@@ -36,7 +36,7 @@ DECLARE_uint32(max_short_value_in_write_cf);
 butil::Status TxnEngineHelper::GetLockInfo(std::shared_ptr<RawEngine::Reader> reader, const std::string &key,
                                            pb::store::LockInfo &lock_info) {
   std::string lock_value;
-  auto status = reader->KvGet(key, lock_value);
+  auto status = reader->KvGet(Helper::EncodeTxnKey(key, Constant::kLockVer), lock_value);
   // if lock_value is not found or it is empty, then the key is not locked
   // else the key is locked, return WriteConflict
   if (status.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
@@ -80,7 +80,7 @@ butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine
 
   for (const auto &key : keys) {
     // delete lock
-    kv_deletes_lock.emplace_back(key);
+    kv_deletes_lock.emplace_back(Helper::EncodeTxnKey(key, Constant::kLockVer));
 
     // delete write
     pb::store::WriteInfo write_info;
@@ -159,7 +159,7 @@ butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
     }
 
     // 3.delete lock from lock_cf
-    { kv_deletes_lock.push_back(lock_info.key()); }
+    { kv_deletes_lock.push_back(Helper::EncodeTxnKey(lock_info.key(), Constant::kLockVer)); }
   }
 
   // after all mutations is processed, write into raw engine

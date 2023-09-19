@@ -329,7 +329,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
       // put lock
       {
         pb::common::KeyValue kv;
-        kv.set_key(mutation.key());
+        kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
 
         pb::store::LockInfo lock_info;
         lock_info.set_primary_lock(request.primary_lock());
@@ -386,7 +386,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
         // put lock
         {
           pb::common::KeyValue kv;
-          kv.set_key(mutation.key());
+          kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
 
           pb::store::LockInfo lock_info;
           lock_info.set_primary_lock(request.primary_lock());
@@ -408,7 +408,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
       // put lock
       {
         pb::common::KeyValue kv;
-        kv.set_key(mutation.key());
+        kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
 
         pb::store::LockInfo lock_info;
         lock_info.set_primary_lock(request.primary_lock());
@@ -546,7 +546,7 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
     }
 
     // 3.delete lock from lock_cf
-    { kv_deletes_lock.push_back(key); }
+    { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
   }
 
   // after all mutations is processed, write into raw engine
@@ -805,7 +805,7 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
 
     // lock is expired, do rollback
     // 1. delete lock from lock_cf
-    { kv_deletes_lock.push_back(primary_key); }
+    { kv_deletes_lock.push_back(Helper::EncodeTxnKey(primary_key, Constant::kLockVer)); }
 
     // 2. put rollback to write_cf
     {
@@ -950,11 +950,11 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
         }
 
         // 3.delete lock from lock_cf
-        { kv_deletes_lock.push_back(key); }
+        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
       } else {
         // do rollback
         // 1. delete lock from lock_cf
-        { kv_deletes_lock.push_back(key); }
+        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
 
         // 2. put rollback to write_cf
         {
@@ -1062,11 +1062,11 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
         }
 
         // 3.delete lock from lock_cf
-        { kv_deletes_lock.push_back(std::string(iter->Key())); }
+        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(iter->Key(), Constant::kLockVer)); }
       } else {
         // do rollback
         // 1. delete lock from lock_cf
-        { kv_deletes_lock.push_back(std::string(iter->Key())); }
+        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(iter->Key(), Constant::kLockVer)); }
 
         // 2. put rollback to write_cf
         {
@@ -1188,7 +1188,7 @@ void TxnHandler::HandleTxnBatchRollbackRequest(std::shared_ptr<Context> ctx, sto
 
     // do rollback
     // 1. delete lock from lock_cf
-    { kv_deletes_lock.push_back(key); }
+    { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
 
     // 2. put rollback to write_cf
     {
@@ -1296,7 +1296,7 @@ void TxnHandler::HandleTxnHeartBeatRequest(std::shared_ptr<Context> ctx, store::
   lock_info.set_lock_ttl(advise_lock_ttl);
 
   pb::common::KeyValue kv;
-  kv.set_key(primary_lock);
+  kv.set_key(Helper::EncodeTxnKey(primary_lock, Constant::kLockVer));
   kv.set_value(lock_info.SerializeAsString());
 
   auto writer = engine->NewWriter(Constant::kTxnLockCF);
@@ -1337,8 +1337,8 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
 
   pb::common::Range range;
 
-  range.set_start_key(request.start_key());
-  range.set_start_key(request.end_key());
+  range.set_start_key(Helper::EncodeTxnKey(request.start_key(), UINT64_MAX));
+  range.set_end_key(Helper::EncodeTxnKey(request.end_key(), 0));
 
   std::vector<pb::common::Range> data_ranges;
   std::vector<pb::common::Range> lock_ranges;
