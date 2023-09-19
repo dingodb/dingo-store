@@ -39,6 +39,8 @@ class ServiceHelper {
 
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id);
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region);
+  static butil::Status GetStoreRegionInfo(uint64_t region_id, pb::error::StoreRegionInfo& store_region_info);
+  static butil::Status GetStoreRegionInfo(store::RegionPtr region, pb::error::StoreRegionInfo& store_region_info);
   static butil::Status ValidateRegionState(store::RegionPtr region);
   static butil::Status ValidateRange(const pb::common::Range& range);
   static butil::Status ValidateKeyInRange(const pb::common::Range& range, const std::vector<std::string_view>& keys);

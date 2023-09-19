@@ -90,6 +90,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -225,6 +226,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -393,6 +395,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -504,6 +507,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -590,6 +594,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -691,6 +696,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -800,6 +806,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
@@ -977,6 +984,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
       err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
       return;
     }
