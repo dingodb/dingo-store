@@ -1257,6 +1257,24 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
 //   return buf.GetString();
 // }
 
+uint64_t Helper::DecodeVectorId(const std::string& value) {
+  dingodb::Buf buf(value);
+  if (value.size() == 17) {
+    buf.Skip(9);
+  } else if (value.size() == 16) {
+    buf.Skip(8);
+  } else if (value.size() == 9 || value.size() == 8) {
+    return 0;
+  } else {
+    DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:["
+                     << dingodb::Helper::StringToHex(value) << "]"
+                     << " size: " << value.size();
+    return 0;
+  }
+
+  return buf.ReadLong();
+}
+
 // for txn, encode start_ts/commit_ts to std::string
 std::string Helper::EncodeTso(uint64_t ts) {
   Buf buf(8);

@@ -454,7 +454,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
 
 void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                         std::shared_ptr<RawEngine> engine, const pb::raft::TxnCommitRequest &request,
-                                        store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id, uint64_t log_id) {
+                                        store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
                                  log_id)
                   << ", request: " << request.ShortDebugString();
@@ -477,6 +477,12 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
   auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
   auto *error = response->mutable_error();
   auto *txn_result = response->mutable_txn_result();
+
+  // for vector index region, commit to vector index
+  pb::raft::Request raft_request_for_vector_add;
+  pb::raft::Request raft_request_for_vector_del;
+  auto *vector_add = raft_request_for_vector_add.mutable_vector_add();
+  auto *vector_del = raft_request_for_vector_del.mutable_vector_delete();
 
   // for every key, check and do commit, if primary key is failed, the whole commit is failed
   for (const auto &key : request.keys()) {
@@ -543,6 +549,40 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
       kv.set_value(write_info.SerializeAsString());
 
       kv_puts_write.push_back(kv);
+
+      if (region->Type() == pb::common::INDEX_REGION) {
+        if (lock_info.lock_type() == pb::store::Op::Put) {
+          pb::common::VectorWithId vector_with_id;
+          auto ret = vector_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}",
+                                            region->Id(), term_id, log_id)
+                             << ", parse vector_with_id failed, request: " << request.ShortDebugString()
+                             << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                             << ", data_value: " << Helper::StringToHex(data_value)
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
+
+          *(vector_add->add_vectors()) = vector_with_id;
+        } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+          auto vector_id = Helper::DecodeVectorId(lock_info.key());
+          if (vector_id == 0) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}",
+                                            region->Id(), term_id, log_id)
+                             << ", decode vector_id failed, request: " << request.ShortDebugString()
+                             << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
+
+          vector_del->add_ids(vector_id);
+        } else {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                          term_id, log_id)
+                           << ", invalid lock_type, request: " << request.ShortDebugString()
+                           << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+      }
     }
 
     // 3.delete lock from lock_cf
@@ -569,6 +609,52 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCOmmit, term: {} apply_log_id: {}", region->Id(),
                                     term_id, log_id)
                      << ", write failed, request: " << request.ShortDebugString() << ", status: " << status.error_str();
+  }
+
+  // check if need to commit to vector index
+  if (vector_add->vectors_size() > 0) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                   term_id, log_id)
+                    << ", commit to vector index count: " << vector_add->vectors_size()
+                    << ", vector_add: " << vector_add->ShortDebugString();
+    auto handler = std::make_shared<VectorAddHandler>();
+    if (handler == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", new vector add handler failed, request: " << request.ShortDebugString();
+    }
+    auto add_ctx = std::make_shared<Context>();
+    add_ctx->SetRegionId(ctx->RegionId()).SetCfName(Constant::kStoreDataCF);
+    add_ctx->SetRegionEpoch(ctx->RegionEpoch());
+    add_ctx->SetIsolationLevel(ctx->IsolationLevel());
+
+    handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
+    if (!add_ctx->Status().ok()) {
+      ctx->SetStatus(add_ctx->Status());
+    }
+  }
+
+  if (vector_del->ids_size() > 0) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                   term_id, log_id)
+                    << ", commit to vector index count: " << vector_del->ids_size()
+                    << ", vector_del: " << vector_del->ShortDebugString();
+    auto handler = std::make_shared<VectorDeleteHandler>();
+    if (handler == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", new vector delete handler failed, request: " << request.ShortDebugString();
+    }
+
+    auto del_ctx = std::make_shared<Context>();
+    del_ctx->SetRegionId(ctx->RegionId()).SetCfName(Constant::kStoreDataCF);
+    del_ctx->SetRegionEpoch(ctx->RegionEpoch());
+    del_ctx->SetIsolationLevel(ctx->IsolationLevel());
+
+    handler->Handle(del_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
+    if (!del_ctx->Status().ok()) {
+      ctx->SetStatus(del_ctx->Status());
+    }
   }
 }
 

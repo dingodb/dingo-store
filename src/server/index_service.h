@@ -109,6 +109,19 @@ class IndexServiceImpl : public pb::index::IndexService {
   // This function is for testing only
   butil::Status ValidateVectorSearchDebugRequest(const dingodb::pb::index::VectorSearchDebugRequest* request,
                                                  store::RegionPtr region);
+  butil::Status ValidateTxnGetRequest(const dingodb::pb::index::TxnGetRequest* request);
+  butil::Status ValidateTxnScanRequestIndex(store::RegionPtr region, const pb::common::Range& req_range);
+  butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRequest* request);
+  butil::Status ValidateTxnCommitRequest(const dingodb::pb::index::TxnCommitRequest* request);
+  butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::index::TxnCheckTxnStatusRequest* request);
+  butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::index::TxnResolveLockRequest* request);
+  butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::index::TxnBatchGetRequest* request);
+  butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::index::TxnBatchRollbackRequest* request);
+  butil::Status ValidateTxnScanLockRequest(const dingodb::pb::index::TxnScanLockRequest* request);
+  butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::index::TxnHeartBeatRequest* request);
+  butil::Status ValidateTxnGcRequest(const dingodb::pb::index::TxnGcRequest* request);
+  butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::index::TxnDeleteRangeRequest* request);
+  butil::Status ValidateTxnDumpRequest(const dingodb::pb::index::TxnDumpRequest* request);
 
   std::shared_ptr<Storage> storage_;
 };
