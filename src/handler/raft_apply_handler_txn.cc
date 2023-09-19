@@ -287,7 +287,8 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
         DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
                                         term_id, log_id)
                          << ", invalid key, request: " << request.ShortDebugString() << ", key: " << mutation.key()
-                         << ", start_ts: " << start_ts << ", write_key is less than 8 bytes: " << iter->Key();
+                         << ", start_ts: " << start_ts
+                         << ", write_key is less than 8 bytes: " << Helper::StringToHex(iter->Key());
       }
       std::string write_key;
       uint64_t write_ts;
@@ -764,14 +765,16 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
       }
 
       DINGO_LOG(INFO) << "get start_ts: " << write_info.start_ts() << ", lock_ts: " << lock_ts
-                      << ", write_info: " << write_info.ShortDebugString() << ", write_key: " << iter->Key();
+                      << ", write_info: " << write_info.ShortDebugString()
+                      << ", write_key: " << Helper::StringToHex(iter->Key());
 
       // if start_ts match lock_ts, mean we get the commit of the transaction
       // we need to decode the key for commit_ts
       if (write_info.start_ts() < lock_ts) {
         // we have scan past the lock_ts, but still not find the commit_ts, no need to continue
         DINGO_LOG(INFO) << "get start_ts: " << write_info.start_ts() << ", lock_ts: " << lock_ts
-                        << ", write_info: " << write_info.ShortDebugString() << ", write_key: " << iter->Key()
+                        << ", write_info: " << write_info.ShortDebugString()
+                        << ", write_key: " << Helper::StringToHex(iter->Key())
                         << ", we have scan past the lock_ts, but still not find the commit_ts, no need to continue";
         break;
       }
@@ -788,7 +791,7 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
 
           // this is a rollback record, we may have get this record in previous KvGet, so print warning here.
           DINGO_LOG(WARNING) << " meet rollback write record in Scan, there is something wrong, request: "
-                             << request.ShortDebugString() << ", write_key: " << iter->Key()
+                             << request.ShortDebugString() << ", write_key: " << Helper::StringToHex(iter->Key())
                              << ", write_info: " << write_info.ShortDebugString();
 
           // rollback, return rollback
@@ -815,7 +818,7 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
           return;
 
         } else {
-          DINGO_LOG(FATAL) << " meet unexpected write value, key: " << iter->Key()
+          DINGO_LOG(FATAL) << " meet unexpected write value, key: " << Helper::StringToHex(iter->Key())
                            << ", write_info: " << write_info.ShortDebugString();
         }
 
@@ -940,7 +943,7 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
 void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              std::shared_ptr<RawEngine> engine,
                                              const pb::raft::TxnResolveLockRequest &request,
-                                             store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id,
+                                             store::RegionMetricsPtr region_metrics, uint64_t term_id,
                                              uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
@@ -968,6 +971,12 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
   auto *response = dynamic_cast<pb::store::TxnResolveLockResponse *>(ctx->Response());
   auto *error = response->mutable_error();
   auto *txn_result = response->mutable_txn_result();
+
+  // for vector index region, commit to vector index
+  pb::raft::Request raft_request_for_vector_add;
+  pb::raft::Request raft_request_for_vector_del;
+  auto *vector_add = raft_request_for_vector_add.mutable_vector_add();
+  auto *vector_del = raft_request_for_vector_del.mutable_vector_delete();
 
   std::vector<std::string> keys_to_rollback;
 
@@ -1035,6 +1044,40 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
           kv_puts_write.push_back(kv);
         }
 
+        if (region->Type() == pb::common::INDEX_REGION) {
+          if (lock_info.lock_type() == pb::store::Op::Put) {
+            pb::common::VectorWithId vector_with_id;
+            auto ret = vector_with_id.ParseFromString(data_value);
+            if (!ret) {
+              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
+                                              region->Id(), term_id, log_id)
+                               << ", parse vector_with_id failed, request: " << request.ShortDebugString()
+                               << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                               << ", data_value: " << Helper::StringToHex(data_value)
+                               << ", lock_info: " << lock_info.ShortDebugString();
+            }
+
+            *(vector_add->add_vectors()) = vector_with_id;
+          } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+            auto vector_id = Helper::DecodeVectorId(lock_info.key());
+            if (vector_id == 0) {
+              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
+                                              region->Id(), term_id, log_id)
+                               << ", decode vector_id failed, request: " << request.ShortDebugString()
+                               << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                               << ", lock_info: " << lock_info.ShortDebugString();
+            }
+
+            vector_del->add_ids(vector_id);
+          } else {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
+                                            region->Id(), term_id, log_id)
+                             << ", invalid lock_type, request: " << request.ShortDebugString()
+                             << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
+        }
+
         // 3.delete lock from lock_cf
         { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
       } else {
@@ -1091,14 +1134,16 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
       }
 
       DINGO_LOG(INFO) << "get lock_info lock_ts: " << lock_info.lock_ts()
-                      << ", lock_info: " << lock_info.ShortDebugString() << ", lock_key: " << iter->Key();
+                      << ", lock_info: " << lock_info.ShortDebugString()
+                      << ", iter->key: " << Helper::StringToHex(iter->Key())
+                      << ", lock_key: " << Helper::StringToHex(lock_info.key());
 
       // if lock is not exist, nothing to do
       if (lock_info.primary_lock().empty()) {
         DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
                                           region->Id(), term_id, log_id)
                            << ", txn_not_found with lock_info empty, request: " << request.ShortDebugString()
-                           << ", key: " << iter->Key() << ", start_ts: " << start_ts;
+                           << ", iter->key: " << Helper::StringToHex(iter->Key()) << ", start_ts: " << start_ts;
 
         // auto *txn_not_found = txn_result->mutable_txn_not_found();
         // txn_not_found->set_start_ts(start_ts);
@@ -1110,30 +1155,32 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
         DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
                                           region->Id(), term_id, log_id)
                            << ", txn_not_found with lock_info.lock_ts not equal to start_ts, request: "
-                           << request.ShortDebugString() << ", key: " << iter->Key() << ", start_ts: " << start_ts
-                           << ", lock_info: " << lock_info.ShortDebugString();
+                           << request.ShortDebugString() << ", key: " << Helper::StringToHex(lock_info.key())
+                           << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
         iter->Next();
         continue;
       }
 
       // prepare to do rollback or commit
+      const std::string &key = lock_info.key();
       if (commit_ts > 0) {
         // do commit
         // 1.put data to write_cf
         std::string data_value;
         if (lock_info.lock_type() == pb::store::Put) {
-          auto ret = data_reader->KvGet(Helper::EncodeTxnKey(iter->Key(), start_ts), data_value);
+          auto ret = data_reader->KvGet(Helper::EncodeTxnKey(key, start_ts), data_value);
           if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
             DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
                                             region->Id(), term_id, log_id)
-                             << ", get data failed, request: " << request.ShortDebugString() << ", key: " << iter->Key()
-                             << ", start_ts: " << start_ts << ", status: " << ret.error_str();
+                             << ", get data failed, request: " << request.ShortDebugString()
+                             << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                             << ", status: " << ret.error_str();
           }
         }
 
         {
           pb::common::KeyValue kv;
-          std::string write_key = Helper::EncodeTxnKey(iter->Key(), commit_ts);
+          std::string write_key = Helper::EncodeTxnKey(key, commit_ts);
           kv.set_key(write_key);
 
           pb::store::WriteInfo write_info;
@@ -1147,17 +1194,51 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
           kv_puts_write.push_back(kv);
         }
 
+        if (region->Type() == pb::common::INDEX_REGION) {
+          if (lock_info.lock_type() == pb::store::Op::Put) {
+            pb::common::VectorWithId vector_with_id;
+            auto ret = vector_with_id.ParseFromString(data_value);
+            if (!ret) {
+              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
+                                              region->Id(), term_id, log_id)
+                               << ", parse vector_with_id failed, request: " << request.ShortDebugString()
+                               << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                               << ", data_value: " << Helper::StringToHex(data_value)
+                               << ", lock_info: " << lock_info.ShortDebugString();
+            }
+
+            *(vector_add->add_vectors()) = vector_with_id;
+          } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+            auto vector_id = Helper::DecodeVectorId(lock_info.key());
+            if (vector_id == 0) {
+              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
+                                              region->Id(), term_id, log_id)
+                               << ", decode vector_id failed, request: " << request.ShortDebugString()
+                               << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                               << ", lock_info: " << lock_info.ShortDebugString();
+            }
+
+            vector_del->add_ids(vector_id);
+          } else {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}",
+                                            region->Id(), term_id, log_id)
+                             << ", invalid lock_type, request: " << request.ShortDebugString()
+                             << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
+        }
+
         // 3.delete lock from lock_cf
-        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(iter->Key(), Constant::kLockVer)); }
+        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
       } else {
         // do rollback
         // 1. delete lock from lock_cf
-        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(iter->Key(), Constant::kLockVer)); }
+        { kv_deletes_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer)); }
 
         // 2. put rollback to write_cf
         {
           pb::common::KeyValue kv;
-          std::string write_key = Helper::EncodeTxnKey(iter->Key(), start_ts);
+          std::string write_key = Helper::EncodeTxnKey(key, start_ts);
           kv.set_key(write_key);
 
           pb::store::WriteInfo write_info;
@@ -1200,6 +1281,52 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
                                     term_id, log_id)
                      << ", write failed, request: " << request.ShortDebugString() << ", status: " << status.error_str();
+  }
+
+  // check if need to commit to vector index
+  if (vector_add->vectors_size() > 0) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
+                                   term_id, log_id)
+                    << ", commit to vector index count: " << vector_add->vectors_size()
+                    << ", vector_add: " << vector_add->ShortDebugString();
+    auto handler = std::make_shared<VectorAddHandler>();
+    if (handler == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", new vector add handler failed, request: " << request.ShortDebugString();
+    }
+    auto add_ctx = std::make_shared<Context>();
+    add_ctx->SetRegionId(ctx->RegionId()).SetCfName(Constant::kStoreDataCF);
+    add_ctx->SetRegionEpoch(ctx->RegionEpoch());
+    add_ctx->SetIsolationLevel(ctx->IsolationLevel());
+
+    handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
+    if (!add_ctx->Status().ok()) {
+      ctx->SetStatus(add_ctx->Status());
+    }
+  }
+
+  if (vector_del->ids_size() > 0) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
+                                   term_id, log_id)
+                    << ", commit to vector index count: " << vector_del->ids_size()
+                    << ", vector_del: " << vector_del->ShortDebugString();
+    auto handler = std::make_shared<VectorDeleteHandler>();
+    if (handler == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
+                                      term_id, log_id)
+                       << ", new vector delete handler failed, request: " << request.ShortDebugString();
+    }
+
+    auto del_ctx = std::make_shared<Context>();
+    del_ctx->SetRegionId(ctx->RegionId()).SetCfName(Constant::kStoreDataCF);
+    del_ctx->SetRegionEpoch(ctx->RegionEpoch());
+    del_ctx->SetIsolationLevel(ctx->IsolationLevel());
+
+    handler->Handle(del_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
+    if (!del_ctx->Status().ok()) {
+      ctx->SetStatus(del_ctx->Status());
+    }
   }
 }
 
