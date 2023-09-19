@@ -128,7 +128,7 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
 
 VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, range) {
+    : VectorIndex(id, vector_index_parameter, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
   bthread_mutex_init(&mutex_, nullptr);
   hnsw_num_threads_ = std::thread::hardware_concurrency();
 
@@ -160,16 +160,12 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
 
     hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, actual_max_elements, hnsw_parameter.nlinks(),
                                                       hnsw_parameter.efconstruction(), 100, false);
-  } else {
-    hnsw_index_ = nullptr;
   }
 }
 
 VectorIndexHnsw::~VectorIndexHnsw() {
-  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    delete hnsw_index_;
-    delete hnsw_space_;
-  }
+  delete hnsw_index_;
+  delete hnsw_space_;
 
   bthread_mutex_destroy(&mutex_);
 }

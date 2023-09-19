@@ -119,13 +119,13 @@ class Constant {
 
   // split region
   inline static const std::string kSplitStrategy = "PRE_CREATE_REGION";
-  static const uint32_t kDefaultSplitCheckConcurrency = 5;
+  static constexpr uint32_t kDefaultSplitCheckConcurrency = 5;
   inline static const std::string kDefaultSplitPolicy = "HALF";
-  static const uint32_t kRegionMaxSizeDefaultValue = 67108864;  // 64M
+  static constexpr uint32_t kRegionMaxSizeDefaultValue = 67108864;  // 64M
   static constexpr float kDefaultSplitCheckApproximateSizeRatio = 0.8;
-  static const uint32_t kSplitChunkSizeDefaultValue = 1048576;  // 1M
+  static constexpr uint32_t kSplitChunkSizeDefaultValue = 1048576;  // 1M
   static constexpr float kSplitRatioDefaultValue = 0.5;
-  static const uint32_t kSplitKeysNumberDefaultValue = 100000;
+  static constexpr uint32_t kSplitKeysNumberDefaultValue = 100000;
   static constexpr float kSplitKeysRatioDefaultValue = 0.5;
 
   static const int32_t kRaftLogFallBehindThreshold = 1000;
