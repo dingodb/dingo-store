@@ -23,7 +23,6 @@ option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
 message Context {
-  Context context = 10;
   uint64 region_id = 1;
   dingodb.pb.common.RegionEpoch region_epoch = 2;
 }

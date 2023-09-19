@@ -43,6 +43,30 @@ butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& 
   return butil::Status::OK();
 }
 
+butil::Status ServiceHelper::GetStoreRegionInfo(uint64_t region_id, pb::error::StoreRegionInfo& store_region_info) {
+  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+  return GetStoreRegionInfo(region, store_region_info);
+}
+
+butil::Status ServiceHelper::GetStoreRegionInfo(store::RegionPtr region,
+                                                pb::error::StoreRegionInfo& store_region_info) {
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  store_region_info.set_region_id(region->Id());
+  *(store_region_info.mutable_current_region_epoch()) = region->Epoch();
+  *(store_region_info.mutable_current_range()) = region->Range();
+  for (const auto& peer : region->Peers()) {
+    *(store_region_info.add_peers()) = peer;
+  }
+
+  return butil::Status::OK();
+}
+
 // Validate region state
 butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {
   // Check is exist region.

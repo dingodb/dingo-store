@@ -77,6 +77,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvGet request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -157,6 +158,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvBatchGet request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -233,6 +235,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     return;
   }
 
@@ -308,6 +311,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvBatchPut request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -376,6 +380,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -455,6 +460,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvBatchPutIfAbsent request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -527,6 +533,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvBatchDelete request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -590,8 +597,10 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
         ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
     if (!epoch_ret.ok()) {
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      response->mutable_error()->set_errmsg(epoch_ret.error_str());
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       return;
     }
   }
@@ -674,6 +683,7 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -753,6 +763,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvBatchCompareAndSet request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -817,8 +828,10 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
         ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
     if (!epoch_ret.ok()) {
       DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      response->mutable_error()->set_errmsg(epoch_ret.error_str());
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
       return;
     }
   }
@@ -921,6 +934,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvScanContinue request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
@@ -994,6 +1008,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
     DINGO_LOG(ERROR) << fmt::format("KvScanRelease request: {} response: {}", request->ShortDebugString(),
                                     response->ShortDebugString());
     return;
