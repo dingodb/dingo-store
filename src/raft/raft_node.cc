@@ -124,7 +124,8 @@ uint32_t RaftNode::ElectionTimeout() const { return election_timeout_ms_; }
 
 void RaftNode::ResetElectionTimeout(int election_timeout_ms, int max_clock_drift_ms) {
   if (election_timeout_ms != election_timeout_ms_) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.node][node_id({})] reset election time", node_id_);
+    DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] reset election time({}) max_clock_drift({})", node_id_,
+                                   election_timeout_ms, max_clock_drift_ms);
     election_timeout_ms_ = election_timeout_ms;
     node_->reset_election_timeout_ms(election_timeout_ms, max_clock_drift_ms);
   }

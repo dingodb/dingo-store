@@ -147,21 +147,19 @@ class Helper {
   static void SetPbMessageError(butil::Status status, google::protobuf::Message* message);
 
   template <typename T>
-  static void SetPbMessageErrorLeader(butil::EndPoint endpoint, T* message) {
+  static void SetPbMessageErrorLeader(const pb::node::NodeInfo& node_info, T* message) {
+    message->mutable_error()->set_store_id(node_info.id());
     auto leader_location = message->mutable_error()->mutable_leader_location();
-    leader_location->set_host(std::string(butil::ip2str(endpoint.ip).c_str()));
-    leader_location->set_port(endpoint.port);
+    *leader_location = node_info.server_location();
   }
 
   static std::string MessageToJsonString(const google::protobuf::Message& message);
 
-  // Use raft endpoint query server endpoint
-  static butil::EndPoint QueryServerEndpointByRaftEndpoint(
-      std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores, butil::EndPoint endpoint);
-
   // use raft_location to get server_location
   // in: raft_location
   // out: server_location
+  static void GetNodeInfoByRaftLocation(const pb::common::Location& raft_location, pb::node::NodeInfo& node_info);
+  static void GetNodeInfoByServerLocation(const pb::common::Location& server_location, pb::node::NodeInfo& node_info);
   static void GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location);
   static void GetRaftLocation(const pb::common::Location& server_location, pb::common::Location& raft_location);
   static pb::common::Peer GetPeerInfo(const butil::EndPoint& endpoint);

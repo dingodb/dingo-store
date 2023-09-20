@@ -195,4 +195,5 @@ message Error {
 
   dingodb.pb.common.Location leader_location = 3;
   StoreRegionInfo store_region_info = 4;
+  uint64 store_id = 5;  // along with leader_location
 }

@@ -899,6 +899,16 @@ int SegmentLogStorage::TruncatePrefix(int64_t first_index_kept) {
 }
 
 int SegmentLogStorage::TruncateVectorIndexPrefix(int64_t first_index_kept) {
+  if (first_index_kept <= vector_index_first_log_index_.load(std::memory_order_relaxed)) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[raft.log][region({}).index({}_{})] truncate vector index prefix, must greater vector_index_first_log_index: "
+        "{} first_index_kept: {}",
+        region_id_, FirstLogIndex(), LastLogIndex(), vector_index_first_log_index_.load(std::memory_order_relaxed),
+        first_index_kept);
+
+    return 0;
+  }
+
   DINGO_LOG(INFO) << fmt::format(
       "[raft.log][region({}).index({}_{})] truncate vector index prefix, first_index_kept: {}", region_id_,
       FirstLogIndex(), LastLogIndex(), first_index_kept);
@@ -908,8 +918,6 @@ int SegmentLogStorage::TruncateVectorIndexPrefix(int64_t first_index_kept) {
   if (SaveMeta(first_log_index_.load(std::memory_order_relaxed)) != 0) {
     return -1;
   }
-
-  TruncateActualPrefixLog();
 
   return 0;
 }

@@ -586,17 +586,28 @@ std::string Helper::MessageToJsonString(const google::protobuf::Message& message
   return json_string;
 }
 
-butil::EndPoint Helper::QueryServerEndpointByRaftEndpoint(std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores,
-                                                          butil::EndPoint endpoint) {
-  butil::EndPoint result;
-  std::string host(butil::ip2str(endpoint.ip).c_str());
-  for (const auto& it : stores) {
-    if (it.second->raft_location().host() == host && it.second->raft_location().port() == endpoint.port) {
-      str2endpoint(it.second->server_location().host().c_str(), it.second->server_location().port(), &result);
-    }
+void Helper::GetNodeInfoByRaftLocation(const pb::common::Location& raft_location, pb::node::NodeInfo& node_info) {
+  // validate raft_location
+  // TODO: how to support ipv6
+  if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
+    DINGO_LOG(ERROR) << "GetNodeInfoByRaftLocation illegal raft_location=" << raft_location.host() << ":"
+                     << raft_location.port();
+    return;
   }
 
-  return result;
+  node_info = ServiceAccess::GetNodeInfo(raft_location.host(), raft_location.port());
+}
+
+void Helper::GetNodeInfoByServerLocation(const pb::common::Location& server_location, pb::node::NodeInfo& node_info) {
+  // validate server_location
+  // TODO: how to support ipv6
+  if (server_location.host().length() <= 0 || server_location.port() <= 0) {
+    DINGO_LOG(ERROR) << "GetNodeInfoByServerLocation illegal server_location=" << server_location.host() << ":"
+                     << server_location.port();
+    return;
+  }
+
+  node_info = ServiceAccess::GetNodeInfo(server_location.host(), server_location.port());
 }
 
 void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::common::Location& server_location) {
