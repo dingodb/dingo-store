@@ -8,8 +8,8 @@ server:
   heartbeat_interval_s: 10
   metrics_collect_interval_s: 300
   scrub_vector_index_interval_s: 60
-  worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
-  # worker_thread_ratio: 0.5 # cpu core * ratio
+  # worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
+  worker_thread_ratio: 1 # cpu core * ratio
 region:
   region_max_size: 134217728 # 128M
   enable_auto_split: true
@@ -18,7 +18,7 @@ raft:
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/index/raft
   log_path: $BASE_PATH$/data/index/log
-  election_timeout_s: 2
+  election_timeout_s: 6
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32M
 log:
