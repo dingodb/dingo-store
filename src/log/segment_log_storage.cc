@@ -732,11 +732,11 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
 
   if (last_log_index_.load(butil::memory_order_relaxed) + 1 != entries.front()->id.index) {
     DINGO_LOG(FATAL) << fmt::format(
-        "[raft.log][region({})] there's gap between appending entries and last_log_index_ path: {} last_log_index_: {} "
+        "[raft.log][region({}).index({}_{})] there's gap between appending entries and last_log_index_ path: {} "
         "log type: {} "
         "entry_index: {}_{}",
-        region_id_, path_, LastLogIndex(), static_cast<int>(entries.front()->type), entries.front()->id.term,
-        entries.front()->id.index);
+        region_id_, FirstLogIndex(), LastLogIndex(), path_, static_cast<int>(entries.front()->type),
+        entries.front()->id.term, entries.front()->id.index);
     return -1;
   }
   std::shared_ptr<Segment> last_segment;
@@ -856,10 +856,8 @@ void SegmentLogStorage::PopSegments(int64_t first_index_kept, std::vector<std::s
     if (open_segment_->LastIndex() < first_index_kept) {
       poppeds.push_back(open_segment_);
       open_segment_ = nullptr;
-      last_log_index_.store(first_index_kept - 1);
+      last_log_index_.store(FirstLogIndex() - 1);
     }
-  } else {
-    last_log_index_.store(first_index_kept - 1);
   }
 }
 
@@ -868,7 +866,7 @@ void SegmentLogStorage::SetFirstAndLastLogIndex(int64_t first_index_kept) {
 
   first_log_index_.store(first_index_kept, butil::memory_order_release);
   if (!open_segment_) {
-    last_log_index_.store(first_index_kept - 1);
+    last_log_index_.store(FirstLogIndex() - 1);
   }
 }
 

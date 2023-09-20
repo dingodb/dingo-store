@@ -206,6 +206,7 @@ void VectorIndexWrapper::SetNeedBootstrapBuild(bool need) {
 }
 
 void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index) {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] update vector index", Id());
   // Check vector index is stop
   if (IsStop()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());
