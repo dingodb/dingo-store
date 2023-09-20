@@ -339,6 +339,15 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
         Helper::RemoveFileOrDirectory(sst_file);
       }
     }
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] ingest sst file failed, error: {} {}", region->Id(),
+                                      status.error_code(), status.error_str())
+                       << ", sst files count: " << sst_files.size();
+      for (const auto& file : sst_files) {
+        DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] ingest sst error files: {}", region->Id(), file);
+      }
+      return false;
+    }
   }
 
   return true;
