@@ -159,6 +159,8 @@ class Constant {
 
   static constexpr uint32_t kCollectApproximateSizeBatchSize = 1024;
   static constexpr uint64_t kVectorIndexSnapshotCatchupMargin = 4000;
+
+  static constexpr uint32_t kRaftElectionTimeoutSDefaultValue = 6;
 };
 
 }  // namespace dingodb

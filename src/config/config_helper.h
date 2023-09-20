@@ -15,6 +15,8 @@
 #ifndef DINGODB_CONFIG_HELPER_H_
 #define DINGODB_CONFIG_HELPER_H_
 
+#include <cstdint>
+
 #include "proto/raft.pb.h"
 
 namespace dingodb {
@@ -30,6 +32,8 @@ class ConfigHelper {
   static float GetSplitSizeRatio();
   static uint32_t GetSplitKeysNumber();
   static float GetSplitKeysRatio();
+
+  static uint32_t GetElectionTimeout();
 };
 
 }  // namespace dingodb

@@ -96,7 +96,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
 
   auto config = Server::GetInstance()->GetConfig();
   parameter.raft_path = config->GetString("raft.path");
-  parameter.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
+  parameter.election_timeout_ms = 200;
   parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
   parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   parameter.log_path = config->GetString("raft.log_path");

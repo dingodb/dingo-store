@@ -14,6 +14,7 @@
 
 #include "event/store_state_machine_event.h"
 
+#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "config/config_helper.h"
 #include "fmt/core.h"
 #include "handler/raft_snapshot_handler.h"
 #include "handler/raft_vote_handler.h"
@@ -86,14 +88,17 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
   auto region = the_event->region;
 
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto node = raft_store_engine->GetNode(region->Id());
+  if (node != nullptr) {
+    uint32_t election_timeout_ms = ConfigHelper::GetElectionTimeout() * 1000;
+    if (node->ElectionTimeout() != election_timeout_ms) {
+      node->ResetElectionTimeout(election_timeout_ms, 1000);
+    }
+  }
+
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-
   if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
-    auto config = Server::GetInstance()->GetConfig();
-    auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
-    auto node = raft_store_engine->GetNode(region->Id());
-    node->ResetElectionTimeout(config->GetInt("raft.election_timeout_s") * 1000, 1000);
-
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
     }
@@ -187,14 +192,18 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
 void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   auto region = the_event->region;
+
+  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto node = raft_store_engine->GetNode(region->Id());
+  if (node != nullptr) {
+    uint32_t election_timeout_ms = ConfigHelper::GetElectionTimeout() * 1000;
+    if (node->ElectionTimeout() != election_timeout_ms) {
+      node->ResetElectionTimeout(election_timeout_ms, 1000);
+    }
+  }
+
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-
   if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
-    auto config = Server::GetInstance()->GetConfig();
-    auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
-    auto node = raft_store_engine->GetNode(region->Id());
-    node->ResetElectionTimeout(config->GetInt("raft.election_timeout_s") * 1000, 1000);
-
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
     }

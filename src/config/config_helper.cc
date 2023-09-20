@@ -116,4 +116,19 @@ float ConfigHelper::GetSplitKeysRatio() {
   return split_keys_ratio;
 }
 
+uint32_t ConfigHelper::GetElectionTimeout() {
+  auto config = ConfigManager::GetInstance()->GetConfig();
+  if (config == nullptr) {
+    return Constant::kRaftElectionTimeoutSDefaultValue;
+  }
+
+  int election_timeout_s = config->GetInt("raft.election_timeout_s");
+  if (election_timeout_s <= 0) {
+    election_timeout_s = Constant::kRaftElectionTimeoutSDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] election_timeout_s is too small, set default value({})",
+                                      Constant::kRaftElectionTimeoutSDefaultValue);
+  }
+  return election_timeout_s;
+}
+
 }  // namespace dingodb
