@@ -96,6 +96,7 @@ dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction
 
 // coordinator
 dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id);
+dingodb::pb::store::Context GetRegionContext(ServerInteractionPtr interaction, uint64_t region_id);
 
 // vector
 void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn);

@@ -50,7 +50,7 @@ void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ =
 
 butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
     const dingodb::pb::index::VectorBatchQueryRequest* request, store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
@@ -64,8 +64,7 @@ butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
                                      request->vector_ids().size(), FLAGS_vector_max_bactch_count));
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -83,29 +82,25 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   DINGO_LOG(DEBUG) << "VectorBatchQuery request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -156,7 +151,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
 
 butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request,
                                                             store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
@@ -183,8 +178,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -219,29 +213,25 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   DINGO_LOG(DEBUG) << "VectorSearch request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -301,7 +291,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
 
 butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request,
                                                          store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
@@ -321,8 +311,7 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
                                      FLAGS_vector_max_request_size));
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -388,29 +377,25 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   DINGO_LOG(DEBUG) << "VectorAdd request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -426,15 +411,13 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}",
-                                    (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                    request->vectors().size(), request->replace_deleted(), request->is_update(),
-                                    response->ShortDebugString());
+                                    request->context().region_id(), request->vectors().size(),
+                                    request->replace_deleted(), request->is_update(), response->ShortDebugString());
     return;
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
-  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
-      .SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
 
   std::vector<pb::common::VectorWithId> vectors;
   for (const auto& vector : request->vectors()) {
@@ -453,15 +436,14 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     }
     brpc::ClosureGuard done_guard(done);
     DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}",
-                                    (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                    request->vectors().size(), request->replace_deleted(), request->is_update(),
-                                    response->ShortDebugString());
+                                    request->context().region_id(), request->vectors().size(),
+                                    request->replace_deleted(), request->is_update(), response->ShortDebugString());
   }
 }
 
 butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request,
                                                             store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
@@ -475,8 +457,7 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
                                      FLAGS_vector_max_bactch_count));
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -500,29 +481,25 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   DINGO_LOG(DEBUG) << "VectorDelete request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -543,8 +520,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
-  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
-      .SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
 
   status = storage_->VectorDelete(ctx, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
@@ -564,12 +540,11 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
 
 butil::Status IndexServiceImpl::ValidateVectorGetBorderIdRequest(
     const dingodb::pb::index::VectorGetBorderIdRequest* request, store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -587,29 +562,25 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   DINGO_LOG(DEBUG) << "VectorGetBorderId request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -630,8 +601,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId((request->region_id() > 0 ? request->region_id() : request->context().region_id()))
-      .SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
 
   uint64_t vector_id = 0;
   status = storage_->VectorGetBorderId(region->Id(), region->RawRange(), request->get_min(), vector_id);
@@ -654,7 +624,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
 
 butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
     const dingodb::pb::index::VectorScanQueryRequest* request, store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
@@ -671,8 +641,7 @@ butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
                          FLAGS_vector_max_bactch_count);
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -689,29 +658,25 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   DINGO_LOG(DEBUG) << "VectorScanQuery request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -770,12 +735,11 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
 
 butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
     const dingodb::pb::index::VectorGetRegionMetricsRequest* request, store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -799,29 +763,25 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   DINGO_LOG(DEBUG) << "VectorGetRegionMetrics request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 
@@ -905,7 +865,7 @@ void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contr
 
 butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
     const dingodb::pb::index::VectorSearchDebugRequest* request, store::RegionPtr region) {
-  if ((request->region_id() > 0 ? request->region_id() : request->context().region_id()) == 0) {
+  if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
@@ -939,8 +899,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   }
 
-  auto status =
-      storage_->ValidateLeader((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto status = storage_->ValidateLeader(request->context().region_id());
   if (!status.ok()) {
     return status;
   }
@@ -977,29 +936,25 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
   DINGO_LOG(DEBUG) << "VectorSearch request: " << request->ShortDebugString();
 
   // check if region_epoch is match
-  if (request->context().region_id() > 0) {
-    auto epoch_ret =
-        ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-    if (!epoch_ret.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
-      err->set_errmsg(epoch_ret.error_str());
-      ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-      return;
-    }
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
   }
 
   // Validate region exist.
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto region =
-      store_region_meta->GetRegion((request->region_id() > 0 ? request->region_id() : request->context().region_id()));
+  auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EREGION_NOT_FOUND);
-    err->set_errmsg(fmt::format("Not found region {} at server {}",
-                                (request->region_id() > 0 ? request->region_id() : request->context().region_id()),
-                                Server::GetInstance()->Id()));
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
     return;
   }
 

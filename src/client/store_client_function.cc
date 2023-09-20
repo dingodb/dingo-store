@@ -36,6 +36,7 @@
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
+#include "proto/store.pb.h"
 #include "serial/buf.h"
 
 const int kBatchSize = 1000;
@@ -53,6 +54,8 @@ DECLARE_bool(with_vector_ids);
 DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
 DECLARE_uint32(vector_ids_count);
+
+extern std::shared_ptr<client::Context> global_ctx;
 
 namespace client {
 
@@ -339,7 +342,7 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   auto* vector = request.add_vector_with_ids();
 
   if (region_id == 0) {
@@ -524,7 +527,7 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
   dingodb::pb::index::VectorSearchDebugRequest request;
   dingodb::pb::index::VectorSearchDebugResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
   if (region_id == 0) {
     DINGO_LOG(ERROR) << "region_id is 0";
@@ -743,7 +746,7 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
   if (region_id == 0) {
     DINGO_LOG(ERROR) << "region_id is 0";
@@ -937,7 +940,7 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
   dingodb::pb::index::VectorBatchQueryRequest request;
   dingodb::pb::index::VectorBatchQueryResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   for (auto vector_id : vector_ids) {
     request.add_vector_ids(vector_id);
   }
@@ -969,7 +972,7 @@ void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, u
   dingodb::pb::index::VectorScanQueryRequest request;
   dingodb::pb::index::VectorScanQueryResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   request.set_vector_id_start(start_id);
   request.set_vector_id_end(end_id);
 
@@ -1034,7 +1037,7 @@ void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t regio
   dingodb::pb::index::VectorGetRegionMetricsRequest request;
   dingodb::pb::index::VectorGetRegionMetricsResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
   interaction->SendRequest("IndexService", "VectorGetRegionMetrics", request, response);
 
@@ -1046,7 +1049,7 @@ int SendBatchVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uin
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
@@ -1200,7 +1203,7 @@ void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint
   dingodb::pb::index::VectorDeleteRequest request;
   dingodb::pb::index::VectorDeleteResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   for (int i = 0; i < count; ++i) {
     request.add_ids(i + start_id);
   }
@@ -1222,7 +1225,7 @@ void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id) { 
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
   interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
 
@@ -1233,7 +1236,7 @@ void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id) { 
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   request.set_get_min(true);
 
   interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
@@ -1331,7 +1334,7 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
       dingodb::pb::index::VectorAddRequest request;
       dingodb::pb::index::VectorAddResponse response;
 
-      request.set_region_id(region_id);
+      *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
       uint64_t real_start_id = start_id + x * step_count;
       for (int i = real_start_id; i < real_start_id + step_count; ++i) {
@@ -1472,7 +1475,7 @@ void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_i
       dingodb::pb::index::VectorAddRequest request;
       dingodb::pb::index::VectorAddResponse response;
 
-      request.set_region_id(region_id);
+      *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
 
       uint64_t real_start_id = start_id + x * step_count;
       for (int i = real_start_id; i < real_start_id + step_count; ++i) {
@@ -1644,7 +1647,7 @@ void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   request.set_key(key);
 
   interaction->SendRequest("StoreService", "KvGet", request, response);
@@ -1656,7 +1659,7 @@ void SendKvBatchGet(ServerInteractionPtr interaction, uint64_t region_id, const 
   dingodb::pb::store::KvBatchGetRequest request;
   dingodb::pb::store::KvBatchGetResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     request.add_keys(key);
@@ -1669,7 +1672,7 @@ int SendKvPut(ServerInteractionPtr interaction, uint64_t region_id, const std::s
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   auto* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(value.empty() ? Helper::GenRandomString(64) : value);
@@ -1682,7 +1685,7 @@ void SendKvBatchPut(ServerInteractionPtr interaction, uint64_t region_id, const 
   dingodb::pb::store::KvBatchPutRequest request;
   dingodb::pb::store::KvBatchPutResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
@@ -1697,7 +1700,7 @@ void SendKvPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id, con
   dingodb::pb::store::KvPutIfAbsentRequest request;
   dingodb::pb::store::KvPutIfAbsentResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(Helper::GenRandomString(64));
@@ -1710,7 +1713,7 @@ void SendKvBatchPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id
   dingodb::pb::store::KvBatchPutIfAbsentRequest request;
   dingodb::pb::store::KvBatchPutIfAbsentResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
@@ -1725,7 +1728,7 @@ void SendKvBatchDelete(ServerInteractionPtr interaction, uint64_t region_id, con
   dingodb::pb::store::KvBatchDeleteRequest request;
   dingodb::pb::store::KvBatchDeleteResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   request.add_keys(key);
 
   interaction->SendRequest("StoreService", "KvBatchDelete", request, response);
@@ -1735,7 +1738,7 @@ void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, con
   dingodb::pb::store::KvDeleteRangeRequest request;
   dingodb::pb::store::KvDeleteRangeResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   request.mutable_range()->mutable_range()->set_start_key(prefix);
   request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
@@ -1749,7 +1752,7 @@ void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std:
   dingodb::pb::store::KvScanBeginRequest request;
   dingodb::pb::store::KvScanBeginResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   request.mutable_range()->mutable_range()->set_start_key(prefix);
   request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
@@ -1762,7 +1765,7 @@ void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std:
 
   dingodb::pb::store::KvScanContinueRequest continue_request;
   dingodb::pb::store::KvScanContinueResponse continue_response;
-  continue_request.set_region_id(region_id);
+  *(continue_request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   continue_request.set_scan_id(response.scan_id());
   int batch_size = 1000;
   continue_request.set_max_fetch_cnt(batch_size);
@@ -1785,7 +1788,7 @@ void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std:
   dingodb::pb::store::KvScanReleaseRequest release_request;
   dingodb::pb::store::KvScanReleaseResponse release_response;
 
-  release_request.set_region_id(region_id);
+  *(release_request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   release_request.set_scan_id(response.scan_id());
 
   interaction->SendRequest("StoreService", "KvScanRelease", release_request, release_response);
@@ -1795,7 +1798,7 @@ void SendKvCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, c
   dingodb::pb::store::KvCompareAndSetRequest request;
   dingodb::pb::store::KvCompareAndSetResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(Helper::GenRandomString(64));
@@ -1809,7 +1812,7 @@ void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_
   dingodb::pb::store::KvBatchCompareAndSetRequest request;
   dingodb::pb::store::KvBatchCompareAndSetResponse response;
 
-  request.set_region_id(region_id);
+  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
@@ -2297,6 +2300,15 @@ dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, ui
   interaction->SendRequest("CoordinatorService", "QueryRegion", request, response);
 
   return response.region();
+}
+
+dingodb::pb::store::Context GetRegionContext(ServerInteractionPtr interaction, uint64_t region_id) {
+  const auto& region = SendQueryRegion(interaction, region_id);
+  dingodb::pb::store::Context context;
+  context.set_region_id(region_id);
+  *(context.mutable_region_epoch()) = region.definition().epoch();
+
+  return context;
 }
 
 void SendChangePeer(ServerInteractionPtr interaction, const dingodb::pb::common::RegionDefinition& region_definition) {
