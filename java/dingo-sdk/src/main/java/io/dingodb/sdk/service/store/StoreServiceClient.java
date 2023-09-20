@@ -18,7 +18,14 @@ package io.dingodb.sdk.service.store;
 
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
-import io.dingodb.sdk.common.*;
+import io.dingodb.sdk.common.Context;
+import io.dingodb.sdk.common.DingoCommonId;
+import io.dingodb.sdk.common.KeyValue;
+import io.dingodb.sdk.common.KeyValueWithExpect;
+import io.dingodb.sdk.common.Location;
+import io.dingodb.sdk.common.Range;
+import io.dingodb.sdk.common.RangeWithOptions;
+import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.StoreServiceConnector;
@@ -42,6 +49,7 @@ import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 public class StoreServiceClient {
 
     private final Map<DingoCommonId, StoreServiceConnector> connectorCache = new ConcurrentHashMap<>();
+    private final Map<DingoCommonId, Context> contextCache = new ConcurrentHashMap<>();
     private final MetaServiceClient rootMetaService;
 
     private Integer retryTimes;
@@ -60,6 +68,7 @@ public class StoreServiceClient {
             return () -> rootMetaService.getSubMetaService(schemaId).getRangeDistribution(tableId).values().stream()
                     .filter(rd -> rd.getId().equals(regionId))
                     .findAny()
+                    .map(this::cacheRangeEpoch)
                     .map(RangeDistribution::getLeader)
                     .orElse(null);
         }
@@ -67,10 +76,18 @@ public class StoreServiceClient {
             return () -> rootMetaService.getSubMetaService(schemaId).getIndexRangeDistribution(tableId).values().stream()
                     .filter(rd -> rd.getId().equals(regionId))
                     .findAny()
+                    .map(this::cacheRangeEpoch)
                     .map(RangeDistribution::getLeader)
                     .orElse(null);
         }
         return null;
+    }
+
+    private RangeDistribution cacheRangeEpoch(RangeDistribution rangeDistribution) {
+        contextCache.computeIfAbsent(
+                rangeDistribution.getId(),
+                __ -> new Context(rangeDistribution.getId(), rangeDistribution.getRegionEpoch()));
+        return rangeDistribution;
     }
 
     /**
@@ -102,11 +119,9 @@ public class StoreServiceClient {
      * @return value
      */
     public byte[] kvGet(DingoCommonId tableId, DingoCommonId regionId, byte[] key) {
-        Store.KvGetRequest req = Store.KvGetRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .setKey(ByteString.copyFrom(key))
-                .build();
-        return exec(stub -> stub.kvGet(req), retryTimes, tableId, regionId).getValue().toByteArray();
+        Store.KvGetRequest.Builder builder = Store.KvGetRequest.newBuilder().setKey(ByteString.copyFrom(key));
+        return exec(stub -> stub.kvGet(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getValue().toByteArray();
     }
 
     /**
@@ -117,12 +132,10 @@ public class StoreServiceClient {
      * @return values
      */
     public List<KeyValue> kvBatchGet(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
-        Store.KvBatchGetRequest req = Store.KvBatchGetRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
-                .build();
-        return exec(stub -> stub.kvBatchGet(req), retryTimes, tableId, regionId)
-                .getKvsList().stream()
+        Store.KvBatchGetRequest.Builder builder = Store.KvBatchGetRequest.newBuilder()
+                .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()));
+        return exec(stub -> stub.kvBatchGet(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getKvsList().stream()
                 .map(EntityConversion::mapping)
                 .collect(Collectors.toList());
     }
@@ -167,7 +180,7 @@ public class StoreServiceClient {
         Coprocessor coprocessor
     ) {
         return new ScanIterator(getStoreConnector(tableId, regionId),
-                regionId,
+                contextCache.get(regionId),
                 Common.RangeWithOptions.newBuilder()
                     .setRange(
                         Common.Range.newBuilder()
@@ -191,20 +204,17 @@ public class StoreServiceClient {
      * @return is success
      */
     public boolean kvPut(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
-        Store.KvPutRequest req = Store.KvPutRequest.newBuilder()
-            .setRegionId(regionId.entityId())
-            .setKv(mapping(keyValue))
-            .build();
-        exec(stub -> stub.kvPut(req), retryTimes, tableId, regionId);
+        Store.KvPutRequest.Builder builder = Store.KvPutRequest.newBuilder().setKv(mapping(keyValue));
+        exec(stub -> stub.kvPut(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId);
         return true;
     }
 
     public boolean kvBatchPut(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues) {
-        Store.KvBatchPutRequest req = Store.KvBatchPutRequest.newBuilder()
-            .setRegionId(regionId.entityId())
-            .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
-            .build();
-        exec(stub -> stub.kvBatchPut(req), retryTimes, tableId, regionId);
+        Store.KvBatchPutRequest.Builder builder = Store.KvBatchPutRequest.newBuilder()
+                .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()));
+        exec(stub -> stub.kvBatchPut(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId);
         return true;
     }
 
@@ -216,24 +226,25 @@ public class StoreServiceClient {
      * @return true if key is not in store or false if the key exist in store
      */
     public boolean kvPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, KeyValue keyValue) {
-        Store.KvPutIfAbsentRequest req = Store.KvPutIfAbsentRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .setKv(mapping(keyValue))
-                .build();
-        return exec(stub -> stub.kvPutIfAbsent(req), retryTimes, tableId, regionId).getKeyState();
+        Store.KvPutIfAbsentRequest.Builder builder = Store.KvPutIfAbsentRequest.newBuilder().setKv(mapping(keyValue));
+        return exec(stub -> stub.kvPutIfAbsent(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getKeyState();
     }
 
     public List<Boolean> kvBatchPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues) {
         return kvBatchPutIfAbsent(tableId, regionId, keyValues, false);
     }
 
-    public List<Boolean> kvBatchPutIfAbsent(DingoCommonId tableId, DingoCommonId regionId, List<KeyValue> keyValues, boolean isAtomic) {
-        Store.KvBatchPutIfAbsentRequest req = Store.KvBatchPutIfAbsentRequest.newBuilder()
-                .setRegionId(regionId.entityId())
+    public List<Boolean> kvBatchPutIfAbsent(
+            DingoCommonId tableId,
+            DingoCommonId regionId,
+            List<KeyValue> keyValues,
+            boolean isAtomic) {
+        Store.KvBatchPutIfAbsentRequest.Builder builder = Store.KvBatchPutIfAbsentRequest.newBuilder()
                 .addAllKvs(keyValues.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
-                .setIsAtomic(isAtomic)
-                .build();
-        return exec(stub -> stub.kvBatchPutIfAbsent(req), retryTimes, tableId, regionId).getKeyStatesList();
+                .setIsAtomic(isAtomic);
+        return exec(stub -> stub.kvBatchPutIfAbsent(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getKeyStatesList();
     }
 
     /**
@@ -244,11 +255,10 @@ public class StoreServiceClient {
      * @return delete success or fail with keys
      */
     public List<Boolean> kvBatchDelete(DingoCommonId tableId, DingoCommonId regionId, List<byte[]> keys) {
-        Store.KvBatchDeleteRequest req = Store.KvBatchDeleteRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()))
-                .build();
-        return exec(stub -> stub.kvBatchDelete(req), retryTimes, tableId, regionId).getKeyStatesList();
+        Store.KvBatchDeleteRequest.Builder builder = Store.KvBatchDeleteRequest.newBuilder()
+                .addAllKeys(keys.stream().map(ByteString::copyFrom).collect(Collectors.toList()));
+        return exec(stub -> stub.kvBatchDelete(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getKeyStatesList();
     }
 
     /**
@@ -259,20 +269,17 @@ public class StoreServiceClient {
      * @return delete keys count
      */
     public long kvDeleteRange(DingoCommonId tableId, DingoCommonId regionId, RangeWithOptions range) {
-        Store.KvDeleteRangeRequest req = Store.KvDeleteRangeRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .setRange(mapping(range))
-                .build();
-        return exec(stub -> stub.kvDeleteRange(req), retryTimes, tableId, regionId).getDeleteCount();
+        Store.KvDeleteRangeRequest.Builder builder = Store.KvDeleteRangeRequest.newBuilder().setRange(mapping(range));
+        return exec(stub -> stub.kvDeleteRange(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getDeleteCount();
     }
 
     public boolean kvCompareAndSet(DingoCommonId tableId, DingoCommonId regionId, KeyValueWithExpect keyValue) {
-        Store.KvCompareAndSetRequest req = Store.KvCompareAndSetRequest.newBuilder()
-            .setRegionId(regionId.entityId())
-            .setKv(EntityConversion.mapping(keyValue))
-            .setExpectValue(ByteString.copyFrom(keyValue.expect))
-            .build();
-        return exec(stub -> stub.kvCompareAndSet(req), retryTimes, tableId, regionId).getKeyState();
+        Store.KvCompareAndSetRequest.Builder builder = Store.KvCompareAndSetRequest.newBuilder()
+                .setKv(mapping(keyValue))
+                .setExpectValue(ByteString.copyFrom(keyValue.expect));
+        return exec(stub -> stub.kvCompareAndSet(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getKeyState();
     }
 
     public List<Boolean> kvBatchCompareAndSet(
@@ -281,13 +288,12 @@ public class StoreServiceClient {
         List<Common.KeyValue> kvs = new ArrayList<>();
         List<ByteString> expects = new ArrayList<>();
         keyValues.stream().peek(__ -> kvs.add(mapping(__))).forEach(__ -> expects.add(ByteString.copyFrom(__.expect)));
-        Store.KvBatchCompareAndSetRequest req = Store.KvBatchCompareAndSetRequest.newBuilder()
-            .setRegionId(regionId.entityId())
-            .addAllKvs(kvs)
-            .addAllExpectValues(expects)
-            .setIsAtomic(isAtomic)
-            .build();
-        return exec(stub -> stub.kvBatchCompareAndSet(req), retryTimes, tableId, regionId).getKeyStatesList();
+        Store.KvBatchCompareAndSetRequest.Builder builder = Store.KvBatchCompareAndSetRequest.newBuilder()
+                .addAllKvs(kvs)
+                .addAllExpectValues(expects)
+                .setIsAtomic(isAtomic);
+        return exec(stub -> stub.kvBatchCompareAndSet(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, tableId, regionId).getKeyStatesList();
     }
 
     private <R> R exec(

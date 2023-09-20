@@ -19,12 +19,16 @@ package io.dingodb.sdk.common.table;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.Range;
+import io.dingodb.sdk.common.region.RegionEpoch;
+import io.dingodb.sdk.common.region.RegionStatus;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 
 import java.util.List;
 
 @Getter
+@Builder
 @AllArgsConstructor
 public class RangeDistribution {
 
@@ -32,6 +36,8 @@ public class RangeDistribution {
     private Range range;
     private Location leader;
     private List<Location> voters;
+    private RegionEpoch regionEpoch;
+    private RegionStatus status;
 
     @Override
     public boolean equals(Object other) {

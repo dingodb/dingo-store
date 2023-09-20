@@ -19,9 +19,11 @@ package io.dingodb.sdk.service.index;
 import io.dingodb.common.Common;
 import io.dingodb.index.Index;
 import io.dingodb.index.IndexServiceGrpc;
+import io.dingodb.sdk.common.Context;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.SDKCommonId;
+import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
@@ -34,7 +36,6 @@ import io.dingodb.sdk.common.vector.VectorScanQuery;
 import io.dingodb.sdk.common.vector.VectorSearchParameter;
 import io.dingodb.sdk.common.vector.VectorWithDistanceResult;
 import io.dingodb.sdk.common.vector.VectorWithId;
-import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.service.connector.IndexServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,7 @@ import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 public class IndexServiceClient {
 
     private final Map<DingoCommonId, IndexServiceConnector> connectorCache = new ConcurrentHashMap<>();
+    private final Map<DingoCommonId, Context> contextCache = new ConcurrentHashMap<>();
     private final MetaServiceClient rootMetaService;
 
     private Integer retryTimes;
@@ -70,8 +72,16 @@ public class IndexServiceClient {
         return () -> rootMetaService.getSubMetaService(schemaId).getIndexRangeDistribution(indexId).values().stream()
                 .filter(rd -> rd.getId().equals(regionId))
                 .findAny()
+                .map(this::cacheRangeEpoch)
                 .map(RangeDistribution::getLeader)
                 .orElse(null);
+    }
+
+    private RangeDistribution cacheRangeEpoch(RangeDistribution rangeDistribution) {
+        contextCache.computeIfAbsent(
+                rangeDistribution.getId(),
+                __ -> new Context(rangeDistribution.getId(), rangeDistribution.getRegionEpoch()));
+        return rangeDistribution;
     }
 
     public IndexServiceConnector getIndexStoreConnector(DingoCommonId indexId, DingoCommonId regionId) {
@@ -92,14 +102,17 @@ public class IndexServiceClient {
             List<VectorWithId> vectors,
             boolean replaceDeleted,
             boolean isUpdate) {
-        Index.VectorAddRequest request = Index.VectorAddRequest.newBuilder()
-                .setRegionId(regionId.entityId())
+
+        Index.VectorAddRequest.Builder builder = Index.VectorAddRequest.newBuilder()
                 .addAllVectors(vectors.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
                 .setReplaceDeleted(replaceDeleted)
-                .setIsUpdate(isUpdate)
-                .build();
+                .setIsUpdate(isUpdate);
 
-        Index.VectorAddResponse response = exec(stub -> stub.vectorAdd(request), retryTimes, indexId, regionId);
+        Index.VectorAddResponse response = exec(stub -> stub.vectorAdd(
+                builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes,
+                indexId,
+                regionId);
 
         return response.getKeyStatesList();
     }
@@ -153,13 +166,13 @@ public class IndexServiceClient {
         if (search.getDiskAnnParam() != null) {
 
         }
-        Index.VectorSearchRequest request = Index.VectorSearchRequest.newBuilder()
-                .setRegionId(regionId.entityId())
+        Index.VectorSearchRequest.Builder reqBuilder = Index.VectorSearchRequest.newBuilder()
                 .addAllVectorWithIds(vectors.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
-                .setParameter(builder.build())
-                .build();
+                .setParameter(builder.build());
 
-        Index.VectorSearchResponse response = exec(stub -> stub.vectorSearch(request), retryTimes, indexId, regionId);
+        Index.VectorSearchResponse response = exec(stub ->
+                stub.vectorSearch(reqBuilder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, indexId, regionId);
 
         return response.getBatchResultsList().stream()
                 .map(r -> new VectorWithDistanceResult(r.getVectorWithDistancesList().stream()
@@ -175,34 +188,30 @@ public class IndexServiceClient {
             Boolean withOutVectorData,
             Boolean withOutScalarData,
             List<String> selectedKeys) {
-        Index.VectorBatchQueryRequest request = Index.VectorBatchQueryRequest.newBuilder()
-                .setRegionId(regionId.entityId())
+        Index.VectorBatchQueryRequest.Builder builder = Index.VectorBatchQueryRequest.newBuilder()
                 .addAllVectorIds(vectorIds)
                 .setWithoutVectorData(withOutVectorData)
                 .setWithoutScalarData(withOutScalarData)
-                .addAllSelectedKeys(selectedKeys)
-                .build();
+                .addAllSelectedKeys(selectedKeys);
 
-        Index.VectorBatchQueryResponse response = exec(stub -> stub.vectorBatchQuery(request), retryTimes, indexId,
-                regionId);
+        Index.VectorBatchQueryResponse response = exec(stub ->
+                stub.vectorBatchQuery(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, indexId, regionId);
 
         return response.getVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
     }
 
     public Long vectorGetBoderId(DingoCommonId indexId, DingoCommonId regionId, Boolean getMin) {
-        Index.VectorGetBorderIdRequest request = Index.VectorGetBorderIdRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .setGetMin(getMin)
-                .build();
+        Index.VectorGetBorderIdRequest.Builder builder = Index.VectorGetBorderIdRequest.newBuilder().setGetMin(getMin);
 
-        Index.VectorGetBorderIdResponse response = exec(stub -> stub.vectorGetBorderId(request), retryTimes, indexId,
-                regionId);
+        Index.VectorGetBorderIdResponse response = exec(stub ->
+                stub.vectorGetBorderId(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, indexId, regionId);
         return response.getId();
     }
 
     public List<VectorWithId> vectorScanQuery(DingoCommonId indexId, DingoCommonId regionId, VectorScanQuery query) {
-        Index.VectorScanQueryRequest request = Index.VectorScanQueryRequest.newBuilder()
-                .setRegionId(regionId.entityId())
+        Index.VectorScanQueryRequest.Builder builder = Index.VectorScanQueryRequest.newBuilder()
                 .setVectorIdStart(query.getStartId())
                 .setVectorIdEnd(query.getEndId())
                 .setIsReverseScan(query.getIsReverseScan())
@@ -215,11 +224,11 @@ public class IndexServiceClient {
                 .setScalarForFilter(Optional.mapOrGet(
                         query.getScalarForFilter(),
                         EntityConversion::mapping,
-                        () -> Common.VectorScalardata.newBuilder().build()))
-                .build();
+                        () -> Common.VectorScalardata.newBuilder().build()));
 
-        Index.VectorScanQueryResponse response = exec(stub -> stub.vectorScanQuery(request), retryTimes, indexId,
-                regionId);
+        Index.VectorScanQueryResponse response = exec(stub ->
+                stub.vectorScanQuery(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, indexId, regionId);
         return response.getVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList());
     }
 
@@ -227,8 +236,14 @@ public class IndexServiceClient {
         Index.VectorCalcDistanceRequest request = Index.VectorCalcDistanceRequest.newBuilder()
                 .setAlgorithmType(Index.AlgorithmType.valueOf(distance.getAlgorithmType().name()))
                 .setMetricType(Common.MetricType.valueOf(distance.getMetricType().name()))
-                .addAllOpLeftVectors(distance.getLeftVectors().stream().map(EntityConversion::mapping).collect(Collectors.toList()))
-                .addAllOpRightVectors(distance.getRightVectors().stream().map(EntityConversion::mapping).collect(Collectors.toList()))
+                .addAllOpLeftVectors(distance.getLeftVectors()
+                        .stream()
+                        .map(EntityConversion::mapping)
+                        .collect(Collectors.toList()))
+                .addAllOpRightVectors(distance.getRightVectors()
+                        .stream()
+                        .map(EntityConversion::mapping)
+                        .collect(Collectors.toList()))
                 .setIsReturnNormlize(distance.getIsReturnNormalize())
                 .build();
 
@@ -237,27 +252,27 @@ public class IndexServiceClient {
         return new VectorDistanceRes(
                 response.getOpLeftVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
                 response.getOpRightVectorsList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
-                response.getDistancesList().stream().map(d -> new VectorDistance(d.getInternalDistancesList())).collect(Collectors.toList())
+                response.getDistancesList().stream()
+                        .map(d -> new VectorDistance(d.getInternalDistancesList()))
+                        .collect(Collectors.toList())
         );
     }
 
     public VectorIndexMetrics vectorGetRegionMetrics(DingoCommonId indexId, DingoCommonId regionId) {
-        Index.VectorGetRegionMetricsRequest request = Index.VectorGetRegionMetricsRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .build();
+        Index.VectorGetRegionMetricsRequest.Builder builder = Index.VectorGetRegionMetricsRequest.newBuilder();
 
-        Index.VectorGetRegionMetricsResponse response = exec(stub -> stub.vectorGetRegionMetrics(request), retryTimes,
-                indexId, regionId);
+        Index.VectorGetRegionMetricsResponse response = exec(stub ->
+                stub.vectorGetRegionMetrics(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, indexId, regionId);
         return mapping(response.getMetrics());
     }
 
     public List<Boolean> vectorDelete(DingoCommonId indexId, DingoCommonId regionId, List<Long> ids) {
-        Index.VectorDeleteRequest request = Index.VectorDeleteRequest.newBuilder()
-                .setRegionId(regionId.entityId())
-                .addAllIds(ids)
-                .build();
+        Index.VectorDeleteRequest.Builder builder = Index.VectorDeleteRequest.newBuilder().addAllIds(ids);
 
-        Index.VectorDeleteResponse response = exec(stub -> stub.vectorDelete(request), retryTimes, indexId, regionId);
+        Index.VectorDeleteResponse response = exec(stub ->
+                stub.vectorDelete(builder.setContext(mapping(contextCache.get(regionId))).build()),
+                retryTimes, indexId, regionId);
 
         return response.getKeyStatesList();
     }

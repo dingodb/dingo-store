@@ -29,7 +29,6 @@
 
     <modules>
         <module>dingo-sdk</module>
-        <module>dingo-java-sdk-example</module>
     </modules>
     <packaging>pom</packaging>
 

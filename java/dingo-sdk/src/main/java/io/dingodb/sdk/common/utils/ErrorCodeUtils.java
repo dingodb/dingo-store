@@ -20,7 +20,21 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
-import static io.dingodb.error.ErrorOuterClass.Errno.*;
+import static io.dingodb.error.ErrorOuterClass.Errno.EKEY_OUT_OF_RANGE_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_COMMITLOG_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_INIT_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_NOTLEADER_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_MERGEING_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_NOT_FOUND_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_PEER_CHANGEING_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_REDIRECT_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_SPLITING_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_STATE_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_UNAVAILABLE_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_VERSION_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_NOT_FOUND_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ETABLE_NOT_FOUND_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EVECTOR_INDEX_NOT_READY_VALUE;
 
 public class ErrorCodeUtils {
 
@@ -37,7 +51,8 @@ public class ErrorCodeUtils {
         EREGION_REDIRECT_VALUE,
         EREGION_SPLITING_VALUE,
         EREGION_MERGEING_VALUE,
-        EREGION_NOT_FOUND_VALUE
+        EREGION_NOT_FOUND_VALUE,
+        EREGION_VERSION_VALUE
     );
 
     public static final List<Integer> retryCode = Arrays.asList(
