@@ -789,6 +789,8 @@ int CoordinatorSender() {
   return 0;
 }
 
+std::shared_ptr<client::Context> global_ctx;
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = true;
@@ -868,6 +870,8 @@ int main(int argc, char* argv[]) {
   if (!FLAGS_addr.empty()) {
     FLAGS_coordinator_addr = FLAGS_addr;
   }
+
+  global_ctx = ctx;
 
   auto ret = CoordinatorSender();
   if (ret < 0) {

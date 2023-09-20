@@ -28,8 +28,7 @@ message Context {
 }
 
 message KvGetRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   bytes key = 2;
 }
 
@@ -39,8 +38,7 @@ message KvGetResponse {
 }
 
 message KvBatchGetRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   repeated bytes keys = 2;
 }
 
@@ -50,8 +48,7 @@ message KvBatchGetResponse {
 }
 
 message KvPutRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   dingodb.pb.common.KeyValue kv = 2;
 }
 
@@ -60,8 +57,7 @@ message KvPutResponse {
 }
 
 message KvBatchPutRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
@@ -70,8 +66,7 @@ message KvBatchPutResponse {
 }
 
 message KvPutIfAbsentRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   dingodb.pb.common.KeyValue kv = 2;
 }
 
@@ -83,8 +78,7 @@ message KvPutIfAbsentResponse {
 }
 
 message KvBatchPutIfAbsentRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   repeated dingodb.pb.common.KeyValue kvs = 2;
   bool is_atomic = 3;
 }
@@ -98,8 +92,7 @@ message KvBatchPutIfAbsentResponse {
 }
 
 message KvBatchDeleteRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   repeated bytes keys = 2;
 }
 
@@ -112,8 +105,7 @@ message KvBatchDeleteResponse {
 }
 
 message KvDeleteRangeRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   dingodb.pb.common.RangeWithOptions range = 2;
 }
 
@@ -123,8 +115,7 @@ message KvDeleteRangeResponse {
 }
 
 message KvCompareAndSetRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   dingodb.pb.common.KeyValue kv = 2;
   // empty means key not exist
   bytes expect_value = 3;
@@ -138,8 +129,7 @@ message KvCompareAndSetResponse {
 }
 
 message KvBatchCompareAndSetRequest {
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
   repeated dingodb.pb.common.KeyValue kvs = 2;
   // empty means key not exist
   repeated bytes expect_values = 3;
@@ -238,8 +228,7 @@ message Coprocessor {
 
 message KvScanBeginRequest {
   // region id
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
 
   // prefix start_key end_key with mode
   dingodb.pb.common.RangeWithOptions range = 2;
@@ -280,8 +269,7 @@ message KvScanBeginResponse {
 
 message KvScanContinueRequest {
   // region id
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
 
   // uniquely identifies this scan
   bytes scan_id = 2;
@@ -304,8 +292,7 @@ message KvScanContinueResponse {
 
 message KvScanReleaseRequest {
   // region id
-  Context context = 10;
-  uint64 region_id = 1;
+  Context context = 1;
 
   // uniquely identifies this scan
   bytes scan_id = 2;
