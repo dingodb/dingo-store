@@ -20,8 +20,8 @@ package io.dingodb.sdk.service.store;
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
 import io.dingodb.common.Common.RangeWithOptions;
+import io.dingodb.sdk.common.Context;
 import io.dingodb.sdk.common.DingoClientException;
-import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.StoreServiceConnector;
@@ -37,7 +37,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     private final AtomicReference<StoreServiceGrpc.StoreServiceBlockingStub> stub = new AtomicReference<>();
     private final StoreServiceConnector connector;
-    private final DingoCommonId regionId;
+    private final Context context;
     private final RangeWithOptions range;
 
     private final ByteString scanId;
@@ -50,14 +50,14 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     public ScanIterator(
         StoreServiceConnector connector,
-        DingoCommonId regionId,
+        Context context,
         RangeWithOptions range,
         boolean key_only,
         int retryTimes,
         Coprocessor coprocessor
     ) {
         this.connector = connector;
-        this.regionId = regionId;
+        this.context = context;
         this.range = range;
         this.retryTimes = retryTimes;
         this.coprocessor = coprocessor;
@@ -80,10 +80,10 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
     public ByteString scanBegin() {
         Store.KvScanBeginRequest.Builder builder = Store.KvScanBeginRequest.newBuilder()
                 .setRange(range)
-                .setRegionId(regionId.entityId())
+                .setContext(EntityConversion.mapping(context))
                 .setMaxFetchCnt(0);
         if (coprocessor != null) {
-            builder.setCoprocessor(EntityConversion.mapping(coprocessor, regionId));
+            builder.setCoprocessor(EntityConversion.mapping(coprocessor, context.getRegionId()));
         }
         Store.KvScanBeginRequest request = builder.build();
         Store.KvScanBeginResponse response = connector.exec(stub -> {
@@ -99,7 +99,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         }
         Store.KvScanContinueResponse response = stub.get().kvScanContinue(Store.KvScanContinueRequest.newBuilder()
             .setScanId(scanId)
-            .setRegionId(regionId.entityId())
+            .setContext(EntityConversion.mapping(context))
             .setMaxFetchCnt(10)
             .build());
         checkRes(response.getError(), "continue");
@@ -112,7 +112,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     public void scanRelease() {
         Store.KvScanReleaseResponse response = stub.get().kvScanRelease(Store.KvScanReleaseRequest.newBuilder()
-            .setRegionId(regionId.entityId())
+            .setContext(EntityConversion.mapping(context))
             .setScanId(scanId)
             .build());
         checkRes(response.getError(), "release");

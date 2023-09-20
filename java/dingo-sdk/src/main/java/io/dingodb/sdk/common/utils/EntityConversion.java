@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
 import io.dingodb.meta.Meta;
+import io.dingodb.sdk.common.Context;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
@@ -51,6 +52,10 @@ import io.dingodb.sdk.common.partition.Partition;
 import io.dingodb.sdk.common.partition.PartitionDetail;
 import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
 import io.dingodb.sdk.common.partition.PartitionRule;
+import io.dingodb.sdk.common.region.RegionEpoch;
+import io.dingodb.sdk.common.region.RegionHeartbeatState;
+import io.dingodb.sdk.common.region.RegionState;
+import io.dingodb.sdk.common.region.RegionStatus;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.serial.schema.Type;
@@ -188,12 +193,39 @@ public class EntityConversion {
                 .build();
     }
 
+    public static Store.Context mapping(Context context) {
+        return Store.Context.newBuilder()
+                .setRegionId(context.getRegionId().entityId())
+                .setRegionEpoch(mapping(context.getRegionEpoch()))
+                .build();
+    }
+
     public static RangeDistribution mapping(Meta.RangeDistribution rangeDistribution) {
         return new RangeDistribution(
                 mapping(rangeDistribution.getId()),
                 mapping(rangeDistribution.getRange()),
                 mapping(rangeDistribution.getLeader()),
-                rangeDistribution.getVotersList().stream().map(EntityConversion::mapping).collect(Collectors.toList()));
+                rangeDistribution.getVotersList().stream().map(EntityConversion::mapping).collect(Collectors.toList()),
+                mapping(rangeDistribution.getRegionEpoch()),
+                mapping(rangeDistribution.getStatus())
+        );
+    }
+
+    public static RegionEpoch mapping(Common.RegionEpoch regionEpoch) {
+        return new RegionEpoch(regionEpoch.getConfVersion(), regionEpoch.getVersion());
+    }
+
+    public static Common.RegionEpoch mapping(RegionEpoch regionEpoch) {
+        return Common.RegionEpoch.newBuilder()
+                .setConfVersion(regionEpoch.getConfVersion())
+                .setVersion(regionEpoch.getVersion())
+                .build();
+    }
+
+    public static RegionStatus mapping(Meta.RegionStatus status) {
+        return new RegionStatus(
+                RegionState.valueOf(status.getState().name()),
+                RegionHeartbeatState.valueOf(status.getHeartbeatState().name()));
     }
 
     public static Location mapping(Common.Location location) {
