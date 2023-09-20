@@ -65,6 +65,7 @@ DECLARE_string(key);
 DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
 DECLARE_int32(limit);
+DECLARE_uint64(safe_point);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1637,6 +1638,32 @@ void SendScanRegions(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   DINGO_LOG(INFO) << "ScanRegions request: " << request.DebugString();
 
   auto status = coordinator_interaction->SendRequest("ScanRegions", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetGCSafePointRequest request;
+  dingodb::pb::coordinator::GetGCSafePointResponse response;
+
+  auto status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << "gc_safe_point=" << response.safe_point();
+}
+
+void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::UpdateGCSafePointRequest request;
+  dingodb::pb::coordinator::UpdateGCSafePointResponse response;
+
+  if (FLAGS_safe_point == 0) {
+    DINGO_LOG(ERROR) << "gc_safe_point is empty";
+    return;
+  }
+
+  request.set_safe_point(FLAGS_safe_point);
+
+  auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 }

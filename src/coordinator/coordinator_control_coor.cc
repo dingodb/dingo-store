@@ -4724,4 +4724,29 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::UpdateGCSafePoint(uint64_t safe_point, uint64_t& new_safe_point,
+                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "UpdateGCSafePoint safe_point=" << safe_point;
+
+  uint64_t now_safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+
+  if (now_safe_point >= safe_point) {
+    DINGO_LOG(WARNING) << "UpdateGCSafePoint now_safe_point=" << now_safe_point << " >= safe_point=" << safe_point
+                       << ", skip update";
+    new_safe_point = now_safe_point;
+    return butil::Status::OK();
+  }
+
+  new_safe_point = safe_point;
+
+  UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT, safe_point, meta_increment);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetGCSafePoint(uint64_t& safe_point) {
+  safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb
