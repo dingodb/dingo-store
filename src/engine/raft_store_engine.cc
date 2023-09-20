@@ -138,6 +138,14 @@ bool RaftStoreEngine::Recover() {
       }
 
       AddNode(region, parameter);
+      if (region->NeedBootstrapDoSnapshot()) {
+        DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] need do snapshot.", region->Id());
+        auto node = GetNode(region->Id());
+        if (node != nullptr) {
+          node->Snapshot(new SplitHandler::SplitClosure(region));
+        }
+      }
+
       ++count;
     }
   }

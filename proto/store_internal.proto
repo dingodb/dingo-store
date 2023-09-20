@@ -48,7 +48,10 @@ message Region {
   dingodb.pb.common.StoreRegionState state = 40;
   repeated dingodb.pb.common.StoreRegionState history_states = 50;
 
-  bool disable_split = 70;  // true: forbid region split
+  bool need_bootstrap_do_snapshot = 51;
+
+  bool temporary_disable_change = 69;  // store local control
+  bool disable_change = 70;  // external control, e.g. coordinator/store, region split/merge/conf_change switch
   uint64 last_split_timestamp = 71;
   uint64 parent_id = 72;
   repeated RegionSplitRecord childs = 73;
@@ -61,6 +64,7 @@ message VectorIndexMeta {
   int32 status = 4;
   uint64 apply_log_id = 5;
   uint64 snapshot_log_id = 6;
+  bool need_bootstrap_build = 10;
 }
 
 message VectorIndexSnapshotMeta {

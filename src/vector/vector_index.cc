@@ -85,6 +85,8 @@ std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(uint64_t id,
   return vector_index_wrapper;
 }
 
+std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::GetSelf() { return shared_from_this(); }
+
 bool VectorIndexWrapper::Init() {
   if (!worker_->Init()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Init vector index wrapper failed.", Id());
@@ -107,6 +109,11 @@ bool VectorIndexWrapper::Recover() {
     return false;
   }
 
+  if (NeedBootstrapBuild()) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] need bootstrap build vector index.", Id());
+    VectorIndexManager::AsyncLoadOrBuildVectorIndex(GetSelf());
+  }
+
   return true;
 }
 
@@ -126,6 +133,7 @@ butil::Status VectorIndexWrapper::SaveMeta() {
   meta.set_type(static_cast<int>(vector_index_type_));
   meta.set_apply_log_id(ApplyLogId());
   meta.set_snapshot_log_id(SnapshotLogId());
+  meta.set_need_bootstrap_build(NeedBootstrapBuild());
 
   auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenMetaKey(id_));
@@ -162,6 +170,8 @@ butil::Status VectorIndexWrapper::LoadMeta() {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] prase vector index meta failed.", Id());
   }
 
+  SetNeedBootstrapBuild(meta.need_bootstrap_build());
+
   return butil::Status();
 }
 
@@ -186,6 +196,13 @@ bool VectorIndexWrapper::IsSwitchingVectorIndex() { return is_switching_vector_i
 
 void VectorIndexWrapper::SetIsSwitchingVectorIndex(bool is_switching) {
   is_switching_vector_index_.store(is_switching);
+}
+
+bool VectorIndexWrapper::NeedBootstrapBuild() { return need_bootstrap_build_; }
+
+void VectorIndexWrapper::SetNeedBootstrapBuild(bool need) {
+  need_bootstrap_build_ = need;
+  SaveMeta();
 }
 
 void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index) {

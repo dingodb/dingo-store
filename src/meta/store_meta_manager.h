@@ -43,9 +43,7 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() : temporary_disable_split_(false), split_strategy_(pb::raft::PRE_CREATE_REGION) {
-    bthread_mutex_init(&mutex_, nullptr);
-  };
+  Region() : split_strategy_(pb::raft::PRE_CREATE_REGION) { bthread_mutex_init(&mutex_, nullptr); };
   ~Region() { bthread_mutex_destroy(&mutex_); }
 
   Region(const Region&) = delete;
@@ -91,11 +89,14 @@ class Region {
   void SetState(pb::common::StoreRegionState state);
   void AppendHistoryState(pb::common::StoreRegionState state) { inner_region_.add_history_states(state); }
 
-  bool DisableSplit();
-  void SetDisableSplit(bool disable_split);
+  bool NeedBootstrapDoSnapshot();
+  void SetNeedBootstrapDoSnapshot(bool need_do_snapshot);
 
-  bool TemporaryDisableSplit();
-  void SetTemporaryDisableSplit(bool disable_split);
+  bool DisableChange();
+  void SetDisableChange(bool disable_change);
+
+  bool TemporaryDisableChange();
+  void SetTemporaryDisableChange(bool disable_change);
 
   pb::raft::SplitStrategy SplitStrategy();
   void SetSplitStrategy(pb::raft::SplitStrategy split_strategy);
@@ -121,7 +122,6 @@ class Region {
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
 
-  std::atomic<bool> temporary_disable_split_;
   pb::raft::SplitStrategy split_strategy_;
 
   VectorIndexWrapperPtr vector_index_wapper_;
@@ -195,6 +195,10 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateEpochVersion(uint64_t region_id, uint64_t version);
   void UpdateEpochConfVersion(store::RegionPtr region, uint64_t version);
   void UpdateEpochConfVersion(uint64_t region_id, uint64_t version);
+
+  void UpdateNeedBootstrapDoSnapshot(store::RegionPtr region, bool need_do_snapshot);
+  void UpdateDisableChange(store::RegionPtr region, bool disable_change);
+  void UpdateTemporaryDisableChange(store::RegionPtr region, bool disable_change);
 
   bool IsExistRegion(uint64_t region_id);
   store::RegionPtr GetRegion(uint64_t region_id);

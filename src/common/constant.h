@@ -115,9 +115,10 @@ class Constant {
 
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 
-  static const uint32_t kBuildVectorIndexBatchSize = 4096;
+  static const uint32_t kBuildVectorIndexBatchSize = 8192;
 
   // split region
+  static constexpr int kSplitDoSnapshotRetryTimes = 5;
   inline static const std::string kSplitStrategy = "PRE_CREATE_REGION";
   static constexpr uint32_t kDefaultSplitCheckConcurrency = 5;
   inline static const std::string kDefaultSplitPolicy = "HALF";

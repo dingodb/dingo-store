@@ -276,6 +276,15 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   if (parent_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
   }
+
+  if (parent_region->DisableChange()) {
+    return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Disable region change.");
+  }
+
+  if (parent_region->TemporaryDisableChange()) {
+    return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Temporary disable region change.");
+  }
+
   if (ConfigHelper::GetSplitStrategy() == pb::raft::PRE_CREATE_REGION) {
     auto child_region = store_region_meta->GetRegion(child_region_id);
     if (child_region == nullptr) {
@@ -425,6 +434,14 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 
   if (region->State() != pb::common::StoreRegionState::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow change.");
+  }
+
+  if (region->DisableChange()) {
+    return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Disable region change.");
+  }
+
+  if (region->TemporaryDisableChange()) {
+    return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Temporary disable region change.");
   }
 
   return CheckLeader(region_definition.id());
@@ -840,7 +857,7 @@ butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, uint64_t re
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
   }
 
-  region->SetDisableSplit(disable_split);
+  store_region_meta->UpdateDisableChange(region, disable_split);
 
   return butil::Status();
 }
@@ -888,6 +905,7 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   if (is_hold) {
     // Load vector index.
     if (!vector_index_wrapper->IsReady()) {
+      vector_index_wrapper->SetNeedBootstrapBuild(true);
       auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format(
@@ -897,6 +915,7 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
         DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] load or build vector index finish",
                                        region_id);
       }
+      vector_index_wrapper->SetNeedBootstrapBuild(false);
     }
   } else {
     // Delete vector index.
