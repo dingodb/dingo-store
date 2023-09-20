@@ -73,13 +73,12 @@ class SplitHandler : public BaseHandler {
  public:
   class SplitClosure : public braft::Closure {
    public:
-    SplitClosure(store::RegionPtr region, bool is_child) : region_(region), is_child_(is_child) {}
+    SplitClosure(store::RegionPtr region) : region_(region) {}
     ~SplitClosure() override = default;
 
     void Run() override;
 
    private:
-    bool is_child_;
     store::RegionPtr region_;
   };
 

@@ -212,7 +212,7 @@ class VectorIndex {
 
 using VectorIndexPtr = std::shared_ptr<VectorIndex>;
 
-class VectorIndexWrapper {
+class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrapper> {
  public:
   VectorIndexWrapper(uint64_t id, pb::common::VectorIndexParameter index_parameter,
                      int64_t save_snapshot_threshold_write_key_num)
@@ -236,6 +236,8 @@ class VectorIndexWrapper {
   ~VectorIndexWrapper();
 
   static std::shared_ptr<VectorIndexWrapper> New(uint64_t id, pb::common::VectorIndexParameter index_parameter);
+
+  std::shared_ptr<VectorIndexWrapper> GetSelf();
 
   bool Init();
   void Destroy();
@@ -267,6 +269,9 @@ class VectorIndexWrapper {
 
   bool IsSwitchingVectorIndex();
   void SetIsSwitchingVectorIndex(bool is_switching);
+
+  bool NeedBootstrapBuild();
+  void SetNeedBootstrapBuild(bool need);
 
   vector_index::SnapshotMetaSetPtr SnapshotSet() { return snapshot_set_; }
 
@@ -342,6 +347,9 @@ class VectorIndexWrapper {
   uint64_t last_save_write_key_count_;
   // save snapshot threshold write key num
   uint64_t save_snapshot_threshold_write_key_num_;
+
+  // need build vector index when bootstrap
+  bool need_bootstrap_build_;
 };
 
 using VectorIndexWrapperPtr = std::shared_ptr<VectorIndexWrapper>;

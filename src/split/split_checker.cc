@@ -194,12 +194,12 @@ void SplitCheckTask::SplitCheck() {
       need_split = false;
       break;
     }
-    if (region_->DisableSplit()) {
+    if (region_->DisableChange()) {
       reason = "region disable split";
       need_split = false;
       break;
     }
-    if (region_->TemporaryDisableSplit()) {
+    if (region_->TemporaryDisableChange()) {
       reason = "region temporary disable split";
       need_split = false;
       break;
@@ -332,12 +332,12 @@ void PreSplitCheckTask::PreSplitCheck() {
         reason = "region state is not normal";
         break;
       }
-      if (region->DisableSplit()) {
+      if (region->DisableChange()) {
         need_scan_check = false;
         reason = "region is disable split";
         break;
       }
-      if (region->TemporaryDisableSplit()) {
+      if (region->TemporaryDisableChange()) {
         need_scan_check = false;
         reason = "region is temporary disable split";
         break;

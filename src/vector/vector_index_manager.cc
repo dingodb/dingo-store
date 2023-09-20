@@ -89,7 +89,8 @@ void RebuildVectorIndexTask::Run() {
 
     auto region = Server::GetInstance()->GetRegion(vector_index_wrapper_->Id());
     if (region != nullptr) {
-      region->SetTemporaryDisableSplit(false);
+      auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+      store_region_meta->UpdateTemporaryDisableChange(region, false);
     }
   }
 }
@@ -147,6 +148,7 @@ bool VectorIndexManager::NeedHoldVectorIndex(uint64_t region_id) {
 butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
 
+  uint64_t start_time = Helper::TimestampMs();
   uint64_t vector_index_id = vector_index_wrapper->Id();
 
   // try to load vector index from snapshot
@@ -157,8 +159,9 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
         "[vector_index.load][index_id({})] Load vector index from snapshot success, will ReplayWal", vector_index_id);
     auto status = ReplayWalToVectorIndex(new_vector_index, new_vector_index->ApplyLogId() + 1, UINT64_MAX);
     if (status.ok()) {
-      DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] ReplayWal success, log_id {}", vector_index_id,
-                                     new_vector_index->ApplyLogId());
+      DINGO_LOG(INFO) << fmt::format(
+          "[vector_index.load][index_id({})] ReplayWal success, log_id {} elapsed time({}ms)", vector_index_id,
+          new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
       // Switch vector index.
       vector_index_wrapper->UpdateVectorIndex(new_vector_index);
 
@@ -173,7 +176,9 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   // Build a new vector_index from original data
   new_vector_index = BuildVectorIndex(vector_index_wrapper);
   if (new_vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] Build vector index failed", vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.build][index_id({})] Build vector index failed, elapsed time({}ms).", vector_index_id,
+        Helper::TimestampMs() - start_time);
 
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed, vector index id %lu",
                          vector_index_id);
@@ -182,7 +187,41 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   // Switch vector index.
   vector_index_wrapper->UpdateVectorIndex(new_vector_index);
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] Build vector index success.", vector_index_id);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] Build vector index success, elapsed time({}ms).",
+                                 vector_index_id, Helper::TimestampMs() - start_time);
+
+  return butil::Status();
+}
+
+butil::Status VectorIndexManager::AsyncLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+  assert(vector_index_wrapper != nullptr);
+
+  DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] async load or build vector index.",
+                                 vector_index_wrapper->Id());
+
+  struct Parameter {
+    VectorIndexWrapperPtr vector_index_wrapper;
+  };
+
+  Parameter* param = new Parameter();
+  param->vector_index_wrapper = vector_index_wrapper;
+
+  bthread_t tid;
+  const bthread_attr_t attr = BTHREAD_ATTR_NORMAL;
+  bthread_start_background(
+      &tid, &attr,
+      [](void* arg) -> void* {
+        Parameter* param = static_cast<Parameter*>(arg);
+        auto vector_index_wrapper = param->vector_index_wrapper;
+
+        LoadOrBuildVectorIndex(vector_index_wrapper);
+
+        vector_index_wrapper->SetNeedBootstrapBuild(false);
+
+        delete param;
+        return nullptr;
+      },
+      param);
 
   return butil::Status();
 }
@@ -196,7 +235,7 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
     std::vector<int> results;
   };
 
-  Parameter* param = new Parameter();
+  auto param = std::make_shared<Parameter>();
   param->regions = regions;
   param->offset = 0;
   param->results.resize(regions.size(), 0);
@@ -230,7 +269,7 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
     return nullptr;
   };
 
-  if (!Helper::ParallelRunTask(task, param, concurrency)) {
+  if (!Helper::ParallelRunTask(task, param.get(), concurrency)) {
     return butil::Status(pb::error::EINTERNAL, "Create bthread failed.");
   }
 
@@ -247,8 +286,8 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
 butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_index, uint64_t start_log_id,
                                                          uint64_t end_log_id) {
   assert(vector_index != nullptr);
-  DINGO_LOG(INFO) << fmt::format("Replay vector index {} from log id {} to log id {}", vector_index->Id(), start_log_id,
-                                 end_log_id);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.replaywal][index_id({})] replay wal log({}-{})", vector_index->Id(),
+                                 start_log_id, end_log_id);
 
   uint64_t start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
@@ -334,8 +373,10 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "Replay vector index {} from log id {} to log id {} finish, last_log_id {} elapsed time {}ms", vector_index->Id(),
-      start_log_id, end_log_id, last_log_id, Helper::TimestampMs() - start_time);
+      "[vector_index.replaywal][index_id({})] replay wal finish, log({}-{}) last_log_id({}) vector_id({}-{}) elapsed "
+      "time({}ms)",
+      vector_index->Id(), start_log_id, end_log_id, last_log_id, min_vector_id, max_vector_id,
+      Helper::TimestampMs() - start_time);
 
   return butil::Status();
 }
@@ -372,8 +413,10 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
   std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
-  DINGO_LOG(INFO) << fmt::format("[vector_index.build][index_id({})] Build vector index, range: [{}-{})",
-                                 vector_index_id, Helper::StringToHex(start_key), Helper::StringToHex(end_key));
+  DINGO_LOG(INFO) << fmt::format("[vector_index.build][index_id({})] Build vector index, range: [{}({})-{}({}))",
+                                 vector_index_id, Helper::StringToHex(start_key),
+                                 VectorCodec::DecodeVectorId(start_key), Helper::StringToHex(end_key),
+                                 VectorCodec::DecodeVectorId(end_key));
 
   uint64_t start_time = Helper::TimestampMs();
   // load vector data to vector index

@@ -201,19 +201,35 @@ void Region::SetState(pb::common::StoreRegionState state) {
   }
 }
 
-bool Region::DisableSplit() {
+bool Region::NeedBootstrapDoSnapshot() {
   BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.disable_split();
+  return inner_region_.need_bootstrap_do_snapshot();
 }
 
-void Region::SetDisableSplit(bool disable_split) {
+void Region::SetNeedBootstrapDoSnapshot(bool need_do_snapshot) {
   BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.set_disable_split(disable_split);
+  inner_region_.set_need_bootstrap_do_snapshot(need_do_snapshot);
 }
 
-bool Region::TemporaryDisableSplit() { return temporary_disable_split_.load(); }
+bool Region::DisableChange() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.disable_change();
+}
 
-void Region::SetTemporaryDisableSplit(bool disable_split) { temporary_disable_split_.store(disable_split); }
+void Region::SetDisableChange(bool disable_change) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_disable_change(disable_change);
+}
+
+bool Region::TemporaryDisableChange() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.temporary_disable_change();
+}
+
+void Region::SetTemporaryDisableChange(bool disable_change) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_temporary_disable_change(disable_change);
+}
 
 pb::raft::SplitStrategy Region::SplitStrategy() { return split_strategy_; }
 void Region::SetSplitStrategy(pb::raft::SplitStrategy split_strategy) { split_strategy_ = split_strategy; }
@@ -506,6 +522,27 @@ void StoreRegionMeta::UpdateEpochConfVersion(uint64_t region_id, uint64_t versio
   if (region != nullptr) {
     UpdateEpochConfVersion(region, version);
   }
+}
+
+void StoreRegionMeta::UpdateNeedBootstrapDoSnapshot(store::RegionPtr region, bool need_do_snapshot) {
+  assert(region != nullptr);
+
+  region->SetNeedBootstrapDoSnapshot(need_do_snapshot);
+  meta_writer_->Put(TransformToKv(region));
+}
+
+void StoreRegionMeta::UpdateDisableChange(store::RegionPtr region, bool disable_change) {
+  assert(region != nullptr);
+
+  region->SetDisableChange(disable_change);
+  meta_writer_->Put(TransformToKv(region));
+}
+
+void StoreRegionMeta::UpdateTemporaryDisableChange(store::RegionPtr region, bool disable_change) {
+  assert(region != nullptr);
+
+  region->SetTemporaryDisableChange(disable_change);
+  meta_writer_->Put(TransformToKv(region));
 }
 
 bool StoreRegionMeta::IsExistRegion(uint64_t region_id) { return GetRegion(region_id) != nullptr; }
