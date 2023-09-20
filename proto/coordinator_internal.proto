@@ -147,6 +147,8 @@ enum IdEpochType {
 
   ID_NEXT_LEASE = 40;
   ID_NEXT_REVISION = 41;
+
+  ID_GC_SAFE_POINT = 50;
 }
 
 message IdEpochInternal {

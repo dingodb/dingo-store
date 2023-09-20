@@ -1792,4 +1792,74 @@ void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController * /*con
   }
 }
 
+void CoordinatorServiceImpl::UpdateGCSafePoint(google::protobuf::RpcController *controller,
+                                               const pb::coordinator::UpdateGCSafePointRequest *request,
+                                               pb::coordinator::UpdateGCSafePointResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(INFO) << "Receive UpdateGCSafePoint Request:" << request->ShortDebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  uint64_t new_gc_safe_point = 0;
+  auto ret = this->coordinator_control_->UpdateGCSafePoint(request->safe_point(), new_gc_safe_point, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "UpdateGCSafePoint failed, gc_safe_point:" << request->safe_point()
+                     << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  response->set_new_safe_point(new_gc_safe_point);
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::coordinator::UpdateGCSafePointRequest, pb::coordinator::UpdateGCSafePointResponse>
+      *meta_update_gc_safe_point_closure =
+          new CoordinatorClosure<pb::coordinator::UpdateGCSafePointRequest, pb::coordinator::UpdateGCSafePointResponse>(
+              request, response, done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_update_gc_safe_point_closure);
+
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void CoordinatorServiceImpl::GetGCSafePoint(google::protobuf::RpcController * /*controller*/,
+                                            const pb::coordinator::GetGCSafePointRequest *request,
+                                            pb::coordinator::GetGCSafePointResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive GetGCSafePoint Request:" << request->ShortDebugString();
+
+  auto is_leader = this->coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  uint64_t gc_safe_point = 0;
+  auto ret = this->coordinator_control_->GetGCSafePoint(gc_safe_point);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetGCSafePoint failed, errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+
+  response->set_safe_point(gc_safe_point);
+
+  DINGO_LOG(INFO) << "Response GetGCSafePoint Request:" << response->ShortDebugString();
+}
+
 }  // namespace dingodb
