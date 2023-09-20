@@ -46,13 +46,14 @@ RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, int election_timeout_ms,
                    int snapshot_interval_s) {
-  DINGO_LOG(INFO) << "raft init node_id: " << node_id_ << " init_conf: " << init_conf;
+  DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] raft init init_conf: {}", node_id_, init_conf);
+  election_timeout_ms_ = election_timeout_ms;
+
   braft::NodeOptions node_options;
   if (node_options.initial_conf.parse_from(init_conf) != 0) {
     DINGO_LOG(ERROR) << "Fail to parse configuration";
     return -1;
   }
-
   node_options.election_timeout_ms = election_timeout_ms;
   node_options.fsm = fsm_.get();
   node_options.node_owns_fsm = false;
@@ -67,7 +68,7 @@ int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, i
   node_options.node_owns_log_storage = true;
 
   if (node_->init(node_options) != 0) {
-    DINGO_LOG(ERROR) << "Fail to init raft node " << node_id_;
+    DINGO_LOG(ERROR) << fmt::format("[raft.node][node_id({})] init raft node failed.", node_id_);
     return -1;
   }
 
@@ -75,17 +76,17 @@ int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, i
 }
 
 void RaftNode::Stop() {
-  DINGO_LOG(DEBUG) << fmt::format("Stop region {} raft node shutdown", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("[raft.node][node_id({})] stop raft node shutdown.", node_id_);
   node_->shutdown(nullptr);
   node_->join();
-  DINGO_LOG(DEBUG) << fmt::format("Stop region {} finish raft node shutdown", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("[raft.node][node_id({})] stop raft node shutdown finish.", node_id_);
 }
 
 void RaftNode::Destroy() {
   Stop();
   // Delete file directory
   Helper::RemoveAllFileOrDirectory(path_);
-  DINGO_LOG(DEBUG) << fmt::format("Delete region {} delete file directory", node_id_);
+  DINGO_LOG(DEBUG) << fmt::format("[raft.node][node_id({})] delete file directory", node_id_);
 }
 
 // Commit message to raft
@@ -119,8 +120,14 @@ bool RaftNode::HasLeader() { return node_->leader_id().to_string() != "0.0.0.0:0
 braft::PeerId RaftNode::GetLeaderId() { return node_->leader_id(); }
 braft::PeerId RaftNode::GetPeerId() { return node_->node_id().peer_id; }
 
+uint32_t RaftNode::ElectionTimeout() const { return election_timeout_ms_; }
+
 void RaftNode::ResetElectionTimeout(int election_timeout_ms, int max_clock_drift_ms) {
-  node_->reset_election_timeout_ms(election_timeout_ms, max_clock_drift_ms);
+  if (election_timeout_ms != election_timeout_ms_) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.node][node_id({})] reset election time", node_id_);
+    election_timeout_ms_ = election_timeout_ms;
+    node_->reset_election_timeout_ms(election_timeout_ms, max_clock_drift_ms);
+  }
 }
 
 void RaftNode::Shutdown(braft::Closure* done) { node_->shutdown(done); }
@@ -132,7 +139,8 @@ butil::Status RaftNode::ListPeers(std::vector<braft::PeerId>* peers) {
   }
   auto status = node_->list_peers(peers);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "List peers failed, error: " << status.error_str();
+    DINGO_LOG(ERROR) << fmt::format("[raft.node][node_id({})] list peers failed, error: {}", node_id_,
+                                    status.error_str());
   }
   return status;
 }

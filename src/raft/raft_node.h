@@ -18,6 +18,7 @@
 #include <braft/raft.h>
 #include <braft/util.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -53,6 +54,7 @@ class RaftNode {
   braft::PeerId GetLeaderId();
   braft::PeerId GetPeerId();
 
+  uint32_t ElectionTimeout() const;
   void ResetElectionTimeout(int election_timeout_ms, int max_clock_drift_ms);
 
   void Shutdown(braft::Closure* done);
@@ -75,6 +77,8 @@ class RaftNode {
   uint64_t node_id_;
   std::string str_node_id_;
   std::string raft_group_name_;
+
+  uint32_t election_timeout_ms_;
 
   std::shared_ptr<braft::StateMachine> fsm_;
   std::shared_ptr<SegmentLogStorage> log_storage_;
