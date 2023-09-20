@@ -1128,9 +1128,12 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     }
   }
 
+  // check if table_name exists
+  std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
+
   // check if index_name exists
   uint64_t value = 0;
-  index_name_map_safe_temp_.Get(std::to_string(schema_id) + table_definition.name(), value);
+  index_name_map_safe_temp_.Get(new_index_check_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createindex index_name is exist " << table_definition.name();
     return butil::Status(pb::error::Errno::EINDEX_EXISTS,
@@ -1165,7 +1168,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   }
 
   // update index_name_map_safe_temp_
-  if (index_name_map_safe_temp_.PutIfAbsent(std::to_string(schema_id) + table_definition.name(), new_index_id) < 0) {
+  if (index_name_map_safe_temp_.PutIfAbsent(new_index_check_name, new_index_id) < 0) {
     DINGO_LOG(INFO) << " CreateIndex index_name" << table_definition.name()
                     << " is exist, when insert new_index_id=" << new_index_id;
     return butil::Status(pb::error::Errno::EINDEX_EXISTS,
@@ -1219,7 +1222,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
     }
 
     // remove index_name from map
-    index_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_definition.name());
+    index_name_map_safe_temp_.Erase(new_index_check_name);
     return butil::Status(pb::error::Errno::EINDEX_REGION_CREATE_FAILED, "Not enough regions is created");
   }
 
@@ -1472,7 +1475,8 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
 
   // delete index_name from index_name_safe_map_temp_
-  index_name_map_safe_temp_.Erase(std::to_string(schema_id) + table_internal.definition().name());
+  std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, table_internal.definition().name());
+  index_name_map_safe_temp_.Erase(new_index_check_name);
 
   if (table_internal.definition().auto_increment() > 0) {
     AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(index_id);
@@ -1812,8 +1816,10 @@ butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::
     return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_id not valid");
   }
 
+  std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, index_name);
+
   uint64_t temp_index_id = 0;
-  auto ret = index_name_map_safe_temp_.Get(std::to_string(schema_id) + index_name, temp_index_id);
+  auto ret = index_name_map_safe_temp_.Get(new_index_check_name, temp_index_id);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ERRROR: index_name not found " << index_name;
     return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_name not found");

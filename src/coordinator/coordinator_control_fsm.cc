@@ -85,7 +85,9 @@ void CoordinatorControl::BuildTempMaps() {
     table_map_copy.init(10000);
     table_map_.GetRawMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
-      table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+      // table_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+      table_name_map_safe_temp_.Put(Helper::GenNewTableCheckName(it.second.schema_id(), it.second.definition().name()),
+                                    it.first);
     }
   }
 
@@ -98,7 +100,9 @@ void CoordinatorControl::BuildTempMaps() {
     index_map_copy.init(10000);
     index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {
-      index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+      // index_name_map_safe_temp_.Put(std::to_string(it.second.schema_id()) + it.second.definition().name(), it.first);
+      index_name_map_safe_temp_.Put(Helper::GenNewTableCheckName(it.second.schema_id(), it.second.definition().name()),
+                                    it.first);
     }
   }
   DINGO_LOG(INFO) << "index_name_map_safe_temp_ finished, count=" << index_name_map_safe_temp_.Size();
