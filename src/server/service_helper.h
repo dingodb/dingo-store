@@ -22,6 +22,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
@@ -35,7 +36,7 @@ class ServiceHelper {
   static void RedirectLeader(std::string addr, T* response);
 
   template <typename T>
-  static butil::EndPoint RedirectLeader(std::string addr);
+  static pb::node::NodeInfo RedirectLeader(std::string addr);
 
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id);
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region);
@@ -51,31 +52,32 @@ class ServiceHelper {
 };
 
 template <typename T>
-butil::EndPoint ServiceHelper::RedirectLeader(std::string addr) {
-  DINGO_LOG(INFO) << "Redirect leader " << addr;
+pb::node::NodeInfo ServiceHelper::RedirectLeader(std::string addr) {
   auto raft_endpoint = Helper::StrToEndPoint(addr);
-  if (raft_endpoint.port == 0) return butil::EndPoint();
-
-  // From local store map query.
-  butil::EndPoint server_endpoint = Helper::QueryServerEndpointByRaftEndpoint(
-      Server::GetInstance()->GetStoreMetaManager()->GetStoreServerMeta()->GetAllStore(), raft_endpoint);
-  if (server_endpoint.port == 0) {
-    // From remote node query.
-    pb::common::Location server_location;
-    Helper::GetServerLocation(Helper::EndPointToLocation(raft_endpoint), server_location);
-    if (server_location.port() > 0) {
-      server_endpoint = Helper::LocationToEndPoint(server_location);
-    }
+  if (raft_endpoint.port == 0) {
+    DINGO_LOG(WARNING) << fmt::format("[redirect][addr({})] invalid addr.", addr);
+    return {};
   }
 
-  return server_endpoint;
+  // From local store map query.
+  auto node_info =
+      Server::GetInstance()->GetStoreMetaManager()->GetStoreServerMeta()->GetNodeInfoByRaftEndPoint(raft_endpoint);
+  if (node_info.id() == 0) {
+    // From remote node query.
+    Helper::GetNodeInfoByRaftLocation(Helper::EndPointToLocation(raft_endpoint), node_info);
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[redirect][addr({})] redirect leader, node_info: {}", addr,
+                                 node_info.ShortDebugString());
+
+  return node_info;
 }
 
 template <typename T>
 void ServiceHelper::RedirectLeader(std::string addr, T* response) {
-  auto server_endpoint = RedirectLeader<T>(addr);
-  if (server_endpoint.ip != butil::IP_ANY) {
-    Helper::SetPbMessageErrorLeader(server_endpoint, response);
+  auto node_info = RedirectLeader<T>(addr);
+  if (node_info.id() != 0) {
+    Helper::SetPbMessageErrorLeader(node_info, response);
   }
 }
 

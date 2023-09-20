@@ -193,7 +193,7 @@ class Heartbeat {
   static void TriggerCompactionTask(void*);
 
   static butil::Status RpcSendPushStoreOperation(const pb::common::Location& location,
-                                                 const pb::push::PushStoreOperationRequest& request,
+                                                 pb::push::PushStoreOperationRequest& request,
                                                  pb::push::PushStoreOperationResponse& response);
 
  private:

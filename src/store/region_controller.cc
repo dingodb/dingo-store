@@ -323,7 +323,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   if (!node->IsLeader()) {
-    return butil::Status(pb::error::ERAFT_NOTLEADER, "Not leader %s", node->GetLeaderId().to_string().c_str());
+    return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
   }
 
   auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());

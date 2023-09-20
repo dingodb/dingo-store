@@ -32,6 +32,7 @@
 #include "meta/meta_writer.h"
 #include "meta/transform_kv_able.h"
 #include "proto/common.pb.h"
+#include "proto/node.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store_internal.pb.h"
 #include "vector/vector_index.h"
@@ -152,6 +153,9 @@ class StoreServerMeta {
   void DeleteStore(uint64_t store_id);
   std::shared_ptr<pb::common::Store> GetStore(uint64_t store_id);
   std::map<uint64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
+
+  pb::node::NodeInfo GetNodeInfoByRaftEndPoint(const butil::EndPoint& endpoint);
+  pb::node::NodeInfo GetNodeInfoByServerEndPoint(const butil::EndPoint& endpoint);
 
  private:
   uint64_t epoch_;

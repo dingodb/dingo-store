@@ -819,7 +819,7 @@ void Heartbeat::TriggerScrubVectorIndex(void*) {
 }
 
 butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& location,
-                                                   const pb::push::PushStoreOperationRequest& request,
+                                                   pb::push::PushStoreOperationRequest& request,
                                                    pb::push::PushStoreOperationResponse& response) {
   // build send location string
   auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
@@ -860,6 +860,7 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
                            << response.error().leader_location().port();
         store_server_location_string =
             response.error().leader_location().host() + ":" + std::to_string(response.error().leader_location().port());
+        request.mutable_store_operation()->set_id(response.error().store_id());
         continue;
       } else {
         DINGO_LOG(WARNING) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode

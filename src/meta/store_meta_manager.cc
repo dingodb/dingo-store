@@ -328,6 +328,40 @@ std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreServerMeta::GetAllSt
   return stores_;
 }
 
+pb::node::NodeInfo StoreServerMeta::GetNodeInfoByRaftEndPoint(const butil::EndPoint& endpoint) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  pb::node::NodeInfo node_info;
+  std::string host(butil::ip2str(endpoint.ip).c_str());
+  for (const auto& [store_id, store] : stores_) {
+    if (store->raft_location().host() == host && store->raft_location().port() == endpoint.port) {
+      node_info.set_id(store->id());
+      *node_info.mutable_server_location() = store->server_location();
+      *node_info.mutable_raft_location() = store->raft_location();
+      break;
+    }
+  }
+
+  return node_info;
+}
+
+pb::node::NodeInfo StoreServerMeta::GetNodeInfoByServerEndPoint(const butil::EndPoint& endpoint) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  pb::node::NodeInfo node_info;
+  std::string host(butil::ip2str(endpoint.ip).c_str());
+  for (const auto& [store_id, store] : stores_) {
+    if (store->server_location().host() == host && store->server_location().port() == endpoint.port) {
+      node_info.set_id(store->id());
+      *node_info.mutable_server_location() = store->server_location();
+      *node_info.mutable_raft_location() = store->raft_location();
+      break;
+    }
+  }
+
+  return node_info;
+}
+
 bool StoreRegionMeta::Init() {
   std::vector<pb::common::KeyValue> kvs;
   if (!meta_reader_->Scan(Prefix(), kvs)) {
