@@ -109,6 +109,7 @@ public class StoreServiceClient {
 
     public void shutdown() {
         connectorCache.clear();
+        contextCache.clear();
     }
 
     /**
@@ -180,7 +181,7 @@ public class StoreServiceClient {
         Coprocessor coprocessor
     ) {
         return new ScanIterator(getStoreConnector(tableId, regionId),
-                contextCache.get(regionId),
+                () -> contextCache.get(regionId),
                 Common.RangeWithOptions.newBuilder()
                     .setRange(
                         Common.Range.newBuilder()

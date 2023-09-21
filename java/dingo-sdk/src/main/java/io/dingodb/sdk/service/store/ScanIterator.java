@@ -32,12 +32,14 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     private final AtomicReference<StoreServiceGrpc.StoreServiceBlockingStub> stub = new AtomicReference<>();
+    private final AtomicReference<Context> context = new AtomicReference<>();
     private final StoreServiceConnector connector;
-    private final Context context;
+    private final Supplier<Context> contextSupplier;
     private final RangeWithOptions range;
 
     private final ByteString scanId;
@@ -50,14 +52,14 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     public ScanIterator(
         StoreServiceConnector connector,
-        Context context,
+        Supplier<Context> contextSupplier,
         RangeWithOptions range,
         boolean key_only,
         int retryTimes,
         Coprocessor coprocessor
     ) {
         this.connector = connector;
-        this.context = context;
+        this.contextSupplier = contextSupplier;
         this.range = range;
         this.retryTimes = retryTimes;
         this.coprocessor = coprocessor;
@@ -80,15 +82,15 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
     public ByteString scanBegin() {
         Store.KvScanBeginRequest.Builder builder = Store.KvScanBeginRequest.newBuilder()
                 .setRange(range)
-                .setContext(EntityConversion.mapping(context))
                 .setMaxFetchCnt(0);
-        if (coprocessor != null) {
-            builder.setCoprocessor(EntityConversion.mapping(coprocessor, context.getRegionId()));
-        }
-        Store.KvScanBeginRequest request = builder.build();
         Store.KvScanBeginResponse response = connector.exec(stub -> {
+            Context con = contextSupplier.get();
+            this.context.set(con);
+            if (coprocessor != null) {
+                builder.setCoprocessor(EntityConversion.mapping(coprocessor, con.getRegionId()));
+            }
             this.stub.set(stub);
-            return stub.kvScanBegin(request);
+            return stub.kvScanBegin(builder.setContext(EntityConversion.mapping(con)).build());
         });
         return response.getScanId();
     }
@@ -99,7 +101,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         }
         Store.KvScanContinueResponse response = stub.get().kvScanContinue(Store.KvScanContinueRequest.newBuilder()
             .setScanId(scanId)
-            .setContext(EntityConversion.mapping(context))
+            .setContext(EntityConversion.mapping(context.get()))
             .setMaxFetchCnt(10)
             .build());
         checkRes(response.getError(), "continue");
@@ -112,7 +114,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
 
     public void scanRelease() {
         Store.KvScanReleaseResponse response = stub.get().kvScanRelease(Store.KvScanReleaseRequest.newBuilder()
-            .setContext(EntityConversion.mapping(context))
+            .setContext(EntityConversion.mapping(context.get()))
             .setScanId(scanId)
             .build());
         checkRes(response.getError(), "release");
