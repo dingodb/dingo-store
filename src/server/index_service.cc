@@ -1786,6 +1786,14 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
 
 // txn
 butil::Status IndexServiceImpl::ValidateTxnGetRequest(const dingodb::pb::index::TxnGetRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -1908,6 +1916,18 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    return;
+  }
+
   auto region =
       Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
@@ -1991,6 +2011,14 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
 }
 
 butil::Status IndexServiceImpl::ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->mutations_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations is empty");
   }
@@ -2178,6 +2206,14 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
 }
 
 butil::Status IndexServiceImpl::ValidateTxnCommitRequest(const dingodb::pb::index::TxnCommitRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->start_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
   }
@@ -2265,6 +2301,14 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
 
 butil::Status IndexServiceImpl::ValidateTxnCheckTxnStatusRequest(
     const dingodb::pb::index::TxnCheckTxnStatusRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->primary_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "primary_key is empty");
   }
@@ -2354,6 +2398,14 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
 
 butil::Status IndexServiceImpl::ValidateTxnResolveLockRequest(
     const dingodb::pb::index::TxnResolveLockRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->start_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
   }
@@ -2436,6 +2488,14 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
 }
 
 butil::Status IndexServiceImpl::ValidateTxnBatchGetRequest(const dingodb::pb::index::TxnBatchGetRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->keys_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Keys is empty");
   }
@@ -2540,6 +2600,14 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
 
 butil::Status IndexServiceImpl::ValidateTxnBatchRollbackRequest(
     const dingodb::pb::index::TxnBatchRollbackRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->keys_size() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Keys is empty");
   }
@@ -2621,6 +2689,14 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
 }
 
 butil::Status IndexServiceImpl::ValidateTxnScanLockRequest(const dingodb::pb::index::TxnScanLockRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->max_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_ts is 0");
   }
@@ -2713,6 +2789,14 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
 }
 
 butil::Status IndexServiceImpl::ValidateTxnHeartBeatRequest(const dingodb::pb::index::TxnHeartBeatRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->primary_lock().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "primary_lock is empty");
   }
@@ -2790,6 +2874,14 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
 }
 
 butil::Status IndexServiceImpl::ValidateTxnGcRequest(const dingodb::pb::index::TxnGcRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->safe_point_ts() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "safe_point_ts is 0");
   }
@@ -2849,6 +2941,14 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
 
 butil::Status IndexServiceImpl::ValidateTxnDeleteRangeRequest(
     const dingodb::pb::index::TxnDeleteRangeRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->start_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is empty");
   }
@@ -2915,6 +3015,14 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
 }
 
 butil::Status IndexServiceImpl::ValidateTxnDumpRequest(const dingodb::pb::index::TxnDumpRequest* request) {
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return epoch_ret;
+  }
+
   if (request->start_key().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is empty");
   }
