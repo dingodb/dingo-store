@@ -213,7 +213,7 @@ message VectorGetParameter {
   bool without_table_data = 4;        // Default false, if true, response without table data.
 }
 
-// TxnKvGet do point-lookup a value for key in the transaction with start_ts
+// TxnGet do point-lookup a value for key in the transaction with start_ts
 message TxnGetRequest {
   dingodb.pb.store.Context context = 1;
   // the key client want to do get
@@ -243,7 +243,7 @@ message TxnGetResponse {
   // bool not_found = 4;
 }
 
-// TxnKvScan fetches values for a range of keys in the transaction with start_ts.
+// TxnScan fetches values for a range of keys in the transaction with start_ts.
 message TxnScanRequest {
   dingodb.pb.store.Context context = 1;
   // prefix start_key end_key with mode
@@ -326,6 +326,10 @@ message TxnPrewriteResponse {
   // for prewrite, txn_result will be one of the following:
   // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
   // 2. WriteConflict: Write conflict with key which is already written after start_ts
+  //    2.1 Optimistic: in optimistic transactions.
+  //    2.2  PessimisticRetry: a lock acquisition request waits for a lock and awakes, or meets a newer version of data,
+  //                           let Executor retry.
+  //    2.3 SelfRolledBack: the transaction itself has been rolled back when it tries to prewrite.
   // 3. otherwise, txn_result is empty
   // for success prewrite, txn_result is empty
   // for failure prewrite, txn_result is not empty
@@ -355,7 +359,9 @@ message TxnCommitResponse {
   // error code
   dingodb.pb.error.Error error = 1;
   // the txn_result is one of the following:
-  // 1. Abort: if committing primary with no lock, the txn_result is Abort
+  // 1. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
+  // committing primary key meet this error, the transaction may be rolled back. If committing secondary key meet this,
+  // Executor can think its lock is resolved, and continue to commit.
   // 2. otherwise, txn_result is empty
   dingodb.pb.store.TxnResultInfo txn_result = 2;
   // The commit_ts of the transaction.

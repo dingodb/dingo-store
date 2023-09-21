@@ -463,6 +463,28 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
       return;
     }
 
+    // check if the key is already committed, if it is committed can skip it
+    pb::store::WriteInfo write_info;
+    uint64_t commit_ts = 0;
+    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, start_ts, UINT64_MAX, start_ts, key, false, true, true,
+                                              write_info, commit_ts);
+    if (!ret2.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
+                                      region->Id(), term_id, log_id)
+                       << ", get write info failed, request: " << request.ShortDebugString()
+                       << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                       << ", status: " << ret2.error_str();
+    }
+
+    // if commit_ts > 0, means this key of start_ts is already committed, can skip it
+    if (commit_ts > 0) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                     term_id, log_id)
+                      << ", key: " << key << " is already committed, commit_ts: " << commit_ts
+                      << ", start_ts: " << start_ts << ", request: " << request.ShortDebugString();
+      continue;
+    }
+
     // now txn is match, prepare to commit
     lock_infos.push_back(lock_info);
   }
@@ -1142,9 +1164,9 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
   }
 }
 
-void TxnHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term,
-                        uint64_t log_id) {
+int TxnHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term,
+                       uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Handle txn, term: {} apply_log_id: {}", region->Id(), term, log_id);
 
   const auto &txn_raft_req = req.txn_raft_req();
@@ -1171,6 +1193,8 @@ void TxnHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, s
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Unknown txn request", region->Id())
                      << ", txn_raft_req: " << txn_raft_req.DebugString();
   }
+
+  return 0;
 }
 
 }  // namespace dingodb
