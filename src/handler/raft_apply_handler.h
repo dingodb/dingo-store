@@ -143,6 +143,12 @@ class TxnHandler : public BaseHandler {
                                        std::shared_ptr<RawEngine> engine, const pb::raft::TxnPrewriteRequest &request,
                                        store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
 
+  static butil::Status DoTxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                   std::shared_ptr<RawEngine> engine,
+                                   const std::vector<pb::store::LockInfo> &lock_infos, uint64_t start_ts,
+                                   uint64_t commit_ts, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+                                   uint64_t log_id);
+
   static void HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                      std::shared_ptr<RawEngine> engine, const pb::raft::TxnCommitRequest &req,
                                      store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);

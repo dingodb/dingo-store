@@ -54,6 +54,7 @@ DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation"
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_uint32(max_prewrite_count);
+DECLARE_uint32(max_scan_lock_limit);
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
@@ -2626,6 +2627,10 @@ butil::Status IndexServiceImpl::ValidateTxnScanLockRequest(const dingodb::pb::in
 
   if (request->limit() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is 0");
+  }
+
+  if (request->limit() > FLAGS_max_scan_lock_limit) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is too large, max=1024");
   }
 
   if (request->start_key().empty()) {

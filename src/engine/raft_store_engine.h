@@ -159,6 +159,9 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                           uint64_t limit, bool key_only, bool is_reverse, bool disable_coprocessor,
                           const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
                           std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) override;
+    butil::Status TxnScanLock(std::shared_ptr<Context> ctx, uint64_t min_lock_ts, uint64_t max_lock_ts,
+                              const pb::common::Range& range, uint64_t limit,
+                              std::vector<pb::store::LockInfo>& lock_infos) override;
 
    private:
     std::shared_ptr<RawEngine> engine_;
