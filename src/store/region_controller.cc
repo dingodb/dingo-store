@@ -332,6 +332,10 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   if (parent_region->Type() == pb::common::INDEX_REGION) {
+    if (!VectorCodec::IsValidKey(split_key)) {
+      return butil::Status(pb::error::EKEY_INVALID,
+                           fmt::format("Split key is invalid, length {} is wrong", split_key.size()));
+    }
     // Check follower whether hold vector index.
     auto self_peer = node->GetPeerId();
     std::vector<braft::PeerId> peers;
@@ -903,9 +907,9 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   }
 
   if (is_hold) {
+    vector_index_wrapper->SetNeedBootstrapBuild(true);
     // Load vector index.
     if (!vector_index_wrapper->IsReady()) {
-      vector_index_wrapper->SetNeedBootstrapBuild(true);
       auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format(
@@ -915,7 +919,6 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
         DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] load or build vector index finish",
                                        region_id);
       }
-      vector_index_wrapper->SetNeedBootstrapBuild(false);
     }
   } else {
     // Delete vector index.

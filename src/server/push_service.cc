@@ -90,7 +90,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     status = (validate_func != nullptr) ? validate_func(command)
                                         : butil::Status(pb::error::EINTERNAL, "Unknown region command");
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("PushStoreOperation validate error: {} command: {}", status.error_str(),
+      DINGO_LOG(ERROR) << fmt::format("PushStoreOperation validate error: {} {} command: {}",
+                                      pb::error::Errno_Name(status.error_code()), status.error_str(),
                                       command.ShortDebugString());
       error_func(command.id(), command.region_cmd_type(), status);
       continue;

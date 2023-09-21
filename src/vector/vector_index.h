@@ -256,6 +256,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
         index_parameter_(index_parameter),
         write_key_count_(0),
         last_save_write_key_count_(0),
+        need_bootstrap_build_(false),
         save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
     worker_ = Worker::New();
     snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
@@ -298,7 +299,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsSwitchingVectorIndex();
   void SetIsSwitchingVectorIndex(bool is_switching);
 
-  bool NeedBootstrapBuild();
+  bool NeedBootstrapBuild() const;
   void SetNeedBootstrapBuild(bool need);
 
   vector_index::SnapshotMetaSetPtr SnapshotSet() { return snapshot_set_; }
