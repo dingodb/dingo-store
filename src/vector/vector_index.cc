@@ -199,7 +199,7 @@ void VectorIndexWrapper::SetIsSwitchingVectorIndex(bool is_switching) {
   is_switching_vector_index_.store(is_switching);
 }
 
-bool VectorIndexWrapper::NeedBootstrapBuild() { return need_bootstrap_build_; }
+bool VectorIndexWrapper::NeedBootstrapBuild() const { return need_bootstrap_build_; }
 
 void VectorIndexWrapper::SetNeedBootstrapBuild(bool need) {
   need_bootstrap_build_ = need;

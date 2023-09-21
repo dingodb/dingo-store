@@ -376,9 +376,7 @@ void SplitHandler::SplitClosure::Run() {
 
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
-  if (region_->Type() == pb::common::INDEX_REGION) {
-    LaunchRebuildVectorIndex(region_->Id());
-  } else {
+  if (region_->Type() == pb::common::STORE_REGION) {
     store_region_meta->UpdateTemporaryDisableChange(region_, false);
   }
 
@@ -433,17 +431,6 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateTemporaryDisableChange(from_region, true);
   store_region_meta->UpdateTemporaryDisableChange(to_region, true);
 
-  if (to_region->Type() == pb::common::INDEX_REGION) {
-    // Set child share vector index
-    auto vector_index = from_region->VectorIndexWrapper()->GetOwnVectorIndex();
-    if (vector_index != nullptr) {
-      to_region->VectorIndexWrapper()->SetShareVectorIndex(vector_index);
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed",
-                                      from_region->Id(), to_region->Id());
-    }
-  }
-
   // Set region state spliting
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
@@ -493,6 +480,23 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                  to_region->Id());
   // Do child region snapshot
   LaunchDoSnapshot(to_region);
+
+  if (to_region->Type() == pb::common::INDEX_REGION) {
+    // Set child share vector index
+    auto vector_index = from_region->VectorIndexWrapper()->GetOwnVectorIndex();
+    if (vector_index != nullptr) {
+      to_region->VectorIndexWrapper()->SetShareVectorIndex(vector_index);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed",
+                                        from_region->Id(), to_region->Id());
+    }
+
+    // build vector index
+    VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), true);
+    VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), true);
+
+    from_region->VectorIndexWrapper()->SetNeedBootstrapBuild(false);
+  }
 
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);

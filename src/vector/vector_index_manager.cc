@@ -216,8 +216,6 @@ butil::Status VectorIndexManager::AsyncLoadOrBuildVectorIndex(VectorIndexWrapper
 
         LoadOrBuildVectorIndex(vector_index_wrapper);
 
-        vector_index_wrapper->SetNeedBootstrapBuild(false);
-
         delete param;
         return nullptr;
       },
