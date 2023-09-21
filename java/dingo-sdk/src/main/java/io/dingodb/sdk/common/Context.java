@@ -20,6 +20,7 @@ import io.dingodb.sdk.common.region.RegionEpoch;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 
 @Getter
@@ -29,5 +30,6 @@ import lombok.ToString;
 public class Context {
 
     private DingoCommonId regionId;
+    @Setter
     private RegionEpoch regionEpoch;
 }
