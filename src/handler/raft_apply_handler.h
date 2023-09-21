@@ -129,9 +129,9 @@ class RebuildVectorIndexHandler : public BaseHandler {
 class TxnHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kTxn; }
-  void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-              const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-              uint64_t log_id) override;
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+             uint64_t log_id) override;
 
   static void HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                std::shared_ptr<RawEngine> engine,

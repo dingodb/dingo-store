@@ -150,7 +150,7 @@ butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine
     // delete lock
     kv_deletes_lock.emplace_back(Helper::EncodeTxnKey(key, Constant::kLockVer));
 
-    // delete write
+    // add write
     pb::store::WriteInfo write_info;
     write_info.set_start_ts(start_ts);
     write_info.set_op(::dingodb::pb::store::Op::Rollback);
@@ -168,7 +168,7 @@ butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine
     // delete data
     kv_deletes_data.emplace_back(Helper::EncodeTxnKey(key, start_ts));
 
-    // delete write
+    // add write
     pb::store::WriteInfo write_info;
     write_info.set_start_ts(start_ts);
     write_info.set_op(::dingodb::pb::store::Op::Rollback);
