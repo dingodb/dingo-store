@@ -78,9 +78,12 @@ public class IndexServiceClient {
     }
 
     private RangeDistribution cacheRangeEpoch(RangeDistribution rangeDistribution) {
-        contextCache.computeIfAbsent(
-                rangeDistribution.getId(),
-                __ -> new Context(rangeDistribution.getId(), rangeDistribution.getRegionEpoch()));
+        Context context = contextCache.get(rangeDistribution.getId());
+        if (context != null && !context.getRegionEpoch().equals(rangeDistribution.getRegionEpoch())) {
+            context.setRegionEpoch(rangeDistribution.getRegionEpoch());
+        } else {
+            contextCache.put(rangeDistribution.getId(), new Context(rangeDistribution.getId(), rangeDistribution.getRegionEpoch()));
+        }
         return rangeDistribution;
     }
 
