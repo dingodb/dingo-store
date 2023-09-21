@@ -326,6 +326,8 @@ message LockInfo {
   uint64 lock_ttl = 4;     // the lock ttl timestamp in milisecond
   uint64 txn_size = 5;     // the number of keys involved in the transaction
   Op lock_type = 6;        // the type of the lock, it can be put, delete, lock
+  bytes short_value = 7;   // the short value will persist to lock_info, and do not write data, commit will set it to
+                           // write_info.short_value
 }
 
 message WriteInfo {

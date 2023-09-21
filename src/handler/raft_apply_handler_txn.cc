@@ -318,7 +318,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
     // 3.do Put/Delete/PutIfAbsent
     if (mutation.op() == pb::store::Op::Put) {
       // put data
-      {
+      if (mutation.value().length() >= FLAGS_max_short_value_in_write_cf) {
         pb::common::KeyValue kv;
         std::string data_key = Helper::EncodeTxnKey(mutation.key(), start_ts);
         kv.set_key(data_key);
@@ -339,6 +339,9 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
         lock_info.set_lock_ttl(lock_ttl);
         lock_info.set_txn_size(txn_size);
         lock_info.set_lock_type(pb::store::Op::Put);
+        if (mutation.value().length() < FLAGS_max_short_value_in_write_cf) {
+          lock_info.set_short_value(mutation.value());
+        }
         kv.set_value(lock_info.SerializeAsString());
 
         kv_puts_lock.push_back(kv);
@@ -375,7 +378,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
         continue;
       } else {
         // put data
-        {
+        if (mutation.value().length() >= FLAGS_max_short_value_in_write_cf) {
           pb::common::KeyValue kv;
           std::string data_key = Helper::EncodeTxnKey(mutation.key(), start_ts);
           kv.set_key(data_key);
@@ -396,6 +399,9 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
           lock_info.set_lock_ttl(lock_ttl);
           lock_info.set_txn_size(txn_size);
           lock_info.set_lock_type(pb::store::Op::Put);
+          if (mutation.value().length() < FLAGS_max_short_value_in_write_cf) {
+            lock_info.set_short_value(mutation.value());
+          }
           kv.set_value(lock_info.SerializeAsString());
 
           kv_puts_lock.push_back(kv);
@@ -526,7 +532,9 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
     // now txn is match, prepare to commit
     // 1.put data to write_cf
     std::string data_value;
-    if (lock_info.lock_type() == pb::store::Put) {
+    if (lock_info.short_value().length() > 0) {
+      data_value = lock_info.short_value();
+    } else if (lock_info.lock_type() == pb::store::Put) {
       ret = data_reader->KvGet(Helper::EncodeTxnKey(key, start_ts), data_value);
       if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
         DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(),
@@ -544,7 +552,7 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
       pb::store::WriteInfo write_info;
       write_info.set_start_ts(start_ts);
       write_info.set_op(lock_info.lock_type());
-      if (!data_value.empty() && data_value.length() < FLAGS_max_short_value_in_write_cf) {
+      if (!data_value.empty()) {
         write_info.set_short_value(data_value);
       }
       kv.set_value(write_info.SerializeAsString());
