@@ -460,4 +460,11 @@ butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, 
                                disable_coprocessor, coprocessor, txn_result_info, kvs, has_more, end_key);
 }
 
+butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, uint64_t min_lock_ts,
+                                                      uint64_t max_lock_ts, const pb::common::Range& range,
+                                                      uint64_t limit, std::vector<pb::store::LockInfo>& lock_infos) {
+  return TxnEngineHelper::ScanLockInfo(engine_, min_lock_ts, max_lock_ts, range.start_key(), range.end_key(), limit,
+                                       lock_infos);
+}
+
 }  // namespace dingodb

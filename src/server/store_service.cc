@@ -27,6 +27,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -42,6 +43,7 @@ namespace dingodb {
 
 DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
+DEFINE_uint32(max_scan_lock_limit, 5000, "Max scan lock limit");
 DECLARE_uint32(max_prewrite_count);
 
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
@@ -2737,6 +2739,10 @@ butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnScanLockRe
 
   if (request->limit() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is 0");
+  }
+
+  if (request->limit() > FLAGS_max_scan_lock_limit) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is too large, max=1024");
   }
 
   if (request->start_key().empty()) {

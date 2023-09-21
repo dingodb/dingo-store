@@ -754,6 +754,17 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, uint64_t max_ts
                   << " end_key : " << end_key << " txn_result_info : " << txn_result_info.ShortDebugString()
                   << " locks size : " << locks.size();
 
+  pb::common::Range range;
+  range.set_start_key(start_key);
+  range.set_end_key(end_key);
+  std::vector<pb::store::LockInfo> lock_infos;
+
+  auto reader = engine_->NewTxnReader();
+  status = reader->TxnScanLock(ctx, 0, max_ts, range, limit, lock_infos);
+  if (!status.ok()) {
+    return status;
+  }
+
   return butil::Status();
 }
 
