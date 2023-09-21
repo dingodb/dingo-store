@@ -30,14 +30,17 @@ namespace dingodb {
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
   }
   return ServiceHelper::ValidateRegionEpoch(req_epoch, region);
 }
 
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region) {
   if (region->Epoch().conf_version() != req_epoch.conf_version() || region->Epoch().version() != req_epoch.version()) {
-    return butil::Status(pb::error::Errno::EREGION_VERSION, "Region epoch is not match");
+    return butil::Status(pb::error::Errno::EREGION_VERSION,
+                         fmt::format("Region({}) epoch is not match, region_epoch({}_{}) req_epoch({}_{})",
+                                     region->Id(), region->Epoch().conf_version(), region->Epoch().version(),
+                                     req_epoch.conf_version(), req_epoch.version()));
   }
 
   return butil::Status::OK();
@@ -46,7 +49,7 @@ butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& 
 butil::Status ServiceHelper::GetStoreRegionInfo(uint64_t region_id, pb::error::StoreRegionInfo& store_region_info) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
   }
   return GetStoreRegionInfo(region, store_region_info);
 }
