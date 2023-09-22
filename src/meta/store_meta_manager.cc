@@ -234,19 +234,38 @@ void Region::SetTemporaryDisableChange(bool disable_change) {
 pb::raft::SplitStrategy Region::SplitStrategy() { return split_strategy_; }
 void Region::SetSplitStrategy(pb::raft::SplitStrategy split_strategy) { split_strategy_ = split_strategy; }
 
-uint64_t Region::LastSplitTimestamp() { return inner_region_.last_split_timestamp(); }
+uint64_t Region::LastSplitTimestamp() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.last_split_timestamp();
+}
 
-void Region::UpdateLastSplitTimestamp() { inner_region_.set_last_split_timestamp(Helper::TimestampMs()); }
+void Region::UpdateLastSplitTimestamp() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_last_split_timestamp(Helper::TimestampMs());
+}
 
-uint64_t Region::ParentId() { return inner_region_.parent_id(); }
-void Region::SetParentId(uint64_t region_id) { inner_region_.set_parent_id(region_id); }
+uint64_t Region::ParentId() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.parent_id();
+}
+void Region::SetParentId(uint64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_parent_id(region_id);
+}
 
 std::vector<pb::store_internal::RegionSplitRecord> Region::Childs() {
+  BAIDU_SCOPED_LOCK(mutex_);
   return Helper::PbRepeatedToVector(inner_region_.childs());
 }
-void Region::AddChild(pb::store_internal::RegionSplitRecord& record) { inner_region_.add_childs()->Swap(&record); }
+void Region::AddChild(pb::store_internal::RegionSplitRecord& record) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.add_childs()->Swap(&record);
+}
 
-uint64_t Region::PartitionId() { return inner_region_.definition().part_id(); }
+uint64_t Region::PartitionId() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition().part_id();
+}
 
 }  // namespace store
 

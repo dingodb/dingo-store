@@ -23,6 +23,14 @@
 
 namespace dingodb {
 
+void VectorCodec::EncodeVectorKey(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+  Buf buf(16);
+  buf.WriteLong(partition_id);
+  buf.WriteLong(vector_id);
+
+  buf.GetBytes(result);
+}
+
 void VectorCodec::EncodeVectorData(uint64_t partition_id, uint64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.Write(Constant::kVectorDataPrefix);
@@ -102,5 +110,9 @@ std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
 }
 
 std::string VectorCodec::RemoveVectorPrefix(const std::string& value) { return value.substr(1); }  // NOLINT
+
+bool VectorCodec::IsValidKey(const std::string& key) {
+  return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
+}
 
 }  // namespace dingodb

@@ -24,6 +24,7 @@ namespace dingodb {
 
 class VectorCodec {
  public:
+  static void EncodeVectorKey(uint64_t partition_id, uint64_t vector_id, std::string& result);
   // Foramt: prefix/partition_id/vector_id
   static void EncodeVectorData(uint64_t partition_id, uint64_t vector_id, std::string& result);
   static void EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, std::string& result);
@@ -37,6 +38,8 @@ class VectorCodec {
   static std::string FillVectorTablePrefix(const std::string& value);
 
   static std::string RemoveVectorPrefix(const std::string& value);
+
+  static bool IsValidKey(const std::string& key);
 };
 
 }  // namespace dingodb
