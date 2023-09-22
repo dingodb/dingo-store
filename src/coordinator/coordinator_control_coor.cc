@@ -1840,6 +1840,20 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   // create task list
   auto* new_task_list = CreateTaskList(meta_increment);
 
+  // check if need to send load vector index to store
+  if (split_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
+      split_from_region.definition().index_parameter().has_vector_index_parameter()) {
+    // send load vector index to store
+    for (const auto& peer : split_from_region.definition().peers()) {
+      AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
+    }
+
+    // check vector index is ready
+    for (const auto& peer : split_from_region.definition().peers()) {
+      AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
+    }
+  }
+
   // build create_region task
   auto* create_region_task = new_task_list->add_tasks();
   for (const auto& it : store_operations) {
@@ -1859,20 +1873,6 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   // meta_increment_tmp.tables()) {
   //   *(meta_increment.add_tables())=it;
   // }
-
-  // check if need to send load vector index to store
-  if (split_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
-      split_from_region.definition().index_parameter().has_vector_index_parameter()) {
-    // send load vector index to store
-    for (const auto& peer : split_from_region.definition().peers()) {
-      AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
-    }
-
-    // check vector index is ready
-    for (const auto& peer : split_from_region.definition().peers()) {
-      AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
-    }
-  }
 
   // build split_region task
   AddSplitTask(new_task_list, split_from_region.leader_store_id(), split_from_region_id, new_region_id,
