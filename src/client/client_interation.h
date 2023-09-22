@@ -27,9 +27,13 @@
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
+#include "bthread/bthread.h"
+#include "bthread/types.h"
+#include "client/client_router.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/region_control.pb.h"
@@ -166,6 +170,131 @@ butil::Status ServerInteraction::AllSendRequest(const std::string& service_name,
   }
 
   return butil::Status();
+}
+
+class InteractionManager {
+ public:
+  static InteractionManager& GetInstance();
+
+  void SetCoorinatorInteraction(ServerInteractionPtr interaction);
+  void SetStoreInteraction(ServerInteractionPtr interaction);
+
+  bool CreateStoreInteraction(std::vector<std::string> addrs);
+  butil::Status CreateStoreInteraction(uint64_t region_id);
+
+  uint64_t GetLatency() const;
+
+  template <typename Request, typename Response>
+  butil::Status SendRequestWithoutContext(const std::string& service_name, const std::string& api_name,
+                                          const Request& request, Response& response);
+
+  template <typename Request, typename Response>
+  butil::Status SendRequestWithContext(const std::string& service_name, const std::string& api_name, Request& request,
+                                       Response& response);
+
+  template <typename Request, typename Response>
+  butil::Status AllSendRequestWithoutContext(const std::string& service_name, const std::string& api_name,
+                                             const Request& request, Response& response);
+
+  template <typename Request, typename Response>
+  butil::Status AllSendRequestWithContext(const std::string& service_name, const std::string& api_name,
+                                          const Request& request, Response& response);
+
+ private:
+  InteractionManager();
+  ~InteractionManager();
+
+  ServerInteractionPtr coordinator_interaction_;
+  ServerInteractionPtr store_interaction_;
+
+  bthread_mutex_t mutex_;
+};
+
+template <typename Request, typename Response>
+butil::Status InteractionManager::SendRequestWithoutContext(const std::string& service_name,
+                                                            const std::string& api_name, const Request& request,
+                                                            Response& response) {
+  if (service_name == "UtilService" || service_name == "RegionControlService") {
+    if (store_interaction_ == nullptr) {
+      return butil::Status(dingodb::pb::error::EINTERNAL, "Store interaction is nullptr.");
+    }
+    return store_interaction_->SendRequest(service_name, api_name, request, response);
+  }
+  return coordinator_interaction_->SendRequest(service_name, api_name, request, response);
+}
+
+template <typename Request, typename Response>
+butil::Status InteractionManager::SendRequestWithContext(const std::string& service_name, const std::string& api_name,
+                                                         Request& request, Response& response) {
+  if (store_interaction_ == nullptr) {
+    auto status = CreateStoreInteraction(request.context().region_id());
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  for (;;) {
+    auto status = store_interaction_->SendRequest(service_name, api_name, request, response);
+    if (status.ok()) {
+      return status;
+    }
+
+    if (response.error().errcode() == dingodb::pb::error::EREGION_VERSION) {
+      RegionRouter::GetInstance().UpdateRegionEntry(response.error().store_region_info());
+      auto region_entry = RegionRouter::GetInstance().QueryRegionEntry(request.context().region_id());
+      if (region_entry == nullptr) {
+        return butil::Status(dingodb::pb::error::EREGION_NOT_FOUND, "Not found region %lu",
+                             request.context().region_id());
+      }
+      *request.mutable_context() = region_entry->GenConext();
+    } else {
+      return status;
+    }
+    bthread_usleep(1000 * 500);
+  }
+}
+
+template <typename Request, typename Response>
+butil::Status InteractionManager::AllSendRequestWithoutContext(const std::string& service_name,
+                                                               const std::string& api_name, const Request& request,
+                                                               Response& response) {
+  if (store_interaction_ == nullptr) {
+    return butil::Status(dingodb::pb::error::EINTERNAL, "Store interaction is nullptr.");
+  }
+
+  return store_interaction_->AllSendRequest(service_name, api_name, request, response);
+}
+
+template <typename Request, typename Response>
+butil::Status InteractionManager::AllSendRequestWithContext(const std::string& service_name,
+                                                            const std::string& api_name, const Request& request,
+                                                            Response& response) {
+  if (store_interaction_ == nullptr) {
+    auto status = CreateStoreInteraction(request.context().region_id());
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  for (;;) {
+    auto status = store_interaction_->AllSendRequest(service_name, api_name, request, response);
+    if (status.ok()) {
+      return status;
+    }
+
+    if (response.error().errcode() == dingodb::pb::error::EREGION_VERSION) {
+      RegionRouter::GetInstance().UpdateRegionEntry(response.error().store_region_info());
+      auto region_entry = RegionRouter::GetInstance().QueryRegionEntry(request.context().region_id());
+      if (region_entry == nullptr) {
+        return butil::Status(dingodb::pb::error::EREGION_NOT_FOUND, "Not found region %lu",
+                             request.context().region_id());
+      }
+      *request.mutable_context() = region_entry->GenConext();
+    } else {
+      return status;
+    }
+    bthread_usleep(1000 * 500);
+  }
 }
 
 }  // namespace client

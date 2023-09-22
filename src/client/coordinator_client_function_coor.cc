@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "butil/time.h"
+#include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -1168,7 +1169,12 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     const auto& start_key = query_response.region().definition().range().start_key();
     const auto& end_key = query_response.region().definition().range().end_key();
 
-    auto real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
+    std::string real_mid;
+    if (query_response.region().region_type() == dingodb::pb::common::INDEX_REGION) {
+      real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
+    } else {
+      real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
+    }
 
     request.mutable_split_request()->set_split_watershed_key(real_mid);
 

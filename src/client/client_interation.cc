@@ -99,4 +99,56 @@ void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location
   }
 }
 
+InteractionManager::InteractionManager() { bthread_mutex_init(&mutex_, nullptr); }
+
+InteractionManager::~InteractionManager() { bthread_mutex_destroy(&mutex_); }
+
+InteractionManager& InteractionManager::GetInstance() {
+  static InteractionManager instance;
+  return instance;
+}
+
+void InteractionManager::SetCoorinatorInteraction(ServerInteractionPtr interaction) {
+  coordinator_interaction_ = interaction;
+}
+
+void InteractionManager::SetStoreInteraction(ServerInteractionPtr interaction) { store_interaction_ = interaction; }
+
+bool InteractionManager::CreateStoreInteraction(std::vector<std::string> addrs) {
+  auto interaction = std::make_shared<ServerInteraction>();
+  if (!interaction->Init(addrs)) {
+    DINGO_LOG(ERROR) << "Fail to init store_interaction";
+    return false;
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    if (store_interaction_ == nullptr) {
+      store_interaction_ = interaction;
+    }
+  }
+
+  return true;
+}
+
+butil::Status InteractionManager::CreateStoreInteraction(uint64_t region_id) {
+  auto region_entry = RegionRouter::GetInstance().QueryRegionEntry(region_id);
+  if (region_entry == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("not found region entry {}", region_id);
+    return butil::Status(dingodb::pb::error::EREGION_NOT_FOUND, "Not found region entry %lu", region_id);
+  }
+  if (!CreateStoreInteraction(region_entry->GetAddrs())) {
+    DINGO_LOG(ERROR) << fmt::format("init store interaction failed, region {}", region_id);
+    return butil::Status(dingodb::pb::error::EINTERNAL, "Init store interaction failed, region %lu", region_id);
+  }
+
+  return butil::Status();
+}
+uint64_t InteractionManager::GetLatency() const {
+  if (store_interaction_ == nullptr) {
+    return 0;
+  }
+
+  return store_interaction_->GetLatency();
+}
 }  // namespace client
