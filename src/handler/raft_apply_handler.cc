@@ -469,6 +469,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   // Increase region version
   store_region_meta->UpdateEpochVersion(from_region, from_region->Epoch().version() + 1);
+  store_region_meta->UpdateEpochVersion(to_region, to_region->Epoch().version() + 1);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
                                  to_region->Id());
@@ -642,6 +643,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
   // Increase region version
   store_region_meta->UpdateEpochVersion(parent_region, parent_region->Epoch().version() + 1);
+  store_region_meta->UpdateEpochVersion(child_region, child_region->Epoch().version() + 1);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", parent_region_id,
                                  child_region_id);
