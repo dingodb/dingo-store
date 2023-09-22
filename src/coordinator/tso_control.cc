@@ -388,10 +388,12 @@ void TsoControl::OnLeaderStart(int64_t term) {
   current.set_physical(now);
   current.set_logical(0);
   int64_t last_save = tso_obj_.last_save_physical;
-  if (last_save - now < kUpdateTimestampIntervalMs) {
+  if (now < last_save + kUpdateTimestampIntervalMs) {
+    DINGO_LOG(WARNING) << "time maybe fallback, now: " << now << ", last_save: " << last_save
+                       << ", kUpdateTimestampIntervalMs: " << kUpdateTimestampIntervalMs;
     current.set_physical(last_save + kUpdateTimestampGuardMs);
-    last_save = now + kSaveIntervalMs;
   }
+  last_save = current.physical() + kSaveIntervalMs;
   auto func = [this, last_save, current]() {
     LOG(INFO) << "leader_start current(phy:" << current.physical() << ",log:" << current.logical()
               << ") save:" << last_save;
