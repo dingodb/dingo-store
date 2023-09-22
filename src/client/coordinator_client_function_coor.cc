@@ -542,6 +542,11 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
               << dingodb::Helper::StringToHex(region.definition().range().start_key()) << ",0x"
               << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]\n";
 
+    if (region.metrics().has_vector_index_status()) {
+      std::cout << "vector_id=" << region.id()
+                << " vector_status=" << region.metrics().vector_index_status().ShortDebugString() << "\n";
+    }
+
     if (region.state() == dingodb::pb::common::RegionState::REGION_NORMAL) {
       normal_region_count++;
     }
@@ -909,10 +914,21 @@ void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
     request.set_store_id(std::stoull(FLAGS_id));
   }
 
+  if (FLAGS_store_id > 0) {
+    request.set_store_id(FLAGS_store_id);
+  }
+
+  if (FLAGS_region_id > 0) {
+    request.set_region_id(FLAGS_region_id);
+  }
+
   auto status = coordinator_interaction->SendRequest("GetStoreMetrics", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   for (const auto& it : response.store_metrics()) {
-    DINGO_LOG(INFO) << it.DebugString();
+    DINGO_LOG(INFO) << it.store_own_metrics().DebugString();
+    for (const auto& it2 : it.region_metrics_map()) {
+      DINGO_LOG(INFO) << it2.second.DebugString();
+    }
   }
 
   for (const auto& it : response.store_metrics()) {

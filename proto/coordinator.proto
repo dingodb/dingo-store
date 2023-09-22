@@ -360,6 +360,7 @@ message GetStoreMapResponse {
 message GetStoreMetricsRequest {
   uint64 epoch = 1;
   uint64 store_id = 2;
+  uint64 region_id = 3;
 }
 
 message GetStoreMetricsResponse {
