@@ -506,7 +506,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), true);
     VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), true);
 
-    from_region->VectorIndexWrapper()->SetNeedBootstrapBuild(false);
+    from_region->VectorIndexWrapper()->SetIsHoldVectorIndex(false);
   }
 
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);

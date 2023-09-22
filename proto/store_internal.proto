@@ -64,7 +64,7 @@ message VectorIndexMeta {
   int32 status = 4;
   uint64 apply_log_id = 5;
   uint64 snapshot_log_id = 6;
-  bool need_bootstrap_build = 10;
+  bool is_hold_vector_index = 10;
 }
 
 message VectorIndexSnapshotMeta {

@@ -15,6 +15,7 @@
 #ifndef DINGODB_VECTOR_INDEX_MANAGER_H_
 #define DINGODB_VECTOR_INDEX_MANAGER_H_
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -56,6 +57,19 @@ class SaveVectorIndexTask : public TaskRunnable {
   VectorIndexWrapperPtr vector_index_wrapper_;
 };
 
+// Load or build vector index task
+class LoadOrBuildVectorIndexTask : public TaskRunnable {
+ public:
+  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper)
+      : vector_index_wrapper_(vector_index_wrapper) {}
+  ~LoadOrBuildVectorIndexTask() override = default;
+
+  void Run() override;
+
+ private:
+  VectorIndexWrapperPtr vector_index_wrapper_;
+};
+
 // Manage vector index, e.g. build/rebuild/save/load vector index.
 class VectorIndexManager {
  public:
@@ -72,7 +86,7 @@ class VectorIndexManager {
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
   static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
-  static butil::Status AsyncLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
+  static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
   // Parallel load or build vector index at server bootstrap.
   static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);
 
@@ -87,6 +101,11 @@ class VectorIndexManager {
   static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force);
 
   static butil::Status ScrubVectorIndex();
+
+  static std::atomic<int> vector_index_task_runinng_num;
+  static int GetVectorIndexTaskRuningNum() { return vector_index_task_runinng_num.load(); }
+  static void IncVectorIndexTaskRuningNum() { vector_index_task_runinng_num.fetch_add(1); }
+  static void DecVectorIndexTaskRuningNum() { vector_index_task_runinng_num.fetch_sub(1); }
 
  private:
   // Build vector index with original data(rocksdb).

@@ -164,6 +164,10 @@ class Constant {
   static constexpr uint64_t kVectorIndexSnapshotCatchupMargin = 4000;
 
   static constexpr uint32_t kRaftElectionTimeoutSDefaultValue = 6;
+
+  static constexpr int32_t kVectorIndexTaskRuninngNumExpectValue = 6;
+
+  static constexpr int32_t kPullVectorIndexSnapshotMinApplyLogId = 66;
 };
 
 }  // namespace dingodb

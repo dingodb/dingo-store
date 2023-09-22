@@ -214,6 +214,13 @@ void SplitCheckTask::SplitCheck() {
       need_split = false;
       break;
     }
+    int runing_num = VectorIndexManager::GetVectorIndexTaskRuningNum();
+    if (runing_num > Constant::kVectorIndexTaskRuninngNumExpectValue) {
+      reason = fmt::format("runing vector index task num({}) too many, exceed expect num({})", runing_num,
+                           Constant::kVectorIndexTaskRuninngNumExpectValue);
+      need_split = false;
+      break;
+    }
   } while (false);
 
   DINGO_LOG(INFO) << fmt::format(
@@ -357,10 +364,17 @@ void PreSplitCheckTask::PreSplitCheck() {
         reason = "region approximate size too small";
         break;
       }
+      int runing_num = VectorIndexManager::GetVectorIndexTaskRuningNum();
+      if (runing_num > Constant::kVectorIndexTaskRuninngNumExpectValue) {
+        need_scan_check = false;
+        reason = fmt::format("runing vector index task num({}) too many, exceed expect num({})", runing_num,
+                             Constant::kVectorIndexTaskRuninngNumExpectValue);
+        break;
+      }
     } while (false);
 
     DINGO_LOG(INFO) << fmt::format(
-        "[split.check][region({})] pre split check result({}) reason({}) approximate size({}/{})", region->Id(),
+        "[split.check][region({})] presplit check result({}) reason({}) approximate size({}/{})", region->Id(),
         need_scan_check, reason, region_metric == nullptr ? 0 : region_metric->InnerRegionMetrics().region_size(),
         split_check_approximate_size);
     if (!need_scan_check) {

@@ -2564,6 +2564,7 @@ void CheckIndexDistribution(std::shared_ptr<Context> ctx) {
       DINGO_LOG(ERROR) << fmt::format("Invalid region {} range [{}-{})", region_range.id().entity_id(),
                                       dingodb::Helper::StringToHex(region_range.range().start_key()),
                                       dingodb::Helper::StringToHex(region_range.range().end_key()));
+      continue;
     }
 
     auto it = region_map.find(region_range.range().start_key());
