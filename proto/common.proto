@@ -722,25 +722,36 @@ message VectorIndexMetrics {
   int64 memory_bytes = 6;
 }
 
+message VectorIndexStatus {
+  bool is_ready = 1;
+  bool is_stop = 2;
+  bool is_build_error = 3;
+  bool is_rebuild_error = 4;
+  uint64 apply_log_id = 5;
+  uint64 snapshot_log_id = 6;
+  bool is_switching = 7;
+  bool is_hold_vector_index = 8;  // is hold vector index
+}
+
 // RegionMetrics
 message RegionMetrics {
   uint64 id = 1;
-  uint64 leader_store_id = 2;               // leader store id
-  StoreRegionState store_region_state = 3;  // region state defined by store
-  BRaftStatus braft_status = 4;             // region braft status defined by store
-  RegionDefinition region_definition = 5;   // region definition
+  uint64 leader_store_id = 2;                 // leader store id
+  StoreRegionState store_region_state = 3;    // region state defined by store
+  BRaftStatus braft_status = 4;               // region braft status defined by store
+  RegionDefinition region_definition = 5;     // region definition
+  VectorIndexStatus vector_index_status = 6;  // vector index status
 
   uint64 row_count = 11;    // row count of this region
   bytes min_key = 12;       // the min key of this region now exist
   bytes max_key = 13;       // the max key of this region now exist
   uint64 region_size = 14;  // the bytes size of this region
 
-  bool is_hold_vector_index = 29;                // is hold vector index
+  // bool is_hold_vector_index = 29;                // is hold vector index
   VectorIndexMetrics vector_index_metrics = 30;  // vector index  metrics
 }
 
-// StoreMetrics
-message StoreMetrics {
+message StoreOwnMetrics {
   uint64 id = 1;                     // store id
   uint64 system_total_capacity = 2;  // total capacity of this store
   uint64 system_free_capacity = 3;   // free capacity of this store
@@ -759,10 +770,17 @@ message StoreMetrics {
   uint64 process_used_cpu = 21;       // cpu usage of this store process, this value / 100 is the real cpu usage percent
   uint64 process_used_memory = 22;    // total used memory of this store process
   uint64 process_used_capacity = 23;  // free capacity of this store , NOT IMPLEMENTED
+}
+
+// StoreMetrics
+message StoreMetrics {
+  uint64 id = 1;  // store id
+
+  StoreOwnMetrics store_own_metrics = 10;  // store own metrics
 
   // the key of the map is region_id,  the value is RegionMetrics
   // this map contains all region's metrics include follower on this store
-  map<uint64, dingodb.pb.common.RegionMetrics> region_metrics_map = 40;
+  map<uint64, RegionMetrics> region_metrics_map = 40;
   // true: region_metrics_map only contain partial region metrics, false: contain full region metrics
   bool is_partial_region_metrics = 41;
 }

@@ -610,7 +610,7 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController * /
   // get store metrics
   pb::common::StoreMetrics store_metrics;
   std::vector<pb::common::StoreMetrics> store_metrics_list;
-  this->coordinator_control_->GetStoreMetrics(request->store_id(), store_metrics_list);
+  this->coordinator_control_->GetStoreMetrics(request->store_id(), request->region_id(), store_metrics_list);
 
   for (auto &store_metrics : store_metrics_list) {
     auto *new_store_metrics = response->add_store_metrics();

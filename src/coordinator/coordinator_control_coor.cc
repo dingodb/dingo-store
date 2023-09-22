@@ -134,6 +134,45 @@ void CoordinatorControl::GetStoreMetrics(uint64_t store_id, std::vector<pb::comm
   }
 }
 
+void CoordinatorControl::GetStoreMetrics(uint64_t store_id, uint64_t region_id,
+                                         std::vector<pb::common::StoreMetrics>& store_metrics) {
+  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  if (store_id == 0) {
+    for (auto& element : store_metrics_map_) {
+      if (region_id == 0) {
+        store_metrics.push_back(element.second);
+      } else {
+        pb::common::StoreMetrics tmp_store_metrics;
+        tmp_store_metrics.set_id(element.second.id());
+
+        const auto& region_metrics_map = element.second.region_metrics_map();
+        if (region_metrics_map.find(region_id) != region_metrics_map.end()) {
+          tmp_store_metrics.mutable_region_metrics_map()->insert({region_id, region_metrics_map.at(region_id)});
+        }
+
+        store_metrics.push_back(tmp_store_metrics);
+      }
+    }
+  } else {
+    auto* it = store_metrics_map_.seek(store_id);
+    if (it != nullptr) {
+      if (region_id == 0) {
+        store_metrics.push_back(*it);
+      } else {
+        pb::common::StoreMetrics tmp_store_metrics;
+        tmp_store_metrics.set_id(it->id());
+
+        const auto& region_metrics_map = it->region_metrics_map();
+        if (region_metrics_map.find(region_id) != region_metrics_map.end()) {
+          tmp_store_metrics.mutable_region_metrics_map()->insert({region_id, region_metrics_map.at(region_id)});
+        }
+
+        store_metrics.push_back(tmp_store_metrics);
+      }
+    }
+  }
+}
+
 void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
@@ -487,6 +526,29 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
       tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
       tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
       tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
+
+      if (elemnt.second.definition().index_parameter().has_vector_index_parameter()) {
+        tmp_region->set_id(elemnt.second.id());
+        tmp_region->mutable_definition()->set_name(elemnt.second.definition().name());
+        tmp_region->mutable_definition()->mutable_epoch()->set_conf_version(
+            elemnt.second.definition().epoch().conf_version());
+        tmp_region->mutable_definition()->mutable_epoch()->set_version(elemnt.second.definition().epoch().version());
+        tmp_region->mutable_definition()->mutable_range()->set_start_key(
+            elemnt.second.definition().range().start_key());
+        tmp_region->mutable_definition()->mutable_range()->set_start_key(
+            elemnt.second.definition().range().start_key());
+        tmp_region->mutable_definition()->mutable_range()->set_end_key(elemnt.second.definition().range().end_key());
+        tmp_region->set_state(elemnt.second.state());
+        tmp_region->set_raft_status(elemnt.second.raft_status());
+        tmp_region->set_replica_status(elemnt.second.replica_status());
+        tmp_region->set_heartbeat_state(elemnt.second.heartbeat_state());
+        tmp_region->set_leader_store_id(elemnt.second.leader_store_id());
+        tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
+        tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
+        tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
+
+        *(tmp_region->mutable_metrics()->mutable_vector_index_status()) = elemnt.second.metrics().vector_index_status();
+      }
     }
   }
 }
@@ -906,7 +968,8 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
       continue;
     }
 
-    auto store_metrics = tmp_store_metrics[0];
+    const auto& store_metrics = tmp_store_metrics[0];
+    const auto& store_own_metrics = store_metrics.store_own_metrics();
     // if (store_metrics.region_metrics_map_size() == 0) {
     //   DINGO_LOG(INFO) << "Store metrics region_metrics_map_size is 0, store_id=" << store.id()
     //                   << ", just make use of it";
@@ -914,34 +977,34 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     //   continue;
     // }
 
-    if (store_metrics.system_total_memory() == 0) {
+    if (store_own_metrics.system_total_memory() == 0) {
       DINGO_LOG(WARNING) << "Store metrics system_total_memory is 0, store_id=" << store.id()
                          << ", just make use of it";
       tmp_stores_for_regions.push_back(store);
       continue;
     }
 
-    if (store_metrics.system_available_memory() < store_metrics.system_total_memory() * 0.05) {
+    if (store_own_metrics.system_available_memory() < store_own_metrics.system_total_memory() * 0.05) {
       DINGO_LOG(ERROR) << "Store metrics system_available_memory < system_total_memory * 0.05, store_id=" << store.id()
-                       << ", system_free_memory=" << store_metrics.system_free_memory()
-                       << ", system_available_memory=" << store_metrics.system_available_memory()
-                       << ", system_total_memory=" << store_metrics.system_total_memory();
+                       << ", system_free_memory=" << store_own_metrics.system_free_memory()
+                       << ", system_available_memory=" << store_own_metrics.system_available_memory()
+                       << ", system_total_memory=" << store_own_metrics.system_total_memory();
       status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                              "Not enough stores for create region, one store has low memory");
       continue;
     }
 
-    if (store_metrics.system_total_capacity() == 0) {
+    if (store_own_metrics.system_total_capacity() == 0) {
       DINGO_LOG(WARNING) << "Store metrics system_total_capacity is 0, store_id=" << store.id()
                          << ", just make use of it";
       tmp_stores_for_regions.push_back(store);
       continue;
     }
 
-    if (store_metrics.system_free_capacity() < store_metrics.system_total_capacity() * 0.05) {
+    if (store_own_metrics.system_free_capacity() < store_own_metrics.system_total_capacity() * 0.05) {
       DINGO_LOG(ERROR) << "Store metrics system_free_capacity < system_total_capacity * 0.05, store_id=" << store.id()
-                       << ", system_free_capacity=" << store_metrics.system_free_capacity()
-                       << ", system_total_capacity=" << store_metrics.system_total_capacity();
+                       << ", system_free_capacity=" << store_own_metrics.system_free_capacity()
+                       << ", system_total_capacity=" << store_own_metrics.system_total_capacity();
       status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                              "Not enough stores for create region, one store has low capacity");
       continue;
@@ -958,10 +1021,10 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     uint64_t new_hnsw_index_plan_memory = hnsw_parameter.dimension() * hnsw_parameter.max_elements() * 4;
     DINGO_LOG(INFO) << "Store metrics new_hnsw_index_plan_memory=" << new_hnsw_index_plan_memory
                     << ", store_id=" << store.id() << ", region_count=" << store_metrics.region_metrics_map_size();
-    if (new_hnsw_index_plan_memory > store_metrics.system_available_memory() * 0.95) {
+    if (new_hnsw_index_plan_memory > store_own_metrics.system_available_memory() * 0.95) {
       DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used > system_available_memory * 0.95, store_id=" << store.id()
                       << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
-                      << ", system_available_memory=" << store_metrics.system_available_memory();
+                      << ", system_available_memory=" << store_own_metrics.system_available_memory();
       status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                              "Not enough stores for create region, one store has low memory for hnsw");
       continue;
@@ -985,18 +1048,18 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
                     << ", hnsw_memory_plan=" << hnsw_memory_plan_used << ", store_id=" << store.id()
                     << ", region_count=" << store_metrics.region_metrics_map_size();
 
-    if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 0.30 < store_metrics.system_total_memory()) {
+    if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 0.30 < store_own_metrics.system_total_memory()) {
       DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used * 0.30 < system_total_memory, store_id=" << store.id()
                       << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
                       << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
-                      << ", system_total_memory=" << store_metrics.system_total_memory();
+                      << ", system_total_memory=" << store_own_metrics.system_total_memory();
       tmp_stores_for_regions.push_back(store);
       continue;
     } else {
       DINGO_LOG(ERROR) << "Store metrics hnsw_memory_plan_used * 0.30 >= system_total_memory, store_id=" << store.id()
                        << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
                        << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
-                       << ", system_total_memory=" << store_metrics.system_total_memory();
+                       << ", system_total_memory=" << store_own_metrics.system_total_memory();
       status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
       continue;
     }
@@ -1043,11 +1106,17 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
       auto* ptr = store_metrics_map_.seek(it.id());
       if (ptr != nullptr) {
         store_more.region_num = ptr->region_metrics_map_size() > 0 ? ptr->region_metrics_map_size() : 0;
-        store_more.system_free_capacity = ptr->system_free_capacity() > 0 ? ptr->system_free_capacity() : 0;
-        store_more.system_total_capacity = ptr->system_total_capacity() > 0 ? ptr->system_total_capacity() : 0;
-        store_more.system_total_memory = ptr->system_total_memory() > 0 ? ptr->system_free_memory() : 0;
-        store_more.system_free_memory = ptr->system_free_memory() > 0 ? ptr->system_free_memory() : 0;
-        store_more.system_available_memory = ptr->system_available_memory() > 0 ? ptr->system_available_memory() : 0;
+        const auto& store_own_metrics = ptr->store_own_metrics();
+        store_more.system_free_capacity =
+            store_own_metrics.system_free_capacity() > 0 ? store_own_metrics.system_free_capacity() : 0;
+        store_more.system_total_capacity =
+            store_own_metrics.system_total_capacity() > 0 ? store_own_metrics.system_total_capacity() : 0;
+        store_more.system_total_memory =
+            store_own_metrics.system_total_memory() > 0 ? store_own_metrics.system_free_memory() : 0;
+        store_more.system_free_memory =
+            store_own_metrics.system_free_memory() > 0 ? store_own_metrics.system_free_memory() : 0;
+        store_more.system_available_memory =
+            store_own_metrics.system_available_memory() > 0 ? store_own_metrics.system_available_memory() : 0;
         has_metrics = true;
       }
 
@@ -3194,8 +3263,9 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
   }
 
   // mbvar store
-  coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(), store_metrics.system_total_capacity(),
-                                                  store_metrics.system_free_capacity());
+  coordinator_bvar_metrics_store_.UpdateStoreBvar(store_metrics.id(),
+                                                  store_metrics.store_own_metrics().system_total_capacity(),
+                                                  store_metrics.store_own_metrics().system_free_capacity());
 
   // use region_metrics_map to update region_map and store_operation
   if (store_metrics.region_metrics_map_size() > 0) {
@@ -3734,7 +3804,7 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
 
     // check vector_index
     if (region_check.check_vector_index()) {
-      if (region_check.is_hold_vector_index() != region.is_hold_vector_index()) {
+      if (region_check.is_hold_vector_index() != region.vector_index_status().is_hold_vector_index()) {
         check_passed = false;
       }
     }

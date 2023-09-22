@@ -184,8 +184,12 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
   }
 
   if (!region->VectorIndexWrapper()->IsReady()) {
-    butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
-                  fmt::format("Vector index {} not ready, please retry.", region->Id()));
+    if (!region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
   std::vector<uint64_t> vector_ids;
@@ -318,6 +322,10 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
+    if (!region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
@@ -464,6 +472,10 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
+    if (!region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
@@ -746,6 +758,10 @@ butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
+    if (!region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
@@ -906,6 +922,10 @@ butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
+    if (!region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }

@@ -162,8 +162,10 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
       DINGO_LOG(INFO) << fmt::format(
           "[vector_index.load][index_id({})] ReplayWal success, log_id {} elapsed time({}ms)", vector_index_id,
           new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
+
       // Switch vector index.
       vector_index_wrapper->UpdateVectorIndex(new_vector_index);
+      vector_index_wrapper->SetBuildSuccess();
 
       return status;
     }
@@ -180,12 +182,15 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
         "[vector_index.build][index_id({})] Build vector index failed, elapsed time({}ms).", vector_index_id,
         Helper::TimestampMs() - start_time);
 
+    vector_index_wrapper->SetBuildError();
+
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed, vector index id %lu",
                          vector_index_id);
   }
 
   // Switch vector index.
   vector_index_wrapper->UpdateVectorIndex(new_vector_index);
+  vector_index_wrapper->SetBuildSuccess();
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] Build vector index success, elapsed time({}ms).",
                                  vector_index_id, Helper::TimestampMs() - start_time);
@@ -503,12 +508,17 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
   if (vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})] Build vector index failed.",
                                       vector_index_id);
+
+    vector_index_wrapper->SetRebuildError();
+
     return butil::Status(pb::error::Errno::EINTERNAL, "Build vector index failed");
   }
 
   // Check vector index is stop
   if (vector_index_wrapper->IsStop()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})] vector index is stop.", vector_index_id);
+    vector_index_wrapper->SetRebuildError();
+
     return butil::Status();
   }
 
@@ -522,6 +532,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] ReplayWal failed first-round, log_id {}",
                                     vector_index_id, vector_index->ApplyLogId());
+    vector_index_wrapper->SetRebuildError();
     return butil::Status(pb::error::Errno::EINTERNAL, "ReplayWal failed first-round");
   }
 
@@ -547,6 +558,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] ReplayWal failed catch-up round, log_id {}",
                                       vector_index_id, vector_index->ApplyLogId());
+      vector_index_wrapper->SetRebuildError();
       return status;
     }
 
@@ -557,6 +569,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
         Helper::TimestampMs() - start_time);
 
     vector_index_wrapper->UpdateVectorIndex(vector_index);
+    vector_index_wrapper->SetRebuildSuccess();
   }
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})] Rebuild vector index success",

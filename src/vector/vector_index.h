@@ -245,7 +245,6 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   VectorIndexWrapper(uint64_t id, pb::common::VectorIndexParameter index_parameter,
                      int64_t save_snapshot_threshold_write_key_num)
       : id_(id),
-        version_(0),
         vector_index_type_(index_parameter.vector_index_type()),
         ready_(false),
         stop_(false),
@@ -254,8 +253,6 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
         snapshot_log_id_(0),
         active_index_(0),
         index_parameter_(index_parameter),
-        write_key_count_(0),
-        last_save_write_key_count_(0),
         need_bootstrap_build_(false),
         save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
     worker_ = Worker::New();
@@ -283,6 +280,30 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsReady() { return ready_.load(); }
 
   bool IsStop() { return stop_.load(); }
+
+  bool IsBuildError() { return build_error_.load(); }
+
+  bool IsRebuildError() { return rebuild_error_.load(); }
+
+  bool SetBuildError() {
+    build_error_.store(true);
+    return build_error_.load();
+  }
+
+  bool SetBuildSuccess() {
+    build_error_.store(false);
+    return build_error_.load();
+  }
+
+  bool SetRebuildError() {
+    rebuild_error_.store(true);
+    return rebuild_error_.load();
+  }
+
+  bool SetRebuildSuccess() {
+    rebuild_error_.store(false);
+    return rebuild_error_.load();
+  }
 
   pb::common::VectorIndexType Type() { return vector_index_type_; }
 
@@ -337,11 +358,15 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // vector index id
   uint64_t id_;
   // vector index version
-  uint64_t version_;
+  uint64_t version_{0};
   // vector index is ready
   std::atomic<bool> ready_;
   // stop vector index
   std::atomic<bool> stop_;
+  // vector index build status
+  std::atomic<bool> build_error_{false};
+  // vector index rebuild status
+  std::atomic<bool> rebuild_error_{false};
   // status
   std::atomic<pb::common::RegionVectorIndexStatus> status_;
   // vector index type, e.g. hnsw/flat
@@ -373,8 +398,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   WorkerPtr worker_;
 
   // write(add/update/delete) key count
-  uint64_t write_key_count_;
-  uint64_t last_save_write_key_count_;
+  uint64_t write_key_count_{0};
+  uint64_t last_save_write_key_count_{0};
   // save snapshot threshold write key num
   uint64_t save_snapshot_threshold_write_key_num_;
 

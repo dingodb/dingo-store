@@ -214,8 +214,8 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
     return butil::Status();
   }
 
-  uint64_t free_capacity = metrics->system_free_capacity();
-  uint64_t total_capacity = metrics->system_total_capacity();
+  uint64_t free_capacity = metrics->store_own_metrics().system_free_capacity();
+  uint64_t total_capacity = metrics->store_own_metrics().system_total_capacity();
   if (total_capacity != 0) {
     double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
     if (disk_free_capacity_ratio < Constant::kSystemDiskCapacityFreeRatio) {
@@ -226,8 +226,8 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
     }
   }
 
-  uint64_t available_memory = metrics->system_available_memory();
-  uint64_t total_memory = metrics->system_total_memory();
+  uint64_t available_memory = metrics->store_own_metrics().system_available_memory();
+  uint64_t total_memory = metrics->store_own_metrics().system_total_memory();
   if (total_memory != 0 && available_memory != UINT64_MAX) {
     double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
     if (memory_free_capacity_ratio < Constant::kSystemMemoryCapacityFreeRatio) {
