@@ -110,9 +110,9 @@ bool VectorIndexWrapper::Recover() {
     return false;
   }
 
-  if (NeedBootstrapBuild()) {
+  if (IsHoldVectorIndex()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] need bootstrap build vector index.", Id());
-    VectorIndexManager::AsyncLoadOrBuildVectorIndex(GetSelf());
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(GetSelf());
   }
 
   return true;
@@ -134,7 +134,7 @@ butil::Status VectorIndexWrapper::SaveMeta() {
   meta.set_type(static_cast<int>(vector_index_type_));
   meta.set_apply_log_id(ApplyLogId());
   meta.set_snapshot_log_id(SnapshotLogId());
-  meta.set_need_bootstrap_build(NeedBootstrapBuild());
+  meta.set_is_hold_vector_index(IsHoldVectorIndex());
 
   auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenMetaKey(id_));
@@ -171,7 +171,7 @@ butil::Status VectorIndexWrapper::LoadMeta() {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] prase vector index meta failed.", Id());
   }
 
-  SetNeedBootstrapBuild(meta.need_bootstrap_build());
+  SetIsHoldVectorIndex(meta.is_hold_vector_index());
 
   return butil::Status();
 }
@@ -199,10 +199,10 @@ void VectorIndexWrapper::SetIsSwitchingVectorIndex(bool is_switching) {
   is_switching_vector_index_.store(is_switching);
 }
 
-bool VectorIndexWrapper::NeedBootstrapBuild() const { return need_bootstrap_build_; }
+bool VectorIndexWrapper::IsHoldVectorIndex() const { return is_hold_vector_index_.load(); }
 
-void VectorIndexWrapper::SetNeedBootstrapBuild(bool need) {
-  need_bootstrap_build_ = need;
+void VectorIndexWrapper::SetIsHoldVectorIndex(bool need) {
+  is_hold_vector_index_.store(need);
   SaveMeta();
 }
 
@@ -266,8 +266,20 @@ bool VectorIndexWrapper::ExecuteTask(TaskRunnable* task) {
   if (worker_ == nullptr) {
     return false;
   }
-  return worker_->Execute(task);
+
+  bool ret = worker_->Execute(task);
+  if (ret) {
+    IncPendingTaskNum();
+  }
+
+  return ret;
 }
+
+int VectorIndexWrapper::PendingTaskNum() { return pending_task_num_.load(); }
+
+void VectorIndexWrapper::IncPendingTaskNum() { pending_task_num_.fetch_add(1); }
+
+void VectorIndexWrapper::DecPendingTaskNum() { pending_task_num_.fetch_sub(1); }
 
 int32_t VectorIndexWrapper::GetDimension() {
   auto vector_index = GetVectorIndex();

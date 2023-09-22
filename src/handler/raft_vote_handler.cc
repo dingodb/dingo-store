@@ -17,6 +17,7 @@
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/vector_index_snapshot_manager.h"
 
@@ -30,22 +31,25 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
   // Load vector index.
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper->IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
+    DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
+                                   region->Id());
   } else {
-    auto snapshot_set = vector_index_wrapper->SnapshotSet();
-    auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
-    if (!status.ok()) {
-      if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
-        DINGO_LOG(ERROR) << fmt::format("Pull vector index {} last snapshot failed, error: {}", region->Id(),
-                                        status.error_str());
+    auto raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(region->Id());
+    // New region don't pull snapshot, directly build.
+    if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
+      DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] pull last snapshot from peers.", region->Id());
+      auto snapshot_set = vector_index_wrapper->SnapshotSet();
+      auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
+      if (!status.ok()) {
+        if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
+            status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
+          DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] pull vector index last snapshot failed, error: {}",
+                                          region->Id(), status.error_str());
+        }
       }
     }
 
-    status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
-                                      status.error_str());
-    }
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
   }
 
   return 0;
@@ -63,10 +67,12 @@ int VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status)
     return 0;
   }
 
-  if (!region->NeedBootstrapDoSnapshot()) {
-    // Delete vector index.
-    region->VectorIndexWrapper()->ClearVectorIndex();
+  if (region->VectorIndexWrapper()->IsHoldVectorIndex()) {
+    return 0;
   }
+
+  // Delete vector index.
+  region->VectorIndexWrapper()->ClearVectorIndex();
 
   return 0;
 }
@@ -86,13 +92,10 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
   // Load vector index.
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper->IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("Vector index {} already exist, don't need load again.", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
+                                      region->Id());
   } else {
-    auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Load or build vector index failed, region {} error: {}", region->Id(),
-                                      status.error_str());
-    }
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
   }
 
   return 0;

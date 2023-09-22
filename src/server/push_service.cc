@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "bthread/bthread.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
@@ -85,6 +86,11 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   for (const auto& command : request->store_operation().region_cmds()) {
     butil::Status status;
     auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+
+    // Tmp code.
+    if (command.region_cmd_type() == pb::coordinator::CMD_SPLIT) {
+      bthread_usleep(1000 * 1000);
+    }
 
     auto validate_func = RegionController::GetValidater(command.region_cmd_type());
     status = (validate_func != nullptr) ? validate_func(command)

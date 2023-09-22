@@ -161,6 +161,10 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
 
   DispatchEvent(EventType::kSmSnapshotSave, event);
 
+  if (raft_meta_ != nullptr) {
+    Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+  }
+
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_save done", region_->Id());
 }
 

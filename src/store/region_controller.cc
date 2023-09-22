@@ -907,18 +907,11 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   }
 
   if (is_hold) {
-    vector_index_wrapper->SetNeedBootstrapBuild(true);
+    vector_index_wrapper->SetIsHoldVectorIndex(true);
     // Load vector index.
     if (!vector_index_wrapper->IsReady()) {
-      auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[vector_index.hold][index_id({})] load or build vector index failed, error: {}", region_id,
-            status.error_str());
-      } else {
-        DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] load or build vector index finish",
-                                       region_id);
-      }
+      DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
+      VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
     }
   } else {
     // Delete vector index.

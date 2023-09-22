@@ -253,7 +253,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
         snapshot_log_id_(0),
         active_index_(0),
         index_parameter_(index_parameter),
-        need_bootstrap_build_(false),
+        is_hold_vector_index_(false),
+        pending_task_num_(0),
         save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
     worker_ = Worker::New();
     snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
@@ -320,8 +321,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsSwitchingVectorIndex();
   void SetIsSwitchingVectorIndex(bool is_switching);
 
-  bool NeedBootstrapBuild() const;
-  void SetNeedBootstrapBuild(bool need);
+  bool IsHoldVectorIndex() const;
+  void SetIsHoldVectorIndex(bool need);
 
   vector_index::SnapshotMetaSetPtr SnapshotSet() { return snapshot_set_; }
 
@@ -335,6 +336,10 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   void SetShareVectorIndex(VectorIndexPtr vector_index);
 
   bool ExecuteTask(TaskRunnable* task);
+
+  int PendingTaskNum();
+  void IncPendingTaskNum();
+  void DecPendingTaskNum();
 
   int32_t GetDimension();
   butil::Status GetCount(uint64_t& count);
@@ -396,6 +401,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   // Run long time task, e.g. rebuild
   WorkerPtr worker_;
+  std::atomic<int> pending_task_num_;
 
   // write(add/update/delete) key count
   uint64_t write_key_count_{0};
@@ -403,8 +409,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // save snapshot threshold write key num
   uint64_t save_snapshot_threshold_write_key_num_;
 
-  // need build vector index when bootstrap
-  bool need_bootstrap_build_;
+  // need hold vector index
+  std::atomic<bool> is_hold_vector_index_;
 };
 
 using VectorIndexWrapperPtr = std::shared_ptr<VectorIndexWrapper>;
