@@ -61,8 +61,10 @@ void VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status
     return;
   }
 
-  // Delete vector index.
-  region->VectorIndexWrapper()->ClearVectorIndex();
+  if (!region->NeedBootstrapDoSnapshot()) {
+    // Delete vector index.
+    region->VectorIndexWrapper()->ClearVectorIndex();
+  }
 }
 
 void VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {

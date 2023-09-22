@@ -250,7 +250,7 @@ static pb::common::RegionMetrics GetRegionActualMetrics(uint64_t region_id) {
 
   auto raw_engine = Server::GetInstance()->GetRawEngine();
 
-  int32_t size = 0;
+  uint64_t size = 0;
   int32_t key_count = 0;
   std::string min_key, max_key;
   auto ranges = region->PhysicsRange();

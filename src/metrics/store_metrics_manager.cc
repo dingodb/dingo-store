@@ -206,7 +206,7 @@ std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproxim
   auto sizes = raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
   int i = 0;
   for (const auto& region : valid_regions) {
-    int size = 0;
+    uint64_t size = 0;
     if (region->Type() == pb::common::INDEX_REGION) {
       for (int j = 0; j < Constant::kVectorDataCategoryNum; ++j) {
         size += sizes[i + j];
