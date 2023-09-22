@@ -14,6 +14,7 @@
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
@@ -61,6 +62,12 @@
 DEFINE_string(conf, "", "server config");
 DEFINE_string(role, "", "server role [store|coordinator]");
 DECLARE_string(coor_url);
+
+DEFINE_uint32(h2_server_max_concurrent_streams, UINT32_MAX, "max concurrent streams");
+DEFINE_uint32(h2_server_stream_window_size, 1024 * 1024 * 1024, "stream window size");
+DEFINE_uint32(h2_server_connection_window_size, 1024 * 1024 * 1024, "connection window size");
+DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
+DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
 
 namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
@@ -511,6 +518,19 @@ int main(int argc, char *argv[]) {
   brpc::Server raft_server;
 
   brpc::ServerOptions options;
+
+  options.h2_settings.max_concurrent_streams = FLAGS_h2_server_max_concurrent_streams;
+  options.h2_settings.stream_window_size = FLAGS_h2_server_stream_window_size;
+  options.h2_settings.connection_window_size = FLAGS_h2_server_connection_window_size;
+  options.h2_settings.max_frame_size = FLAGS_h2_server_max_frame_size;
+  options.h2_settings.max_header_list_size = FLAGS_h2_server_max_header_list_size;
+
+  DINGO_LOG(INFO) << "h2_settings.max_concurrent_streams: " << options.h2_settings.max_concurrent_streams;
+  DINGO_LOG(INFO) << "h2_settings.stream_window_size: " << options.h2_settings.stream_window_size;
+  DINGO_LOG(INFO) << "h2_settings.connection_window_size: " << options.h2_settings.connection_window_size;
+  DINGO_LOG(INFO) << "h2_settings.max_frame_size: " << options.h2_settings.max_frame_size;
+  DINGO_LOG(INFO) << "h2_settings.max_header_list_size: " << options.h2_settings.max_header_list_size;
+
   options.num_threads = GetWorkerThreadNum(config);
   DINGO_LOG(INFO) << "num_threads: " << options.num_threads;
 
