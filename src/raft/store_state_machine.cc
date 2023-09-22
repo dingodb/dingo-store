@@ -71,12 +71,17 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
 
 bool StoreStateMachine::Init() { return true; }
 
-void StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
-  if (listeners_ == nullptr) return;
+int StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
+  if (listeners_ == nullptr) return -1;
 
   for (auto& listener : listeners_->Get(event_type)) {
-    listener->OnEvent(event);
+    int ret = listener->OnEvent(event);
+    if (ret != 0) {
+      return ret;
+    }
   }
+
+  return 0;
 }
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
@@ -191,7 +196,10 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     event->reader = reader;
     event->region = region_;
 
-    DispatchEvent(EventType::kSmSnapshotLoad, event);
+    int ret = DispatchEvent(EventType::kSmSnapshotLoad, event);
+    if (ret != 0) {
+      return ret;
+    }
 
     // Update applied term and index
     applied_term_ = meta.last_included_term();

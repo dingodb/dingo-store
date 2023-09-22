@@ -411,8 +411,8 @@ std::string GetSnapshotPolicy(std::shared_ptr<dingodb::Config> config) {
   return policy = policy.empty() ? Constant::kDefaultRaftSnapshotPolicy : policy;
 }
 
-void RaftSaveSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                                    braft::SnapshotWriter* writer, braft::Closure* done) {
+int RaftSaveSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                                   braft::SnapshotWriter* writer, braft::Closure* done) {
   auto config = Server::GetInstance()->GetConfig();
   std::string policy = GetSnapshotPolicy(config);
   if (policy == "checkpoint") {
@@ -420,14 +420,19 @@ void RaftSaveSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<Raw
   } else if (policy == "scan") {
     AsyncSaveSnapshotByScan(region, engine, writer, done);
   }
+
+  return 0;
 }
 
-void RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                                    braft::SnapshotReader* reader) {
+int RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                                   braft::SnapshotReader* reader) {
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (!raft_snapshot->LoadSnapshot(reader, region)) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed.", region->Id());
+    return -1;
   }
+
+  return 0;
 }
 
 }  // namespace dingodb

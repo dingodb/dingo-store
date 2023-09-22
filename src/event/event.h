@@ -83,7 +83,7 @@ class EventListener {
 
   uint64_t GetID() const { return id_; }
   virtual EventType GetType() = 0;
-  virtual void OnEvent(std::shared_ptr<Event> event) = 0;
+  virtual int OnEvent(std::shared_ptr<Event> event) = 0;
 
  private:
   uint64_t id_;

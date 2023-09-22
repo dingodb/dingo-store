@@ -65,14 +65,14 @@ class RaftSnapshot {
 class RaftSaveSnapshotHanler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kSaveSnapshot; }
-  void Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
-              braft::Closure* done) override;
+  int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
+             braft::Closure* done) override;
 };
 
 class RaftLoadSnapshotHanler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kLoadSnapshot; }
-  void Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader* reader) override;
+  int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader* reader) override;
 };
 
 }  // namespace dingodb
