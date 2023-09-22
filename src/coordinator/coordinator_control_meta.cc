@@ -1854,16 +1854,9 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
   }
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
-    auto* range_distribution = table_range.add_range_distribution();
-
     // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
     uint64_t part_id = table_internal.partitions(i).part_id();
-
-    auto* common_id_region = range_distribution->mutable_id();
-    common_id_region->set_entity_id(region_id);
-    common_id_region->set_parent_entity_id(part_id);
-    common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // get region
     pb::common::Region part_region;
@@ -1873,6 +1866,19 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
                                       table_id, region_id);
       continue;
     }
+
+    if (part_region.definition().range().start_key() >= part_region.definition().range().end_key()) {
+      DINGO_LOG(INFO) << fmt::format("region range illegal, table_id={} region_id={} range={}", table_id, region_id,
+                                     part_region.definition().range().ShortDebugString())
+                      << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      continue;
+    }
+
+    auto* range_distribution = table_range.add_range_distribution();
+    auto* common_id_region = range_distribution->mutable_id();
+    common_id_region->set_entity_id(region_id);
+    common_id_region->set_parent_entity_id(part_id);
+    common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // region epoch
     *(range_distribution->mutable_region_epoch()) = part_region.definition().epoch();
@@ -1945,16 +1951,9 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
   }
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
-    auto* range_distribution = index_range.add_range_distribution();
-
     // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
     uint64_t part_id = table_internal.partitions(i).part_id();
-
-    auto* common_id_region = range_distribution->mutable_id();
-    common_id_region->set_entity_id(region_id);
-    common_id_region->set_parent_entity_id(part_id);
-    common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // get region
     pb::common::Region part_region;
@@ -1964,6 +1963,19 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
                                       index_id, region_id);
       continue;
     }
+
+    if (part_region.definition().range().start_key() >= part_region.definition().range().end_key()) {
+      DINGO_LOG(INFO) << fmt::format("region range illegal, index_id={} region_id={} range={}", index_id, region_id,
+                                     part_region.definition().range().ShortDebugString())
+                      << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      continue;
+    }
+
+    auto* range_distribution = index_range.add_range_distribution();
+    auto* common_id_region = range_distribution->mutable_id();
+    common_id_region->set_entity_id(region_id);
+    common_id_region->set_parent_entity_id(part_id);
+    common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // region epoch
     *(range_distribution->mutable_region_epoch()) = part_region.definition().epoch();
