@@ -35,7 +35,7 @@
 
 namespace dingodb {
 
-void SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmApplyEvent>(event);
 
   // Dispatch
@@ -50,22 +50,31 @@ void SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
       DINGO_LOG(ERROR) << "Unknown raft cmd type " << req.cmd_type();
     }
   }
+
+  return 0;
 }
 
-void SmSnapshotSaveEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmSnapshotSaveEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmSnapshotSaveEvent>(event);
 
   if (handler_) {
     handler_->Handle(the_event->region, the_event->engine, the_event->writer, the_event->done);
   }
+
+  return 0;
 }
 
-void SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmSnapshotLoadEvent>(event);
 
   if (handler_) {
-    handler_->Handle(the_event->region, the_event->engine, the_event->reader);
+    int ret = handler_->Handle(the_event->region, the_event->engine, the_event->reader);
+    if (ret != 0) {
+      return ret;
+    }
   }
+
+  return 0;
 }
 
 // Launch save raft snapshot
@@ -84,7 +93,7 @@ static void LaunchSaveRaftSnapshot(uint64_t region_id) {
   }
 }
 
-void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
   auto region = the_event->region;
 
@@ -124,9 +133,11 @@ void SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   for (auto& handle : handlers) {
     handle->Handle(the_event->region, the_event->term);
   }
+
+  return 0;
 }
 
-void SmLeaderStopEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmLeaderStopEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStopEvent>(event);
 
   // Invoke handler
@@ -134,19 +145,21 @@ void SmLeaderStopEventListener::OnEvent(std::shared_ptr<Event> event) {
   for (auto& handle : handlers) {
     handle->Handle(the_event->region, the_event->status);
   }
+
+  return 0;
 }
 
-void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmConfigurationCommittedEvent>(event);
 
   // Update region definition peers
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   if (store_region_meta == nullptr) {
-    return;
+    return 0;
   }
   auto region = store_region_meta->GetRegion(the_event->node_id);
   if (region == nullptr) {
-    return;
+    return 0;
   }
   const auto& old_peers = region->Peers();
 
@@ -187,9 +200,11 @@ void SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event
     // Notify coordinator
     Heartbeat::TriggerStoreHeartbeat(the_event->node_id);
   }
+
+  return 0;
 }
 
-void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   auto region = the_event->region;
 
@@ -219,9 +234,11 @@ void SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   for (auto& handle : handlers) {
     handle->Handle(the_event->region, the_event->ctx);
   }
+
+  return 0;
 }
 
-void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
+int SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStopFollowingEvent>(event);
 
   // Invoke handler
@@ -229,6 +246,8 @@ void SmStopFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   for (auto& handle : handlers) {
     handle->Handle(the_event->region, the_event->ctx);
   }
+
+  return 0;
 }
 
 std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {

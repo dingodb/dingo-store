@@ -65,18 +65,18 @@ class Handler {
   // virtual void Handle(std::shared_ptr<Context> ctx, std::shared_ptr<RawEngine> engine,
   //                     const pb::raft::Request &req) = 0;
 
-  virtual void Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                      const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                      uint64_t log_id) = 0;
+  virtual int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                     const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+                     uint64_t log_id) = 0;
 
-  virtual void Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
-                      braft::Closure *done) = 0;
-  virtual void Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader *reader) = 0;
+  virtual int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
+                     braft::Closure *done) = 0;
+  virtual int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader *reader) = 0;
 
-  virtual void Handle(store::RegionPtr region, uint64_t term_id) = 0;
-  virtual void Handle(store::RegionPtr region, butil::Status status) = 0;
+  virtual int Handle(store::RegionPtr region, uint64_t term_id) = 0;
+  virtual int Handle(store::RegionPtr region, butil::Status status) = 0;
 
-  virtual void Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) = 0;
+  virtual int Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) = 0;
 };
 
 class BaseHandler : public Handler {
@@ -88,23 +88,33 @@ class BaseHandler : public Handler {
   //   DINGO_LOG(ERROR) << "Not support handle...";
   // }
 
-  void Handle(std::shared_ptr<Context>, store::RegionPtr, std::shared_ptr<RawEngine>, const pb::raft::Request &,
-              store::RegionMetricsPtr, uint64_t /*term_id*/, uint64_t /*log_id*/) override {
+  int Handle(std::shared_ptr<Context>, store::RegionPtr, std::shared_ptr<RawEngine>, const pb::raft::Request &,
+             store::RegionMetricsPtr, uint64_t /*term_id*/, uint64_t /*log_id*/) override {
     DINGO_LOG(ERROR) << "Not support handle...";
+    return 0;
   }
 
-  void Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotWriter *, braft::Closure *) override {
+  int Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotWriter *, braft::Closure *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
+    return 0;
   }
 
-  void Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotReader *) override {
+  int Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotReader *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
+    return 0;
   }
 
-  void Handle(store::RegionPtr, uint64_t) override { DINGO_LOG(ERROR) << "Not support handle..."; }
-  void Handle(store::RegionPtr, butil::Status) override { DINGO_LOG(ERROR) << "Not support handle..."; }
-  void Handle(store::RegionPtr, const braft::LeaderChangeContext &) override {
+  int Handle(store::RegionPtr, uint64_t) override {
     DINGO_LOG(ERROR) << "Not support handle...";
+    return 0;
+  }
+  int Handle(store::RegionPtr, butil::Status) override {
+    DINGO_LOG(ERROR) << "Not support handle...";
+    return 0;
+  }
+  int Handle(store::RegionPtr, const braft::LeaderChangeContext &) override {
+    DINGO_LOG(ERROR) << "Not support handle...";
+    return 0;
   }
 };
 

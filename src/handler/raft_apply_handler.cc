@@ -38,9 +38,9 @@
 
 namespace dingodb {
 
-void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
-                        uint64_t /*log_id*/) {
+int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
+                       uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put();
   // region is spliting, check key out range
@@ -52,7 +52,7 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, s
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -72,11 +72,13 @@ void PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, s
   if (region_metrics != nullptr) {
     region_metrics->UpdateMaxAndMinKey(request.kvs());
   }
+
+  return 0;
 }
 
-void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
+int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
+                               uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
@@ -88,7 +90,7 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -129,11 +131,13 @@ void PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (region_metrics != nullptr) {
     region_metrics->UpdateMaxAndMinKey(request.kvs());
   }
+
+  return 0;
 }
 
-void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                  std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                  store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
+int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                 store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.compare_and_set();
   // region is spliting, check key out range
@@ -145,7 +149,7 @@ void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -204,11 +208,13 @@ void CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
     // delete key
     region_metrics->UpdateMaxAndMinKeyPolicy(delete_keys);
   }
+
+  return 0;
 }
 
-void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
+int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
+                               uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_range();
   // region is spliting, check key out range
@@ -220,7 +226,7 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -265,11 +271,13 @@ void DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (region_metrics != nullptr) {
     region_metrics->UpdateMaxAndMinKeyPolicy(request.ranges());
   }
+
+  return 0;
 }
 
-void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
+int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
+                               uint64_t /*term_id*/, uint64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
@@ -281,7 +289,7 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -318,6 +326,8 @@ void DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (region_metrics != nullptr) {
     region_metrics->UpdateMaxAndMinKeyPolicy(request.keys());
   }
+
+  return 0;
 }
 
 // Launch rebuild vector index through raft state machine
@@ -661,20 +671,20 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
 // region-100: [start_key,end_key) ->
 // region-101: [start_key, split_key) and region-100: [split_key, end_key)
-void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
-                          const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                          uint64_t log_id) {
+int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
+                         const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
+                         uint64_t log_id) {
   const auto &request = req.split();
 
   if (request.split_strategy() == pb::raft::PRE_CREATE_REGION) {
     bool ret = HandlePreCreateRegionSplit(request, from_region, term_id, log_id);
     if (!ret) {
-      return;
+      return 0;
     }
   } else {
     bool ret = HandlePostCreateRegionSplit(request, from_region, term_id, log_id);
     if (!ret) {
-      return;
+      return 0;
     }
   }
 
@@ -682,11 +692,13 @@ void SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region
   if (region_metrics != nullptr) {
     region_metrics->UpdateMaxAndMinKeyPolicy();
   }
+
+  return 0;
 }
 
-void SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
-                                     const pb::raft::Request &, store::RegionMetricsPtr, uint64_t term_id,
-                                     uint64_t log_id) {
+int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
+                                    const pb::raft::Request &, store::RegionMetricsPtr, uint64_t term_id,
+                                    uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] save snapshot, term({}) log_id({})",
                                  region->ParentId(), region->Id(), term_id, log_id);
   auto engine = Server::GetInstance()->GetEngine();
@@ -697,11 +709,13 @@ void SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr 
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] do snapshot failed, error: {}",
                                     region->ParentId(), region->Id(), status.error_str());
   }
+
+  return 0;
 }
 
-void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                              const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
-                              uint64_t /*term_id*/, uint64_t log_id) {
+int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                             const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
+                             uint64_t /*term_id*/, uint64_t log_id) {
   auto set_ctx_status = [ctx](butil::Status status) {
     if (ctx) {
       ctx->SetStatus(status);
@@ -722,7 +736,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -778,7 +792,7 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
     DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
     status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
     set_ctx_status(status);
-    return;
+    return 0;
   }
 
   // Only leader and specific follower write vector index, other follower don't write vector index.
@@ -842,11 +856,13 @@ void VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr reg
 
     ctx->SetStatus(status);
   }
+
+  return 0;
 }
 
-void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                 store::RegionMetricsPtr /*region_metrics*/, uint64_t /*term_id*/, uint64_t log_id) {
+int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                store::RegionMetricsPtr /*region_metrics*/, uint64_t /*term_id*/, uint64_t log_id) {
   auto set_ctx_status = [ctx](butil::Status status) {
     if (ctx) {
       ctx->SetStatus(status);
@@ -867,7 +883,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
           status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
           ctx->SetStatus(status);
         }
-        return;
+        return 0;
       }
     }
   }
@@ -879,7 +895,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     DINGO_LOG(WARNING) << fmt::format("vector_delete ids_size is 0, region_id={}", region->Id());
     status = butil::Status::OK();
     set_ctx_status(status);
-    return;
+    return 0;
   }
 
   // Transform vector to kv
@@ -931,7 +947,7 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
     DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
     status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
     set_ctx_status(status);
-    return;
+    return 0;
   }
 
   // Only leader and specific follower write vector index, other follower don't write vector index.
@@ -988,11 +1004,13 @@ void VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
     ctx->SetStatus(status);
   }
+
+  return 0;
 }
 
-void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
-                                       [[maybe_unused]] const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
-                                       uint64_t log_id) {
+int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
+                                      [[maybe_unused]] const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
+                                      uint64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Handle rebuild vector index, apply_log_id: {}",
                                  region->Id(), log_id);
   auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -1001,6 +1019,8 @@ void RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPt
 
     VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, true);
   }
+
+  return 0;
 }
 
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {

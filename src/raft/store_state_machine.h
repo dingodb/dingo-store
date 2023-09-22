@@ -73,7 +73,7 @@ class StoreStateMachine : public braft::StateMachine {
   void on_stop_following(const braft::LeaderChangeContext& ctx) override;
 
  private:
-  void DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
+  int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
   store::RegionPtr region_;
   std::string str_node_id_;

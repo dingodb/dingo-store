@@ -47,7 +47,7 @@ class SmApplyEventListener : public EventListener {
   ~SmApplyEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmApply; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<HandlerCollection> handler_collection_;
@@ -65,7 +65,7 @@ class SmShutdownEventListener : public EventListener {
   ~SmShutdownEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmShutdown; }
-  void OnEvent(std::shared_ptr<Event> event) override {}
+  int OnEvent(std::shared_ptr<Event> event) override { return 0; }
 };
 
 // State Machine SnapshotSave
@@ -85,7 +85,7 @@ class SmSnapshotSaveEventListener : public EventListener {
   ~SmSnapshotSaveEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmSnapshotSave; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<Handler> handler_;
@@ -107,7 +107,7 @@ class SmSnapshotLoadEventListener : public EventListener {
   ~SmSnapshotLoadEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmSnapshotLoad; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<Handler> handler_;
@@ -129,7 +129,7 @@ class SmLeaderStartEventListener : public EventListener {
   ~SmLeaderStartEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmLeaderStart; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<HandlerCollection> handler_collection_;
@@ -151,7 +151,7 @@ class SmLeaderStopEventListener : public EventListener {
   ~SmLeaderStopEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmLeaderStop; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<HandlerCollection> handler_collection_;
@@ -171,7 +171,7 @@ class SmErrorEventListener : public EventListener {
   ~SmErrorEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmError; }
-  void OnEvent(std::shared_ptr<Event> event) override {}
+  int OnEvent(std::shared_ptr<Event> event) override { return 0; }
 };
 
 // State Machine ConfigurationCommitted
@@ -189,7 +189,7 @@ class SmConfigurationCommittedEventListener : public EventListener {
   ~SmConfigurationCommittedEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmConfigurationCommited; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 };
 
 // State Machine StartFollowing
@@ -209,7 +209,7 @@ class SmStartFollowingEventListener : public EventListener {
   ~SmStartFollowingEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmStartFollowing; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<HandlerCollection> handler_collection_;
@@ -232,7 +232,7 @@ class SmStopFollowingEventListener : public EventListener {
   ~SmStopFollowingEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmStopFollowing; }
-  void OnEvent(std::shared_ptr<Event> event) override;
+  int OnEvent(std::shared_ptr<Event> event) override;
 
  private:
   std::shared_ptr<HandlerCollection> handler_collection_;

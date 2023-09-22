@@ -22,9 +22,9 @@
 
 namespace dingodb {
 
-void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
+int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
   if (region == nullptr) {
-    return;
+    return 0;
   }
 
   // Load vector index.
@@ -47,36 +47,40 @@ void VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
                                       status.error_str());
     }
   }
+
+  return 0;
 }
 
-void VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status) {
+int VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status) {
   auto config = Server::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return;
+    return 0;
   }
   if (config->GetBool("vector.enable_follower_hold_index")) {
-    return;
+    return 0;
   }
   if (region == nullptr) {
-    return;
+    return 0;
   }
 
   if (!region->NeedBootstrapDoSnapshot()) {
     // Delete vector index.
     region->VectorIndexWrapper()->ClearVectorIndex();
   }
+
+  return 0;
 }
 
-void VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
+int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
   auto config = Server::GetInstance()->GetConfig();
   if (config == nullptr) {
-    return;
+    return 0;
   }
   if (!config->GetBool("vector.enable_follower_hold_index")) {
-    return;
+    return 0;
   }
   if (region == nullptr) {
-    return;
+    return 0;
   }
 
   // Load vector index.
@@ -90,9 +94,11 @@ void VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braf
                                       status.error_str());
     }
   }
+
+  return 0;
 }
 
-void VectorIndexFollowerStopHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) {}
+int VectorIndexFollowerStopHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) { return 0; }
 
 std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();

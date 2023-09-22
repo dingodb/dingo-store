@@ -23,28 +23,28 @@ namespace dingodb {
 class VectorIndexLeaderStartHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kVectorIndexLeaderStart; }
-  void Handle(store::RegionPtr region, uint64_t term_id) override;
+  int Handle(store::RegionPtr region, uint64_t term_id) override;
 };
 
 // VectorIndexLeaderStop
 class VectorIndexLeaderStopHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kVectorIndexLeaderStop; }
-  void Handle(store::RegionPtr region, butil::Status status) override;
+  int Handle(store::RegionPtr region, butil::Status status) override;
 };
 
 // VectorIndexFollowerStart
 class VectorIndexFollowerStartHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kVectorIndexFollowerStart; }
-  void Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
+  int Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
 };
 
 // VectorIndexFollowerStop
 class VectorIndexFollowerStopHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kVectorIndexFollowerStop; }
-  void Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
+  int Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
 };
 
 // Leader start handler collection
