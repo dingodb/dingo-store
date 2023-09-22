@@ -15,6 +15,7 @@
 #ifndef DINGODB_CLIENT_HELPER_H_
 #define DINGODB_CLIENT_HELPER_H_
 
+#include <cstdint>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -26,6 +27,7 @@
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 #include "serial/buf.h"
+#include "vector/codec.h"
 
 namespace client {
 
@@ -161,6 +163,18 @@ class Helper {
     buf.WriteLong(partition_id);
 
     return buf.GetString();
+  }
+
+  static std::string CalculateVectorMiddleKey(const std::string& start_key, const std::string& end_key) {
+    uint64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
+    uint64_t min_vector_id = dingodb::VectorCodec::DecodeVectorId(start_key);
+    uint64_t max_vector_id = dingodb::VectorCodec::DecodeVectorId(end_key);
+    max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
+    uint64_t mid_vector_id = min_vector_id + (max_vector_id - min_vector_id) / 2;
+
+    std::string result;
+    dingodb::VectorCodec::EncodeVectorKey(partition_id, mid_vector_id, result);
+    return result;
   }
 };
 

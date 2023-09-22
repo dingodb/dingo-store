@@ -55,8 +55,6 @@ DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
 DECLARE_uint32(vector_ids_count);
 
-extern std::shared_ptr<client::Context> global_ctx;
-
 namespace client {
 
 /*
@@ -122,7 +120,7 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
 
 // ============================== meta service ===========================
 
-dingodb::pb::meta::TableDefinition SendGetIndex(ServerInteractionPtr interaction, uint64_t index_id) {
+dingodb::pb::meta::TableDefinition SendGetIndex(uint64_t index_id) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -131,12 +129,12 @@ dingodb::pb::meta::TableDefinition SendGetIndex(ServerInteractionPtr interaction
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(index_id);
 
-  interaction->SendRequest("MetaService", "GetTables", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTables", request, response);
 
   return response.table_definition_with_ids()[0].table_definition();
 }
 
-dingodb::pb::meta::TableDefinition SendGetTable(ServerInteractionPtr interaction, uint64_t table_id) {
+dingodb::pb::meta::TableDefinition SendGetTable(uint64_t table_id) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -145,12 +143,12 @@ dingodb::pb::meta::TableDefinition SendGetTable(ServerInteractionPtr interaction
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(table_id);
 
-  interaction->SendRequest("MetaService", "GetTables", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTables", request, response);
 
   return response.table_definition_with_ids()[0].table_definition();
 }
 
-dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction, uint64_t table_id) {
+dingodb::pb::meta::TableRange SendGetTableRange(uint64_t table_id) {
   dingodb::pb::meta::GetTableRangeRequest request;
   dingodb::pb::meta::GetTableRangeResponse response;
 
@@ -159,12 +157,12 @@ dingodb::pb::meta::TableRange SendGetTableRange(ServerInteractionPtr interaction
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(table_id);
 
-  interaction->SendRequest("MetaService", "GetTableRange", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableRange", request, response);
 
   return response.table_range();
 }
 
-dingodb::pb::meta::IndexRange SendGetIndexRange(ServerInteractionPtr interaction, uint64_t table_id) {
+dingodb::pb::meta::IndexRange SendGetIndexRange(uint64_t table_id) {
   dingodb::pb::meta::GetIndexRangeRequest request;
   dingodb::pb::meta::GetIndexRangeResponse response;
 
@@ -173,12 +171,12 @@ dingodb::pb::meta::IndexRange SendGetIndexRange(ServerInteractionPtr interaction
   mut_index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_index_id->set_entity_id(table_id);
 
-  interaction->SendRequest("MetaService", "GetIndexRange", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetIndexRange", request, response);
 
   return response.index_range();
 }
 
-std::vector<uint64_t> SendGetTablesBySchema(ServerInteractionPtr interaction) {
+std::vector<uint64_t> SendGetTablesBySchema() {
   dingodb::pb::meta::GetTablesBySchemaRequest request;
   dingodb::pb::meta::GetTablesBySchemaResponse response;
 
@@ -187,7 +185,7 @@ std::vector<uint64_t> SendGetTablesBySchema(ServerInteractionPtr interaction) {
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
-  interaction->SendRequest("MetaService", "GetTablesBySchema", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTablesBySchema", request, response);
 
   std::vector<uint64_t> table_ids;
   for (const auto& id : response.table_definition_with_ids()) {
@@ -197,7 +195,7 @@ std::vector<uint64_t> SendGetTablesBySchema(ServerInteractionPtr interaction) {
   return table_ids;
 }
 
-int GetCreateTableId(ServerInteractionPtr interaction, uint64_t& table_id) {
+int GetCreateTableId(uint64_t& table_id) {
   dingodb::pb::meta::CreateTableIdRequest request;
   dingodb::pb::meta::CreateTableIdResponse response;
 
@@ -206,8 +204,9 @@ int GetCreateTableId(ServerInteractionPtr interaction, uint64_t& table_id) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  auto status = interaction->SendRequest("MetaService", "CreateTableId", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  auto status =
+      InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "CreateTableId", request, response);
+  DINGO_LOG(INFO) << "SendRequestWithoutContext status=" << status;
   DINGO_LOG_INFO << response.DebugString();
 
   if (response.has_table_id()) {
@@ -218,12 +217,11 @@ int GetCreateTableId(ServerInteractionPtr interaction, uint64_t& table_id) {
   }
 }
 
-dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(ServerInteractionPtr interaction,
-                                                              const std::string& table_name, int partition_num) {
+dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string& table_name, int partition_num) {
   dingodb::pb::meta::CreateTableRequest request;
 
   uint64_t new_table_id = 0;
-  int ret = GetCreateTableId(interaction, new_table_id);
+  int ret = GetCreateTableId(new_table_id);
   if (ret != 0) {
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
     return request;
@@ -234,7 +232,7 @@ dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(ServerInteractionP
   std::vector<uint64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
     uint64_t new_part_id = 0;
-    int ret = GetCreateTableId(interaction, new_part_id);
+    int ret = GetCreateTableId(new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
       return request;
@@ -294,21 +292,21 @@ dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(ServerInteractionP
   return request;
 }
 
-uint64_t SendCreateTable(ServerInteractionPtr interaction, const std::string& table_name, int partition_num) {
-  auto request = BuildCreateTableRequest(interaction, table_name, partition_num);
+uint64_t SendCreateTable(const std::string& table_name, int partition_num) {
+  auto request = BuildCreateTableRequest(table_name, partition_num);
   if (request.table_id().entity_id() == 0) {
     DINGO_LOG(WARNING) << "BuildCreateTableRequest failed";
     return 0;
   }
 
   dingodb::pb::meta::CreateTableResponse response;
-  interaction->SendRequest("MetaService", "CreateTable", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "CreateTable", request, response);
 
   DINGO_LOG(INFO) << "response=" << response.DebugString();
   return response.table_id().entity_id();
 }
 
-void SendDropTable(ServerInteractionPtr interaction, uint64_t table_id) {
+void SendDropTable(uint64_t table_id) {
   dingodb::pb::meta::DropTableRequest request;
   dingodb::pb::meta::DropTableResponse response;
 
@@ -317,10 +315,10 @@ void SendDropTable(ServerInteractionPtr interaction, uint64_t table_id) {
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(table_id);
 
-  interaction->SendRequest("MetaService", "DropTable", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "DropTable", request, response);
 }
 
-uint64_t SendGetTableByName(ServerInteractionPtr interaction, const std::string& table_name) {
+uint64_t SendGetTableByName(const std::string& table_name) {
   dingodb::pb::meta::GetTableByNameRequest request;
   dingodb::pb::meta::GetTableByNameResponse response;
 
@@ -331,18 +329,18 @@ uint64_t SendGetTableByName(ServerInteractionPtr interaction, const std::string&
 
   request.set_table_name(table_name);
 
-  interaction->SendRequest("MetaService", "GetTableByName", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableByName", request, response);
 
   return response.table_definition_with_id().table_id().entity_id();
 }
 
 // ============================== meta service ===========================
 
-void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn) {
+void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   auto* vector = request.add_vector_with_ids();
 
   if (region_id == 0) {
@@ -444,14 +442,14 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
 
   if (FLAGS_print_vector_search_delay) {
     auto start = std::chrono::steady_clock::now();
-    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
 
   } else {
-    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
   }
 
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
@@ -521,13 +519,12 @@ void SendVectorSearch(ServerInteractionPtr interaction, uint64_t region_id, uint
   }
 }
 
-void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension,
-                           uint64_t start_vector_id, uint32_t topn, uint32_t batch_count, const std::string& key,
-                           const std::string& value) {
+void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t start_vector_id, uint32_t topn,
+                           uint32_t batch_count, const std::string& key, const std::string& value) {
   dingodb::pb::index::VectorSearchDebugRequest request;
   dingodb::pb::index::VectorSearchDebugResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
   if (region_id == 0) {
     DINGO_LOG(ERROR) << "region_id is 0";
@@ -652,14 +649,14 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
 
   if (FLAGS_print_vector_search_delay) {
     auto start = std::chrono::steady_clock::now();
-    interaction->SendRequest("IndexService", "VectorSearchDebug", request, response);
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearchDebug", request, response);
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     DINGO_LOG(INFO) << fmt::format("SendVectorSearchDebug  span: {} (us)", diff);
 
   } else {
-    interaction->SendRequest("IndexService", "VectorSearchDebug", request, response);
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearchDebug", request, response);
   }
 
   DINGO_LOG(INFO) << "VectorSearchDebug response: " << response.DebugString();
@@ -741,12 +738,11 @@ void SendVectorSearchDebug(ServerInteractionPtr interaction, uint64_t region_id,
 #endif
 }
 
-void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t topn,
-                           uint32_t batch_count) {
+void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
   if (region_id == 0) {
     DINGO_LOG(ERROR) << "region_id is 0";
@@ -850,14 +846,14 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
 
   if (FLAGS_print_vector_search_delay) {
     auto start = std::chrono::steady_clock::now();
-    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
     DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
 
   } else {
-    interaction->SendRequest("IndexService", "VectorSearch", request, response);
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
   }
 
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
@@ -936,11 +932,11 @@ void SendVectorBatchSearch(ServerInteractionPtr interaction, uint64_t region_id,
   }
 }
 
-void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, std::vector<uint64_t> vector_ids) {
+void SendVectorBatchQuery(uint64_t region_id, std::vector<uint64_t> vector_ids) {
   dingodb::pb::index::VectorBatchQueryRequest request;
   dingodb::pb::index::VectorBatchQueryResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (auto vector_id : vector_ids) {
     request.add_vector_ids(vector_id);
   }
@@ -962,17 +958,16 @@ void SendVectorBatchQuery(ServerInteractionPtr interaction, uint64_t region_id, 
     key->assign(FLAGS_key);
   }
 
-  interaction->SendRequest("IndexService", "VectorBatchQuery", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorBatchQuery", request, response);
 
   DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
 }
 
-void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, uint64_t start_id, uint64_t end_id,
-                         uint64_t limit, bool is_reverse) {
+void SendVectorScanQuery(uint64_t region_id, uint64_t start_id, uint64_t end_id, uint64_t limit, bool is_reverse) {
   dingodb::pb::index::VectorScanQueryRequest request;
   dingodb::pb::index::VectorScanQueryResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.set_vector_id_start(start_id);
   request.set_vector_id_end(end_id);
 
@@ -1027,29 +1022,29 @@ void SendVectorScanQuery(ServerInteractionPtr interaction, uint64_t region_id, u
                     << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
   }
 
-  interaction->SendRequest("IndexService", "VectorScanQuery", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorScanQuery", request, response);
 
   DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString()
                   << " vector count: " << response.vectors().size();
 }
 
-void SendVectorGetRegionMetrics(ServerInteractionPtr interaction, uint64_t region_id) {
+void SendVectorGetRegionMetrics(uint64_t region_id) {
   dingodb::pb::index::VectorGetRegionMetricsRequest request;
   dingodb::pb::index::VectorGetRegionMetricsResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
-  interaction->SendRequest("IndexService", "VectorGetRegionMetrics", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorGetRegionMetrics", request, response);
 
   DINGO_LOG(INFO) << "VectorGetRegionMetrics response: " << response.DebugString();
 }
 
-int SendBatchVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension,
-                       std::vector<uint64_t> vector_ids, bool with_scalar, bool with_table) {
+int SendBatchVectorAdd(uint64_t region_id, uint32_t dimension, std::vector<uint64_t> vector_ids, bool with_scalar,
+                       bool with_table) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
@@ -1087,7 +1082,8 @@ int SendBatchVectorAdd(ServerInteractionPtr interaction, uint64_t region_id, uin
     }
   }
 
-  butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorAdd", request, response);
   int success_count = 0;
   for (auto key_state : response.key_states()) {
     if (key_state) {
@@ -1151,7 +1147,11 @@ void PrintIndexRange(dingodb::pb::meta::IndexRange& index_range) {  // NOLINT
 }
 
 void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
-  auto index_range = SendGetIndexRange(ctx->coordinator_interaction, ctx->table_id);
+  auto index_range = SendGetIndexRange(ctx->table_id);
+  if (index_range.range_distribution().empty()) {
+    DINGO_LOG(INFO) << fmt::format("Not found range of table {}", ctx->table_id);
+    return;
+  }
   PrintIndexRange(index_range);
 
   int end_id = ctx->start_id + ctx->count;
@@ -1168,11 +1168,10 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
       return;
     }
 
-    int ret = SendBatchVectorAdd(ctx->store_interaction, region_id, ctx->dimension, vector_ids, !FLAGS_without_scalar,
-                                 !FLAGS_without_table);
+    int ret = SendBatchVectorAdd(region_id, ctx->dimension, vector_ids, !FLAGS_without_scalar, !FLAGS_without_table);
     if (ret == dingodb::pb::error::EKEY_OUT_OF_RANGE || ret == dingodb::pb::error::EREGION_REDIRECT) {
       bthread_usleep(1000 * 500);  // 500ms
-      index_range = SendGetIndexRange(ctx->coordinator_interaction, ctx->table_id);
+      index_range = SendGetIndexRange(ctx->table_id);
       PrintIndexRange(index_range);
     }
 
@@ -1191,24 +1190,24 @@ void SendVectorAdd(std::shared_ptr<Context> ctx) {  // NOLINT
       vector_ids.push_back(j);
     }
 
-    int ret = SendBatchVectorAdd(ctx->store_interaction, ctx->region_id, ctx->dimension, vector_ids,
-                                 !FLAGS_without_scalar, !FLAGS_without_table);
+    int ret =
+        SendBatchVectorAdd(ctx->region_id, ctx->dimension, vector_ids, !FLAGS_without_scalar, !FLAGS_without_table);
 
     vector_ids.clear();
   }
 }
 
-void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint32_t start_id,  // NOLINT
-                      uint32_t count) {                                                         // NOLINT
+void SendVectorDelete(uint64_t region_id, uint32_t start_id,  // NOLINT
+                      uint32_t count) {                       // NOLINT
   dingodb::pb::index::VectorDeleteRequest request;
   dingodb::pb::index::VectorDeleteResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (int i = 0; i < count; ++i) {
     request.add_ids(i + start_id);
   }
 
-  interaction->SendRequest("IndexService", "VectorDelete", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorDelete", request, response);
   int success_count = 0;
   for (auto key_state : response.key_states()) {
     if (key_state) {
@@ -1221,31 +1220,31 @@ void SendVectorDelete(ServerInteractionPtr interaction, uint64_t region_id, uint
                                  response.key_states().size() - success_count);
 }
 
-void SendVectorGetMaxId(ServerInteractionPtr interaction, uint64_t region_id) {  // NOLINT
+void SendVectorGetMaxId(uint64_t region_id) {  // NOLINT
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
-  interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorGetBorderId", request, response);
 
   DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
 }
 
-void SendVectorGetMinId(ServerInteractionPtr interaction, uint64_t region_id) {  // NOLINT
+void SendVectorGetMinId(uint64_t region_id) {  // NOLINT
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.set_get_min(true);
 
-  interaction->SendRequest("IndexService", "VectorGetBorderId", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorGetBorderId", request, response);
 
   DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
 }
 
-void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
-                        uint32_t step_count, int64_t start_id, const std::string& file) {
+void SendVectorAddBatch(uint64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
+                        const std::string& file) {
   if (step_count == 0) {
     DINGO_LOG(ERROR) << "step_count must be greater than 0";
     return;
@@ -1334,7 +1333,7 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
       dingodb::pb::index::VectorAddRequest request;
       dingodb::pb::index::VectorAddResponse response;
 
-      *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+      *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
       uint64_t real_start_id = start_id + x * step_count;
       for (int i = real_start_id; i < real_start_id + step_count; ++i) {
@@ -1360,7 +1359,8 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
         }
       }
 
-      butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+      butil::Status status =
+          InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorAdd", request, response);
       int success_count = 0;
       for (auto key_state : response.key_states()) {
         if (key_state) {
@@ -1385,8 +1385,8 @@ void SendVectorAddBatch(ServerInteractionPtr interaction, uint64_t region_id, ui
   out.close();
 }
 
-void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_id, uint32_t dimension, uint32_t count,
-                             uint32_t step_count, int64_t start_id, const std::string& file) {
+void SendVectorAddBatchDebug(uint64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
+                             int64_t start_id, const std::string& file) {
   if (step_count == 0) {
     DINGO_LOG(ERROR) << "step_count must be greater than 0";
     return;
@@ -1475,7 +1475,7 @@ void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_i
       dingodb::pb::index::VectorAddRequest request;
       dingodb::pb::index::VectorAddResponse response;
 
-      *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+      *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
       uint64_t real_start_id = start_id + x * step_count;
       for (int i = real_start_id; i < real_start_id + step_count; ++i) {
@@ -1520,7 +1520,8 @@ void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_i
         }
       }
 
-      butil::Status status = interaction->SendRequest("IndexService", "VectorAdd", request, response);
+      butil::Status status =
+          InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorAdd", request, response);
       int success_count = 0;
       for (auto key_state : response.key_states()) {
         if (key_state) {
@@ -1545,9 +1546,9 @@ void SendVectorAddBatchDebug(ServerInteractionPtr interaction, uint64_t region_i
   out.close();
 }
 
-void SendVectorCalcDistance(ServerInteractionPtr interaction, [[maybe_unused]] uint64_t region_id, uint32_t dimension,
-                            const std::string& alg_type, const std::string& metric_type, int32_t left_vector_size,
-                            int32_t right_vector_size, bool is_return_normlize) {
+void SendVectorCalcDistance(uint64_t region_id, uint32_t dimension, const std::string& alg_type,
+                            const std::string& metric_type, int32_t left_vector_size, int32_t right_vector_size,
+                            bool is_return_normlize) {
   ::dingodb::pb::index::VectorCalcDistanceRequest request;
   ::dingodb::pb::index::VectorCalcDistanceResponse response;
 
@@ -1638,54 +1639,54 @@ void SendVectorCalcDistance(ServerInteractionPtr interaction, [[maybe_unused]] u
 
   DINGO_LOG(INFO) << "SendVectorCalcDistance request: " << request.DebugString();
 
-  interaction->SendRequest("UtilService", "VectorCalcDistance", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("UtilService", "VectorCalcDistance", request, response);
 
   DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
 }
 
-void SendKvGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string& value) {
+void SendKvGet(uint64_t region_id, const std::string& key, std::string& value) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.set_key(key);
 
-  interaction->SendRequest("StoreService", "KvGet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvGet", request, response);
 
   value = response.value();
 }
 
-void SendKvBatchGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count) {
+void SendKvBatchGet(uint64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchGetRequest request;
   dingodb::pb::store::KvBatchGetResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     request.add_keys(key);
   }
 
-  interaction->SendRequest("StoreService", "KvBatchGet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchGet", request, response);
 }
 
-int SendKvPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key, std::string value) {
+int SendKvPut(uint64_t region_id, const std::string& key, std::string value) {
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   auto* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(value.empty() ? Helper::GenRandomString(64) : value);
 
-  interaction->SendRequest("StoreService", "KvPut", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPut", request, response);
   return response.error().errcode();
 }
 
-void SendKvBatchPut(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int count) {
+void SendKvBatchPut(uint64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchPutRequest request;
   dingodb::pb::store::KvBatchPutResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
@@ -1693,27 +1694,26 @@ void SendKvBatchPut(ServerInteractionPtr interaction, uint64_t region_id, const 
     kv->set_value(Helper::GenRandomString(64));
   }
 
-  interaction->SendRequest("StoreService", "KvBatchPut", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPut", request, response);
 }
 
-void SendKvPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key) {
+void SendKvPutIfAbsent(uint64_t region_id, const std::string& key) {
   dingodb::pb::store::KvPutIfAbsentRequest request;
   dingodb::pb::store::KvPutIfAbsentResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(Helper::GenRandomString(64));
 
-  interaction->SendRequest("StoreService", "KvPutIfAbsent", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPutIfAbsent", request, response);
 }
 
-void SendKvBatchPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix,
-                            int count) {
+void SendKvBatchPutIfAbsent(uint64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchPutIfAbsentRequest request;
   dingodb::pb::store::KvBatchPutIfAbsentResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
@@ -1721,58 +1721,60 @@ void SendKvBatchPutIfAbsent(ServerInteractionPtr interaction, uint64_t region_id
     kv->set_value(Helper::GenRandomString(64));
   }
 
-  interaction->SendRequest("StoreService", "KvBatchPutIfAbsent", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPutIfAbsent", request, response);
 }
 
-void SendKvBatchDelete(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key) {
+void SendKvBatchDelete(uint64_t region_id, const std::string& key) {
   dingodb::pb::store::KvBatchDeleteRequest request;
   dingodb::pb::store::KvBatchDeleteResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.add_keys(key);
 
-  interaction->SendRequest("StoreService", "KvBatchDelete", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchDelete", request, response);
 }
 
-void SendKvDeleteRange(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix) {
+void SendKvDeleteRange(uint64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvDeleteRangeRequest request;
   dingodb::pb::store::KvDeleteRangeResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.mutable_range()->mutable_range()->set_start_key(prefix);
   request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
   request.mutable_range()->set_with_end(false);
 
-  interaction->SendRequest("StoreService", "KvDeleteRange", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvDeleteRange", request, response);
   DINGO_LOG(INFO) << "delete count: " << response.delete_count();
 }
 
-void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix) {
+void SendKvScan(uint64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvScanBeginRequest request;
   dingodb::pb::store::KvScanBeginResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.mutable_range()->mutable_range()->set_start_key(prefix);
   request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
   request.mutable_range()->set_with_end(false);
 
-  interaction->SendRequest("StoreService", "KvScanBegin", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvScanBegin", request, response);
   if (response.error().errcode() != 0) {
     return;
   }
 
   dingodb::pb::store::KvScanContinueRequest continue_request;
   dingodb::pb::store::KvScanContinueResponse continue_response;
-  *(continue_request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+
+  *(continue_request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   continue_request.set_scan_id(response.scan_id());
   int batch_size = 1000;
   continue_request.set_max_fetch_cnt(batch_size);
 
   int count = 0;
   for (;;) {
-    interaction->SendRequest("StoreService", "KvScanContinue", continue_request, continue_response);
+    InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvScanContinue", continue_request,
+                                                             continue_response);
     if (continue_response.error().errcode() != 0) {
       return;
     }
@@ -1788,31 +1790,31 @@ void SendKvScan(ServerInteractionPtr interaction, uint64_t region_id, const std:
   dingodb::pb::store::KvScanReleaseRequest release_request;
   dingodb::pb::store::KvScanReleaseResponse release_response;
 
-  *(release_request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(release_request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   release_request.set_scan_id(response.scan_id());
 
-  interaction->SendRequest("StoreService", "KvScanRelease", release_request, release_response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvScanRelease", release_request,
+                                                           release_response);
 }
 
-void SendKvCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& key) {
+void SendKvCompareAndSet(uint64_t region_id, const std::string& key) {
   dingodb::pb::store::KvCompareAndSetRequest request;
   dingodb::pb::store::KvCompareAndSetResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(Helper::GenRandomString(64));
   request.set_expect_value("");
 
-  interaction->SendRequest("StoreService", "KvCompareAndSet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvCompareAndSet", request, response);
 }
 
-void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix,
-                              int count) {
+void SendKvBatchCompareAndSet(uint64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchCompareAndSetRequest request;
   dingodb::pb::store::KvBatchCompareAndSetResponse response;
 
-  *(request.mutable_context()) = GetRegionContext(global_ctx->coordinator_interaction, region_id);
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (int i = 0; i < count; ++i) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
@@ -1826,7 +1828,7 @@ void SendKvBatchCompareAndSet(ServerInteractionPtr interaction, uint64_t region_
 
   request.set_is_atomic(false);
 
-  interaction->SendRequest("StoreService", "KvBatchCompareAndSet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchCompareAndSet", request, response);
 }
 
 dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, const std::string& raft_group,
@@ -1859,71 +1861,75 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, 
   return region_definition;
 }
 
-void SendAddRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
-                   std::vector<std::string> raft_addrs) {
+void SendAddRegion(uint64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
   dingodb::pb::region_control::AddRegionRequest request;
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::region_control::AddRegionResponse response;
 
-  interaction->SendRequest("RegionControlService", "AddRegion", request, response);
+  InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
+                                                                 response);
 }
 
-void SendChangeRegion(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
-                      std::vector<std::string> raft_addrs) {
+void SendChangeRegion(uint64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
   dingodb::pb::region_control::ChangeRegionRequest request;
   dingodb::pb::region_control::ChangeRegionResponse response;
 
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
 
-  interaction->SendRequest("RegionControlService", "ChangeRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "ChangeRegion", request,
+                                                              response);
 }
 
-void SendDestroyRegion(ServerInteractionPtr interaction, uint64_t region_id) {
+void SendDestroyRegion(uint64_t region_id) {
   dingodb::pb::region_control::DestroyRegionRequest request;
   dingodb::pb::region_control::DestroyRegionResponse response;
 
   request.set_region_id(region_id);
 
-  interaction->SendRequest("RegionControlService", "DestroyRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "DestroyRegion", request,
+                                                              response);
 }
 
-void SendSnapshot(ServerInteractionPtr interaction, uint64_t region_id) {
+void SendSnapshot(uint64_t region_id) {
   dingodb::pb::region_control::SnapshotRequest request;
   dingodb::pb::region_control::SnapshotResponse response;
 
   request.set_region_id(region_id);
 
-  interaction->SendRequest("RegionControlService", "Snapshot", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Snapshot", request, response);
 }
 
-void SendSnapshotVectorIndex(ServerInteractionPtr interaction, uint64_t vector_index_id) {
+void SendSnapshotVectorIndex(uint64_t vector_index_id) {
   dingodb::pb::region_control::SnapshotVectorIndexRequest request;
   dingodb::pb::region_control::SnapshotVectorIndexResponse response;
 
   request.set_vector_index_id(vector_index_id);
 
-  interaction->SendRequest("RegionControlService", "SnapshotVectorIndex", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "SnapshotVectorIndex", request,
+                                                              response);
 }
 
-void SendTransferLeader(ServerInteractionPtr interaction, uint64_t region_id, const dingodb::pb::common::Peer& peer) {
+void SendTransferLeader(uint64_t region_id, const dingodb::pb::common::Peer& peer) {
   dingodb::pb::region_control::TransferLeaderRequest request;
   dingodb::pb::region_control::TransferLeaderResponse response;
 
   request.set_region_id(region_id);
   *(request.mutable_peer()) = peer;
 
-  interaction->SendRequest("RegionControlService", "TransferLeader", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "TransferLeader", request,
+                                                              response);
 }
 
-void SendTransferLeaderByCoordinator(ServerInteractionPtr interaction, uint64_t region_id, uint64_t leader_store_id) {
+void SendTransferLeaderByCoordinator(uint64_t region_id, uint64_t leader_store_id) {
   dingodb::pb::coordinator::TransferLeaderRegionRequest request;
   dingodb::pb::coordinator::TransferLeaderRegionResponse response;
 
   request.set_region_id(region_id);
   request.set_leader_store_id(leader_store_id);
 
-  interaction->SendRequest("CoordinatorService", "TransferLeaderRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "TransferLeaderRegion", request,
+                                                              response);
 }
 
 struct BatchPutGetParam {
@@ -1931,7 +1937,6 @@ struct BatchPutGetParam {
   int32_t req_num;
   int32_t thread_no;
   std::string prefix;
-  ServerInteractionPtr interaction;
 
   std::map<std::string, std::shared_ptr<dingodb::pb::store::StoreService_Stub>> stubs;
 };
@@ -1941,8 +1946,8 @@ void BatchPut(std::shared_ptr<Context> ctx) {
   for (int i = 0; i < ctx->req_num; ++i) {
     std::string key = ctx->prefix + Helper::GenRandomStringV2(32);
     std::string value = Helper::GenRandomString(256);
-    SendKvPut(ctx->store_interaction, ctx->region_id, key, value);
-    latencys.push_back(ctx->store_interaction->GetLatency());
+    SendKvPut(ctx->region_id, key, value);
+    latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 
   int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
@@ -1974,10 +1979,10 @@ void PrintTableRange(dingodb::pb::meta::TableRange& table_range) {
 
 void BatchPutTable(std::shared_ptr<Context> ctx) {
   // Get table definition
-  auto table_definition = SendGetTable(ctx->coordinator_interaction, ctx->table_id);
+  auto table_definition = SendGetTable(ctx->table_id);
   auto partitions = table_definition.table_partition().partitions();
   // Get table range distribution
-  auto table_range = SendGetTableRange(ctx->coordinator_interaction, ctx->table_id);
+  auto table_range = SendGetTableRange(ctx->table_id);
   PrintTableRange(table_range);
 
   std::vector<uint64_t> latencys;
@@ -1991,14 +1996,14 @@ void BatchPutTable(std::shared_ptr<Context> ctx) {
       break;
     }
 
-    int ret = SendKvPut(ctx->store_interaction, region_id, key, value);
+    int ret = SendKvPut(region_id, key, value);
     if (ret == dingodb::pb::error::EKEY_OUT_OF_RANGE || ret == dingodb::pb::error::EREGION_REDIRECT) {
       bthread_usleep(1000 * 500);  // 500ms
-      table_range = SendGetTableRange(ctx->coordinator_interaction, ctx->table_id);
+      table_range = SendGetTableRange(ctx->table_id);
       PrintTableRange(table_range);
     }
 
-    latencys.push_back(ctx->store_interaction->GetLatency());
+    latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 }
 
@@ -2033,15 +2038,15 @@ void TestBatchPut(std::shared_ptr<Context> ctx) {
   }
 }
 
-void BatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, const std::string& prefix, int req_num) {
+void BatchPutGet(uint64_t region_id, const std::string& prefix, int req_num) {
   auto dataset = Helper::GenDataset(prefix, req_num);
 
   std::vector<uint64_t> latencys;
   latencys.reserve(dataset.size());
   for (auto& [key, value] : dataset) {
-    SendKvPut(interaction, region_id, key, value);
+    SendKvPut(region_id, key, value);
 
-    latencys.push_back(interaction->GetLatency());
+    latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 
   int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
@@ -2050,19 +2055,18 @@ void BatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, const std
   latencys.clear();
   for (auto& [key, expect_value] : dataset) {
     std::string value;
-    SendKvGet(interaction, region_id, key, value);
+    SendKvGet(region_id, key, value);
     if (value != expect_value) {
       DINGO_LOG(INFO) << "Not match: " << key << " = " << value << " expected=" << expect_value;
     }
-    latencys.push_back(interaction->GetLatency());
+    latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 
   sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
   DINGO_LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
 }
 
-void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int thread_num, int req_num,
-                     const std::string& prefix) {
+void TestBatchPutGet(uint64_t region_id, int thread_num, int req_num, const std::string& prefix) {
   std::vector<bthread_t> tids;
   tids.resize(thread_num);
   for (int i = 0; i < thread_num; ++i) {
@@ -2070,7 +2074,6 @@ void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int t
     param->req_num = req_num;
     param->region_id = region_id;
     param->thread_no = i;
-    param->interaction = interaction;
     param->prefix = prefix;
 
     if (bthread_start_background(
@@ -2079,7 +2082,7 @@ void TestBatchPutGet(ServerInteractionPtr interaction, uint64_t region_id, int t
               std::unique_ptr<BatchPutGetParam> param(static_cast<BatchPutGetParam*>(arg));
 
               LOG(INFO) << "========thread: " << param->thread_no;
-              BatchPutGet(param->interaction, param->region_id, param->prefix, param->req_num);
+              BatchPutGet(param->region_id, param->prefix, param->req_num);
 
               return nullptr;
             },
@@ -2102,19 +2105,20 @@ struct AddRegionParam {
   std::string prefix;
 
   std::vector<std::string> raft_addrs;
-  ServerInteractionPtr interaction;
 };
 
 void* AdddRegionRoutine(void* arg) {
   std::unique_ptr<AddRegionParam> param(static_cast<AddRegionParam*>(arg));
-  auto interaction = param->interaction;
   for (int i = 0; i < param->region_count; ++i) {
     dingodb::pb::region_control::AddRegionRequest request;
+
     *(request.mutable_region()) =
         BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
+
     dingodb::pb::region_control::AddRegionResponse response;
 
-    interaction->AllSendRequest("StoreService", "AddRegion", request, response);
+    InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
+                                                                   response);
 
     bthread_usleep(3 * 1000 * 1000L);
   }
@@ -2122,8 +2126,8 @@ void* AdddRegionRoutine(void* arg) {
   return nullptr;
 }
 
-void BatchSendAddRegion(ServerInteractionPtr interaction, int start_region_id, int region_count, int thread_num,
-                        const std::string& raft_group, std::vector<std::string>& raft_addrs) {
+void BatchSendAddRegion(int start_region_id, int region_count, int thread_num, const std::string& raft_group,
+                        std::vector<std::string>& raft_addrs) {
   int32_t step = region_count / thread_num;
   std::vector<bthread_t> tids;
   tids.resize(thread_num);
@@ -2132,7 +2136,6 @@ void BatchSendAddRegion(ServerInteractionPtr interaction, int start_region_id, i
     param->start_region_id = start_region_id + i * step;
     param->region_count = (i + 1 == thread_num) ? region_count - i * step : step;
     param->raft_group = raft_group;
-    param->interaction = interaction;
     param->raft_addrs = raft_addrs;
 
     if (bthread_start_background(&tids[i], nullptr, AdddRegionRoutine, param) != 0) {
@@ -2148,7 +2151,6 @@ void BatchSendAddRegion(ServerInteractionPtr interaction, int start_region_id, i
 
 void* OperationRegionRoutine(void* arg) {
   std::unique_ptr<AddRegionParam> param(static_cast<AddRegionParam*>(arg));
-  auto interaction = param->interaction;
 
   bthread_usleep((Helper::GetRandInt() % 1000) * 1000L);
   for (int i = 0; i < param->region_count; ++i) {
@@ -2162,14 +2164,15 @@ void* OperationRegionRoutine(void* arg) {
           BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
       dingodb::pb::region_control::AddRegionResponse response;
 
-      interaction->AllSendRequest("StoreService", "AddRegion", request, response);
+      InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
+                                                                     response);
     }
 
     // Put/Get
     {
       bthread_usleep(3 * 1000 * 1000L);
       DINGO_LOG(INFO) << "======Put region " << region_id;
-      BatchPutGet(interaction, region_id, param->prefix, param->req_num);
+      BatchPutGet(region_id, param->prefix, param->req_num);
     }
 
     // Destroy region
@@ -2181,7 +2184,8 @@ void* OperationRegionRoutine(void* arg) {
 
       request.set_region_id(region_id);
 
-      interaction->AllSendRequest("StoreService", "DestroyRegion", request, response);
+      InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "DestroyRegion", request,
+                                                                     response);
     }
 
     bthread_usleep(1 * 1000 * 1000L);
@@ -2190,9 +2194,8 @@ void* OperationRegionRoutine(void* arg) {
   return nullptr;
 }
 
-void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, const std::string& raft_group,
-                         std::vector<std::string>& raft_addrs, int region_count, int thread_num, int req_num,
-                         const std::string& prefix) {
+void TestRegionLifecycle(uint64_t region_id, const std::string& raft_group, std::vector<std::string>& raft_addrs,
+                         int region_count, int thread_num, int req_num, const std::string& prefix) {
   int32_t step = region_count / thread_num;
   std::vector<bthread_t> tids;
   tids.resize(thread_num);
@@ -2201,7 +2204,6 @@ void TestRegionLifecycle(ServerInteractionPtr interaction, uint64_t region_id, c
     param->start_region_id = region_id + i * step;
     param->region_count = (i + 1 == thread_num) ? region_count - i * step : step;
     param->raft_addrs = raft_addrs;
-    param->interaction = interaction;
     param->raft_group = raft_group;
     param->req_num = req_num;
     param->prefix = prefix;
@@ -2222,11 +2224,11 @@ void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t re
                                        const std::string& prefix) {
   // put data
   DINGO_LOG(INFO) << "batch put...";
-  // BatchPut(ctx->store_interaction, region_id, prefix, req_num);
+  // BatchPut( region_id, prefix, req_num);
 
   // transfer leader
   dingodb::pb::common::Peer new_leader_peer;
-  auto region = SendQueryRegion(ctx->coordinator_interaction, region_id);
+  auto region = SendQueryRegion(region_id);
   for (const auto& peer : region.definition().peers()) {
     if (region.leader_store_id() != peer.store_id()) {
       new_leader_peer = peer;
@@ -2235,15 +2237,15 @@ void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t re
 
   DINGO_LOG(INFO) << fmt::format("transfer leader {}:{}", new_leader_peer.raft_location().host(),
                                  new_leader_peer.raft_location().port());
-  SendTransferLeader(ctx->store_interaction, region_id, new_leader_peer);
+  SendTransferLeader(region_id, new_leader_peer);
 
   // delete range
   DINGO_LOG(INFO) << "delete range...";
-  SendKvDeleteRange(ctx->store_interaction, region_id, prefix);
+  SendKvDeleteRange(region_id, prefix);
 
   // scan data
   DINGO_LOG(INFO) << "scan...";
-  SendKvScan(ctx->store_interaction, region_id, prefix);
+  SendKvScan(region_id, prefix);
 }
 
 // Create table / Put data / Get data / Destroy table
@@ -2251,7 +2253,7 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
   DINGO_LOG(INFO) << "======= Create table " << ctx->table_name;
-  uint64_t table_id = SendCreateTable(ctx->coordinator_interaction, ctx->table_name, ctx->partition_num);
+  uint64_t table_id = SendCreateTable(ctx->table_name, ctx->partition_num);
   if (table_id == 0) {
     DINGO_LOG(ERROR) << "create table failed";
     return nullptr;
@@ -2260,7 +2262,7 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
   DINGO_LOG(INFO) << "======= Put/Get table " << ctx->table_name;
   int batch_count = ctx->req_num / kBatchSize + 1;
   for (int i = 0; i < batch_count; ++i) {
-    auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
+    auto table_range = SendGetTableRange(table_id);
 
     for (const auto& range_dist : table_range.range_distribution()) {
       if (range_dist.leader().host().empty()) {
@@ -2270,40 +2272,40 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
       uint64_t region_id = range_dist.id().entity_id();
       std::string prefix = range_dist.range().start_key();
 
-      BatchPutGet(ctx->store_interaction, region_id, prefix, kBatchSize);
+      BatchPutGet(region_id, prefix, kBatchSize);
     }
   }
 
   DINGO_LOG(INFO) << "======= Drop table " << ctx->table_name;
-  SendDropTable(ctx->coordinator_interaction, table_id);
+  SendDropTable(table_id);
 
   return nullptr;
 }
 
-dingodb::pb::common::StoreMap SendGetStoreMap(ServerInteractionPtr interaction) {
+dingodb::pb::common::StoreMap SendGetStoreMap() {
   dingodb::pb::coordinator::GetStoreMapRequest request;
   dingodb::pb::coordinator::GetStoreMapResponse response;
 
   request.set_epoch(1);
 
-  interaction->SendRequest("CoordinatorService", "GetStoreMap", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetStoreMap", request, response);
 
   return response.storemap();
 }
 
-dingodb::pb::common::Region SendQueryRegion(ServerInteractionPtr interaction, uint64_t region_id) {
+dingodb::pb::common::Region SendQueryRegion(uint64_t region_id) {
   dingodb::pb::coordinator::QueryRegionRequest request;
   dingodb::pb::coordinator::QueryRegionResponse response;
 
   request.set_region_id(region_id);
 
-  interaction->SendRequest("CoordinatorService", "QueryRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "QueryRegion", request, response);
 
   return response.region();
 }
 
-dingodb::pb::store::Context GetRegionContext(ServerInteractionPtr interaction, uint64_t region_id) {
-  const auto& region = SendQueryRegion(interaction, region_id);
+dingodb::pb::store::Context GetRegionContext(uint64_t region_id) {
+  const auto& region = SendQueryRegion(region_id);
   dingodb::pb::store::Context context;
   context.set_region_id(region_id);
   *(context.mutable_region_epoch()) = region.definition().epoch();
@@ -2311,17 +2313,18 @@ dingodb::pb::store::Context GetRegionContext(ServerInteractionPtr interaction, u
   return context;
 }
 
-void SendChangePeer(ServerInteractionPtr interaction, const dingodb::pb::common::RegionDefinition& region_definition) {
+void SendChangePeer(const dingodb::pb::common::RegionDefinition& region_definition) {
   dingodb::pb::coordinator::ChangePeerRegionRequest request;
   dingodb::pb::coordinator::ChangePeerRegionResponse response;
 
   auto* mut_definition = request.mutable_change_peer_request()->mutable_region_definition();
   *mut_definition = region_definition;
 
-  interaction->SendRequest("CoordinatorService", "ChangePeerRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "ChangePeerRegion", request,
+                                                              response);
 }
 
-void SendSplitRegion(ServerInteractionPtr interaction, const dingodb::pb::common::RegionDefinition& region_definition) {
+void SendSplitRegion(const dingodb::pb::common::RegionDefinition& region_definition) {
   dingodb::pb::coordinator::SplitRegionRequest request;
   dingodb::pb::coordinator::SplitRegionResponse response;
 
@@ -2343,7 +2346,7 @@ void SendSplitRegion(ServerInteractionPtr interaction, const dingodb::pb::common
 
   request.mutable_split_request()->set_split_watershed_key(real_mid);
 
-  interaction->SendRequest("CoordinatorService", "SplitRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "SplitRegion", request, response);
 }
 
 std::string FormatPeers(dingodb::pb::common::RegionDefinition definition) {
@@ -2362,15 +2365,15 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
   for (;;) {
-    uint64_t table_id = SendGetTableByName(ctx->coordinator_interaction, ctx->table_name);
+    uint64_t table_id = SendGetTableByName(ctx->table_name);
     if (table_id == 0) {
       DINGO_LOG(INFO) << fmt::format("table: {} table_id: {}", ctx->table_name, table_id);
       bthread_usleep(1 * 1000 * 1000);
       continue;
     }
 
-    auto store_map = SendGetStoreMap(ctx->coordinator_interaction);
-    auto table_range = SendGetTableRange(ctx->coordinator_interaction, table_id);
+    auto store_map = SendGetStoreMap();
+    auto table_range = SendGetTableRange(table_id);
 
     // Traverse region
     for (const auto& range_dist : table_range.range_distribution()) {
@@ -2380,7 +2383,7 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
         continue;
       }
 
-      auto region = SendQueryRegion(ctx->coordinator_interaction, region_id);
+      auto region = SendQueryRegion(region_id);
       if (region.id() == 0) {
         DINGO_LOG(INFO) << fmt::format("Get region failed, table: {} region_id: {}", ctx->table_name, region_id);
         continue;
@@ -2425,7 +2428,7 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
           DINGO_LOG(INFO) << fmt::format("======= Expand region {}/{} region {} peers {}", ctx->table_name, table_id,
                                          region.id(), FormatPeers(region_definition));
 
-          // SendChangePeer(ctx->coordinator_interaction, region_definition);
+          // SendChangePeer( region_definition);
         }
       } else {  // Shrink region
         if (region.definition().peers().size() <= 3) {
@@ -2453,13 +2456,13 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
           DINGO_LOG(INFO) << fmt::format("======= Shrink region {}/{} region {} peers {}", ctx->table_name, table_id,
                                          region.id(), FormatPeers(region_definition));
 
-          // SendChangePeer(ctx->coordinator_interaction, region.definition());
+          // SendChangePeer( region.definition());
         }
       }
 
       // Split region, when row count greater than 1 million.
       if (region.metrics().row_count() > 1 * 1000 * 1000) {
-        SendSplitRegion(ctx->coordinator_interaction, region.definition());
+        SendSplitRegion(region.definition());
       }
     }
 
@@ -2493,19 +2496,19 @@ void AutoTest(std::shared_ptr<Context> ctx) {
 
 void AutoDropTable(std::shared_ptr<Context> ctx) {
   // Get all table
-  auto table_ids = SendGetTablesBySchema(ctx->coordinator_interaction);
+  auto table_ids = SendGetTablesBySchema();
   DINGO_LOG(INFO) << "table nums: " << table_ids.size();
 
   // Drop table
   std::sort(table_ids.begin(), table_ids.end());
   for (int i = 0; i < ctx->req_num && i < table_ids.size(); ++i) {
     DINGO_LOG(INFO) << "Delete table: " << table_ids[i];
-    SendDropTable(ctx->coordinator_interaction, table_ids[i]);
+    SendDropTable(table_ids[i]);
   }
 }
 
 void CheckTableDistribution(std::shared_ptr<Context> ctx) {
-  auto table_range = SendGetTableRange(ctx->coordinator_interaction, ctx->table_id);
+  auto table_range = SendGetTableRange(ctx->table_id);
 
   std::map<std::string, dingodb::pb::meta::RangeDistribution> region_map;
   for (const auto& region_range : table_range.range_distribution()) {
@@ -2553,7 +2556,7 @@ void CheckTableDistribution(std::shared_ptr<Context> ctx) {
 }
 
 void CheckIndexDistribution(std::shared_ptr<Context> ctx) {
-  auto index_range = SendGetIndexRange(ctx->coordinator_interaction, ctx->table_id);
+  auto index_range = SendGetIndexRange(ctx->table_id);
 
   std::map<std::string, dingodb::pb::meta::RangeDistribution> region_map;
   for (const auto& region_range : index_range.range_distribution()) {

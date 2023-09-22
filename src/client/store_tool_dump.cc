@@ -345,9 +345,9 @@ std::vector<int> GemSelectionColumnIndex(
 void DumpDb(std::shared_ptr<Context> ctx) {
   dingodb::pb::meta::TableDefinition table_definition;
   if (ctx->table_id > 0) {
-    table_definition = SendGetTable(ctx->coordinator_interaction, ctx->table_id);
+    table_definition = SendGetTable(ctx->table_id);
   } else if (ctx->index_id > 0) {
-    table_definition = SendGetIndex(ctx->coordinator_interaction, ctx->index_id);
+    table_definition = SendGetIndex(ctx->index_id);
   }
   DINGO_LOG(INFO) << fmt::format("Table|Index {} definition ...", table_definition.name());
   for (const auto& column : table_definition.columns()) {
@@ -404,7 +404,7 @@ std::string FormatVector(const dingodb::pb::common::Vector& data, int num) {
 }
 
 void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
-  auto table_definition = SendGetIndex(ctx->coordinator_interaction, ctx->index_id);
+  auto table_definition = SendGetIndex(ctx->index_id);
 
   DINGO_LOG(INFO) << fmt::format("Table|Index {} definition ...", table_definition.name());
 

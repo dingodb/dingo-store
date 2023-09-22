@@ -23,6 +23,7 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "client/client_helper.h"
+#include "client/client_interation.h"
 #include "client/coordinator_client_function.h"
 #include "client/store_client_function.h"
 #include "client/store_tool_dump.h"
@@ -237,18 +238,6 @@ int ValidateParam() {
   return 0;
 }
 
-// Get store addr from coordinator
-std::vector<std::string> GetStoreAddrs(client::ServerInteractionPtr interaction, uint64_t region_id) {
-  std::vector<std::string> addrs;
-  auto region = client::SendQueryRegion(interaction, region_id);
-  for (const auto& peer : region.definition().peers()) {
-    const auto& location = peer.server_location();
-    addrs.push_back(fmt::format("{}:{}", location.host(), location.port()));
-  }
-
-  return addrs;
-}
-
 void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int round_num) {
   auto ret = ValidateParam();
   if (ret < 0) {
@@ -259,21 +248,16 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
   std::vector<std::string> raft_addrs;
   butil::SplitString(FLAGS_raft_addrs, ',', &raft_addrs);
 
-  if (FLAGS_store_addrs.empty()) {
-    if (method != "AutoDropTable" && method != "AutoTest" && method != "DumpDb" && method != "DumpVectorIndexDb" &&
-        method != "CheckTableDistribution" && method != "CheckIndexDistribution") {
-      // Get store addr from coordinator
-      auto store_addrs = GetStoreAddrs(ctx->coordinator_interaction, FLAGS_region_id);
-      ctx->store_interaction = std::make_shared<client::ServerInteraction>();
-      if (!ctx->store_interaction->Init(store_addrs)) {
-        DINGO_LOG(ERROR) << "Fail to init store_interaction";
-        return;
-      }
+  if (!FLAGS_store_addrs.empty()) {
+    if (!client::InteractionManager::GetInstance().CreateStoreInteraction({FLAGS_store_addrs})) {
+      return;
     }
-  } else {
-    ctx->store_interaction = std::make_shared<client::ServerInteraction>();
-    if (!ctx->store_interaction->Init(FLAGS_store_addrs)) {
-      DINGO_LOG(ERROR) << "Fail to init store_interaction";
+
+  } else if (FLAGS_region_id != 0) {
+    // Get store addr from coordinator
+    auto status = client::InteractionManager::GetInstance().CreateStoreInteraction(FLAGS_region_id);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "Create store interaction failed, error: " << status.error_cstr();
       return;
     }
   }
@@ -282,62 +266,59 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     DINGO_LOG(INFO) << fmt::format("round: {} / {}", i, round_num);
     // Region operation
     if (method == "AddRegion") {
-      client::SendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+      client::SendAddRegion(FLAGS_region_id, FLAGS_raft_group, raft_addrs);
     } else if (method == "ChangeRegion") {
-      client::SendChangeRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+      client::SendChangeRegion(FLAGS_region_id, FLAGS_raft_group, raft_addrs);
     } else if (method == "DestroyRegion") {
-      client::SendDestroyRegion(ctx->store_interaction, FLAGS_region_id);
+      client::SendDestroyRegion(FLAGS_region_id);
     } else if (method == "Snapshot") {
-      client::SendSnapshot(ctx->store_interaction, FLAGS_region_id);
+      client::SendSnapshot(FLAGS_region_id);
     } else if (method == "BatchAddRegion") {
-      client::BatchSendAddRegion(ctx->store_interaction, FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num,
-                                 FLAGS_raft_group, raft_addrs);
+      client::BatchSendAddRegion(FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num, FLAGS_raft_group, raft_addrs);
     } else if (method == "SnapshotVectorIndex") {
-      client::SendSnapshotVectorIndex(ctx->store_interaction, FLAGS_region_id);
+      client::SendSnapshotVectorIndex(FLAGS_region_id);
     }
 
     // Kev/Value operation
     else if (method == "KvGet") {
       std::string value;
-      client::SendKvGet(ctx->store_interaction, FLAGS_region_id, FLAGS_key, value);
+      client::SendKvGet(FLAGS_region_id, FLAGS_key, value);
     } else if (method == "KvBatchGet") {
-      client::SendKvBatchGet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
+      client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
-      client::SendKvPut(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvPut(FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchPut") {
-      client::SendKvBatchPut(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchPut(FLAGS_region_id, FLAGS_prefix, 100);
     } else if (method == "KvPutIfAbsent") {
-      client::SendKvPutIfAbsent(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvPutIfAbsent(FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchPutIfAbsent") {
-      client::SendKvBatchPutIfAbsent(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchPutIfAbsent(FLAGS_region_id, FLAGS_prefix, 100);
     } else if (method == "KvBatchDelete") {
-      client::SendKvBatchDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvBatchDelete(FLAGS_region_id, FLAGS_key);
     } else if (method == "KvDeleteRange") {
-      client::SendKvDeleteRange(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix);
+      client::SendKvDeleteRange(FLAGS_region_id, FLAGS_prefix);
     } else if (method == "KvScan") {
-      client::SendKvScan(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix);
+      client::SendKvScan(FLAGS_region_id, FLAGS_prefix);
     } else if (method == "KvCompareAndSet") {
-      client::SendKvCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_key);
+      client::SendKvCompareAndSet(FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchCompareAndSet") {
-      client::SendKvBatchCompareAndSet(ctx->store_interaction, FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchCompareAndSet(FLAGS_region_id, FLAGS_prefix, 100);
     }
 
     // Vector operation
     else if (method == "VectorSearch") {
-      client::SendVectorSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_topn);
+      client::SendVectorSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn);
     } else if (method == "VectorSearchDebug") {
-      client::SendVectorSearchDebug(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id,
-                                    FLAGS_topn, FLAGS_batch_count, FLAGS_key, FLAGS_value);
+      client::SendVectorSearchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn, FLAGS_batch_count,
+                                    FLAGS_key, FLAGS_value);
     } else if (method == "VectorBatchSearch") {
-      client::SendVectorBatchSearch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_topn,
-                                    FLAGS_batch_count);
+      client::SendVectorBatchSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn, FLAGS_batch_count);
     } else if (method == "VectorBatchQuery") {
-      client::SendVectorBatchQuery(ctx->store_interaction, FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
+      client::SendVectorBatchQuery(FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
     } else if (method == "VectorScanQuery") {
-      client::SendVectorScanQuery(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit,
-                                  FLAGS_is_reverse);
+      client::SendVectorScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
     } else if (method == "VectorGetRegionMetrics") {
-      client::SendVectorGetRegionMetrics(ctx->store_interaction, FLAGS_region_id);
+      client::SendVectorGetRegionMetrics(FLAGS_region_id);
     } else if (method == "VectorAdd") {
       ctx->table_id = FLAGS_table_id;
       ctx->region_id = FLAGS_region_id;
@@ -354,21 +335,20 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
         client::SendVectorAdd(ctx);
       }
     } else if (method == "VectorDelete") {
-      client::SendVectorDelete(ctx->store_interaction, FLAGS_region_id, FLAGS_start_id, FLAGS_count);
+      client::SendVectorDelete(FLAGS_region_id, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorGetMaxId") {
-      client::SendVectorGetMaxId(ctx->store_interaction, FLAGS_region_id);
+      client::SendVectorGetMaxId(FLAGS_region_id);
     } else if (method == "VectorGetMinId") {
-      client::SendVectorGetMinId(ctx->store_interaction, FLAGS_region_id);
+      client::SendVectorGetMinId(FLAGS_region_id);
     } else if (method == "VectorAddBatch") {
-      client::SendVectorAddBatch(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
-                                 FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
+      client::SendVectorAddBatch(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
+                                 FLAGS_vector_index_add_cost_file);
     } else if (method == "VectorAddBatchDebug") {
-      client::SendVectorAddBatchDebug(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_count,
-                                      FLAGS_step_count, FLAGS_start_id, FLAGS_vector_index_add_cost_file);
+      client::SendVectorAddBatchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
+                                      FLAGS_vector_index_add_cost_file);
     } else if (method == "VectorCalcDistance") {
-      client::SendVectorCalcDistance(ctx->store_interaction, FLAGS_region_id, FLAGS_dimension, FLAGS_alg_type,
-                                     FLAGS_metric_type, FLAGS_left_vector_size, FLAGS_right_vector_size,
-                                     FLAGS_is_return_normlize);
+      client::SendVectorCalcDistance(FLAGS_region_id, FLAGS_dimension, FLAGS_alg_type, FLAGS_metric_type,
+                                     FLAGS_left_vector_size, FLAGS_right_vector_size, FLAGS_is_return_normlize);
 
       // Test
     } else if (method == "TestBatchPut") {
@@ -379,10 +359,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
 
       client::TestBatchPut(ctx);
     } else if (method == "TestBatchPutGet") {
-      client::TestBatchPutGet(ctx->store_interaction, FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+      client::TestBatchPutGet(FLAGS_region_id, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestRegionLifecycle") {
-      client::TestRegionLifecycle(ctx->store_interaction, FLAGS_region_id, FLAGS_raft_group, raft_addrs,
-                                  FLAGS_region_count, FLAGS_thread_num, FLAGS_req_num, FLAGS_prefix);
+      client::TestRegionLifecycle(FLAGS_region_id, FLAGS_raft_group, raft_addrs, FLAGS_region_count, FLAGS_thread_num,
+                                  FLAGS_req_num, FLAGS_prefix);
     } else if (method == "TestDeleteRangeWhenTransferLeader") {
       client::TestDeleteRangeWhenTransferLeader(ctx, FLAGS_region_id, FLAGS_req_num, FLAGS_prefix);
     }
@@ -844,7 +824,8 @@ int main(int argc, char* argv[]) {
       DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coor_url;
       return -1;
     }
-    ctx->coordinator_interaction = coordinator_interaction;
+
+    client::InteractionManager::GetInstance().SetCoorinatorInteraction(coordinator_interaction);
   }
 
   // this is for legacy coordinator_client use, will be removed in the future
