@@ -184,7 +184,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
   }
 
   if (!region->VectorIndexWrapper()->IsReady()) {
-    if (!region->VectorIndexWrapper()->IsBuildError()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
                            fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
     }
@@ -322,7 +322,7 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
-    if (!region->VectorIndexWrapper()->IsBuildError()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
                            fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
     }
@@ -472,7 +472,7 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
-    if (!region->VectorIndexWrapper()->IsBuildError()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
                            fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
     }
@@ -758,7 +758,7 @@ butil::Status IndexServiceImpl::ValidateVectorGetRegionMetricsRequest(
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
-    if (!region->VectorIndexWrapper()->IsBuildError()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
                            fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
     }
@@ -922,7 +922,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
-    if (!region->VectorIndexWrapper()->IsBuildError()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
                            fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
     }

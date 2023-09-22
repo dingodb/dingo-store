@@ -113,6 +113,7 @@ std::vector<SnapshotMetaPtr> SnapshotMetaSet::GetSnapshots() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<SnapshotMetaPtr> result;
+  result.reserve(snapshots_.size());
   for (auto& [_, snapshot] : snapshots_) {
     result.push_back(snapshot);
   }
