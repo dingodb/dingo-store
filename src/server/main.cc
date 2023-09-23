@@ -41,6 +41,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/syscheck.h"
 #include "common/version.h"
 #include "config/config.h"
 #include "config/config_manager.h"
@@ -68,6 +69,16 @@ DEFINE_uint32(h2_server_stream_window_size, 1024 * 1024 * 1024, "stream window s
 DEFINE_uint32(h2_server_connection_window_size, 1024 * 1024 * 1024, "connection window size");
 DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
 DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
+
+DEFINE_uint32(omp_num_threads, 8, "omp num threads");
+
+extern "C" {
+extern void omp_set_num_threads(int) noexcept;  // NOLINT
+extern int omp_get_num_threads(void) noexcept;  // NOLINT
+extern int omp_get_max_threads(void) noexcept;  // NOLINT
+extern int omp_get_thread_num(void) noexcept;   // NOLINT
+extern int omp_get_num_procs(void) noexcept;    // NOLINT
+}
 
 namespace bvar {
 DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
@@ -483,6 +494,25 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(ERROR) << "InitDirectory failed!";
     return -1;
   }
+
+  // check system env
+  auto ret = dingodb::DoSystemCheck();
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "DoSystemCheck failed, DingoDB may run with unexpected behavior.";
+  }
+  DINGO_LOG(INFO) << "DoSystemCheck ret:" << ret;
+
+  // setup omp_num_threads
+  if (FLAGS_omp_num_threads > 0) {
+    omp_set_num_threads(FLAGS_omp_num_threads);
+    DINGO_LOG(INFO) << "omp_set_num_threads: " << FLAGS_omp_num_threads;
+  }
+
+  // setup omp_num_threads
+  DINGO_LOG(INFO) << "omp_get_num_threads: " << omp_get_num_threads();
+  DINGO_LOG(INFO) << "omp_get_max_threads: " << omp_get_max_threads();
+  DINGO_LOG(INFO) << "omp_get_thread_num: " << omp_get_thread_num();
+  DINGO_LOG(INFO) << "omp_get_num_procs: " << omp_get_num_procs();
 
   dingo_server->SetServerEndpoint(GetServerEndPoint(config));
   dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));

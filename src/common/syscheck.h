@@ -12,42 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_COMMON_VERSION_H_
-#define DINGODB_COMMON_VERSION_H_
+#ifndef DINGODB_SYSCHECK_H_
+#define DINGODB_SYSCHECK_H_
 
-#include "gflags/gflags.h"
+#include <string>
 
 namespace dingodb {
 
-#ifndef GIT_VERSION
-#define GIT_VERSION "unknown"
+#ifdef __linux__
+int CheckTHPEnabled(std::string &error_msg);
+int CheckOvercommit(std::string &error_msg);
 #endif
 
-#ifndef MAJOR_VERSION
-#define MAJOR_VERSION "v0.7.0"
-#endif
-
-#ifndef MINOR_VERSION
-#define MINOR_VERSION "0"
-#endif
-
-#ifndef GIT_TAG_NAME
-#define GIT_TAG_NAME "v0.7.0"
-#endif
-
-#ifndef DINGO_BUILD_TYPE
-#define DINGO_BUILD_TYPE "unknown"
-#endif
-
-#ifndef DINGO_CONTRIB_BUILD_TYPE
-#define DINGO_CONTRIB_BUILD_TYPE "unknown"
-#endif
-
-DECLARE_bool(show_version);
-
-void DingoShowVerion();
-void DingoLogVerion();
+int DoSystemCheck();
 
 }  // namespace dingodb
 
-#endif  // DINGODB_COMMON_VERSION_H_
+#endif  // DINGODB_SYSCHECK_H_

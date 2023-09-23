@@ -44,6 +44,8 @@
 
 namespace dingodb {
 
+DEFINE_uint32(max_hnsw_parallel_thread_num, 4, "max hnsw parallel thread num");
+
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
  public:
@@ -130,7 +132,11 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
                                  const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
   bthread_mutex_init(&mutex_, nullptr);
-  hnsw_num_threads_ = std::thread::hardware_concurrency();
+  if (FLAGS_max_hnsw_parallel_thread_num > 0) {
+    hnsw_num_threads_ = FLAGS_max_hnsw_parallel_thread_num;
+  } else {
+    hnsw_num_threads_ = std::thread::hardware_concurrency();
+  }
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
