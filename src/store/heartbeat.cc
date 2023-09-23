@@ -265,74 +265,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
     }
   }
 
-  // update region_state by last_update_timestamp
-  pb::coordinator_internal::MetaIncrement meta_increment;
-  pb::common::RegionMap region_map_temp;
-  coordinator_control->GetRegionMap(region_map_temp);
-  for (const auto& it : region_map_temp.regions()) {
-    DINGO_LOG(INFO) << "CoordinatorUpdateState... region " << it.id() << " state " << it.state()
-                    << " last_update_timestamp " << it.last_update_timestamp() << " now " << butil::gettimeofday_ms();
-    if (it.last_update_timestamp() + (FLAGS_region_heartbeat_timeout * 1000) >= butil::gettimeofday_ms()) {
-      if (it.heartbeat_state() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
-        DINGO_LOG(INFO) << "CoordinatorUpdateState... update region " << it.id() << " state to online";
-        coordinator_control->TrySetRegionToOnline(it.id());
-      }
-      continue;
-    }
-
-    if (it.state() != pb::common::RegionState::REGION_NEW && it.state() != pb::common::RegionState::REGION_DELETE &&
-        it.state() != pb::common::RegionState::REGION_DELETING &&
-        it.state() != pb::common::RegionState::REGION_DELETED) {
-      DINGO_LOG(INFO) << "CoordinatorUpdateState... update region " << it.id() << " state to offline";
-      coordinator_control->TrySetRegionToDown(it.id());
-    } else if (it.state() == pb::common::RegionState::REGION_DELETED &&
-               it.last_update_timestamp() + (FLAGS_region_delete_after_deleted_time * 1000) <
-                   butil::gettimeofday_ms()) {
-      DINGO_LOG(INFO) << "CoordinatorUpdateState... start to purge region " << it.id();
-
-      // construct store_operation to purge region
-      // for (const auto& it_peer : it.definition().peers()) {
-      //   auto* purge_region_operation_increment = meta_increment.add_store_operations();
-      //   purge_region_operation_increment->set_id(it_peer.store_id());  // this is store_id
-      //   purge_region_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-      //   auto* purge_region_operation = purge_region_operation_increment->mutable_store_operation();
-      //   purge_region_operation->set_id(it_peer.store_id());  // this is store_id
-      //   auto* purge_region_cmd = purge_region_operation->add_region_cmds();
-      //   purge_region_cmd->set_id(
-      //       coordinator_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD,
-      //       meta_increment));
-      //   purge_region_cmd->set_region_id(it.id());  // this is region_id
-      //   DINGO_LOG(INFO) << " purge set_region_id " << it.id();
-      //   purge_region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
-      //   purge_region_cmd->set_create_timestamp(butil::gettimeofday_ms());
-      //   purge_region_cmd->mutable_purge_request()->set_region_id(it.id());  // this region_id
-      //   DINGO_LOG(INFO) << " purge_region_cmd set_region_id " << it.id();
-
-      //   DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region " << it.id() << " from store " <<
-      //   it_peer.store_id()
-      //                   << " region_cmd_type " << purge_region_cmd->region_cmd_type();
-      // }
-
-      // delete regions
-      auto* region_delete_increment = meta_increment.add_regions();
-      region_delete_increment->set_id(it.id());
-      region_delete_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-      *(region_delete_increment->mutable_region()) = it;
-
-      // mbvar
-      coordinator_control->DeleteRegionBvar(it.id());
-
-      DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region delete region_map " << it.id() << " from store "
-                      << it.id() << " region_cmd_type " << region_delete_increment->region().DebugString()
-                      << " request=" << meta_increment.DebugString();
-    }
-  }
-
-  if (meta_increment.ByteSizeLong() > 0) {
-    // commit to raft
-    coordinator_control->SubmitMetaIncrement(meta_increment);
-  }
+  coordinator_control->UpdateRegionState();
 
   // now update store state in SendCoordinatorPushToStore
 
@@ -519,7 +452,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       }
 
       if (meta_increment.ByteSizeLong() > 0) {
-        coordinator_control->SubmitMetaIncrement(meta_increment);
+        coordinator_control->SubmitMetaIncrementSync(meta_increment);
       }
 
       continue;
@@ -570,7 +503,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     }
 
     if (meta_increment.ByteSizeLong() > 0) {
-      coordinator_control->SubmitMetaIncrement(meta_increment);
+      coordinator_control->SubmitMetaIncrementSync(meta_increment);
     }
   }
 

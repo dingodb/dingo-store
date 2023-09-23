@@ -62,6 +62,28 @@ class DingoSafeMap {
     return 1;
   }
 
+  // multi-get value by key
+  int MultiGet(const std::vector<T_KEY> &keys, std::vector<T_VALUE> &values, std::vector<bool> &exists) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (auto key : keys) {
+      T_VALUE value;
+      auto *value_ptr = ptr->seek(key);
+      if (!value_ptr) {
+        values.push_back(value);
+        exists.push_back(false);
+      } else {
+        values.push_back(*value_ptr);
+        exists.push_back(true);
+      }
+    }
+
+    return 1;
+  }
+
   // Get
   // get value by key
   T_VALUE Get(const T_KEY &key) {
@@ -437,6 +459,28 @@ class DingoSafeStdMap {
     }
 
     value = value_iter->second;
+    return 1;
+  }
+
+  // multi-get value by key
+  int MultiGet(const std::vector<T_KEY> &keys, std::vector<T_VALUE> &values, std::vector<bool> &exists) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (auto key : keys) {
+      T_VALUE value;
+      auto value_iter = ptr->find(key);
+      if (value_iter == ptr->end()) {
+        values.push_back(value);
+        exists.push_back(false);
+      } else {
+        values.push_back(value_iter->second);
+        exists.push_back(true);
+      }
+    }
+
     return 1;
   }
 

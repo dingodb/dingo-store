@@ -41,7 +41,7 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
-DEFINE_uint64(vector_max_bactch_count, 1024, "vector max batch count in one request");
+DEFINE_uint64(vector_max_batch_count, 1024, "vector max batch count in one request");
 DEFINE_uint64(vector_max_request_size, 8388608, "vector max batch count in one request");
 
 IndexServiceImpl::IndexServiceImpl() = default;
@@ -58,10 +58,10 @@ butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_ids is error");
   }
 
-  if (request->vector_ids().size() > FLAGS_vector_max_bactch_count) {
+  if (request->vector_ids().size() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param vector_ids size {} is exceed max batch count {}",
-                                     request->vector_ids().size(), FLAGS_vector_max_bactch_count));
+                                     request->vector_ids().size(), FLAGS_vector_max_batch_count));
   }
 
   auto status = storage_->ValidateLeader(request->context().region_id());
@@ -155,19 +155,19 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
-  if (request->parameter().top_n() > FLAGS_vector_max_bactch_count) {
+  if (request->parameter().top_n() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param top_n {} is exceed max batch count {}", request->parameter().top_n(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   // we limit the max request size to 4M and max batch count to 1024
   // for response, the limit is 10 times of request, which may be 40M
   // this size is less than the default max message size 64M
-  if (request->parameter().top_n() * request->vector_with_ids_size() > FLAGS_vector_max_bactch_count * 10) {
+  if (request->parameter().top_n() * request->vector_with_ids_size() > FLAGS_vector_max_batch_count * 10) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param top_n {} is exceed max batch count {}", request->parameter().top_n(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   if (request->parameter().top_n() < 0) {
@@ -303,10 +303,10 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     return butil::Status(pb::error::EVECTOR_EMPTY, "Vector quantity is empty");
   }
 
-  if (request->vectors_size() > FLAGS_vector_max_bactch_count) {
+  if (request->vectors_size() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param vectors size {} is exceed max batch count {}", request->vectors_size(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {
@@ -459,10 +459,10 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
     return butil::Status(pb::error::EVECTOR_EMPTY, "Vector id quantity is empty");
   }
 
-  if (request->ids_size() > FLAGS_vector_max_bactch_count) {
+  if (request->ids_size() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param ids size {} is exceed max batch count {}", request->ids_size(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   auto status = storage_->ValidateLeader(request->context().region_id());
@@ -648,9 +648,9 @@ butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count cant be 0");
   }
 
-  if (request->max_scan_count() > FLAGS_vector_max_bactch_count) {
+  if (request->max_scan_count() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count is bigger than %ld",
-                         FLAGS_vector_max_bactch_count);
+                         FLAGS_vector_max_batch_count);
   }
 
   auto status = storage_->ValidateLeader(request->context().region_id());
@@ -892,19 +892,19 @@ butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
     }
   }
 
-  if (request->parameter().top_n() > FLAGS_vector_max_bactch_count) {
+  if (request->parameter().top_n() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param top_n {} is exceed max batch count {}", request->parameter().top_n(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   // we limit the max request size to 4M and max batch count to 1024
   // for response, the limit is 10 times of request, which may be 40M
   // this size is less than the default max message size 64M
-  if (request->parameter().top_n() * request->vector_with_ids_size() > FLAGS_vector_max_bactch_count * 10) {
+  if (request->parameter().top_n() * request->vector_with_ids_size() > FLAGS_vector_max_batch_count * 10) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param top_n {} is exceed max batch count {}", request->parameter().top_n(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   if (request->parameter().top_n() < 0) {

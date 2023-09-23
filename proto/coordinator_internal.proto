@@ -96,6 +96,24 @@ message CoordinatorInternal {
   dingodb.pb.common.Location raft_location = 3;
 }
 
+// RegionInternal
+message RegionInternal {
+  // store info
+  uint64 id = 1;
+  // region conf version & version
+  uint64 epoch = 2;
+  // region type
+  dingodb.pb.common.RegionType region_type = 3;
+  // region definition
+  dingodb.pb.common.RegionDefinition definition = 4;
+
+  dingodb.pb.common.RegionState state = 10;
+
+  // timestamp
+  uint64 create_timestamp = 20;
+  uint64 deleted_timestamp = 21;
+}
+
 // ExecutorInternal
 message ExecutorUserInternal {
   string id = 1;  // this is user name
@@ -208,7 +226,8 @@ message MetaIncrementExecutor {
 
 message MetaIncrementRegion {
   uint64 id = 1;
-  dingodb.pb.common.Region region = 2;
+  // dingodb.pb.common.Region region = 2;
+  RegionInternal region = 2;
   MetaIncrementOpType op_type = 3;
   uint64 table_id = 4;
 }

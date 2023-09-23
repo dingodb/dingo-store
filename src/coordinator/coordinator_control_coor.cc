@@ -50,9 +50,14 @@ DECLARE_int32(region_heartbeat_timeout);
 DECLARE_int32(region_delete_after_deleted_time);
 
 DEFINE_int32(
-    region_update_timeout, 20,
+    region_update_timeout, 25,
     "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
     "region_update_timeout");
+
+DEFINE_int32(
+    region_down_after_secondes, 60,
+    "region down after secondes, will not update region info if no state change and (now - last_update_time) > "
+    "region_down_after_secondes");
 
 DEFINE_uint64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
 
@@ -184,6 +189,39 @@ void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
     store_metrics_map_.erase(store_id);
     coordinator_bvar_metrics_store_.DeleteStoreBvar(store_id);
   }
+}
+
+void CoordinatorControl::GetRegionMetrics(uint64_t region_id,
+                                          std::vector<pb::common::RegionMetrics>& region_metrics_array) {
+  if (region_id == 0) {
+    butil::FlatMap<uint64_t, pb::common::RegionMetrics> region_metrics_map_copy;
+    auto ret = region_metrics_map_.GetRawMapCopy(region_metrics_map_copy);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "GetRegionMetrics region_metrics_map_.GetRawMapCopy failed";
+      return;
+    }
+
+    for (const auto& region_metrics : region_metrics_map_copy) {
+      region_metrics_array.push_back(region_metrics.second);
+    }
+  } else {
+    pb::common::RegionMetrics region_metrics;
+    auto ret = region_metrics_map_.Get(region_id, region_metrics);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "GetRegionMetrics region_metrics_map_.Get failed, region_id=" << region_id;
+      return;
+    }
+
+    region_metrics_array.push_back(region_metrics);
+  }
+}
+
+void CoordinatorControl::DeleteRegionMetrics(uint64_t region_id) {
+  if (region_id == 0) {
+    return;
+  }
+
+  region_metrics_map_.Erase(region_id);
 }
 
 butil::Status CoordinatorControl::GetOrphanRegion(uint64_t store_id,
@@ -441,14 +479,14 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
 }
 
 bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
-  pb::common::Region region_to_update;
-  int ret = region_map_.Get(region_id, region_to_update);
+  pb::common::RegionMetrics region_to_update;
+  int ret = region_metrics_map_.Get(region_id, region_to_update);
   if (ret > 0) {
-    if (region_to_update.state() != pb::common::RegionState::REGION_NEW &&
-        region_to_update.last_update_timestamp() + (FLAGS_region_update_timeout * 1000) < butil::gettimeofday_ms()) {
+    if (region_to_update.region_status().last_update_timestamp() + (FLAGS_region_down_after_secondes * 1000) <
+        butil::gettimeofday_ms()) {
       // update region's heartbeat state to REGION_DOWN
-      region_to_update.set_heartbeat_state(pb::common::RegionHeartbeatState::REGION_DOWN);
-      region_map_.PutIfExists(region_id, region_to_update);
+      region_to_update.mutable_region_status()->set_heartbeat_status(pb::common::RegionHeartbeatState::REGION_DOWN);
+      region_metrics_map_.PutIfExists(region_id, region_to_update);
       return true;
     }
   }
@@ -456,14 +494,15 @@ bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
 }
 
 bool CoordinatorControl::TrySetRegionToOnline(uint64_t region_id) {
-  pb::common::Region region_to_update;
-  int ret = region_map_.Get(region_id, region_to_update);
+  pb::common::RegionMetrics region_to_update;
+  int ret = region_metrics_map_.Get(region_id, region_to_update);
   if (ret > 0) {
-    if (region_to_update.heartbeat_state() != pb::common::RegionHeartbeatState::REGION_ONLINE &&
-        region_to_update.last_update_timestamp() + (FLAGS_region_update_timeout * 1000) >= butil::gettimeofday_ms()) {
+    if (region_to_update.region_status().heartbeat_status() != pb::common::RegionHeartbeatState::REGION_ONLINE &&
+        region_to_update.region_status().last_update_timestamp() + (FLAGS_region_down_after_secondes * 1000) >=
+            butil::gettimeofday_ms()) {
       // update region's heartbeat state to REGION_ONLINE
-      region_to_update.set_heartbeat_state(pb::common::RegionHeartbeatState::REGION_ONLINE);
-      region_map_.PutIfExists(region_id, region_to_update);
+      region_to_update.mutable_region_status()->set_heartbeat_status(pb::common::RegionHeartbeatState::REGION_ONLINE);
+      region_metrics_map_.PutIfExists(region_id, region_to_update);
       return true;
     }
   }
@@ -501,54 +540,183 @@ bool CoordinatorControl::TrySetExecutorToOffline(std::string executor_id) {
   return false;
 }
 
+void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInternal& region_internal,
+                                       pb::common::Region& region) {
+  region.set_id(region_internal.id());
+  *(region.mutable_definition()) = region_internal.definition();
+  region.set_state(region_internal.state());
+
+  auto region_status = GetRegionStatus(region_internal.id());
+  *(region.mutable_status()) = region_status;
+  region.set_create_timestamp(region_internal.create_timestamp());
+
+  pb::common::RegionMetrics region_metrics;
+  region_metrics_map_.Get(region_internal.id(), region_metrics);
+  region.set_leader_store_id(region_metrics.leader_store_id());
+
+  *(region.mutable_metrics()) = region_metrics;
+}
+
+void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInternal& region_internal,
+                                       pb::common::Region& region) {
+  region.set_id(region_internal.id());
+  region.mutable_definition()->set_name(region_internal.definition().name());
+  region.mutable_definition()->mutable_epoch()->set_conf_version(region_internal.definition().epoch().conf_version());
+  region.mutable_definition()->mutable_epoch()->set_version(region_internal.definition().epoch().version());
+  region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
+  region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
+  region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
+  region.set_state(region_internal.state());
+
+  auto region_status = GetRegionStatus(region_internal.id());
+  *(region.mutable_status()) = region_status;
+  region.set_create_timestamp(region_internal.create_timestamp());
+
+  pb::common::RegionMetrics region_metrics;
+  region_metrics_map_.Get(region_internal.id(), region_metrics);
+  region.set_leader_store_id(region_metrics.leader_store_id());
+
+  if (region_internal.definition().index_parameter().has_vector_index_parameter()) {
+    *(region.mutable_metrics()->mutable_vector_index_status()) = region_metrics.vector_index_status();
+  }
+}
+
+void CoordinatorControl::UpdateRegionState() {
+  // update region_state by last_update_timestamp
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_map_temp;
+  auto ret = region_map_.GetRawMapCopy(region_map_temp);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "UpdateRegionState... GetRawMapCopy failed";
+    return;
+  }
+
+  for (const auto& it : region_map_temp) {
+    pb::common::RegionMetrics region_metrics;
+    auto ret = region_metrics_map_.Get(it.first, region_metrics);
+    if (ret < 0) {
+      DINGO_LOG(WARNING) << "UpdateRegionState... Get region_metrics failed, region_id=" << it.first;
+      continue;
+    }
+
+    DINGO_LOG(DEBUG) << "CoordinatorUpdateState... region " << it.first << " state "
+                     << pb::common::RegionState_Name(it.second.state()) << " last_update_timestamp "
+                     << region_metrics.region_status().last_update_timestamp() << " now " << butil::gettimeofday_ms();
+
+    if (region_metrics.region_status().last_update_timestamp() + (FLAGS_region_heartbeat_timeout * 1000) >=
+        butil::gettimeofday_ms()) {
+      if (region_metrics.region_status().heartbeat_status() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
+        DINGO_LOG(INFO) << "CoordinatorUpdateState... update region " << it.first << " state to online";
+        TrySetRegionToOnline(it.first);
+      }
+      continue;
+    }
+
+    if (it.second.state() != pb::common::RegionState::REGION_NEW &&
+        it.second.state() != pb::common::RegionState::REGION_DELETE &&
+        it.second.state() != pb::common::RegionState::REGION_DELETING &&
+        it.second.state() != pb::common::RegionState::REGION_DELETED) {
+      DINGO_LOG(INFO) << "CoordinatorUpdateState... update region " << it.first << " state to offline";
+      TrySetRegionToDown(it.first);
+    } else if (it.second.state() == pb::common::RegionState::REGION_DELETED &&
+               region_metrics.region_status().last_update_timestamp() +
+                       (FLAGS_region_delete_after_deleted_time * 1000) <
+                   butil::gettimeofday_ms()) {
+      DINGO_LOG(INFO) << "CoordinatorUpdateState... start to purge region " << it.first;
+
+      // construct store_operation to purge region
+      // for (const auto& it_peer : it.definition().peers()) {
+      //   auto* purge_region_operation_increment = meta_increment.add_store_operations();
+      //   purge_region_operation_increment->set_id(it_peer.store_id());  // this is store_id
+      //   purge_region_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+      //   auto* purge_region_operation = purge_region_operation_increment->mutable_store_operation();
+      //   purge_region_operation->set_id(it_peer.store_id());  // this is store_id
+      //   auto* purge_region_cmd = purge_region_operation->add_region_cmds();
+      //   purge_region_cmd->set_id(
+      //       coordinator_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD,
+      //       meta_increment));
+      //   purge_region_cmd->set_region_id(it.id());  // this is region_id
+      //   DINGO_LOG(INFO) << " purge set_region_id " << it.id();
+      //   purge_region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_PURGE);
+      //   purge_region_cmd->set_create_timestamp(butil::gettimeofday_ms());
+      //   purge_region_cmd->mutable_purge_request()->set_region_id(it.id());  // this region_id
+      //   DINGO_LOG(INFO) << " purge_region_cmd set_region_id " << it.id();
+
+      //   DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region " << it.id() << " from store " <<
+      //   it_peer.store_id()
+      //                   << " region_cmd_type " << purge_region_cmd->region_cmd_type();
+      // }
+
+      // delete regions
+      // auto* region_delete_increment = meta_increment.add_regions();
+      // region_delete_increment->set_id(it.id());
+      // region_delete_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      // *(region_delete_increment->mutable_region()) = it;
+
+      // mbvar
+      // DeleteRegionBvar(it.first);
+
+      // DINGO_LOG(INFO) << "CoordinatorUpdateState... purge region delete region_map " << it.first << " from store "
+      //                 << it.first << " region_cmd_type " << region_delete_increment->region().DebugString()
+      //                 << " request=" << meta_increment.DebugString();
+    }
+  }
+}
+
+uint64_t CoordinatorControl::GetRegionLeaderId(uint64_t region_id) {
+  pb::common::RegionMetrics region_metrics;
+  auto ret = region_metrics_map_.Get(region_id, region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetRegionLeaderId failed, region_id: " << region_id << " not exists in region_metrics_map_";
+    return 0;
+  }
+
+  return region_metrics.leader_store_id();
+}
+
+pb::common::RegionStatus CoordinatorControl::GetRegionStatus(uint64_t region_id) {
+  pb::common::RegionStatus region_status;
+  pb::common::RegionMetrics region_metrics;
+
+  auto ret = region_metrics_map_.Get(region_id, region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GetRegionLeaderId failed, region_id: " << region_id << " not exists in region_metrics_map_";
+    return region_status;
+  }
+
+  return region_metrics.region_status();
+}
+
+void CoordinatorControl::GetRegionLeaderAndStatus(uint64_t region_id, pb::common::RegionStatus& region_status,
+                                                  uint64_t& leader_store_id) {
+  pb::common::RegionMetrics region_metrics;
+
+  auto ret = region_metrics_map_.Get(region_id, region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetRegionLeaderId failed, region_id: " << region_id << " not exists in region_metrics_map_";
+    return;
+  }
+
+  leader_store_id = region_metrics.leader_store_id();
+  region_status = region_metrics.region_status();
+}
+
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
-    region_map_copy.init(30000);
-    region_map_.GetRawMapCopy(region_map_copy);
-    for (auto& elemnt : region_map_copy) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+    region_internal_map_copy.init(30000);
+    region_map_.GetRawMapCopy(region_internal_map_copy);
+    butil::FlatMap<uint64_t, pb::common::RegionMetrics> region_metrics_map_copy;
+    region_metrics_map_copy.init(30000);
+    region_metrics_map_.GetRawMapCopy(region_metrics_map_copy);
+
+    for (auto& element : region_internal_map_copy) {
       auto* tmp_region = region_map.add_regions();
-      tmp_region->set_id(elemnt.second.id());
-      tmp_region->mutable_definition()->set_name(elemnt.second.definition().name());
-      tmp_region->mutable_definition()->mutable_epoch()->set_conf_version(
-          elemnt.second.definition().epoch().conf_version());
-      tmp_region->mutable_definition()->mutable_epoch()->set_version(elemnt.second.definition().epoch().version());
-      tmp_region->mutable_definition()->mutable_range()->set_start_key(elemnt.second.definition().range().start_key());
-      tmp_region->mutable_definition()->mutable_range()->set_start_key(elemnt.second.definition().range().start_key());
-      tmp_region->mutable_definition()->mutable_range()->set_end_key(elemnt.second.definition().range().end_key());
-      tmp_region->set_state(elemnt.second.state());
-      tmp_region->set_raft_status(elemnt.second.raft_status());
-      tmp_region->set_replica_status(elemnt.second.replica_status());
-      tmp_region->set_heartbeat_state(elemnt.second.heartbeat_state());
-      tmp_region->set_leader_store_id(elemnt.second.leader_store_id());
-      tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
-      tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
-      tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
-
-      if (elemnt.second.definition().index_parameter().has_vector_index_parameter()) {
-        tmp_region->set_id(elemnt.second.id());
-        tmp_region->mutable_definition()->set_name(elemnt.second.definition().name());
-        tmp_region->mutable_definition()->mutable_epoch()->set_conf_version(
-            elemnt.second.definition().epoch().conf_version());
-        tmp_region->mutable_definition()->mutable_epoch()->set_version(elemnt.second.definition().epoch().version());
-        tmp_region->mutable_definition()->mutable_range()->set_start_key(
-            elemnt.second.definition().range().start_key());
-        tmp_region->mutable_definition()->mutable_range()->set_start_key(
-            elemnt.second.definition().range().start_key());
-        tmp_region->mutable_definition()->mutable_range()->set_end_key(elemnt.second.definition().range().end_key());
-        tmp_region->set_state(elemnt.second.state());
-        tmp_region->set_raft_status(elemnt.second.raft_status());
-        tmp_region->set_replica_status(elemnt.second.replica_status());
-        tmp_region->set_heartbeat_state(elemnt.second.heartbeat_state());
-        tmp_region->set_leader_store_id(elemnt.second.leader_store_id());
-        tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
-        tmp_region->set_last_update_timestamp(elemnt.second.last_update_timestamp());
-        tmp_region->set_create_timestamp(elemnt.second.create_timestamp());
-
-        *(tmp_region->mutable_metrics()->mutable_vector_index_status()) = elemnt.second.metrics().vector_index_status();
-      }
+      GenRegionSlim(element.second, *tmp_region);
     }
   }
 }
@@ -557,24 +725,25 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
-    region_map_copy.init(30000);
-    region_map_.GetRawMapCopy(region_map_copy);
-    for (auto& elemnt : region_map_copy) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+    region_internal_map_copy.init(30000);
+    region_map_.GetRawMapCopy(region_internal_map_copy);
+
+    for (auto& element : region_internal_map_copy) {
       auto* tmp_region = region_map.add_regions();
-      *tmp_region = elemnt.second;
+      GenRegionFull(element.second, *tmp_region);
     }
   }
 }
 
 void CoordinatorControl::GetDeletedRegionMap(pb::common::RegionMap& region_map) {
   // BAIDU_SCOPED_LOCK(region_map_mutex_);
-  butil::FlatMap<uint64_t, pb::common::Region> region_map_copy;
-  region_map_copy.init(30000);
-  deleted_region_map_.GetRawMapCopy(region_map_copy);
-  for (auto& elemnt : region_map_copy) {
+  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+  region_internal_map_copy.init(30000);
+  deleted_region_map_.GetRawMapCopy(region_internal_map_copy);
+  for (auto& element : region_internal_map_copy) {
     auto* tmp_region = region_map.add_regions();
-    *tmp_region = elemnt.second;
+    GenRegionFull(element.second, *tmp_region);
   }
 }
 
@@ -599,14 +768,14 @@ butil::Status CoordinatorControl::AddDeletedRegionMap(uint64_t region_id, bool f
   deleted_region_increment_region->mutable_definition()->set_name("MANUAL_ADD");
   deleted_region_increment_region->set_deleted_timestamp(butil::gettimeofday_ms());
 
-  SubmitMetaIncrement(meta_increment);
+  SubmitMetaIncrementSync(meta_increment);
 
   return butil::Status::OK();
 }
 
 butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
   if (region_id == 0) {
-    butil::FlatMap<uint64_t, pb::common::Region> deleted_regions;
+    butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> deleted_regions;
     deleted_regions.init(30000);
     auto ret = deleted_region_map_.GetRawMapCopy(deleted_regions);
     if (ret < 0) {
@@ -625,7 +794,7 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
       deleted_region_increment_region->set_id(element.second.id());
     }
 
-    SubmitMetaIncrement(meta_increment);
+    SubmitMetaIncrementSync(meta_increment);
 
     return butil::Status::OK();
   } else {
@@ -644,7 +813,7 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
     auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
     deleted_region_increment_region->set_id(region_id);
 
-    SubmitMetaIncrement(meta_increment);
+    SubmitMetaIncrementSync(meta_increment);
 
     return butil::Status::OK();
   }
@@ -659,7 +828,7 @@ void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { 
 void CoordinatorControl::RecycleOrphanRegionOnStore() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
-  butil::FlatMap<uint64_t, pb::common::Region> delete_regions;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> delete_regions;
   delete_regions.init(3000);
   deleted_region_map_.GetRawMapCopy(delete_regions);
 
@@ -735,9 +904,9 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 
   // delete too old delete_region
   for (const auto& region : delete_regions) {
-    DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore meet obsolete deleted_region region_id:" << region.first
-                    << " deleted_timestamp: " << region.second.deleted_timestamp()
-                    << " region_delete_after_deleted_time: " << FLAGS_region_delete_after_deleted_time;
+    DINGO_LOG(DEBUG) << "RecycleOrphanRegionOnStore meet obsolete deleted_region region_id:" << region.first
+                     << " deleted_timestamp: " << region.second.deleted_timestamp()
+                     << " region_delete_after_deleted_time: " << FLAGS_region_delete_after_deleted_time;
 
     if (region.second.deleted_timestamp() + (FLAGS_region_delete_after_deleted_time * 1000) <
         butil::gettimeofday_ms()) {
@@ -754,7 +923,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
   }
 
   if (meta_increment.ByteSizeLong() > 0) {
-    SubmitMetaIncrement(meta_increment);
+    SubmitMetaIncrementSync(meta_increment);
   }
 }
 
@@ -785,11 +954,14 @@ butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Re
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region_id must be positive");
   }
 
-  int ret = region_map_.Get(region_id, region);
+  pb::coordinator_internal::RegionInternal region_internal;
+  int ret = region_map_.Get(region_id, region_internal);
   if (ret < 0) {
     DINGO_LOG(INFO) << "QueryRegion region_id not exists, id=" << region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region_id not exists");
   }
+
+  GenRegionFull(region_internal, region);
 
   return butil::Status::OK();
 }
@@ -805,7 +977,7 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
 
   std::vector<uint64_t> store_ids;
 
-  pb::common::Region split_from_region;
+  pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
   if (ret < 0) {
     DINGO_LOG(INFO) << "CreateRegionForSplit region_id not exists, id=" << split_from_region_id;
@@ -854,7 +1026,7 @@ butil::Status CoordinatorControl::CreateRegionForSplit(
 
   std::vector<uint64_t> store_ids;
 
-  pb::common::Region split_from_region;
+  pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
   if (ret < 0) {
     DINGO_LOG(INFO) << "CreateRegionForSplit region_id not exists, id=" << split_from_region_id;
@@ -1247,7 +1419,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
   }
 
   // create new region in memory begin
-  pb::common::Region new_region;
+  pb::coordinator_internal::RegionInternal new_region;
   new_region.set_id(create_region_id);
   new_region.set_epoch(1);
   new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
@@ -1255,7 +1427,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
   new_region.set_region_type(region_type);
 
   // create region definition begin
-  auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
+  auto* region_definition = new_region.mutable_definition();
   region_definition->set_id(create_region_id);
   region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
   region_definition->mutable_epoch()->set_conf_version(1);
@@ -1364,7 +1536,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   }
 
   // create new region in memory begin
-  pb::common::Region new_region;
+  pb::coordinator_internal::RegionInternal new_region;
   new_region.set_id(create_region_id);
   new_region.set_epoch(1);
   new_region.set_state(::dingodb::pb::common::RegionState::REGION_NEW);
@@ -1372,7 +1544,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   new_region.set_region_type(region_type);
 
   // create region definition begin
-  auto* region_definition = new_region.mutable_metrics()->mutable_region_definition();
+  auto* region_definition = new_region.mutable_definition();
   region_definition->set_id(create_region_id);
   region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
   region_definition->mutable_epoch()->set_conf_version(1);
@@ -1510,7 +1682,7 @@ butil::Status CoordinatorControl::DropRegionFinal(uint64_t region_id,
   bool need_update_epoch = false;
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    pb::common::Region region_to_delete;
+    pb::coordinator_internal::RegionInternal region_to_delete;
     int ret = region_map_.Get(region_id, region_to_delete);
     if (ret > 0) {
       if (region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETED &&
@@ -1619,7 +1791,7 @@ butil::Status CoordinatorControl::DropRegionPermanently(uint64_t region_id,
   bool need_update_epoch = false;
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    pb::common::Region region_to_delete;
+    pb::coordinator_internal::RegionInternal region_to_delete;
     int ret = region_map_.Get(region_id, region_to_delete);
     if (ret < 0) {
       DINGO_LOG(INFO) << "DropRegionPermanently region not exists, id = " << region_id;
@@ -1660,7 +1832,7 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
                                               std::string split_watershed_key,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate split_from_region_id
-  pb::common::Region split_from_region;
+  pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "SplitRegion from region not exists, id = " << split_from_region_id;
@@ -1668,17 +1840,19 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
   }
 
   // validate split_to_region_id
-  pb::common::Region split_to_region;
+  pb::coordinator_internal::RegionInternal split_to_region;
   ret = region_map_.Get(split_to_region_id, split_to_region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "SplitRegion to region not exists, id = " << split_from_region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "SplitRegion to region not exists");
   }
 
+  auto region_status = GetRegionStatus(split_from_region_id);
+
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      split_from_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
                         "split_from_region_id = "
                      << split_from_region_id << " from_state=" << split_from_region.state();
@@ -1754,7 +1928,8 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
   region_cmd.set_create_timestamp(butil::gettimeofday_ms());
 
   // only send split region_cmd to split_from_region_id's leader store id
-  if (split_from_region.leader_store_id() == 0) {
+  auto leader_store_id = GetRegionLeaderId(split_from_region_id);
+  if (leader_store_id == 0) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region_id's "
                         "leader_store_id is 0, split_from_region_id="
                      << split_from_region_id << ", split_to_region_id=" << split_to_region_id;
@@ -1762,7 +1937,7 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
                          "SplitRegion split_from_region_id's leader_store_id is 0");
   }
 
-  return AddRegionCmd(split_from_region.leader_store_id(), region_cmd, meta_increment);
+  return AddRegionCmd(leader_store_id, region_cmd, meta_increment);
 }
 
 butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
@@ -1781,7 +1956,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   }
 
   // validate split_from_region_id
-  pb::common::Region split_from_region;
+  pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "SplitRegion from region not exists, id = " << split_from_region_id;
@@ -1804,10 +1979,12 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
     return butil::Status(pb::error::Errno::EKEY_INVALID, "SplitRegion split_watershed_key is illegal");
   }
 
+  auto region_status = GetRegionStatus(split_from_region_id);
+
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      split_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      split_from_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
                         "split_from_region_id = "
                      << split_from_region_id << " from_state=" << split_from_region.state();
@@ -1815,7 +1992,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   }
 
   // only send split region_cmd to split_from_region_id's leader store id
-  if (split_from_region.leader_store_id() == 0) {
+  auto leader_store_id = GetRegionLeaderId(split_from_region_id);
+  if (leader_store_id == 0) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region_id's "
                         "leader_store_id is 0, split_from_region_id="
                      << split_from_region_id << ", split_to_region_id=" << split_to_region_id;
@@ -1875,8 +2053,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   // }
 
   // build split_region task
-  AddSplitTask(new_task_list, split_from_region.leader_store_id(), split_from_region_id, new_region_id,
-               split_watershed_key, store_create_region);
+  AddSplitTask(new_task_list, leader_store_id, split_from_region_id, new_region_id, split_watershed_key,
+               store_create_region);
 
   return butil::Status::OK();
 }
@@ -1892,7 +2070,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
   }
 
   // validate merge_from_region_id
-  pb::common::Region merge_from_region;
+  pb::coordinator_internal::RegionInternal merge_from_region;
   int ret = region_map_.Get(merge_from_region_id, merge_from_region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "MergeRegion from region not exists, id = " << merge_from_region_id;
@@ -1900,17 +2078,19 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
   }
 
   // validate merge_to_region_id
-  pb::common::Region merge_to_region;
+  pb::coordinator_internal::RegionInternal merge_to_region;
   ret = region_map_.Get(merge_to_region_id, merge_to_region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "MergeRegion to region not exists, id = " << merge_from_region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MergeRegion to region not exists");
   }
 
+  auto region_status = GetRegionStatus(merge_from_region_id);
+
   // validate merge_from_region and merge_to_region has NORMAL status
   if (merge_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      merge_from_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      merge_from_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "MergeRegion merge_from_region is not ready for merge, "
                         "merge_from_region_id = "
                      << merge_from_region_id << " from_state=" << merge_from_region.state();
@@ -1920,8 +2100,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
 
   // validate merge_to_region and merge_to_region has NORMAL status
   if (merge_to_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      merge_to_region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      merge_to_region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "MergeRegion merge_to_region is not ready for merge, "
                         "merge_to_region_id = "
                      << merge_to_region_id << " from_state=" << merge_to_region.state();
@@ -1984,7 +2164,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
   }
 
   // only send merge region_cmd to merge_from_region_id's leader store id
-  if (merge_from_region.leader_store_id() == 0) {
+  auto leader_store_id = GetRegionLeaderId(merge_from_region_id);
+  if (leader_store_id == 0) {
     DINGO_LOG(ERROR) << "MergeRegion merge_from_region_id's "
                         "leader_store_id is 0, merge_from_region_id="
                      << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
@@ -1996,7 +2177,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
   auto* new_task_list = CreateTaskList(meta_increment);
 
   // build merege task
-  AddMergeTask(new_task_list, merge_from_region.leader_store_id(), merge_from_region_id, merge_to_region_id);
+  AddMergeTask(new_task_list, leader_store_id, merge_from_region_id, merge_to_region_id);
 
   // build drop region task
   auto* drop_region_task = new_task_list->add_tasks();
@@ -2038,7 +2219,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
   }
 
   // validate region_id
-  pb::common::Region region;
+  pb::coordinator_internal::RegionInternal region;
   int ret = region_map_.Get(region_id, region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ChangePeerRegion region not exists, id = " << region_id;
@@ -2046,9 +2227,10 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
   }
 
   // validate region has NORMAL status
+  auto region_status = GetRegionStatus(region_id);
   if (region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      region.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      region.heartbeat_state() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "ChangePeerRegion region is not ready for "
                         "change_peer, region_id = "
                      << region_id;
@@ -2099,8 +2281,9 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
   new_region_definition.clear_peers();
 
   // generate store operation for stores
+  auto leader_store_id = GetRegionLeaderId(region_id);
   if (new_store_ids_diff_less.size() == 1) {
-    if (region.leader_store_id() == new_store_ids_diff_less.at(0) && new_store_ids.size() < 3) {
+    if (leader_store_id == new_store_ids_diff_less.at(0) && new_store_ids.size() < 3) {
       DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == "
                           "new_store_ids_diff_less.at(0), region_id = "
                        << region_id << " new_store_ids.size() = " << new_store_ids.size();
@@ -2109,7 +2292,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
                            "new_store_ids_diff_less.at(0) and new_store_ids.size() < 3");
     }
 
-    if (region.leader_store_id() == 0) {
+    if (leader_store_id == 0) {
       DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == "
                           "0, region_id = "
                        << region_id;
@@ -2129,7 +2312,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     auto* increment_task_list = CreateTaskList(meta_increment);
 
     // this is change_peer task
-    AddChangePeerTask(increment_task_list, region.leader_store_id(), region_id, new_region_definition);
+    AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition);
 
     // this is delete_region task
     AddDeleteTaskWithCheck(increment_task_list, new_store_ids_diff_less.at(0), region_id,
@@ -2165,7 +2348,8 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
       *peer = region.definition().peers(i);
     }
 
-    if (region.leader_store_id() == 0) {
+    auto leader_store_id = GetRegionLeaderId(region_id);
+    if (leader_store_id == 0) {
       DINGO_LOG(ERROR) << "ChangePeerRegion region.leader_store_id() == "
                           "0, region_id = "
                        << region_id;
@@ -2187,7 +2371,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     region_check->mutable_store_region_check()->set_region_id(region_id);
 
     // this is change peer task
-    AddChangePeerTask(increment_task_list, region.leader_store_id(), region_id, new_region_definition);
+    AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition);
 
   } else {
     DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids not match, region_id = " << region_id;
@@ -2200,7 +2384,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
 butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
     uint64_t region_id, uint64_t new_leader_store_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   // check region_id exists
-  pb::common::Region region;
+  pb::coordinator_internal::RegionInternal region;
   int ret = region_map_.Get(region_id, region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion region_id not exists, region_id = " << region_id;
@@ -2214,7 +2398,8 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
     return butil::Status(pb::error::Errno::EREGION_STATE, "TransferLeaderRegion region.state() != REGION_NORMAL");
   }
 
-  if (region.heartbeat_state() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
+  auto region_status = GetRegionStatus(region_id);
+  if (region_status.heartbeat_status() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion region.heartbeat_state() "
                         "!= REGION_ONLINE, region_id = "
                      << region_id;
@@ -2222,7 +2407,8 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
                          "TransferLeaderRegion region.heartbeat_state() != REGION_ONLINE");
   }
 
-  if (region.leader_store_id() == new_leader_store_id) {
+  auto leader_store_id = GetRegionLeaderId(region_id);
+  if (leader_store_id == new_leader_store_id) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion new_leader_store_id == "
                         "old_leader_store_id, region_id = "
                      << region_id;
@@ -2231,7 +2417,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
                          "old_leader_store_id");
   }
 
-  if (region.leader_store_id() == 0) {
+  if (leader_store_id == 0) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion region.leader_store_id() "
                         "== 0, region_id = "
                      << region_id;
@@ -2276,7 +2462,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   auto* increment_task_list = CreateTaskList(meta_increment);
 
   // this transfer leader task
-  AddTransferLeaderTask(increment_task_list, region.leader_store_id(), region_id, new_leader_peer);
+  AddTransferLeaderTask(increment_task_list, leader_store_id, region_id, new_leader_peer);
 
   return butil::Status::OK();
 }
@@ -2572,96 +2758,91 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
 }
 
 // UpdateRegionMap
-uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
-                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
-  uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+// uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
+//                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+//   uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
 
-  bool need_to_get_next_epoch = false;
-  {
-    // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    for (const auto& region : regions) {
-      pb::common::Region region_to_update;
-      int ret = region_map_.Get(region.id(), region_to_update);
-      if (ret > 0) {
-        DINGO_LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
+//   bool need_to_get_next_epoch = false;
+//   {
+//     // BAIDU_SCOPED_LOCK(region_map_mutex_);
+//     for (const auto& region : regions) {
+//       pb::coordinator_internal::RegionInternal region_to_update;
+//       int ret = region_map_.Get(region.id(), region_to_update);
+//       if (ret > 0) {
+//         DINGO_LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
 
-        // if state not change, just update leader_store_id
-        if (region_to_update.state() == region.state()) {
-          // update the region's leader_store_id, no need to apply raft
-          if (region_to_update.leader_store_id() != region.leader_store_id()) {
-            region_to_update.set_leader_store_id(region.leader_store_id());
-            region_map_.Put(region.id(), region_to_update);
-          }
-          continue;
-        } else {
-          // state not equal, need to update region data and apply raft
-          DINGO_LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
-                          << " old status = " << region_to_update.state() << " new status = " << region.state();
-          // maybe need to build a state machine here
-          // if a region is set to DELETE, it will never be updated to
-          // other normal state
-          const auto& region_delete_state_name =
-              dingodb::pb::common::RegionState_Name(pb::common::RegionState::REGION_DELETE);
-          const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(region_to_update.state());
-          const auto& region_state_in_req = dingodb::pb::common::RegionState_Name(region.state());
+//         // if state not change, just update leader_store_id
+//         if (region_to_update.state() == region.state()) {
+//           continue;
+//         } else {
+//           // state not equal, need to update region data and apply raft
+//           DINGO_LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
+//                           << " old status = " << region_to_update.state() << " new status = " << region.state();
+//           // maybe need to build a state machine here
+//           // if a region is set to DELETE, it will never be updated to
+//           // other normal state
+//           const auto& region_delete_state_name =
+//               dingodb::pb::common::RegionState_Name(pb::common::RegionState::REGION_DELETE);
+//           const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(region_to_update.state());
+//           const auto& region_state_in_req = dingodb::pb::common::RegionState_Name(region.state());
 
-          // if store want to update a region state from DELETE_* to other
-          // NON DELETE_* state, it is illegal
-          if (region_state_in_map.rfind(region_delete_state_name, 0) == 0 &&
-              region_state_in_req.rfind(region_delete_state_name, 0) != 0) {
-            DINGO_LOG(INFO) << "illegal intend to update region state from "
-                               "REGION_DELETE to "
-                            << region_state_in_req << " region_id=" << region.id();
-            continue;
-          }
-        }
+//           // if store want to update a region state from DELETE_* to other
+//           // NON DELETE_* state, it is illegal
+//           if (region_state_in_map.rfind(region_delete_state_name, 0) == 0 &&
+//               region_state_in_req.rfind(region_delete_state_name, 0) != 0) {
+//             DINGO_LOG(INFO) << "illegal intend to update region state from "
+//                                "REGION_DELETE to "
+//                             << region_state_in_req << " region_id=" << region.id();
+//             continue;
+//           }
+//         }
 
-        // update meta_increment
-        auto* region_increment = meta_increment.add_regions();
-        region_increment->set_id(region.id());
-        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+//         // update meta_increment
+//         auto* region_increment = meta_increment.add_regions();
+//         region_increment->set_id(region.id());
+//         region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
-        auto* region_increment_region = region_increment->mutable_region();
-        *region_increment_region = region;
+//         auto* region_increment_region = region_increment->mutable_region();
+//         *region_increment_region = region;
 
-        need_to_get_next_epoch = true;
+//         need_to_get_next_epoch = true;
 
-        // on_apply
-        // region_map_[region.id()] = region;  // raft_kv_put
-        // region_map_epoch++;                 // raft_kv_put
-      } else if (region.id() == 0) {
-        DINGO_LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
-                        << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
-                        << " state=" << region.state();
-      } else {
-        DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id()
-                        << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
-                        << " state=" << region.state();
+//         // on_apply
+//         // region_map_[region.id()] = region;  // raft_kv_put
+//         // region_map_epoch++;                 // raft_kv_put
+//       } else if (region.id() == 0) {
+//         DINGO_LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
+//                         << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
+//                         << " state=" << region.state();
+//       } else {
+//         DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id()
+//                         << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
+//                         << " state=" << region.state();
 
-        auto* region_increment = meta_increment.add_regions();
-        region_increment->set_id(region.id());
-        region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+//         auto* region_increment = meta_increment.add_regions();
+//         region_increment->set_id(region.id());
+//         region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
 
-        auto* region_increment_region = region_increment->mutable_region();
-        *region_increment_region = region;
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_ILLEGAL);
+//         auto* region_increment_region = region_increment->mutable_region();
+//         *region_increment_region = region;
+//         region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_ILLEGAL);
 
-        need_to_get_next_epoch = true;
+//         need_to_get_next_epoch = true;
 
-        // region_map_.insert(std::make_pair(region.id(), region));  //
-        // raft_kv_put
-      }
-    }
-  }
+//         // region_map_.insert(std::make_pair(region.id(), region));  //
+//         // raft_kv_put
+//       }
+//     }
+//   }
 
-  if (need_to_get_next_epoch) {
-    region_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
-  }
+//   if (need_to_get_next_epoch) {
+//     region_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+//   }
 
-  DINGO_LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch;
+//   DINGO_LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch;
 
-  return region_map_epoch;
-}
+//   return region_map_epoch;
+// }
 
 void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
@@ -2987,6 +3168,90 @@ uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execu
   return executor_map_epoch;
 }
 
+pb::common::RegionState CoordinatorControl::GenRegionState(
+    const pb::common::RegionMetrics& region_metrics, const pb::coordinator_internal::RegionInternal& region_internal) {
+  if (region_internal.state() == pb::common::RegionState::REGION_DELETE ||
+      region_internal.state() == pb::common::RegionState::REGION_DELETING ||
+      region_internal.state() == pb::common::RegionState::REGION_DELETED) {
+    if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
+      return pb::common::RegionState::REGION_DELETED;
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETING) {
+      return pb::common::RegionState::REGION_DELETING;
+    }
+  } else {
+    if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
+      return pb::common::RegionState::REGION_NORMAL;
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
+      return pb::common::RegionState::REGION_SPLITTING;
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::MERGING) {
+      return pb::common::RegionState::REGION_MERGING;
+    } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::STANDBY) {
+      return pb::common::RegionState::REGION_STANDBY;
+    } else {
+      return pb::common::RegionState::REGION_NONE;
+    }
+  }
+
+  return pb::common::RegionState::REGION_NONE;
+}
+
+pb::common::RegionStatus CoordinatorControl::GenRegionStatus(const pb::common::RegionMetrics& region_metrics) {
+  pb::common::RegionStatus region_status;
+
+  region_status.set_last_update_timestamp(butil::gettimeofday_ms());
+
+  auto region_heartbeat_status = pb::common::RegionHeartbeatState::REGION_ONLINE;
+  auto region_raft_status = pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY;
+  auto region_replica_status = pb::common::ReplicaStatus::REPLICA_NORMAL;
+
+  uint32_t consecutive_error_follower_count = 0;
+  for (const auto& follower : region_metrics.braft_status().stable_followers()) {
+    if (follower.second.next_index() < region_metrics.braft_status().last_index() + 10) {
+      region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY
+                               ? region_raft_status
+                               : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY;
+    }
+
+    if (follower.second.installing_snapshot()) {
+      region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING
+                               ? region_raft_status
+                               : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING;
+    }
+
+    if (follower.second.consecutive_error_times() > 10) {
+      region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR
+                               ? region_raft_status
+                               : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
+
+      consecutive_error_follower_count++;
+    }
+  }
+
+  if (consecutive_error_follower_count == 0) {
+    region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL;
+  } else if (consecutive_error_follower_count < region_metrics.braft_status().stable_followers_size()) {
+    region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED;
+  } else {
+    region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_UNAVAILABLE;
+  }
+
+  // if peer cannot connected, ustable_followers_size will not be 0
+  // so we need set replica status to DEGRAED
+  // if (region_metrics.braft_status().unstable_followers_size() > 0) {
+  //   region_raft_status =
+  //   ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
+  //   region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED);
+  // } else {
+  //   region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL);
+  // }
+
+  region_status.set_heartbeat_status(region_heartbeat_status);
+  region_status.set_replica_status(region_replica_status);
+  region_status.set_raft_status(region_raft_status);
+
+  return region_status;
+}
+
 // Update RegionMap and StoreOperation
 void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics& store_metrics,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
@@ -2994,59 +3259,125 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
   for (const auto& it : store_metrics.region_metrics_map()) {
     const auto& region_metrics = it.second;
 
+    pb::coordinator_internal::RegionInternal region_to_update;
+    auto ret = region_map_.Get(region_metrics.id(), region_to_update);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "region_to_update is not found in region_map_, region_id = " << region_metrics.id();
+      continue;
+    }
+
     // when region leader change or region state change, we need to update
     // region_map_ or when region last_update_timestamp is too old, we
     // need to update region_map_
-    bool need_update_region = false;
+    bool need_update_region_state = false;
     bool need_update_region_definition = false;
+    bool need_update_region_metrics = false;
     bool region_metrics_is_not_leader = false;
+    bool leader_has_old_epoch = false;
+
+    pb::common::RegionMetrics region_metrics_to_update;
+    auto ret1 = region_metrics_map_.Get(region_metrics.id(), region_metrics_to_update);
+    if (ret1 < 0) {
+      DINGO_LOG(WARNING) << "region_metrics_to_update is not found in region_metrics_map_, region_id = "
+                         << region_metrics.id();
+      region_metrics_to_update = region_metrics;
+      *(region_metrics_to_update.mutable_region_status()) = GenRegionStatus(region_metrics);
+      region_metrics_map_.Put(region_metrics.id(), region_metrics_to_update);
+    }
+
+    // this will update to RegionMetrics
+    pb::common::RegionStatus region_status_to_update = region_metrics_to_update.region_status();
+    region_status_to_update.set_last_update_timestamp(butil::gettimeofday_ms());
+
+    // this will update to RegionInternal
+    auto region_state_to_update = region_to_update.state();
 
     // use leader store's region_metrics to update region_map
     // if region's store_region_stat is deleting or deleted, there will be
     // no leaders in this region so we need to update region state using
     // any node of this region
     if (region_metrics.braft_status().raft_state() != pb::common::RaftNodeState::STATE_LEADER) {
-      if (region_metrics.store_region_state() != pb::common::StoreRegionState::DELETING &&
-          region_metrics.store_region_state() != pb::common::StoreRegionState::DELETED) {
-        continue;
-      }
       region_metrics_is_not_leader = true;
     }
 
-    // update region_map
-    pb::common::Region region_to_update;
-    int ret = region_map_.Get(region_metrics.id(), region_to_update);
-    if (ret < 0) {
-      DINGO_LOG(WARNING) << "region deleted and coordinator has purged it, something "
-                            "wrong in store, need to purge this "
-                            "region on store again, region_id = "
-                         << region_metrics.id();
-      continue;
+    if (region_metrics.leader_store_id() > 0 && region_metrics.leader_store_id() != store_metrics.id()) {
+      region_metrics_is_not_leader = true;
     }
 
+    // DINGO_LOG(INFO) << "regoin_id: " << region_metrics.id()
+    //                 << ", region_metrics_is_not_leader: " << region_metrics_is_not_leader
+    //                 << ", leader_store_id: " << region_metrics.leader_store_id();
+
+    // if region_epoch is old than region_map_, skip update definition
     if (region_metrics_is_not_leader) {
-      if (region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
-          region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
-          region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
-        DINGO_LOG(INFO) << "region is not deleted, follower can't update "
-                           "region_map, store_id="
-                        << store_metrics.id() << " region_id = " << region_metrics.id();
+      if (region_to_update.definition().epoch().conf_version() <
+              region_metrics.region_definition().epoch().conf_version() ||
+          region_to_update.definition().epoch().version() < region_metrics.region_definition().epoch().version()) {
+        DINGO_LOG(INFO) << "region_metrics has new epoch, region_id = " << region_metrics.id()
+                        << " old conf_version = " << region_to_update.definition().epoch().conf_version()
+                        << " new conf_version = " << region_metrics.region_definition().epoch().conf_version()
+                        << " old version = " << region_to_update.definition().epoch().version()
+                        << " new version = " << region_metrics.region_definition().epoch().version();
+        need_update_region_definition = true;
+        need_update_region_metrics = true;
+      } else if (region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
+                 region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
+                 region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
+        DINGO_LOG(DEBUG) << "region is not deleted, follower can't update "
+                            "region_map, store_id="
+                         << store_metrics.id() << " region_id = " << region_metrics.id();
         continue;
+      }
+    } else {
+      if (region_to_update.definition().epoch().conf_version() <
+              region_metrics.region_definition().epoch().conf_version() ||
+          region_to_update.definition().epoch().version() < region_metrics.region_definition().epoch().version()) {
+        DINGO_LOG(INFO) << "region_metrics has new epoch, region_id = " << region_metrics.id()
+                        << " old conf_version = " << region_to_update.definition().epoch().conf_version()
+                        << " new conf_version = " << region_metrics.region_definition().epoch().conf_version()
+                        << " old version = " << region_to_update.definition().epoch().version()
+                        << " new version = " << region_metrics.region_definition().epoch().version();
+        need_update_region_definition = true;
+        need_update_region_metrics = true;
+      } else if (region_to_update.definition().epoch().conf_version() >
+                     region_metrics.region_definition().epoch().conf_version() ||
+                 region_to_update.definition().epoch().version() >
+                     region_metrics.region_definition().epoch().version()) {
+        DINGO_LOG(WARNING) << "leader region in RegionMap epoch is old, region_id = " << region_metrics.id()
+                           << " old conf_version = " << region_metrics.region_definition().epoch().conf_version()
+                           << " new conf_version = " << region_to_update.definition().epoch().conf_version()
+                           << " old version = " << region_metrics.region_definition().epoch().version()
+                           << " new version = " << region_to_update.definition().epoch().version();
+        leader_has_old_epoch = true;
       }
     }
 
-    if (region_metrics.has_braft_status() && region_to_update.leader_store_id() != store_metrics.id()) {
-      DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
-                      << " old leader_store_id = " << region_to_update.leader_store_id()
-                      << " new leader_store_id = " << store_metrics.id();
-      need_update_region = true;
+    if (!region_metrics_is_not_leader) {
+      if (region_metrics_to_update.leader_store_id() != store_metrics.id()) {
+        DINGO_LOG(INFO) << "region leader change region_id = " << region_metrics.id()
+                        << " old leader_store_id = " << region_metrics_to_update.leader_store_id()
+                        << " new leader_store_id = " << store_metrics.id();
+        need_update_region_metrics = true;
+      }
     }
 
-    if (region_to_update.metrics().store_region_state() != region_metrics.store_region_state()) {
+    if (region_metrics_to_update.store_region_state() != region_metrics.store_region_state()) {
       DINGO_LOG(INFO) << "region state change region_id = " << region_metrics.id()
-                      << " old state = " << region_to_update.metrics().store_region_state()
+                      << " old state = " << region_metrics_to_update.store_region_state()
                       << " new state = " << region_metrics.store_region_state();
-      need_update_region = true;
+      need_update_region_metrics = true;
+    }
+
+    region_state_to_update = GenRegionState(region_metrics, region_to_update);
+
+    if (region_state_to_update != pb::common::RegionState::REGION_NONE &&
+        region_state_to_update != region_to_update.state()) {
+      DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation region_map_ update state region_id = " << region_metrics.id()
+                      << ", new_state: " << pb::common::RegionState_Name(region_state_to_update)
+                      << ", old_state: " << pb::common::RegionState_Name(region_to_update.state());
+
+      need_update_region_state = true;
+      need_update_region_metrics = true;
     }
 
     // if region is updated to REGION_DELETED, there is no need to update
@@ -3055,12 +3386,14 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     // region's state to DELETED, there is no need to update the region's
     // state in region_map, after timeout, we will trigger purge_request
     // to store to purge this region's meta
-    if (region_to_update.last_update_timestamp() + FLAGS_region_update_timeout * 1000 < butil::gettimeofday_ms() &&
+    if (region_metrics_to_update.mutable_region_status()->last_update_timestamp() + FLAGS_region_update_timeout * 1000 <
+            butil::gettimeofday_ms() &&
         region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
-      DINGO_LOG(INFO) << "region last_update_timestamp too old region_id = " << region_metrics.id()
-                      << " last_update_timestamp = " << region_to_update.last_update_timestamp()
-                      << " now = " << butil::gettimeofday_ms();
-      need_update_region = true;
+      DINGO_LOG(DEBUG) << "region last_update_timestamp too old region_id = " << region_metrics.id()
+                       << " last_update_timestamp = "
+                       << region_metrics_to_update.region_status().last_update_timestamp()
+                       << " now = " << butil::gettimeofday_ms();
+      need_update_region_metrics = true;
     }
 
     if (region_to_update.definition().range().start_key() != region_metrics.region_definition().range().start_key() ||
@@ -3070,8 +3403,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                       << region_to_update.definition().range().end_key() << ")"
                       << " new range = [" << region_metrics.region_definition().range().start_key() << ", "
                       << region_metrics.region_definition().range().end_key() << ")";
-      need_update_region = true;
-      need_update_region_definition = true;
+      if (!leader_has_old_epoch) {
+        need_update_region_definition = true;
+        need_update_region_metrics = true;
+      }
     }
 
     if (region_to_update.definition().raw_range().start_key() !=
@@ -3083,129 +3418,66 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                       << region_to_update.definition().raw_range().end_key() << ")"
                       << " new raw_range = [" << region_metrics.region_definition().raw_range().start_key() << ", "
                       << region_metrics.region_definition().raw_range().end_key() << ")";
-      need_update_region = true;
-      need_update_region_definition = true;
+      if (!leader_has_old_epoch) {
+        need_update_region_definition = true;
+        need_update_region_metrics = true;
+      }
     }
 
     if (region_to_update.definition().peers_size() != region_metrics.region_definition().peers_size()) {
       DINGO_LOG(INFO) << "region peers size change region_id = " << region_metrics.id()
                       << " old peers size = " << region_to_update.definition().peers_size()
                       << " new peers size = " << region_metrics.region_definition().peers_size();
-      need_update_region = true;
       need_update_region_definition = true;
+      need_update_region_metrics = true;
     }
 
-    if (region_to_update.definition().epoch().conf_version() !=
-            region_metrics.region_definition().epoch().conf_version() ||
-        region_to_update.definition().epoch().version() != region_metrics.region_definition().epoch().version()) {
-      DINGO_LOG(INFO) << "region epoch change region_id = " << region_metrics.id()
-                      << " old epoch = " << region_to_update.definition().epoch().ShortDebugString()
-                      << " new epoch = " << region_metrics.region_definition().epoch().ShortDebugString();
-      need_update_region = true;
-      need_update_region_definition = true;
-    }
-
-    if (!need_update_region) {
-      DINGO_LOG(DEBUG) << "region no need to update region_id = " << region_metrics.id()
-                       << " last_update_timestamp = " << region_to_update.last_update_timestamp()
+    if (!(need_update_region_state || need_update_region_definition || need_update_region_metrics)) {
+      DINGO_LOG(DEBUG) << "region no need to update region_id = " << region_metrics.id() << " last_update_timestamp = "
+                       << region_metrics_to_update.region_status().last_update_timestamp()
                        << " now = " << butil::gettimeofday_ms();
       continue;
     }
 
-    // update meta_increment
-    auto* region_increment = meta_increment.add_regions();
-    region_increment->set_id(region_metrics.id());
-    region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    if (need_update_region_definition || need_update_region_state) {
+      // update meta_increment
+      auto* region_increment = meta_increment.add_regions();
+      region_increment->set_id(region_metrics.id());
+      region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
-    auto* region_increment_region = region_increment->mutable_region();
-    *region_increment_region = region_to_update;
+      auto* region_increment_region = region_increment->mutable_region();
+      *region_increment_region = region_to_update;
 
-    // update leader_store_id
-    region_increment_region->set_leader_store_id(store_metrics.id());
+      if (need_update_region_definition) {
+        *(region_increment_region->mutable_definition()) = region_metrics.region_definition();
 
-    // update last_update_timestamp
-    region_increment_region->set_last_update_timestamp(butil::gettimeofday_ms());
-
-    // update region metrics
-    *(region_increment_region->mutable_metrics()) = region_metrics;
-
-    if (region_to_update.state() == pb::common::RegionState::REGION_DELETE ||
-        region_to_update.state() == pb::common::RegionState::REGION_DELETING ||
-        region_to_update.state() == pb::common::RegionState::REGION_DELETED) {
-      if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETED);
-      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETING) {
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_DELETING);
+        DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation region_map_ update definition region_id = "
+                        << region_metrics.id()
+                        << ", definition: " << region_metrics.region_definition().ShortDebugString();
       }
-    } else {
-      if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_NORMAL);
-      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_SPLITTING);
-      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::MERGING) {
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_MERGING);
-      } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::STANDBY) {
-        region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_STANDBY);
-      } else {
-        DINGO_LOG(ERROR) << "ERROR: UpdateRegionMapAndStoreOperation region state "
-                            "error, store_id="
-                         << store_metrics.id() << " region_id = " << region_metrics.id()
-                         << " state = " << region_metrics.store_region_state();
-        continue;
+
+      if (need_update_region_state) {
+        region_increment_region->set_state(region_state_to_update);
       }
     }
 
-    // for split and merge, we need to update region definition
-    if (need_update_region_definition) {
-      *(region_increment_region->mutable_definition()) = region_metrics.region_definition();
-    }
+    if (need_update_region_metrics) {
+      region_metrics_to_update = region_metrics;
 
-    auto region_raft_status = ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY;
-    auto region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL;
-
-    uint32_t consecutive_error_follower_count = 0;
-    for (const auto& follower : region_metrics.braft_status().stable_followers()) {
-      if (follower.second.next_index() < region_metrics.braft_status().last_index() + 10) {
-        region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY
-                                 ? region_raft_status
-                                 : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_LAGGY;
+      if (!region_metrics_is_not_leader) {
+        region_metrics_to_update.set_leader_store_id(store_metrics.id());
+        region_status_to_update = GenRegionStatus(region_metrics);
       }
 
-      if (follower.second.installing_snapshot()) {
-        region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING
-                                 ? region_raft_status
-                                 : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_RECOVERING;
-      }
+      *(region_metrics_to_update.mutable_region_status()) = region_status_to_update;
 
-      if (follower.second.consecutive_error_times() > 10) {
-        region_raft_status = region_raft_status < ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR
-                                 ? region_raft_status
-                                 : ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
+      region_metrics_map_.Put(region_metrics.id(), region_metrics_to_update);
 
-        consecutive_error_follower_count++;
-      }
+      DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation region_metrics_map_ update region_id = "
+                      << region_metrics.id()
+                      << " last_update_timestamp = " << region_metrics_to_update.region_status().last_update_timestamp()
+                      << " now = " << butil::gettimeofday_ms();
     }
-
-    if (consecutive_error_follower_count == 0) {
-      region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL;
-    } else if (consecutive_error_follower_count < region_metrics.braft_status().stable_followers_size()) {
-      region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED;
-    } else {
-      region_replica_status = ::dingodb::pb::common::ReplicaStatus::REPLICA_UNAVAILABLE;
-    }
-    region_increment_region->set_replica_status(region_replica_status);
-
-    // if peer cannot connected, ustable_followers_size will not be 0
-    // so we need set replica status to DEGRAED
-    // if (region_metrics.braft_status().unstable_followers_size() > 0) {
-    //   region_raft_status =
-    //   ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_CONSECUTIVE_ERROR;
-    //   region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_DEGRAED);
-    // } else {
-    //   region_increment_region->set_replica_status(::dingodb::pb::common::ReplicaStatus::REPLICA_NORMAL);
-    // }
-
-    region_increment_region->set_raft_status(region_raft_status);
 
     // mbvar region
     if (region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
@@ -3369,6 +3641,11 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_deleted_region_map_count(deleted_region_map_.Size());
     memory_info.set_deleted_region_map_size(deleted_region_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_region_map_size());
+  }
+  {
+    memory_info.set_region_metrics_map_count(region_metrics_map_.Size());
+    memory_info.set_region_metrics_map_size(region_metrics_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.region_metrics_map_size());
   }
   {
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
@@ -3695,7 +3972,7 @@ void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_
 
 bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& task_pre_check) {
   if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::REGION_CHECK) {
-    pb::common::Region region;
+    pb::coordinator_internal::RegionInternal region;
     int ret = region_map_.Get(task_pre_check.region_check().region_id(), region);
     if (ret < 0) {
       DINGO_LOG(INFO) << "region_map_.Get(" << task_pre_check.region_check().region_id() << ") failed";
@@ -3709,11 +3986,12 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
       check_passed = false;
     }
 
-    if (region_check.raft_status() != 0 && region_check.raft_status() != region.raft_status()) {
+    auto region_status = GetRegionStatus(region.id());
+    if (region_check.raft_status() != 0 && region_check.raft_status() != region_status.raft_status()) {
       check_passed = false;
     }
 
-    if (region_check.replica_status() != 0 && region_check.replica_status() != region.replica_status()) {
+    if (region_check.replica_status() != 0 && region_check.replica_status() != region_status.replica_status()) {
       check_passed = false;
     }
 
@@ -3912,12 +4190,14 @@ butil::Status CoordinatorControl::ProcessTaskList() {
     return butil::Status::OK();
   }
 
-  // this callback will destruct by itself, so we don't need to delete it
-  auto* done = braft::NewCallback(this, &CoordinatorControl::ReleaseProcessTaskListStatus);
+  // // this callback will destruct by itself, so we don't need to delete it
+  // auto* done = braft::NewCallback(this, &CoordinatorControl::ReleaseProcessTaskListStatus);
 
-  // prepare for raft process
-  atomic_guard.Release();
-  SubmitMetaIncrement(done, meta_increment);
+  // // prepare for raft process
+  // atomic_guard.Release();
+  // SubmitMetaIncrementAsync(done, meta_increment);
+
+  SubmitMetaIncrementSync(meta_increment);
 
   return butil::Status::OK();
 }

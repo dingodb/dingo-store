@@ -635,6 +635,46 @@ void CoordinatorServiceImpl::DeleteStoreMetrics(google::protobuf::RpcController 
   this->coordinator_control_->DeleteStoreMetrics(request->store_id());
 }
 
+void CoordinatorServiceImpl::GetRegionMetrics(google::protobuf::RpcController * /*controller*/,
+                                              const pb::coordinator::GetRegionMetricsRequest *request,
+                                              pb::coordinator::GetRegionMetricsResponse *response,
+                                              google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMetrics Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // get region metrics
+  std::vector<pb::common::RegionMetrics> region_metrics_list;
+  this->coordinator_control_->GetRegionMetrics(request->region_id(), region_metrics_list);
+
+  for (auto &region_metrics : region_metrics_list) {
+    auto *new_region_metrics = response->add_region_metrics();
+    *new_region_metrics = region_metrics;
+  }
+}
+
+void CoordinatorServiceImpl::DeleteRegionMetrics(google::protobuf::RpcController * /*controller*/,
+                                                 const pb::coordinator::DeleteRegionMetricsRequest *request,
+                                                 pb::coordinator::DeleteRegionMetricsResponse *response,
+                                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+  auto is_leader = this->coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Delete RegionMetrics Request, IsLeader:" << is_leader
+                   << ", Request:" << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // delete region metrics
+  this->coordinator_control_->DeleteRegionMetrics(request->region_id());
+}
+
 void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController * /*controller*/,
                                             const pb::coordinator::GetExecutorMapRequest *request,
                                             pb::coordinator::GetExecutorMapResponse *response,

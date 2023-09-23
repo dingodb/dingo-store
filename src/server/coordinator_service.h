@@ -143,6 +143,15 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                           pb::coordinator::DeleteStoreMetricsResponse* response,
                           google::protobuf::Closure* done) override;
 
+  void GetRegionMetrics(google::protobuf::RpcController* controller,
+                        const pb::coordinator::GetRegionMetricsRequest* request,
+                        pb::coordinator::GetRegionMetricsResponse* response, google::protobuf::Closure* done) override;
+
+  void DeleteRegionMetrics(google::protobuf::RpcController* controller,
+                           const pb::coordinator::DeleteRegionMetricsRequest* request,
+                           pb::coordinator::DeleteRegionMetricsResponse* response,
+                           google::protobuf::Closure* done) override;
+
   void CreateStore(google::protobuf::RpcController* controller, const pb::coordinator::CreateStoreRequest* request,
                    pb::coordinator::CreateStoreResponse* response, google::protobuf::Closure* done) override;
   void DeleteStore(google::protobuf::RpcController* controller, const pb::coordinator::DeleteStoreRequest* request,

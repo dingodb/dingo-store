@@ -41,7 +41,7 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
-DECLARE_uint64(vector_max_bactch_count);
+DECLARE_uint64(vector_max_batch_count);
 DECLARE_uint64(vector_max_request_size);
 
 UtilServiceImpl::UtilServiceImpl() = default;
@@ -57,8 +57,8 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
 
   DINGO_LOG(DEBUG) << "VectorCalcDistance request: " << request->ShortDebugString();
 
-  if (request->op_left_vectors_size() > FLAGS_vector_max_bactch_count ||
-      request->op_right_vectors_size() > FLAGS_vector_max_bactch_count || request->op_left_vectors_size() == 0 ||
+  if (request->op_left_vectors_size() > FLAGS_vector_max_batch_count ||
+      request->op_right_vectors_size() > FLAGS_vector_max_batch_count || request->op_left_vectors_size() == 0 ||
       request->op_right_vectors_size() == 0) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(pb::error::EILLEGAL_PARAMTETERS));

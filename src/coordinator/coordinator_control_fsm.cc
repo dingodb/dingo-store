@@ -21,10 +21,12 @@
 #include <utility>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"
@@ -1475,6 +1477,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // meta_delete_kv
         meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
+        // remove region from region_metrics_map
+        region_metrics_map_.Erase(region.id());
+
         // update table/index if this is a merge region delete
         const auto& new_region = region.region();
         if (new_region.region_type() == pb::common::RegionType::STORE_REGION) {
@@ -2409,12 +2414,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
-butil::Status CoordinatorControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
-  return SubmitMetaIncrement(nullptr, meta_increment);
-}
-
-butil::Status CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure* done,
-                                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::SubmitMetaIncrementAsync(google::protobuf::Closure* done,
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   LogMetaIncrementSize(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
@@ -2429,6 +2430,23 @@ butil::Status CoordinatorControl::SubmitMetaIncrement(google::protobuf::Closure*
     DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
     return status;
   }
+  return butil::Status::OK();
+}
+
+static void SubmitMetaIncrementDone(BthreadCond* cond) { cond->DecreaseSignal(); }
+
+butil::Status CoordinatorControl::SubmitMetaIncrementSync(pb::coordinator_internal::MetaIncrement& meta_increment) {
+  BthreadCond cond(1);
+  auto* closure = brpc::NewCallback(SubmitMetaIncrementDone, &cond);
+
+  auto ret = SubmitMetaIncrementAsync(closure, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "SubmitMetaIncrementSync failed, errno=" << ret.error_code() << " errmsg=" << ret.error_str();
+    return ret;
+  }
+
+  cond.Wait();
+
   return butil::Status::OK();
 }
 

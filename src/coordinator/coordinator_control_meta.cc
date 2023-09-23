@@ -1352,7 +1352,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
       for (int i = 0; i < table_internal.partitions_size(); i++) {
         auto region_id = table_internal.partitions(i).region_id();
 
-        pb::common::Region region;
+        pb::coordinator_internal::RegionInternal region;
         auto ret = this->region_map_.Get(region_id, region);
         if (ret < 0) {
           DINGO_LOG(ERROR) << "ERRROR: region_id not found" << region_id;
@@ -1853,19 +1853,32 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     }
   }
 
+  std::vector<uint64_t> region_ids;
+  std::vector<pb::coordinator_internal::RegionInternal> region_internals;
+  std::vector<bool> region_exists;
+  for (const auto& part : table_internal.partitions()) {
+    region_ids.push_back(part.region_id());
+  }
+
+  // get regions
+  auto ret = region_map_.MultiGet(region_ids, region_internals, region_exists);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
+  }
+
+  if (region_internals.size() != region_ids.size()) {
+    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
+  }
+
   for (int i = 0; i < table_internal.partitions_size(); i++) {
     // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
     uint64_t part_id = table_internal.partitions(i).part_id();
 
     // get region
-    pb::common::Region part_region;
-    int ret = region_map_.Get(region_id, part_region);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}",
-                                      table_id, region_id);
-      continue;
-    }
+    const auto& part_region = region_internals[i];
 
     if (part_region.definition().range().start_key() >= part_region.definition().range().end_key()) {
       DINGO_LOG(INFO) << fmt::format("region range illegal, table_id={} region_id={} range={}", table_id, region_id,
@@ -1885,12 +1898,18 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     // region status
     auto* region_status = range_distribution->mutable_status();
     region_status->set_state(part_region.state());
-    region_status->set_raft_status(part_region.raft_status());
-    region_status->set_replica_status(part_region.replica_status());
-    region_status->set_heartbeat_state(part_region.heartbeat_state());
+
+    uint64_t leader_id = 0;
+    pb::common::RegionStatus inner_region_status;
+    GetRegionLeaderAndStatus(region_id, inner_region_status, leader_id);
+
+    region_status->set_raft_status(inner_region_status.raft_status());
+    region_status->set_replica_status(inner_region_status.replica_status());
+    region_status->set_heartbeat_state(inner_region_status.heartbeat_status());
+    region_status->set_last_update_timestamp(inner_region_status.last_update_timestamp());
+
     region_status->set_region_type(part_region.region_type());
     region_status->set_create_timestamp(part_region.create_timestamp());
-    region_status->set_last_update_timestamp(part_region.last_update_timestamp());
 
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
@@ -1902,7 +1921,7 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     // range_distribution voter & learner locations
     for (int j = 0; j < part_region.definition().peers_size(); j++) {
       const auto& part_peer = part_region.definition().peers(j);
-      if (part_peer.store_id() == part_region.leader_store_id()) {
+      if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
       }
 
@@ -1949,19 +1968,32 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     }
   }
 
+  std::vector<uint64_t> region_ids;
+  std::vector<pb::coordinator_internal::RegionInternal> region_internals;
+  std::vector<bool> region_exists;
+  for (const auto& part : table_internal.partitions()) {
+    region_ids.push_back(part.region_id());
+  }
+
+  // get regions
+  auto ret = region_map_.MultiGet(region_ids, region_internals, region_exists);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << index_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
+  }
+
+  if (region_internals.size() != region_ids.size()) {
+    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << index_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
+  }
+
   for (int i = 0; i < table_internal.partitions_size(); i++) {
     // range_distribution id
     uint64_t region_id = table_internal.partitions(i).region_id();
     uint64_t part_id = table_internal.partitions(i).part_id();
 
     // get region
-    pb::common::Region part_region;
-    int ret = region_map_.Get(region_id, part_region);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetIndex, index_id={} region_id={}",
-                                      index_id, region_id);
-      continue;
-    }
+    const auto& part_region = region_internals[i];
 
     if (part_region.definition().range().start_key() >= part_region.definition().range().end_key()) {
       DINGO_LOG(INFO) << fmt::format("region range illegal, index_id={} region_id={} range={}", index_id, region_id,
@@ -1981,12 +2013,18 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     // region status
     auto* region_status = range_distribution->mutable_status();
     region_status->set_state(part_region.state());
-    region_status->set_raft_status(part_region.raft_status());
-    region_status->set_replica_status(part_region.replica_status());
-    region_status->set_heartbeat_state(part_region.heartbeat_state());
+
+    uint64_t leader_id = 0;
+    pb::common::RegionStatus inner_region_status;
+    GetRegionLeaderAndStatus(region_id, inner_region_status, leader_id);
+
+    region_status->set_raft_status(inner_region_status.raft_status());
+    region_status->set_replica_status(inner_region_status.replica_status());
+    region_status->set_heartbeat_state(inner_region_status.heartbeat_status());
+    region_status->set_last_update_timestamp(inner_region_status.last_update_timestamp());
+
     region_status->set_region_type(part_region.region_type());
     region_status->set_create_timestamp(part_region.create_timestamp());
-    region_status->set_last_update_timestamp(part_region.last_update_timestamp());
 
     // range_distribution range
     auto* part_range = range_distribution->mutable_range();
@@ -1998,7 +2036,7 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     // range_distribution voter & learner locations
     for (int j = 0; j < part_region.definition().peers_size(); j++) {
       const auto& part_peer = part_region.definition().peers(j);
-      if (part_peer.store_id() == part_region.leader_store_id()) {
+      if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
       }
 
@@ -2184,10 +2222,10 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
     uint64_t region_id = table_internal.partitions(i).region_id();
 
     // get region
-    pb::common::Region part_region;
+    pb::common::RegionMetrics region_metrics;
     {
       // BAIDU_SCOPED_LOCK(region_map_mutex_);
-      int ret = region_map_.Get(region_id, part_region);
+      int ret = region_metrics_map_.Get(region_id, region_metrics);
       if (ret < 0) {
         DINGO_LOG(ERROR) << fmt::format(
             "ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}", table_id, region_id);
@@ -2195,12 +2233,6 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
       }
     }
 
-    if (!part_region.has_metrics()) {
-      DINGO_LOG(ERROR) << fmt::format("ERROR region has no metrics, table_id={} region_id={}", table_id, region_id);
-      continue;
-    }
-
-    const auto& region_metrics = part_region.metrics();
     row_count += region_metrics.row_count();
     table_size += region_metrics.region_size();
 
@@ -2266,10 +2298,10 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
     uint64_t region_id = table_internal.partitions(i).region_id();
 
     // get region
-    pb::common::Region part_region;
+    pb::common::RegionMetrics region_metrics;
     {
       // BAIDU_SCOPED_LOCK(region_map_mutex_);
-      int ret = region_map_.Get(region_id, part_region);
+      int ret = region_metrics_map_.Get(region_id, region_metrics);
       if (ret < 0) {
         DINGO_LOG(ERROR) << fmt::format(
             "ERROR cannot find region in regionmap_ while GetIndex, index_id={} region_id={}", index_id, region_id);
@@ -2277,12 +2309,6 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
       }
     }
 
-    if (!part_region.has_metrics()) {
-      DINGO_LOG(ERROR) << fmt::format("ERROR region has no metrics, index_id={} region_id={}", index_id, region_id);
-      continue;
-    }
-
-    const auto& region_metrics = part_region.metrics();
     row_count += region_metrics.row_count();
 
     if (min_key.empty()) {
@@ -2612,12 +2638,19 @@ butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t t
     uint64_t region_id = table_internal.partitions(i).region_id();
 
     // get region
-    pb::common::Region part_region;
+    pb::coordinator_internal::RegionInternal part_region;
     int ret = region_map_.Get(region_id, part_region);
     if (ret < 0) {
       DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}",
                                       table_id, region_id);
       continue;
+    }
+
+    auto leader_store_id = GetRegionLeaderId(region_id);
+    if (leader_store_id <= 0) {
+      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find leader in regionmap_ while GetTable, table_id={} region_id={}",
+                                      table_id, region_id);
+      return butil::Status(pb::error::Errno::EINTERNAL, "some region leader not found");
     }
 
     // send region_cmd to update auto_split
@@ -2629,7 +2662,7 @@ butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t t
     region_cmd.mutable_switch_split_request()->set_region_id(region_id);
     region_cmd.mutable_switch_split_request()->set_disable_split(!auto_split);
 
-    auto status = AddRegionCmd(part_region.leader_store_id(), region_cmd, meta_increment);
+    auto status = AddRegionCmd(leader_store_id, region_cmd, meta_increment);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "ERRROR: AddRegionCmd failed, table_id=" << table_id << " region_id=" << region_id;
       return status;

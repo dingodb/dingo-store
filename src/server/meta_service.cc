@@ -418,29 +418,13 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
   table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
 
   {
-    std::atomic<bool> inner_done(false);
-
-    auto *closure = brpc::NewCallback(MetaServiceDone, &inner_done);
-
-    auto ret1 = coordinator_control_->SubmitMetaIncrement(closure, meta_increment);
+    auto ret1 = coordinator_control_->SubmitMetaIncrementSync(meta_increment);
     if (!ret1.ok()) {
       DINGO_LOG(ERROR) << "CreateTable failed in meta_service, error code=" << ret1.error_code()
                        << ", error str=" << ret1.error_str();
       response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
       response->mutable_error()->set_errmsg(ret1.error_str());
       return;
-    }
-
-    uint64_t temp_count = 0;
-    for (;;) {
-      if (inner_done.load(std::memory_order_acquire)) {
-        break;
-      }
-      bthread_usleep(10000);
-
-      if (temp_count++ % 100 == 0) {
-        DINGO_LOG(INFO) << "CreateTable wait for raft done. table_id: " << new_table_id;
-      }
     }
 
     if (!FLAGS_async_create_table) {
@@ -1169,29 +1153,13 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
   index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
 
   {
-    std::atomic<bool> inner_done(false);
-
-    auto *closure = brpc::NewCallback(MetaServiceDone, &inner_done);
-
-    auto ret1 = coordinator_control_->SubmitMetaIncrement(closure, meta_increment);
+    auto ret1 = coordinator_control_->SubmitMetaIncrementSync(meta_increment);
     if (!ret1.ok()) {
       DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret1.error_code()
                        << ", error str=" << ret1.error_str();
       response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
       response->mutable_error()->set_errmsg(ret1.error_str());
       return;
-    }
-
-    uint64_t temp_count = 0;
-    for (;;) {
-      if (inner_done.load(std::memory_order_acquire)) {
-        break;
-      }
-      bthread_usleep(10000);
-
-      if (temp_count++ % 100 == 0) {
-        DINGO_LOG(INFO) << "CreateIndex wait for raft done. index_id: " << new_index_id;
-      }
     }
 
     if (!FLAGS_async_create_table) {
@@ -1532,29 +1500,13 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
   }
 
   {
-    std::atomic<bool> inner_done(false);
-
-    auto *closure = brpc::NewCallback(MetaServiceDone, &inner_done);
-
-    auto ret1 = coordinator_control_->SubmitMetaIncrement(closure, meta_increment);
+    auto ret1 = coordinator_control_->SubmitMetaIncrementSync(meta_increment);
     if (!ret1.ok()) {
       DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret1.error_code()
                        << ", error str=" << ret1.error_str();
       response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
       response->mutable_error()->set_errmsg(ret1.error_str());
       return;
-    }
-
-    uint64_t temp_count = 0;
-    for (;;) {
-      if (inner_done.load(std::memory_order_acquire)) {
-        break;
-      }
-      bthread_usleep(10000);
-
-      if (temp_count++ % 100 == 0) {
-        DINGO_LOG(INFO) << "CreateTables wait for raft done. table_id: " << new_table_id;
-      }
     }
 
     if (!FLAGS_async_create_table) {

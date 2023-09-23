@@ -534,11 +534,11 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     std::cout << "id=" << region.id() << " name=" << region.definition().name()
               << " epoch=" << region.definition().epoch().conf_version() << "," << region.definition().epoch().version()
               << " state=" << dingodb::pb::common::RegionState_Name(region.state()) << ","
-              << dingodb::pb::common::RegionHeartbeatState_Name(region.heartbeat_state()) << ","
-              << dingodb::pb::common::ReplicaStatus_Name(region.replica_status()) << ","
-              << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status())
+              << dingodb::pb::common::RegionHeartbeatState_Name(region.status().heartbeat_status()) << ","
+              << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status()) << ","
+              << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status())
               << " leader=" << region.leader_store_id() << " create=" << region.create_timestamp()
-              << " update=" << region.last_update_timestamp() << " range=[0x"
+              << " update=" << region.status().last_update_timestamp() << " range=[0x"
               << dingodb::Helper::StringToHex(region.definition().range().start_key()) << ",0x"
               << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]\n";
 
@@ -551,7 +551,7 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
       normal_region_count++;
     }
 
-    if (region.heartbeat_state() == dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+    if (region.status().heartbeat_status() == dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
       online_region_count++;
     }
   }
@@ -954,6 +954,48 @@ void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coo
   DINGO_LOG(INFO) << response.DebugString();
 }
 
+void SendGetRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetRegionMetricsRequest request;
+  dingodb::pb::coordinator::GetRegionMetricsResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_region_id(std::stoull(FLAGS_id));
+  }
+
+  if (FLAGS_region_id > 0) {
+    request.set_region_id(FLAGS_region_id);
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetRegionMetrics", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  for (const auto& it : response.region_metrics()) {
+    DINGO_LOG(INFO) << it.DebugString();
+  }
+  DINGO_LOG(INFO) << "region_count=" << response.region_metrics_size();
+}
+
+void SendDeleteRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::DeleteRegionMetricsRequest request;
+  dingodb::pb::coordinator::DeleteRegionMetricsResponse response;
+
+  if (!FLAGS_id.empty()) {
+    request.set_region_id(std::stoull(FLAGS_id));
+  }
+
+  if (FLAGS_region_id > 0) {
+    request.set_region_id(FLAGS_region_id);
+  }
+
+  if (request.region_id() == 0) {
+    DINGO_LOG(WARNING) << "region_id is empty";
+    return;
+  }
+
+  auto status = coordinator_interaction->SendRequest("DeleteRegionMetrics", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
 // region
 void SendCreateRegionId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::coordinator::CreateRegionIdRequest request;
@@ -993,8 +1035,8 @@ void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
                   << " state=" << dingodb::pb::common::RegionState_Name(region.state())
                   << " leader_store_id=" << region.leader_store_id()
-                  << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.replica_status())
-                  << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.raft_status());
+                  << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status())
+                  << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status());
   DINGO_LOG(INFO) << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]";
   DINGO_LOG(INFO) << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]";
 }

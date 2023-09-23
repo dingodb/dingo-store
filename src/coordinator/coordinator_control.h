@@ -171,9 +171,9 @@ class CoordinatorControl : public MetaControl {
   // SubmitMetaIncrement
   // in:  meta_increment
   // return: 0 or -1
-  butil::Status SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status SubmitMetaIncrement(google::protobuf::Closure *done,
-                                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SubmitMetaIncrementAsync(google::protobuf::Closure *done,
+                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SubmitMetaIncrementSync(pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // GetMemoryInfo
   void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
@@ -435,6 +435,10 @@ class CoordinatorControl : public MetaControl {
   // delete store metrics
   void DeleteStoreMetrics(uint64_t store_id);
 
+  // region metrics
+  void GetRegionMetrics(uint64_t region_id, std::vector<pb::common::RegionMetrics> &region_metrics_array);
+  void DeleteRegionMetrics(uint64_t region_id);
+
   // get orphan region
   butil::Status GetOrphanRegion(uint64_t store_id, std::map<uint64_t, pb::common::RegionMetrics> &orphan_regions);
 
@@ -476,8 +480,8 @@ class CoordinatorControl : public MetaControl {
 
   // update region map with new Region info
   // return new epoch
-  uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
-                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  // uint64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
+  //                          pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // try to set region to down
   // return bool
@@ -488,6 +492,15 @@ class CoordinatorControl : public MetaControl {
   bool TrySetRegionToOnline(uint64_t region_id);
 
   // get regionmap
+  void GenRegionFull(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
+  void GenRegionSlim(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
+  uint64_t GetRegionLeaderId(uint64_t region_id);
+  pb::common::RegionStatus GetRegionStatus(uint64_t region_id);
+  void GetRegionLeaderAndStatus(uint64_t region_id, pb::common::RegionStatus &region_status, uint64_t &leader_store_id);
+  static pb::common::RegionState GenRegionState(const pb::common::RegionMetrics &region_metrics,
+                                                const pb::coordinator_internal::RegionInternal &region_internal);
+  static pb::common::RegionStatus GenRegionStatus(const pb::common::RegionMetrics &region_metrics);
+
   void GetRegionMap(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
   void GetDeletedRegionMap(pb::common::RegionMap &region_map);
@@ -497,6 +510,8 @@ class CoordinatorControl : public MetaControl {
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
   void RecycleOrphanRegionOnStore();
   void DeleteRegionBvar(uint64_t region_id);
+
+  void UpdateRegionState();
 
   // get schemas
   butil::Status GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);
@@ -864,11 +879,14 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<std::string, uint64_t> schema_name_map_safe_temp_;
 
   // 5.regions
-  DingoSafeMap<uint64_t, pb::common::Region> region_map_;
-  MetaSafeMapStorage<pb::common::Region> *region_meta_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::RegionInternal> region_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::RegionInternal> *region_meta_;
   // 5.1 deleted_regions
-  DingoSafeMap<uint64_t, pb::common::Region> deleted_region_map_;  // tombstone for deleted region
-  MetaSafeMapStorage<pb::common::Region> *deleted_region_meta_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::RegionInternal> deleted_region_map_;  // tombstone for deleted region
+  MetaSafeMapStorage<pb::coordinator_internal::RegionInternal> *deleted_region_meta_;
+  // 5.2 region_metrics, this map does not need to be persisted
+  DingoSafeMap<uint64_t, pb::common::RegionMetrics> region_metrics_map_;
+  MetaSafeMapStorage<pb::common::RegionMetrics> *region_metrics_meta_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
