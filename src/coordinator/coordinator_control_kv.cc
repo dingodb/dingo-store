@@ -918,21 +918,27 @@ butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys
     *(kv_index_increment->mutable_op_revision()) = compact_revision;
   }
 
-  std::atomic<bool> done(false);
+  // std::atomic<bool> done(false);
 
-  auto *closure = brpc::NewCallback(Done, &done);
+  // auto *closure = brpc::NewCallback(Done, &done);
 
-  auto ret = this->SubmitMetaIncrement(closure, meta_increment);
+  // auto ret = this->SubmitMetaIncrementAsync(closure, meta_increment);
+  // if (!ret.ok()) {
+  //   DINGO_LOG(ERROR) << "KvCompact SubmitMetaIncrement failed, error: " << ret.error_str();
+  //   return ret;
+  // }
+
+  // for (;;) {
+  //   if (done.load(std::memory_order_acquire)) {
+  //     break;
+  //   }
+  //   bthread_usleep(1000);
+  // }
+
+  auto ret = this->SubmitMetaIncrementSync(meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvCompact SubmitMetaIncrement failed, error: " << ret.error_str();
     return ret;
-  }
-
-  for (;;) {
-    if (done.load(std::memory_order_acquire)) {
-      break;
-    }
-    bthread_usleep(1000);
   }
 
   return butil::Status::OK();

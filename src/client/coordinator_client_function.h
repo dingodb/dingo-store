@@ -55,6 +55,8 @@ void SendUpdateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendStoreHearbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, uint64_t store_id);
 void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDeleteRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateExecutor(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteExecutor(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateExecutorUser(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

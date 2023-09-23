@@ -657,6 +657,10 @@ int CoordinatorSender() {
     SendGetStoreMetrics(coordinator_interaction);
   } else if (FLAGS_method == "DeleteStoreMetrics") {
     SendDeleteStoreMetrics(coordinator_interaction);
+  } else if (FLAGS_method == "GetRegionMetrics") {
+    SendGetRegionMetrics(coordinator_interaction);
+  } else if (FLAGS_method == "DeleteRegionMetrics") {
+    SendDeleteRegionMetrics(coordinator_interaction);
   } else if (FLAGS_method == "GetSchemas") {  // meta control
     SendGetSchemas(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetSchema") {

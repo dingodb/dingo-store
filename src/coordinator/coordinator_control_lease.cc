@@ -259,7 +259,7 @@ void CoordinatorControl::LeaseTask() {
     // submit meta_increment with mutex locked
     // if we do this without lock, there maybe KvPut before LeaseRevoke, which will cause data inconsistency
     if (meta_increment.leases_size() > 0) {
-      this->SubmitMetaIncrement(meta_increment);
+      this->SubmitMetaIncrementSync(meta_increment);
     }
   }
 }
