@@ -1916,6 +1916,15 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  // check if limit is valid
+  if (request->limit() > FLAGS_vector_max_batch_count) {
+    DINGO_LOG(WARNING) << fmt::format("TxnScan limit is invalid request: {} ", request->ShortDebugString());
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(pb::error::EILLEGAL_PARAMTETERS));
+    err->set_errmsg("limit is exceed vector max batch count");
+    return;
+  }
+
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -2062,10 +2071,10 @@ butil::Status IndexServiceImpl::ValidateTxnPrewriteRequest(const dingodb::pb::in
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  if (request->mutations_size() > FLAGS_vector_max_bactch_count) {
+  if (request->mutations_size() > FLAGS_vector_max_batch_count) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param vectors size {} is exceed max batch count {}", request->mutations_size(),
-                                     FLAGS_vector_max_bactch_count));
+                                     FLAGS_vector_max_batch_count));
   }
 
   if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {

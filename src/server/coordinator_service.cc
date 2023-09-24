@@ -1740,7 +1740,7 @@ void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController * /*con
     return RedirectResponse(response);
   }
 
-  std::vector<pb::common::Region> regions;
+  std::vector<pb::coordinator_internal::RegionInternal> regions;
   auto ret = this->coordinator_control_->ScanRegions(request->key(), request->range_end(), request->limit(), regions);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "ScanRegions failed, start_region_id:" << request->key()
@@ -1760,12 +1760,18 @@ void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController * /*con
     // region status
     auto *region_status = new_region->mutable_status();
     region_status->set_state(part_region.state());
-    region_status->set_raft_status(part_region.raft_status());
-    region_status->set_replica_status(part_region.replica_status());
-    region_status->set_heartbeat_state(part_region.heartbeat_state());
+
+    uint64_t leader_id = 0;
+    pb::common::RegionStatus inner_region_status;
+    coordinator_control_->GetRegionLeaderAndStatus(part_region.id(), inner_region_status, leader_id);
+
+    region_status->set_raft_status(inner_region_status.raft_status());
+    region_status->set_replica_status(inner_region_status.replica_status());
+    region_status->set_heartbeat_state(inner_region_status.heartbeat_status());
+    region_status->set_last_update_timestamp(inner_region_status.last_update_timestamp());
+
     region_status->set_region_type(part_region.region_type());
     region_status->set_create_timestamp(part_region.create_timestamp());
-    region_status->set_last_update_timestamp(part_region.last_update_timestamp());
 
     // new_region range
     auto *part_range = new_region->mutable_range();
@@ -1777,7 +1783,7 @@ void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController * /*con
     // new_region voter & learner locations
     for (int j = 0; j < part_region.definition().peers_size(); j++) {
       const auto &part_peer = part_region.definition().peers(j);
-      if (part_peer.store_id() == part_region.leader_store_id()) {
+      if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
       }
 
