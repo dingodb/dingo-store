@@ -172,8 +172,16 @@ void CoordinatorControl::GetStoreMetrics(uint64_t store_id, uint64_t region_id,
           tmp_store_metrics.mutable_region_metrics_map()->insert({region_id, region_metrics_map.at(region_id)});
         }
 
+        DINGO_LOG(INFO) << "GetStoreMetrics store_id=" << store_id << " region_id=" << region_id
+                        << " region_metrics_map.size()=" << region_metrics_map.size()
+                        << " tmp_store_metrics=" << tmp_store_metrics.DebugString() << " it=" << it->DebugString()
+                        << " it->id()=" << it->id()
+                        << " it->region_metrics_map().size()=" << it->region_metrics_map().size();
+
         store_metrics.push_back(tmp_store_metrics);
       }
+    } else {
+      DINGO_LOG(ERROR) << "GetStoreMetrics store_id=" << store_id << " not exist";
     }
   }
 }
@@ -1268,61 +1276,65 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
   // check and sort store by capacity, regions_num
   std::vector<StoreMore> store_more_vec;
-  {
-    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    for (const auto& it : stores_for_regions) {
-      StoreMore store_more;
-      store_more.store = it;
+  for (const auto& it : stores_for_regions) {
+    StoreMore store_more;
+    store_more.store = it;
 
-      bool has_metrics = false;
+    bool has_metrics = false;
+    pb::common::StoreOwnMetrics store_own_metrics;
+
+    {
+      BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
       auto* ptr = store_metrics_map_.seek(it.id());
       if (ptr != nullptr) {
         store_more.region_num = ptr->region_metrics_map_size() > 0 ? ptr->region_metrics_map_size() : 0;
-        const auto& store_own_metrics = ptr->store_own_metrics();
-        store_more.system_free_capacity =
-            store_own_metrics.system_free_capacity() > 0 ? store_own_metrics.system_free_capacity() : 0;
-        store_more.system_total_capacity =
-            store_own_metrics.system_total_capacity() > 0 ? store_own_metrics.system_total_capacity() : 0;
-        store_more.system_total_memory =
-            store_own_metrics.system_total_memory() > 0 ? store_own_metrics.system_free_memory() : 0;
-        store_more.system_free_memory =
-            store_own_metrics.system_free_memory() > 0 ? store_own_metrics.system_free_memory() : 0;
-        store_more.system_available_memory =
-            store_own_metrics.system_available_memory() > 0 ? store_own_metrics.system_available_memory() : 0;
-        has_metrics = true;
+        store_own_metrics = ptr->store_own_metrics();
+      }
+    }
+
+    if (store_own_metrics.ByteSizeLong() > 0) {
+      store_more.system_free_capacity =
+          store_own_metrics.system_free_capacity() > 0 ? store_own_metrics.system_free_capacity() : 0;
+      store_more.system_total_capacity =
+          store_own_metrics.system_total_capacity() > 0 ? store_own_metrics.system_total_capacity() : 0;
+      store_more.system_total_memory =
+          store_own_metrics.system_total_memory() > 0 ? store_own_metrics.system_free_memory() : 0;
+      store_more.system_free_memory =
+          store_own_metrics.system_free_memory() > 0 ? store_own_metrics.system_free_memory() : 0;
+      store_more.system_available_memory =
+          store_own_metrics.system_available_memory() > 0 ? store_own_metrics.system_available_memory() : 0;
+      has_metrics = true;
+    }
+
+    if (has_metrics) {
+      if (store_type == pb::common::StoreType::NODE_TYPE_STORE) {
+        store_more.weight = store_more.system_free_capacity * 100 / store_more.system_total_capacity +
+                            (100 / (store_more.region_num + 1));
+      } else if (store_type == pb::common::StoreType::NODE_TYPE_INDEX) {
+        store_more.weight = store_more.system_available_memory * 100 / store_more.system_total_memory +
+                            (100 / (store_more.region_num + 1));
       }
 
-      if (has_metrics) {
-        if (store_type == pb::common::StoreType::NODE_TYPE_STORE) {
-          store_more.weight = store_more.system_free_capacity * 100 / store_more.system_total_capacity +
-                              (100 / (store_more.region_num + 1));
-        } else if (store_type == pb::common::StoreType::NODE_TYPE_INDEX) {
-          store_more.weight = store_more.system_available_memory * 100 / store_more.system_total_memory +
-                              (100 / (store_more.region_num + 1));
-        }
-
-        if (store_more.system_total_capacity == 0) {
-          store_more.weight = 0;
-        }
-
-        if (store_more.system_available_memory == 0) {
-          store_more.weight = 0;
-        }
-
-        store_more.weight = store_more.weight * Helper::GenerateRealRandomInteger(1, 20);
-      } else {
+      if (store_more.system_total_capacity == 0) {
         store_more.weight = 0;
       }
 
-      store_more_vec.push_back(store_more);
-      DINGO_LOG(INFO) << "store_more_vec.push_back store_id=" << store_more.store.id()
-                      << ", region_num=" << store_more.region_num
-                      << ", free_capacity=" << store_more.system_free_capacity
-                      << ", total_capacity=" << store_more.system_total_capacity
-                      << ", free_memory=" << store_more.system_free_memory
-                      << ", available_memory=" << store_more.system_available_memory
-                      << ", total_memory=" << store_more.system_total_memory << ", weight=" << store_more.weight;
+      if (store_more.system_available_memory == 0) {
+        store_more.weight = 0;
+      }
+
+      store_more.weight = store_more.weight * Helper::GenerateRealRandomInteger(1, 20);
+    } else {
+      store_more.weight = 0;
     }
+
+    store_more_vec.push_back(store_more);
+    DINGO_LOG(INFO) << "store_more_vec.push_back store_id=" << store_more.store.id()
+                    << ", region_num=" << store_more.region_num << ", free_capacity=" << store_more.system_free_capacity
+                    << ", total_capacity=" << store_more.system_total_capacity
+                    << ", free_memory=" << store_more.system_free_memory
+                    << ", available_memory=" << store_more.system_available_memory
+                    << ", total_memory=" << store_more.system_total_memory << ", weight=" << store_more.weight;
   }
 
   // if not enough stores is selected, return -1
@@ -4021,7 +4033,8 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
       }
     }
 
-    DINGO_LOG(INFO) << "task pre check passed, check_type=REGION_CHECK";
+    DINGO_LOG(INFO) << "task pre check_passed: " << check_passed
+                    << ", check_type=REGION_CHECK, region_id: " << task_pre_check.region_check().region_id();
 
     return check_passed;
   } else if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK) {
@@ -4093,7 +4106,10 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
       }
     }
 
-    DINGO_LOG(INFO) << "task pre check passed, check_type=REGION_CHECK";
+    DINGO_LOG(INFO) << "task pre check_passed: " << check_passed
+                    << ", check_type=STORE_REGION_CHECK, store_id: " << task_pre_check.store_region_check().store_id()
+                    << ", region_id: " << task_pre_check.store_region_check().region_id();
+
     return check_passed;
   } else {
     DINGO_LOG(INFO) << "task pre check passed, check_type=NONE";
