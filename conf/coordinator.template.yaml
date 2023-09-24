@@ -5,8 +5,8 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
-  worker_thread_num: 32 # must >4, worker_thread_num priority worker_thread_ratio
-  # worker_thread_ratio: 0.5 # cpu core * ratio
+  # worker_thread_num: 48 # must >4, worker_thread_num priority worker_thread_ratio
+  worker_thread_ratio: 1.0 # cpu core * ratio
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
   push_interval_s: 1
