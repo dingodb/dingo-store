@@ -259,6 +259,7 @@ butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const
   // Due to delete other region sst file, so need repair db, or rocksdb::DB::Open will fail.
   auto status = rocksdb::RepairDB(path, options, column_families);
   if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("Rocksdb Repair db failed, {}", status.ToString()) << ", path: " << path;
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb Repair db failed, {}", status.ToString()));
   }
 
@@ -267,6 +268,7 @@ butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const
   std::vector<rocksdb::ColumnFamilyHandle*> handles;
   status = rocksdb::DB::OpenForReadOnly(options, path, column_families, &handles, &snapshot_db);
   if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()) << ", path: " << path;
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()));
   }
 
