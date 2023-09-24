@@ -4679,7 +4679,7 @@ butil::Status CoordinatorControl::CleanTaskList(int64_t task_list_id,
 }
 
 butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, const std::string& end_key, int64_t limit,
-                                              std::vector<pb::common::Region>& regions) {
+                                              std::vector<pb::coordinator_internal::RegionInternal>& regions) {
   DINGO_LOG(INFO) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
                   << " end_key=" << Helper::StringToHex(end_key) << " limit=" << limit;
 
@@ -4703,14 +4703,14 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   }
 
   for (const auto& region_id : region_ids) {
-    pb::common::Region region;
-    ret = region_map_.Get(region_id, region);
+    pb::coordinator_internal::RegionInternal region_internal;
+    ret = region_map_.Get(region_id, region_internal);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "region_map_.Get(" << region_id << ") failed";
       return butil::Status(pb::error::EINTERNAL, "region_map_.Get failed");
     }
 
-    regions.push_back(region);
+    regions.push_back(region_internal);
 
     if (limit > 0 && regions.size() >= static_cast<size_t>(limit)) {
       break;

@@ -860,7 +860,7 @@ class CoordinatorControl : public MetaControl {
 
   // scan regions
   butil::Status ScanRegions(const std::string &start_key, const std::string &end_key, int64_t limit,
-                            std::vector<pb::common::Region> &regions);
+                            std::vector<pb::coordinator_internal::RegionInternal> &regions);
 
   // GC
   butil::Status UpdateGCSafePoint(uint64_t safe_point, uint64_t &new_safe_point,
