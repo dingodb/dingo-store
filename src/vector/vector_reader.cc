@@ -450,12 +450,33 @@ butil::Status VectorReader::VectorGetRegionMetrics(uint64_t /*region_id*/, const
   uint64_t max_id = 0;
   uint64_t min_id = 0;
 
-  vector_index->GetCount(total_vector_count);
-  vector_index->GetDeletedCount(total_deleted_count);
-  vector_index->GetMemorySize(total_memory_usage);
+  auto inner_vector_index = vector_index->GetOwnVectorIndex();
+  if (inner_vector_index == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", vector_index->Id());
+  }
 
-  GetBorderId(region_range, true, min_id);
-  GetBorderId(region_range, false, max_id);
+  auto status = inner_vector_index->GetCount(total_vector_count);
+  if (!status.ok()) {
+    return status;
+  }
+  status = inner_vector_index->GetDeletedCount(total_deleted_count);
+  if (!status.ok()) {
+    return status;
+  }
+  status = inner_vector_index->GetMemorySize(total_memory_usage);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = GetBorderId(region_range, true, min_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = GetBorderId(region_range, false, max_id);
+  if (!status.ok()) {
+    return status;
+  }
 
   region_metrics.set_current_count(total_vector_count);
   region_metrics.set_deleted_count(total_deleted_count);
