@@ -35,6 +35,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -1923,14 +1924,21 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
       const auto& part_peer = part_region.definition().peers(j);
       if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
+
+        // transform ip to hostname
+        Server::GetInstance()->Ip2Hostname(*leader_location->mutable_host());
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
         auto* voter_location = range_distribution->add_voters();
         *voter_location = part_peer.server_location();
+        // transform ip to hostname
+        Server::GetInstance()->Ip2Hostname(*voter_location->mutable_host());
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
         auto* learner_location = range_distribution->add_learners();
         *learner_location = part_peer.server_location();
+        // transform ip to hostname
+        Server::GetInstance()->Ip2Hostname(*learner_location->mutable_host());
       }
     }
 
@@ -2038,14 +2046,20 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
       const auto& part_peer = part_region.definition().peers(j);
       if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
+        // transform ip to hostname
+        Server::GetInstance()->Ip2Hostname(*leader_location->mutable_host());
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
         auto* voter_location = range_distribution->add_voters();
         *voter_location = part_peer.server_location();
+        // transform ip to hostname
+        Server::GetInstance()->Ip2Hostname(*voter_location->mutable_host());
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
         auto* learner_location = range_distribution->add_learners();
         *learner_location = part_peer.server_location();
+        // transform ip to hostname
+        Server::GetInstance()->Ip2Hostname(*learner_location->mutable_host());
       }
     }
 

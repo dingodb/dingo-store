@@ -332,9 +332,10 @@ void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::compon
   param.sel = filters.get();
   raw_index_->search(n, x, k, distances, labels, &param);
   faiss::idx_t* li = labels;
-  // TODO: preview gomp error
+  // TODO: running by regular user may cause abort exception below
   // libgomp: Thread creation failed: Resource temporarily unavailable
-  // #pragma omp parallel for
+  // please run by root, or adjust ulimit for regular user, then you can increase FLAGS_omp_num_threads
+#pragma omp parallel for
   for (faiss::idx_t i = 0; i < n * k; ++i) {
     li[i] = li[i] < 0 ? li[i] : index_id_map2_->id_map[li[i]];
   }

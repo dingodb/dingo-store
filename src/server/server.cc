@@ -24,6 +24,7 @@
 #include "braft/util.h"
 #include "butil/endpoint.h"
 #include "butil/files/file_path.h"
+#include "butil/time.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -36,6 +37,7 @@
 #include "engine/raft_store_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -55,6 +57,10 @@ namespace dingodb {
 DECLARE_uint32(compaction_retention_rev_count);
 DECLARE_bool(auto_compaction);
 
+DEFINE_bool(ip2hostname, false, "resolve ip to hostname for get map api");
+DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
+DEFINE_uint32(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
+
 void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
 Server* Server::GetInstance() { return Singleton<Server>::get(); }
@@ -66,6 +72,10 @@ bool Server::InitConfig(const std::string& filename) {
   }
 
   ConfigManager::GetInstance()->Register(role_, config);
+
+  // init ip2hostname_cache
+  ip2hostname_cache_.Init(256);
+
   return true;
 }
 
@@ -508,6 +518,39 @@ void Server::Destroy() {
   store_controller_->Destroy();
 
   google::ShutdownGoogleLogging();
+}
+
+bool Server::Ip2Hostname(std::string& ip2hostname) {
+  if (!FLAGS_ip2hostname) {
+    return true;
+  }
+
+  HostnameItem item;
+
+  if (FLAGS_enable_ip2hostname_cache) {
+    auto ret1 = ip2hostname_cache_.Get(ip2hostname, item);
+    if (ret1 > 0) {
+      if (item.timestamp + FLAGS_ip2hostname_cache_seconds >= butil::gettimeofday_ms()) {
+        ip2hostname = item.hostname;
+        return true;
+      }
+    }
+
+    item.timestamp = butil::gettimeofday_ms();
+  }
+
+  item.hostname = Helper::Ip2HostName(ip2hostname);
+  if (item.hostname.empty()) {
+    return false;
+  }
+
+  if (FLAGS_enable_ip2hostname_cache) {
+    ip2hostname_cache_.Put(ip2hostname, item);
+  }
+
+  ip2hostname = item.hostname;
+
+  return true;
 }
 
 store::RegionPtr Server::GetRegion(uint64_t region_id) {

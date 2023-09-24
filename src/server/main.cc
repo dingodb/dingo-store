@@ -70,7 +70,7 @@ DEFINE_uint32(h2_server_connection_window_size, 1024 * 1024 * 1024, "connection 
 DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
 DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
 
-DEFINE_uint32(omp_num_threads, 4, "omp num threads");
+DEFINE_uint32(omp_num_threads, 32, "omp num threads");
 
 extern "C" {
 extern void omp_set_num_threads(int) noexcept;  // NOLINT

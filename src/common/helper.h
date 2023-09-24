@@ -41,6 +41,8 @@ class Helper {
   static butil::EndPoint GetEndPoint(const std::string& host, int port);
   static butil::EndPoint GetEndPoint(const std::string& addr);
 
+  static std::string Ip2HostName(const std::string& ip);
+
   static bool IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location);
   static bool IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
                                 const std::vector<pb::common::Peer>& other_peers);

@@ -208,6 +208,9 @@ void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location
 
   Helper::GetServerLocation(raft_location, server_location);
 
+  // transform ip to hostname
+  Server::GetInstance()->Ip2Hostname(*server_location.mutable_host());
+
   // add to cache if get server_location
   if (server_location.host().length() > 0 && server_location.port() > 0) {
     DINGO_LOG(INFO) << " Cache Miss, add new cache raft_location=" << raft_location.host() << ":"
