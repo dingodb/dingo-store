@@ -130,6 +130,14 @@ class Bthread {
  public:
   Bthread() = default;
   explicit Bthread(const bthread_attr_t* attr) : attr_(attr) {}
+  explicit Bthread(const std::function<void()>& call) {
+    attr_ = &BTHREAD_ATTR_NORMAL;
+    Run(call);
+  }
+  explicit Bthread(const bthread_attr_t* attr, const std::function<void()>& call) {
+    attr_ = attr;
+    Run(call);
+  }
 
   void Run(const std::function<void()>& call) {
     std::function<void()>* func_call = new std::function<void()>;

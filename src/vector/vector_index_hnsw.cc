@@ -50,7 +50,7 @@ DEFINE_uint32(max_hnsw_parallel_thread_num, 4, "max hnsw parallel thread num");
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
  public:
   HnswRangeFilterFunctor(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
-  virtual ~HnswRangeFilterFunctor() = default;
+  ~HnswRangeFilterFunctor() override = default;
   bool operator()(hnswlib::labeltype id) override {
     if (filters_.empty()) {
       return true;
@@ -86,7 +86,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
       fn(id, 0);
     }
   } else {
-    std::vector<std::thread> threads;
+    // std::vector<std::thread> threads;
+    std::vector<Bthread> threads;
     std::atomic<size_t> current(start);
 
     // keep track of exceptions in threads
@@ -95,13 +96,15 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
     std::mutex last_except_mutex;
 
     for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
-      threads.push_back(std::thread([&, thread_id] {
+      // threads.push_back(std::thread([&, thread_id] {
+      threads.push_back(Bthread([&, thread_id] {
         while (true) {
-          size_t id = current.fetch_add(1, std::memory_order_relaxed);
+          size_t id = current.fetch_add(1);
 
           if (id >= end) {
             break;
           }
+
           try {
             fn(id, thread_id);
           } catch (...) {
@@ -120,7 +123,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
       }));
     }
     for (auto& thread : threads) {
-      thread.join();
+      // thread.join();
+      thread.Join();
     }
     if (last_exception) {
       std::rethrow_exception(last_exception);
@@ -529,24 +533,7 @@ butil::Status VectorIndexHnsw::GetDeletedCount(uint64_t& deleted_count) {
 }
 
 butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
-  auto count = this->hnsw_index_->getCurrentElementCount();
-  if (count == 0) {
-    memory_size = 0;
-    return butil::Status::OK();
-  }
-  auto deleted_count = this->hnsw_index_->getDeletedCount();
-  auto memory_count = count + deleted_count;
-
-  memory_size = memory_count * hnsw_index_->size_data_per_element_  // level 0 memory
-                + hnsw_index_->size_links_level0_                   // level 0 links memory
-                + memory_count * sizeof(void*)                      // linkLists_ memory
-                + memory_count * sizeof(uint64_t)                   // element_levels_
-                + memory_count * sizeof(uint64_t)                  // label_lookup_, translate user label to internal id
-                + hnsw_index_->max_elements_ * sizeof(std::mutex)  // link_list_locks_
-                + 65536 * sizeof(std::mutex)                       // label_op_locks_
-                + memory_count * sizeof(uint64_t) * hnsw_index_->M_ * hnsw_index_->maxlevel_ /
-                      2  // level 1-max_level nlinks, estimate echo vector exists in harf max_level_ count levels
-      ;
+  memory_size = hnsw_index_->indexFileSize();
   return butil::Status::OK();
 }
 
