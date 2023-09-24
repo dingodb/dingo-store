@@ -137,7 +137,7 @@ bool RaftStoreEngine::Recover() {
         parameter.is_restart = false;
       }
 
-      AddNode(region, parameter);
+      AddNode(region, parameter, true);
       if (region->NeedBootstrapDoSnapshot()) {
         DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] need do snapshot.", region->Id());
         auto node = GetNode(region->Id());
@@ -161,7 +161,7 @@ pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE;
 
 std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
+butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter, bool is_recover) {
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   // Build StateMachine
@@ -184,7 +184,16 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
 
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), parameter.raft_path,
                  parameter.election_timeout_ms, parameter.snapshot_interval_s) != 0) {
-    node->Destroy();
+    if (is_recover) {
+      DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] Raft init failed. Please check raft storage!",
+                                      region->Id())
+                       << ", raft_path: " << parameter.raft_path
+                       << ", election_timeout_ms: " << parameter.election_timeout_ms
+                       << ", snapshot_interval_s: " << parameter.snapshot_interval_s
+                       << ", peers: " << Helper::FormatPeers(Helper::ExtractLocations(region->Peers()));
+    } else {
+      node->Destroy();
+    }
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
 
@@ -214,7 +223,17 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   // Build RaftNode
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())), config->GetString("raft.path"),
                  config->GetInt("raft.election_timeout_s") * 1000, config->GetInt("raft.snapshot_interval_s")) != 0) {
-    node->Destroy();
+    // node->Destroy();
+    // this function is only used by coordinator, and will only be called on starting.
+    // so if init failed, we can just exit the process, let user to check if the config is correct.
+    DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] Raft init failed. Please check raft storage!",
+                                    region->id())
+                     << ", raft_path: " << config->GetString("raft.path")
+                     << ", election_timeout_ms: " << config->GetInt("raft.election_timeout_s") * 1000
+                     << ", snapshot_interval_s: " << config->GetInt("raft.snapshot_interval_s")
+                     << ", peers: " << Helper::FormatPeers(Helper::ExtractLocations(region->peers()))
+                     << ", region: " << region->ShortDebugString();
+
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
 

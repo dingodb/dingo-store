@@ -4083,6 +4083,12 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
     // check vector_index
     if (region_check.check_vector_index()) {
       if (region_check.is_hold_vector_index() != region.vector_index_status().is_hold_vector_index()) {
+        DINGO_LOG(INFO) << "check vector_index failed, region_check.is_hold_vector_index()="
+                        << region_check.is_hold_vector_index()
+                        << " region.vector_index_status().is_hold_vector_index()="
+                        << region.vector_index_status().is_hold_vector_index()
+                        << ", store_id=" << region_check.store_id() << ", region_id=" << region_check.region_id()
+                        << ", region=" << region.ShortDebugString();
         check_passed = false;
       }
     }
