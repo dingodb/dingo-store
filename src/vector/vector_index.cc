@@ -290,7 +290,7 @@ int32_t VectorIndexWrapper::GetDimension() {
 }
 
 butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
-  auto vector_index = GetVectorIndex();
+  auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
@@ -299,7 +299,7 @@ butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
 }
 
 butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
-  auto vector_index = GetVectorIndex();
+  auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }
@@ -308,7 +308,7 @@ butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
 }
 
 butil::Status VectorIndexWrapper::GetMemorySize(uint64_t& memory_size) {
-  auto vector_index = GetVectorIndex();
+  auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
   }

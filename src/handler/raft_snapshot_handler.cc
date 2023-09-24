@@ -245,9 +245,9 @@ static butil::Status MergeCheckpointFile(std::string path, std::string merge_fil
 
     if (status.error_code() == pb::error::ENO_ENTRIES) {
       DINGO_LOG(INFO) << fmt::format(
-                             "[raft.snapshot][region()] Merge checkpoint file success with ENO_ENTRIES, error: {} {}",
-                             pb::error::Errno_Name(status.error_code()), status.error_str())
-                      << ", path: " << path << ", merge_file_path: " << merge_file_path;
+          "[raft.snapshot][region()] Merge checkpoint file success with ENO_ENTRIES, error: {} {} path: {} "
+          "merge_file_path: {}",
+          pb::error::Errno_Name(status.error_code()), status.error_str(), path, merge_file_path);
 
       return butil::Status(pb::error::ENO_ENTRIES, "Merge checkpoint file success with ENO_ENTRIES");
     } else {
