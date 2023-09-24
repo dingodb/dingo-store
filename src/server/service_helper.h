@@ -67,6 +67,11 @@ pb::node::NodeInfo ServiceHelper::RedirectLeader(std::string addr) {
     Helper::GetNodeInfoByRaftLocation(Helper::EndPointToLocation(raft_endpoint), node_info);
   }
 
+  if (!node_info.server_location().host().empty()) {
+    // transform ip to hostname
+    Server::GetInstance()->Ip2Hostname(*node_info.mutable_server_location()->mutable_host());
+  }
+
   DINGO_LOG(INFO) << fmt::format("[redirect][addr({})] redirect leader, node_info: {}", addr,
                                  node_info.ShortDebugString());
 

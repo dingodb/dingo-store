@@ -110,6 +110,65 @@ int CheckThpEnabled(std::string &error_msg) {
   }
 }
 
+int CheckNproc(std::string &error_msg) {
+  struct rlimit rlim;
+  if (getrlimit(RLIMIT_NPROC, &rlim) == 0) {
+    DINGO_LOG(INFO) << "NPROC rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
+
+    if (rlim.rlim_cur < 20480) {
+      DINGO_LOG(ERROR) << "NPROC rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
+
+      struct rlimit new_rlim;
+      new_rlim.rlim_cur = 20480;
+      new_rlim.rlim_max = 20480;
+      auto ret = setrlimit(RLIMIT_NPROC, &rlim);
+      if (ret < 0) {
+        error_msg = std::string("ulimit -u: ") + std::to_string(rlim.rlim_cur) + std::string(" rlim_max: ") +
+                    std::to_string(rlim.rlim_max) + std::string(" rlim_max should be at least 20480");
+        return -1;
+      } else {
+        DINGO_LOG(ERROR) << "NPROC is set to rlim_cur:[" << new_rlim.rlim_cur << "] rlim_max:[" << new_rlim.rlim_max
+                         << "]";
+        return 1;
+      }
+    }
+  } else {
+    error_msg = std::string("Cannot get nproc limit, DingoDB may not be able to fork().");
+    return -1;
+  }
+
+  return 1;
+}
+
+int CheckNofile(std::string &error_msg) {
+  struct rlimit rlim;
+  if (getrlimit(RLIMIT_NOFILE, &rlim) == 0) {
+    DINGO_LOG(INFO) << "NOFILE rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
+    if (rlim.rlim_cur < 20480) {
+      DINGO_LOG(ERROR) << "NOFILE rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
+
+      struct rlimit new_rlim;
+      new_rlim.rlim_cur = 20480;
+      new_rlim.rlim_max = 20480;
+      auto ret = setrlimit(RLIMIT_NOFILE, &rlim);
+      if (ret < 0) {
+        error_msg = std::string("ulimit -n: ") + std::to_string(rlim.rlim_cur) + std::string(" rlim_max: ") +
+                    std::to_string(rlim.rlim_max) + std::string(" rlim_max should be at least 20480");
+        return -1;
+      } else {
+        DINGO_LOG(ERROR) << "NOFILE is set to rlim_cur:[" << new_rlim.rlim_cur << "] rlim_max:[" << new_rlim.rlim_max
+                         << "]";
+        return 1;
+      }
+    }
+  } else {
+    error_msg = std::string("Cannot get nofile limit, DingoDB may not be able to fork().");
+    return -1;
+  }
+
+  return 1;
+}
+
 #endif /* __linux__ */
 
 /*
@@ -128,6 +187,8 @@ SysCheckFunctions sys_check_functions[] = {
 #ifdef __linux__
     {.name = "overcommit", .CheckFunction = CheckOvercommit},
     {.name = "THP", .CheckFunction = CheckThpEnabled},
+    {.name = "nofile", .CheckFunction = CheckNofile},
+    {.name = "nproc", .CheckFunction = CheckNproc},
 #endif
     {.name = nullptr, .CheckFunction = nullptr}};
 

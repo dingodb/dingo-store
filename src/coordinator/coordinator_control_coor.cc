@@ -41,6 +41,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
@@ -48,6 +49,8 @@ DECLARE_int32(executor_heartbeat_timeout);
 DECLARE_int32(store_heartbeat_timeout);
 DECLARE_int32(region_heartbeat_timeout);
 DECLARE_int32(region_delete_after_deleted_time);
+
+DECLARE_bool(ip2hostname);
 
 DEFINE_int32(
     region_update_timeout, 25,

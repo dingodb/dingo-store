@@ -34,6 +34,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <random>
 #include <ratio>
 #include <regex>
@@ -51,7 +52,9 @@
 #include "common/logging.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
+#include "gflags/gflags_declare.h"
 #include "google/protobuf/util/json_util.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "serial/buf.h"
@@ -68,6 +71,22 @@ bool Helper::IsIp(const std::string& s) {
       "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("
       "\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))(?=(\\b|\\D))");
   return std::regex_match(s, reg);
+}
+
+std::string Helper::Ip2HostName(const std::string& ip) {
+  std::string hostname;
+  butil::ip_t ip_t;
+  int ret = butil::str2ip(ip.c_str(), &ip_t);
+  if (ret != 0) {
+    ret = butil::hostname2ip(ip.c_str(), &ip_t);
+  }
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << "Ip2HostName failed, ip=" << ip;
+    return hostname;
+  }
+
+  butil::ip2hostname(ip_t, &hostname);
+  return hostname;
 }
 
 int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location) {

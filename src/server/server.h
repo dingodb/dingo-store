@@ -21,6 +21,7 @@
 
 #include "brpc/channel.h"
 #include "common/meta_control.h"
+#include "common/safe_map.h"
 #include "config/config_manager.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
@@ -121,6 +122,8 @@ class Server {
   bool Recover();
 
   void Destroy();
+
+  bool Ip2Hostname(std::string& ip2hostname);
 
   uint64_t Id() const { return id_; }
   std::string Keyring() const { return keyring_; }
@@ -227,6 +230,12 @@ class Server {
   // Raft ip and port.
   butil::EndPoint raft_endpoint_;
   std::vector<butil::EndPoint> endpoints_;
+
+  struct HostnameItem {
+    std::string hostname;
+    uint64_t timestamp;
+  };
+  DingoSafeMap<std::string, HostnameItem> ip2hostname_cache_;
 
   // coordinator interaction
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;

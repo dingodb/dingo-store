@@ -1,6 +1,9 @@
 DEPLOY_PARAMETER=deploy_parameters
 DEPLOY_SERVER_NUM=3
 
+ulimit -n 40960
+ulimit -u 40960
+
 if [ -n "$1" ]
 then
     DEPLOY_PARAMETER=$1
