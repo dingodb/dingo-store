@@ -91,6 +91,7 @@ bool StoreMetrics::CollectMetrics() {
     return false;
   }
 
+  metrics_->mutable_store_own_metrics()->set_id(Server::GetInstance()->Id());
   metrics_->mutable_store_own_metrics()->set_system_total_capacity(output["system_total_capacity"]);
   metrics_->mutable_store_own_metrics()->set_system_free_capacity(output["system_free_capacity"]);
 
