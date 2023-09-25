@@ -81,7 +81,6 @@ void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location
   }
 
   for (int i = 0; i < endpoints_.size(); ++i) {
-    std::string host(butil::ip2str(endpoints_[i].ip).c_str());
     auto endpoints = Helper::StrToEndpoints(location.host() + ":" + std::to_string(location.port()));
     if (endpoints.empty()) {
       bthread_usleep(500 * 1000L);

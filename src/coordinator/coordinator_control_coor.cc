@@ -3584,7 +3584,19 @@ uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& 
 
   {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    store_metrics_map_.insert(store_metrics.id(), store_metrics);
+    if (store_metrics.is_partial_region_metrics()) {
+      auto* ptr = store_metrics_map_.seek(store_metrics.id());
+      if (ptr == nullptr) {
+        store_metrics_map_.insert(store_metrics.id(), store_metrics);
+      } else {
+        for (const auto& region_metrics : store_metrics.region_metrics_map()) {
+          ptr->mutable_region_metrics_map()->insert({region_metrics.first, region_metrics.second});
+        }
+      }
+    } else {
+      store_metrics_map_.insert(store_metrics.id(), store_metrics);
+    }
+
     // if (store_metrics_map_.seek(store_metrics.id()) != nullptr) {
     //   DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " <<
     //   store_metrics.id();
