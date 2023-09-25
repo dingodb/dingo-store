@@ -556,15 +556,20 @@ void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInt
   region.set_id(region_internal.id());
   *(region.mutable_definition()) = region_internal.definition();
   region.set_state(region_internal.state());
-
-  auto region_status = GetRegionStatus(region_internal.id());
-  *(region.mutable_status()) = region_status;
   region.set_create_timestamp(region_internal.create_timestamp());
 
   pb::common::RegionMetrics region_metrics;
-  region_metrics_map_.Get(region_internal.id(), region_metrics);
-  region.set_leader_store_id(region_metrics.leader_store_id());
+  auto ret = region_metrics_map_.Get(region_internal.id(), region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GenRegionFull... Get region_metrics failed, region_id=" << region_internal.id();
+    return;
+  }
 
+  DINGO_LOG(ERROR) << "GenRegionFull... Get region_metrics succ, region_id=" << region_internal.id()
+                   << " region_metrics=" << region_metrics.DebugString();
+
+  region.set_leader_store_id(region_metrics.leader_store_id());
+  *(region.mutable_status()) = region_metrics.region_status();
   *(region.mutable_metrics()) = region_metrics;
 }
 
@@ -578,14 +583,17 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
   region.set_state(region_internal.state());
-
-  auto region_status = GetRegionStatus(region_internal.id());
-  *(region.mutable_status()) = region_status;
   region.set_create_timestamp(region_internal.create_timestamp());
 
   pb::common::RegionMetrics region_metrics;
-  region_metrics_map_.Get(region_internal.id(), region_metrics);
+  auto ret = region_metrics_map_.Get(region_internal.id(), region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GenRegionSlim... Get region_metrics failed, region_id=" << region_internal.id();
+    return;
+  }
+
   region.set_leader_store_id(region_metrics.leader_store_id());
+  *(region.mutable_status()) = region_metrics.region_status();
 
   if (region_internal.definition().index_parameter().has_vector_index_parameter()) {
     *(region.mutable_metrics()->mutable_vector_index_status()) = region_metrics.vector_index_status();
@@ -931,6 +939,67 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
       auto* deleted_region = deleted_region_increment->mutable_region();
       deleted_region->set_id(region.second.id());
     }
+  }
+
+  if (meta_increment.ByteSizeLong() > 0) {
+    SubmitMetaIncrementSync(meta_increment);
+  }
+}
+
+void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
+  DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+
+  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> regions;
+  regions.init(3000);
+  region_map_.GetRawMapCopy(regions);
+
+  if (regions.empty()) {
+    DINGO_LOG(DEBUG) << "No region to recycle";
+    return;
+  }
+
+  std::vector<uint64_t> delete_region_ids;
+  for (const auto& it : regions) {
+    const auto& region = it.second;
+    if (region.definition().table_id() > 0) {
+      bool exists = true;
+      auto ret = table_map_.SafeExists(region.definition().table_id(), exists);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, table_id: " << region.definition().table_id()
+                           << " not exists in table_map_";
+        continue;
+      }
+
+      if (!exists) {
+        DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
+                        << " table_id: " << region.definition().table_id() << " is not exists";
+        delete_region_ids.push_back(region.id());
+      }
+    } else if (region.definition().index_id() > 0) {
+      bool exists;
+      auto ret = index_map_.SafeExists(region.definition().index_id(), exists);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, table_id: " << region.definition().table_id()
+                           << " not exists in table_map_";
+        continue;
+      }
+
+      if (!exists) {
+        DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
+                        << " index_id: " << region.definition().index_id() << " is not exists";
+        delete_region_ids.push_back(region.id());
+      }
+    } else {
+      DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
+                      << " table_id: " << region.definition().table_id()
+                      << " index_id: " << region.definition().index_id() << " is not table or index";
+    }
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  for (auto& region_id : delete_region_ids) {
+    DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator delete region_id: " << region_id;
+    DropRegion(region_id, meta_increment);
   }
 
   if (meta_increment.ByteSizeLong() > 0) {

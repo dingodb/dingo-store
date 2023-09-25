@@ -231,6 +231,8 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
 
   coordinator_control->RecycleOrphanRegionOnStore();
 
+  coordinator_control->RecycleOrphanRegionOnCoordinator();
+
   coordinator_control->RemoveOneTimeWatch();
 }
 

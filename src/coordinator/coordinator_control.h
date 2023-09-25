@@ -509,6 +509,7 @@ class CoordinatorControl : public MetaControl {
   void GetRegionCount(uint64_t &region_count);
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
   void RecycleOrphanRegionOnStore();
+  void RecycleOrphanRegionOnCoordinator();
   void DeleteRegionBvar(uint64_t region_id);
 
   void UpdateRegionState();
