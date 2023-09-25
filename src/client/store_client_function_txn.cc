@@ -109,14 +109,15 @@ std::string HexToVectorPrefix(const std::string& hex) {
   return std::to_string(part_id) + "_" + std::to_string(vector_id);
 }
 
-bool TxnGetRegion(ServerInteractionPtr interaction, uint64_t region_id, dingodb::pb::common::Region& region) {
+bool TxnGetRegion(uint64_t region_id, dingodb::pb::common::Region& region) {
   // query region
   dingodb::pb::coordinator::QueryRegionRequest query_request;
   dingodb::pb::coordinator::QueryRegionResponse query_response;
 
   query_request.set_region_id(region_id);
 
-  auto status = interaction->SendRequest("CoordinatorService", "QueryRegion", query_request, query_response);
+  auto status = InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "QueryRegion",
+                                                                            query_request, query_response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << query_response.DebugString();
 
@@ -131,7 +132,7 @@ bool TxnGetRegion(ServerInteractionPtr interaction, uint64_t region_id, dingodb:
 
 // store
 
-void StoreSendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnGetRequest request;
   dingodb::pb::store::TxnGetResponse response;
 
@@ -157,12 +158,12 @@ void StoreSendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id, const din
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnGet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnGet", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnScanRequest request;
   dingodb::pb::store::TxnScanResponse response;
 
@@ -205,12 +206,12 @@ void StoreSendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const di
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnScan", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnScan", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
@@ -286,12 +287,12 @@ void StoreSendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id, cons
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnPrewrite", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnPrewrite", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnCommitRequest request;
   dingodb::pb::store::TxnCommitResponse response;
 
@@ -317,13 +318,12 @@ void StoreSendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id, const 
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnCommit", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnCommit", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id,
-                                const dingodb::pb::common::Region& region) {
+void StoreSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnCheckTxnStatusRequest request;
   dingodb::pb::store::TxnCheckTxnStatusResponse response;
 
@@ -361,13 +361,12 @@ void StoreSendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnCheckTxnStatus", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnCheckTxnStatus", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id,
-                             const dingodb::pb::common::Region& region) {
+void StoreSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnResolveLockRequest request;
   dingodb::pb::store::TxnResolveLockResponse response;
 
@@ -399,12 +398,12 @@ void StoreSendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnResolveLock", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnResolveLock", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnBatchGetRequest request;
   dingodb::pb::store::TxnBatchGetResponse response;
 
@@ -435,13 +434,12 @@ void StoreSendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id, cons
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnBatchGet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnBatchGet", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id,
-                               const dingodb::pb::common::Region& region) {
+void StoreSendTxnBatchRollback(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnBatchRollbackRequest request;
   dingodb::pb::store::TxnBatchRollbackResponse response;
 
@@ -471,12 +469,12 @@ void StoreSendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnBatchRollback", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnBatchRollback", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnScanLockRequest request;
   dingodb::pb::store::TxnScanLockResponse response;
 
@@ -514,13 +512,12 @@ void StoreSendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id, cons
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnScanLock", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnScanLock", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id,
-                           const dingodb::pb::common::Region& region) {
+void StoreSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnHeartBeatRequest request;
   dingodb::pb::store::TxnHeartBeatResponse response;
 
@@ -552,12 +549,12 @@ void StoreSendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnHeartBeat", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnHeartBeat", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnGcRequest request;
   dingodb::pb::store::TxnGcResponse response;
 
@@ -577,13 +574,12 @@ void StoreSendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id, const ding
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnGc", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnGc", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id,
-                             const dingodb::pb::common::Region& region) {
+void StoreSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnDeleteRangeRequest request;
   dingodb::pb::store::TxnDeleteRangeResponse response;
 
@@ -609,12 +605,12 @@ void StoreSendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnDeleteRange", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnDeleteRange", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnDumpRequest request;
   dingodb::pb::store::TxnDumpResponse response;
 
@@ -652,13 +648,13 @@ void StoreSendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id, const di
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("StoreService", "TxnDump", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnDump", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 // index
-void IndexSendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnGetRequest request;
   dingodb::pb::index::TxnGetResponse response;
 
@@ -684,12 +680,12 @@ void IndexSendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id, const din
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnGet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnGet", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnScanRequest request;
   dingodb::pb::index::TxnScanResponse response;
 
@@ -732,12 +728,12 @@ void IndexSendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id, const di
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnScan", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnScan", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnPrewriteRequest request;
   dingodb::pb::index::TxnPrewriteResponse response;
 
@@ -853,12 +849,12 @@ void IndexSendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id, cons
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnPrewrite", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnPrewrite", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnCommitRequest request;
   dingodb::pb::index::TxnCommitResponse response;
 
@@ -884,13 +880,12 @@ void IndexSendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id, const 
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnCommit", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnCommit", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id,
-                                const dingodb::pb::common::Region& region) {
+void IndexSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnCheckTxnStatusRequest request;
   dingodb::pb::index::TxnCheckTxnStatusResponse response;
 
@@ -928,13 +923,12 @@ void IndexSendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnCheckTxnStatus", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnCheckTxnStatus", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id,
-                             const dingodb::pb::common::Region& region) {
+void IndexSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnResolveLockRequest request;
   dingodb::pb::index::TxnResolveLockResponse response;
 
@@ -966,12 +960,12 @@ void IndexSendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnResolveLock", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnResolveLock", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnBatchGetRequest request;
   dingodb::pb::index::TxnBatchGetResponse response;
 
@@ -1002,13 +996,12 @@ void IndexSendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id, cons
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnBatchGet", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnBatchGet", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id,
-                               const dingodb::pb::common::Region& region) {
+void IndexSendTxnBatchRollback(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnBatchRollbackRequest request;
   dingodb::pb::index::TxnBatchRollbackResponse response;
 
@@ -1038,12 +1031,12 @@ void IndexSendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnBatchRollback", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnBatchRollback", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnScanLockRequest request;
   dingodb::pb::index::TxnScanLockResponse response;
 
@@ -1081,13 +1074,12 @@ void IndexSendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id, cons
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnScanLock", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnScanLock", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id,
-                           const dingodb::pb::common::Region& region) {
+void IndexSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnHeartBeatRequest request;
   dingodb::pb::index::TxnHeartBeatResponse response;
 
@@ -1119,12 +1111,12 @@ void IndexSendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnHeartBeat", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnHeartBeat", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnGcRequest request;
   dingodb::pb::index::TxnGcResponse response;
 
@@ -1144,13 +1136,12 @@ void IndexSendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id, const ding
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnGc", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnGc", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id,
-                             const dingodb::pb::common::Region& region) {
+void IndexSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnDeleteRangeRequest request;
   dingodb::pb::index::TxnDeleteRangeResponse response;
 
@@ -1176,12 +1167,12 @@ void IndexSendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id,
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnDeleteRange", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnDeleteRange", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void IndexSendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnDumpRequest request;
   dingodb::pb::index::TxnDumpResponse response;
 
@@ -1219,216 +1210,216 @@ void IndexSendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id, const di
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  ctx->store_interaction->SendRequest("IndexService", "TxnDump", request, response);
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnDump", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 // unified
 
-void SendTxnGet(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnGet(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnGet(ctx, region_id, region);
+    StoreSendTxnGet(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnGet(ctx, region_id, region);
+    IndexSendTxnGet(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnScan(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnScan(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnScan(ctx, region_id, region);
+    StoreSendTxnScan(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnScan(ctx, region_id, region);
+    IndexSendTxnScan(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnPrewrite(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnPrewrite(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnPrewrite(ctx, region_id, region);
+    StoreSendTxnPrewrite(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnPrewrite(ctx, region_id, region);
+    IndexSendTxnPrewrite(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnCommit(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnCommit(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnCommit(ctx, region_id, region);
+    StoreSendTxnCommit(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnCommit(ctx, region_id, region);
+    IndexSendTxnCommit(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnCheckTxnStatus(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnCheckTxnStatus(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnCheckTxnStatus(ctx, region_id, region);
+    StoreSendTxnCheckTxnStatus(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnCheckTxnStatus(ctx, region_id, region);
+    IndexSendTxnCheckTxnStatus(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnResolveLock(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnResolveLock(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnResolveLock(ctx, region_id, region);
+    StoreSendTxnResolveLock(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnResolveLock(ctx, region_id, region);
+    IndexSendTxnResolveLock(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnBatchGet(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnBatchGet(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnBatchGet(ctx, region_id, region);
+    StoreSendTxnBatchGet(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnBatchGet(ctx, region_id, region);
+    IndexSendTxnBatchGet(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnBatchRollback(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnBatchRollback(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnBatchRollback(ctx, region_id, region);
+    StoreSendTxnBatchRollback(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnBatchRollback(ctx, region_id, region);
+    IndexSendTxnBatchRollback(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnScanLock(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnScanLock(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnScanLock(ctx, region_id, region);
+    StoreSendTxnScanLock(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnScanLock(ctx, region_id, region);
+    IndexSendTxnScanLock(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnHeartBeat(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnHeartBeat(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnHeartBeat(ctx, region_id, region);
+    StoreSendTxnHeartBeat(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnHeartBeat(ctx, region_id, region);
+    IndexSendTxnHeartBeat(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnGc(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnGc(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnGc(ctx, region_id, region);
+    StoreSendTxnGc(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnGc(ctx, region_id, region);
+    IndexSendTxnGc(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnDeleteRange(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnDeleteRange(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnDeleteRange(ctx, region_id, region);
+    StoreSendTxnDeleteRange(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnDeleteRange(ctx, region_id, region);
+    IndexSendTxnDeleteRange(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
 }
 
-void SendTxnDump(std::shared_ptr<Context> ctx, uint64_t region_id) {
+void SendTxnDump(uint64_t region_id) {
   dingodb::pb::common::Region region;
-  if (!TxnGetRegion(ctx->coordinator_interaction, region_id, region)) {
+  if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
     return;
   }
 
   if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnDump(ctx, region_id, region);
+    StoreSendTxnDump(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
-    IndexSendTxnDump(ctx, region_id, region);
+    IndexSendTxnDump(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
