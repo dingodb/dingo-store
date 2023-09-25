@@ -2279,7 +2279,7 @@ void TestRegionLifecycle(int64_t region_id, const std::string& raft_group, std::
   }
 }
 
-void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> /*ctx*/, int64_t region_id,
+void TestDeleteRangeWhenTransferLeader(int64_t region_id,
                                        int req_num,  // NOLINT (*unused)
                                        const std::string& prefix) {
   // put data
