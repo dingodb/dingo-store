@@ -45,6 +45,13 @@ class TxnEngineHelper {
                                 const std::vector<std::string> &keys, std::vector<pb::common::KeyValue> &kvs,
                                 pb::store::TxnResultInfo &txn_result_info);
 
+  static butil::Status ScanGetNextKeyValue(std::shared_ptr<RawEngine::Reader> data_reader,
+                                           std::shared_ptr<Iterator> write_iter, std::shared_ptr<Iterator> lock_iter,
+                                           uint64_t start_ts, const std::string &start_iter_key,
+                                           std::string &last_lock_key, std::string &last_write_key,
+                                           pb::store::TxnResultInfo &txn_result_info, std::string &iter_key,
+                                           std::string &data_value);
+
   static butil::Status Scan(const std::shared_ptr<RawEngine> &engine, const pb::store::IsolationLevel &isolation_level,
                             uint64_t start_ts, const pb::common::Range &range, uint64_t limit, bool key_only,
                             bool is_reverse, bool disable_coprocessor, const pb::store::Coprocessor &coprocessor,
