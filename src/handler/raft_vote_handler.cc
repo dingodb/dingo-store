@@ -34,21 +34,6 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
     DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                    region->Id());
   } else {
-    auto raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(region->Id());
-    // New region don't pull snapshot, directly build.
-    if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
-      DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] pull last snapshot from peers.", region->Id());
-      auto snapshot_set = vector_index_wrapper->SnapshotSet();
-      auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
-      if (!status.ok()) {
-        if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
-            status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
-          DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] pull vector index last snapshot failed, error: {}",
-                                          region->Id(), status.error_str());
-        }
-      }
-    }
-
     VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
   }
 

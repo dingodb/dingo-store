@@ -107,6 +107,16 @@ class VectorIndexManager {
   static void IncVectorIndexTaskRuningNum() { vector_index_task_runinng_num.fetch_add(1); }
   static void DecVectorIndexTaskRuningNum() { vector_index_task_runinng_num.fetch_sub(1); }
 
+  static std::atomic<int> vector_index_rebuild_task_runinng_num;
+  static int GetVectorIndexRebuildTaskRuningNum() { return vector_index_rebuild_task_runinng_num.load(); }
+  static void IncVectorIndexRebuildTaskRuningNum() { vector_index_rebuild_task_runinng_num.fetch_add(1); }
+  static void DecVectorIndexRebuildTaskRuningNum() { vector_index_rebuild_task_runinng_num.fetch_sub(1); }
+
+  static std::atomic<int> vector_index_save_task_runinng_num;
+  static int GetVectorIndexSaveTaskRuningNum() { return vector_index_save_task_runinng_num.load(); }
+  static void IncVectorIndexSaveTaskRuningNum() { vector_index_save_task_runinng_num.fetch_add(1); }
+  static void DecVectorIndexSaveTaskRuningNum() { vector_index_save_task_runinng_num.fetch_sub(1); }
+
  private:
   // Build vector index with original data(rocksdb).
   // Invoke when server starting.

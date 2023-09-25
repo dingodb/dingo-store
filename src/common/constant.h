@@ -123,7 +123,7 @@ class Constant {
   // split region
   static constexpr int kSplitDoSnapshotRetryTimes = 5;
   inline static const std::string kSplitStrategy = "PRE_CREATE_REGION";
-  static constexpr uint32_t kDefaultSplitCheckConcurrency = 5;
+  static constexpr uint32_t kDefaultSplitCheckConcurrency = 3;
   inline static const std::string kDefaultSplitPolicy = "HALF";
   static constexpr uint32_t kRegionMaxSizeDefaultValue = 67108864;  // 64M
   static constexpr float kDefaultSplitCheckApproximateSizeRatio = 0.8;

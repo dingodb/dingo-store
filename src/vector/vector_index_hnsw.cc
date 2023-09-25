@@ -166,8 +166,9 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
     // avoid error write vector index failed cause leader and follower data not consistency.
     // let user_max_elements_<actual_max_elements.
     user_max_elements_ = hnsw_parameter.max_elements();
-    uint32_t actual_max_elements = hnsw_parameter.max_elements() + Constant::kHnswMaxElementsExpandNum;
+    uint32_t actual_max_elements = user_max_elements_ + Constant::kHnswMaxElementsExpandNum;
 
+    DINGO_LOG(INFO) << "actual_max_elements: " << actual_max_elements;
     hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, actual_max_elements, hnsw_parameter.nlinks(),
                                                       hnsw_parameter.efconstruction(), 100, false);
   }
@@ -201,22 +202,6 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
   BAIDU_SCOPED_LOCK(mutex_);
 
-  // delete first
-  // {
-  //   std::vector<uint64_t> delete_ids;
-  //   delete_ids.reserve(vector_with_ids.size());
-  //   for (const auto& v : vector_with_ids) {
-  //     delete_ids.push_back(v.id());
-  //   }
-
-  //   try {
-  //     ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
-  //                 [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
-  //     write_key_count += delete_ids.size();
-  //   } catch (std::runtime_error& e) {
-  //   }
-  // }
-
   // Add data to index
   try {
     size_t real_threads = hnsw_num_threads_;
@@ -245,8 +230,12 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     }
     return butil::Status();
   } catch (std::runtime_error& e) {
-    DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
-    return butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
+    uint64_t current_element_count = hnsw_index_->getCurrentElementCount();
+    uint64_t max_element_count = hnsw_index_->getMaxElements();
+    std::string s = fmt::format("upsert vector failed, error={} current_element_count={} max_element_count={}",
+                                e.what(), current_element_count, max_element_count);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 }
 
