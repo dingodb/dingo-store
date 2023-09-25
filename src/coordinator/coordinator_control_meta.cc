@@ -654,12 +654,12 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   }
 
   // call DropRegion
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
-    // part id
-    uint64_t region_id = table_internal.partitions(i).region_id();
+  // for (int i = 0; i < table_internal.partitions_size(); i++) {
+  //   // part id
+  //   uint64_t region_id = table_internal.partitions(i).region_id();
 
-    DropRegion(region_id, meta_increment);
-  }
+  //   DropRegion(region_id, meta_increment);
+  // }
 
   // delete table
   auto* table_to_delete = meta_increment.add_tables();
@@ -1456,12 +1456,12 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
   }
 
   // call DropRegion
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
-    // part id
-    uint64_t region_id = table_internal.partitions(i).region_id();
+  // for (int i = 0; i < table_internal.partitions_size(); i++) {
+  //   // part id
+  //   uint64_t region_id = table_internal.partitions(i).region_id();
 
-    DropRegion(region_id, meta_increment);
-  }
+  //   DropRegion(region_id, meta_increment);
+  // }
 
   // delete index
   auto* index_to_delete = meta_increment.add_indexes();

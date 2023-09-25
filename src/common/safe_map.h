@@ -191,6 +191,18 @@ class DingoSafeMap {
     return static_cast<bool>(value_ptr);
   }
 
+  // SafeExists
+  // check if the key exists in the safe map
+  int SafeExists(const T_KEY &key, bool &exists) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+    auto *value_ptr = ptr->seek(key);
+    exists = static_cast<bool>(value_ptr);
+    return 1;
+  }
+
   // Size
   // return the record count of map
   uint64_t Size() {

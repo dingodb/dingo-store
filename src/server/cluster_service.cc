@@ -147,6 +147,7 @@ void ClusterStatImpl::PrintSchema(std::ostream& os, const std::string& schema_na
 }
 
 void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region& region) {
+  DINGO_LOG(INFO) << "Region:" << region.ShortDebugString();
   std::string leader_info = "<li>Leader:";
   std::string follower_info = "<li>Follower:";
   std::string range_info = "<li>Range:[";
