@@ -684,8 +684,8 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   // Read vector index snapshot log id form snapshot meta file.
   auto last_snapshot = snapshot_set->GetLastSnapshot();
   if (last_snapshot == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.load_snapshot][index_id({})] Get last vector index snapshot log id failed.", vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] not found vector index snapshot.",
+                                      vector_index_id);
     return nullptr;
   }
 

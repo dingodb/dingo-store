@@ -121,7 +121,6 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
         break;
       }
     }
-
     DINGO_LOG(INFO) << "PushStoreOperation response: " << response->ShortDebugString()
                     << " request: " << request->ShortDebugString();
   }

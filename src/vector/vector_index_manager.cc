@@ -49,18 +49,22 @@
 namespace dingodb {
 
 void RebuildVectorIndexTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] pending task num({}) total runing num({}).",
-                                 vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
-                                 VectorIndexManager::GetVectorIndexTaskRuningNum());
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.rebuild][index_id({})] pending tasks({}) rebuild runing({}) total runing({}).",
+      vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
+      VectorIndexManager::GetVectorIndexRebuildTaskRuningNum(), VectorIndexManager::GetVectorIndexTaskRuningNum());
 
   VectorIndexManager::IncVectorIndexTaskRuningNum();
+  VectorIndexManager::IncVectorIndexRebuildTaskRuningNum();
   ON_SCOPE_EXIT([&]() {
     VectorIndexManager::DecVectorIndexTaskRuningNum();
+    VectorIndexManager::DecVectorIndexRebuildTaskRuningNum();
     vector_index_wrapper_->DecPendingTaskNum();
 
-    LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] pending task num({}) total runing num({}).",
-                             vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
-                             VectorIndexManager::GetVectorIndexTaskRuningNum());
+    LOG(INFO) << fmt::format(
+        "[vector_index.rebuild][index_id({})] pending tasks({}) rebuild runing({}) total runing({}).",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
+        VectorIndexManager::GetVectorIndexRebuildTaskRuningNum(), VectorIndexManager::GetVectorIndexTaskRuningNum());
   });
 
   if (vector_index_wrapper_->IsStop()) {
@@ -113,17 +117,21 @@ void RebuildVectorIndexTask::Run() {
 }
 
 void SaveVectorIndexTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({})] pending task num({}) total runing num({}).",
-                                 vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
-                                 VectorIndexManager::GetVectorIndexTaskRuningNum());
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.save][index_id({})] pending tasks({}) save runing({}) total runing({}).",
+      vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
+      VectorIndexManager::GetVectorIndexSaveTaskRuningNum(), VectorIndexManager::GetVectorIndexTaskRuningNum());
 
   VectorIndexManager::IncVectorIndexTaskRuningNum();
+  VectorIndexManager::IncVectorIndexSaveTaskRuningNum();
   ON_SCOPE_EXIT([&]() {
     VectorIndexManager::DecVectorIndexTaskRuningNum();
+    VectorIndexManager::DecVectorIndexSaveTaskRuningNum();
     vector_index_wrapper_->DecPendingTaskNum();
 
-    LOG(INFO) << fmt::format("[vector_index.save][index_id({})] pending task num({}) total runing num({}).",
+    LOG(INFO) << fmt::format("[vector_index.save][index_id({})] pending tasks({}) save runing({}) total runing({}).",
                              vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
+                             VectorIndexManager::GetVectorIndexSaveTaskRuningNum(),
                              VectorIndexManager::GetVectorIndexTaskRuningNum());
   });
 
@@ -148,7 +156,7 @@ void SaveVectorIndexTask::Run() {
 }
 
 void LoadOrBuildVectorIndexTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending task num({}) total runing num({}).",
+  DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending tasks({}) total runing({}).",
                                  vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
                                  VectorIndexManager::GetVectorIndexTaskRuningNum());
 
@@ -157,7 +165,7 @@ void LoadOrBuildVectorIndexTask::Run() {
     VectorIndexManager::DecVectorIndexTaskRuningNum();
     vector_index_wrapper_->DecPendingTaskNum();
 
-    LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending task num({}) total runing num({}).",
+    LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending tasks({}) total runing({}).",
                              vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
                              VectorIndexManager::GetVectorIndexTaskRuningNum());
   });
@@ -176,6 +184,25 @@ void LoadOrBuildVectorIndexTask::Run() {
     return;
   }
 
+  // Pull snapshot from peers.
+  // New region don't pull snapshot, directly build.
+  auto raft_meta =
+      Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(vector_index_wrapper_->Id());
+  if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
+    DINGO_LOG(INFO) << fmt::format("[raft.loadorbuild][region({})] pull last snapshot from peers.",
+                                   vector_index_wrapper_->Id());
+    auto snapshot_set = vector_index_wrapper_->SnapshotSet();
+    auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
+    if (!status.ok()) {
+      if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
+          status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[raft.loadorbuild][region({})] pull vector index last snapshot failed, error: {}",
+            vector_index_wrapper_->Id(), status.error_str());
+      }
+    }
+  }
+
   auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.load][index_id({}_v{})] load or build vector index failed, error {}",
@@ -185,7 +212,8 @@ void LoadOrBuildVectorIndexTask::Run() {
 }
 
 std::atomic<int> VectorIndexManager::vector_index_task_runinng_num = 0;
-
+std::atomic<int> VectorIndexManager::vector_index_rebuild_task_runinng_num = 0;
+std::atomic<int> VectorIndexManager::vector_index_save_task_runinng_num = 0;
 bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) { return true; }  // NOLINT
 
 // Check whether need hold vector index
@@ -233,7 +261,7 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
           new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
 
       // Switch vector index.
-      vector_index_wrapper->UpdateVectorIndex(new_vector_index);
+      vector_index_wrapper->UpdateVectorIndex(new_vector_index, "LOAD_SNAPSHOT");
       vector_index_wrapper->SetBuildSuccess();
 
       return status;
@@ -258,7 +286,7 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   }
 
   // Switch vector index.
-  vector_index_wrapper->UpdateVectorIndex(new_vector_index);
+  vector_index_wrapper->UpdateVectorIndex(new_vector_index, "BUILD");
   vector_index_wrapper->SetBuildSuccess();
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] Build vector index success, elapsed time({}ms).",
@@ -271,7 +299,7 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
   assert(vector_index_wrapper != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending task num({}) total runing num({}).",
+      "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total runing({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRuningNum());
 
   TaskRunnable* task = new LoadOrBuildVectorIndexTask(vector_index_wrapper);
@@ -542,7 +570,7 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
   assert(vector_index_wrapper != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch rebuild vector index, pending task num({}) total runing num({}).",
+      "[vector_index.launch][index_id({})] Launch rebuild vector index, pending tasks({}) total runing({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRuningNum());
 
   TaskRunnable* task = new RebuildVectorIndexTask(vector_index_wrapper, force);
@@ -626,7 +654,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
         vector_index_id, vector_index_wrapper->Version(), vector_index->ApplyLogId(),
         Helper::TimestampMs() - start_time);
 
-    vector_index_wrapper->UpdateVectorIndex(vector_index);
+    vector_index_wrapper->UpdateVectorIndex(vector_index, "REBUILD");
     vector_index_wrapper->SetRebuildSuccess();
   }
 
@@ -679,7 +707,7 @@ void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_inde
   assert(vector_index_wrapper != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch save vector index, pending task num({}) total runing num({}).",
+      "[vector_index.launch][index_id({})] Launch save vector index, pending tasks({}) total runing({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRuningNum());
 
   TaskRunnable* task = new SaveVectorIndexTask(vector_index_wrapper);

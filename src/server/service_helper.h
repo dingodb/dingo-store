@@ -83,6 +83,8 @@ void ServiceHelper::RedirectLeader(std::string addr, T* response) {
   auto node_info = RedirectLeader<T>(addr);
   if (node_info.id() != 0) {
     Helper::SetPbMessageErrorLeader(node_info, response);
+  } else {
+    response->mutable_error()->set_store_id(Server::GetInstance()->Id());
   }
 }
 

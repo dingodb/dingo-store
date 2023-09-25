@@ -326,7 +326,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   vector_index::SnapshotMetaSetPtr SnapshotSet() { return snapshot_set_; }
 
-  void UpdateVectorIndex(VectorIndexPtr vector_index);
+  void UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& reason);
   void ClearVectorIndex();
 
   VectorIndexPtr GetOwnVectorIndex();

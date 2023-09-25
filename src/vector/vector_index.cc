@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "bthread/bthread.h"
 #include "butil/compiler_specific.h"
@@ -206,8 +207,8 @@ void VectorIndexWrapper::SetIsHoldVectorIndex(bool need) {
   SaveMeta();
 }
 
-void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index) {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] update vector index", Id());
+void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& reason) {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] update vector index, reason({})", Id(), reason);
   // Check vector index is stop
   if (IsStop()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());
@@ -225,10 +226,16 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index) {
     ready_.store(true);
     ++version_;
 
-    if (ApplyLogId() < vector_index->ApplyLogId()) {
+    uint64_t apply_log_id = ApplyLogId();
+    uint64_t snapshot_log_id = SnapshotLogId();
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.wrapper][index_id({})] update vector index, apply_log_id({}/{}) snapshot_log_id({}/{}) "
+        "reason({})",
+        Id(), apply_log_id, vector_index->ApplyLogId(), snapshot_log_id, vector_index->SnapshotLogId(), reason);
+    if (apply_log_id < vector_index->ApplyLogId()) {
       SetApplyLogId(vector_index->ApplyLogId());
     }
-    if (SnapshotLogId() < vector_index->SnapshotLogId()) {
+    if (snapshot_log_id < vector_index->SnapshotLogId()) {
       SetSnapshotLogId(vector_index->SnapshotLogId());
     }
 
