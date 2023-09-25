@@ -443,7 +443,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     // check response
     if (status.ok()) {
       DINGO_LOG(INFO) << "... send store_operation to store " << it.id()
-                      << " all success, will delete these region_cmds";
+                      << " all success, will delete these region_cmds, count: " << store_operation.region_cmds_size();
       // delete region_cmd
       for (const auto& region_cmd : store_operation.region_cmds()) {
         auto ret = coordinator_control->RemoveRegionCmd(store_operation.id(), region_cmd.id(), meta_increment);
@@ -462,15 +462,57 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
     if (response.region_cmd_results_size() <= 0) {
       DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
-                         << " failed, but no region_cmd result, will try this store future";
+                         << " failed, but no region_cmd result, will try this store future, region_cmd_count: "
+                         << store_operation.region_cmds_size();
       continue;
     }
 
     DINGO_LOG(WARNING) << "... send store_operation to store " << it.id()
-                       << " failed, will check each region_cmd result";
+                       << " failed, will check each region_cmd result, region_cmd_count: "
+                       << store_operation.region_cmds_size()
+                       << ", region_cmd_result_count: " << response.region_cmd_results_size();
+
     for (const auto& it_cmd : response.region_cmd_results()) {
       auto errcode = it_cmd.error().errcode();
       auto cmd_type = it_cmd.region_cmd_type();
+
+      // if a region_cmd response as NOT_LEADER, we need to add this region_cmd to store_operation of new store_id again
+      if (errcode == pb::error::Errno::ERAFT_NOTLEADER) {
+        DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
+                        << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
+                        << "][" << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
+                        << " failed, will add this region_cmd to new store_operation, store_id: "
+                        << it_cmd.error().store_id()
+                        << ", leader_locaton: " << it_cmd.error().leader_location().ShortDebugString();
+
+        // add region_cmd to new store_operation
+        for (const auto& region_cmd : store_operation.region_cmds()) {
+          if (region_cmd.id() == it_cmd.region_cmd_id()) {
+            DINGO_LOG(INFO) << "... region_cmd_id=" << region_cmd.id()
+                            << " is meet ERAFT_NOTLEADER, will add to new store_id: " << it_cmd.error().store_id()
+                            << ", region_cmd: " << region_cmd.ShortDebugString();
+
+            auto ret = coordinator_control->AddRegionCmd(it_cmd.error().store_id(), region_cmd, meta_increment);
+            if (!ret.ok()) {
+              DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << it.id()
+                               << " region_cmd_id=" << region_cmd.id();
+            } else {
+              // delete store_operation
+              auto ret = coordinator_control->RemoveRegionCmd(it.id(), it_cmd.region_cmd_id(), meta_increment);
+              if (!ret.ok()) {
+                DINGO_LOG(ERROR) << "... remove store_operation failed for NOTLEADER re-routing, store_id=" << it.id()
+                                 << " region_cmd_id=" << it_cmd.region_cmd_id();
+              } else {
+                DINGO_LOG(INFO) << "... remove store_operation success for NOTLEADER re-routing, store_id=" << it.id()
+                                << " region_cmd_id=" << it_cmd.region_cmd_id();
+              }
+            }
+            break;
+          }
+        }
+
+        continue;
+      }
 
       auto need_delete = CheckStoreOperationResult(cmd_type, errcode);
       if (!need_delete) {
@@ -793,26 +835,15 @@ butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& l
 
     auto errcode = response.error().errcode();
     if (errcode == pb::error::Errno::OK) {
-      DINGO_LOG(INFO) << "... rpc success, will not retry";
+      DINGO_LOG(INFO) << "... rpc success, will not retry, store_id: " << request.store_operation().id()
+                      << ", region_cmd_count: " << request.store_operation().region_cmds_size();
       return butil::Status::OK();
-    } else if (errcode == pb::error::Errno::ERAFT_NOTLEADER) {
-      if (response.error().has_leader_location()) {
-        DINGO_LOG(WARNING) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode
-                           << ", error message: " << response.error().errmsg()
-                           << ", leader location: " << response.error().leader_location().host() << ":"
-                           << response.error().leader_location().port();
-        store_server_location_string =
-            response.error().leader_location().host() + ":" + std::to_string(response.error().leader_location().port());
-        request.mutable_store_operation()->set_id(response.error().store_id());
-        continue;
-      } else {
-        DINGO_LOG(WARNING) << "... rpc failed, ERAFT_NOTLEADER, will retry, error code: " << errcode
-                           << ", error message: " << response.error().errmsg();
-        continue;
-      }
     } else {
       DINGO_LOG(ERROR) << "... rpc failed, error code: " << response.error().errcode()
-                       << ", error message: " << response.error().errmsg();
+                       << ", error message: " << response.error().errmsg()
+                       << ", store_id: " << request.store_operation().id()
+                       << ", region_cmd_count: " << request.store_operation().region_cmds_size()
+                       << ", region_cmd_result_count: " << response.region_cmd_results_size();
       return butil::Status(response.error().errcode(), response.error().errmsg());
     }
   } while (++retry_times < max_retry_times);

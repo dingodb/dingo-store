@@ -115,7 +115,13 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   }
 
   if (!response->region_cmd_results().empty()) {
-    *(response->mutable_error()) = response->region_cmd_results(0).error();
+    for (const auto& cmd_result : response->region_cmd_results()) {
+      if (cmd_result.error().errcode() != 0) {
+        *(response->mutable_error()) = cmd_result.error();
+        break;
+      }
+    }
+
     DINGO_LOG(INFO) << "PushStoreOperation response: " << response->ShortDebugString()
                     << " request: " << request->ShortDebugString();
   }
