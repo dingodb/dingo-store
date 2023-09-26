@@ -511,8 +511,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
-  Heartbeat::TriggerStoreHeartbeat(from_region->Id());
-  Heartbeat::TriggerStoreHeartbeat(to_region->Id());
+  Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
 
   return true;
 }
@@ -664,7 +663,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   store_region_meta->UpdateNeedBootstrapDoSnapshot(child_region, true);
 
   store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
-  Heartbeat::TriggerStoreHeartbeat(parent_region->Id());
+  Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
 
   return true;
 }

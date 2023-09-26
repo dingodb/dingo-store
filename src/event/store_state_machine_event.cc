@@ -126,7 +126,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   }
 
   // trigger heartbeat
-  Heartbeat::TriggerStoreHeartbeat(region->Id());
+  Heartbeat::TriggerStoreHeartbeat({region->Id()});
 
   // Invoke handler
   auto handlers = handler_collection_->GetHandlers();
@@ -198,7 +198,7 @@ int SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event)
     region->SetPeers(changed_peers);
     store_region_meta->UpdateEpochConfVersion(region, region->Epoch().conf_version());
     // Notify coordinator
-    Heartbeat::TriggerStoreHeartbeat(the_event->node_id);
+    Heartbeat::TriggerStoreHeartbeat({the_event->node_id});
   }
 
   return 0;

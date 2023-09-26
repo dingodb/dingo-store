@@ -47,7 +47,7 @@ DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds"
 DEFINE_int32(region_delete_after_deleted_time, 604800, "delete region after deleted time in seconds");
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
-                                       uint64_t region_id) {
+                                       std::vector<uint64_t> region_ids, bool is_update_epoch_version) {
   auto start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
   auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
@@ -67,17 +67,20 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   *mut_store_metrics = (*metrics_manager->GetStoreMetrics()->Metrics());
   // setup id for store_metrics here, coordinator need this id to update store_metrics
   mut_store_metrics->set_id(Server::GetInstance()->Id());
+  mut_store_metrics->set_is_update_epoch_version(is_update_epoch_version);
 
   auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
   auto region_metrics = metrics_manager->GetStoreRegionMetrics();
   std::vector<store::RegionPtr> region_metas;
-  if (region_id == 0) {
+  if (region_ids.empty()) {
     region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
   } else {
     mut_store_metrics->set_is_partial_region_metrics(true);
-    auto region_meta = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
-    if (region_meta != nullptr) {
-      region_metas.push_back(region_meta);
+    for (auto region_id : region_ids) {
+      auto region_meta = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
+      if (region_meta != nullptr) {
+        region_metas.push_back(region_meta);
+      }
     }
   }
   for (const auto& region_meta : region_metas) {
@@ -748,9 +751,10 @@ bool Heartbeat::Execute(TaskRunnable* task) {
   return true;
 }
 
-void Heartbeat::TriggerStoreHeartbeat(uint64_t region_id) {
+void Heartbeat::TriggerStoreHeartbeat(std::vector<uint64_t> region_ids, bool is_update_epoch_version) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction(), region_id);
+  TaskRunnable* task =
+      new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction(), region_ids, is_update_epoch_version);
   if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
     delete task;
   }
