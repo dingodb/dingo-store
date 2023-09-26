@@ -297,6 +297,19 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover table_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 6.1 deleted_table map
+  if (!meta_reader_->Scan(deleted_table_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(table_map_mutex_);
+    if (!deleted_table_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover deleted_table_meta, count=" << kvs.size();
+  kvs.clear();
+
   // 7.store_metrics map
   if (!meta_reader_->Scan(store_metrics_meta_->Prefix(), kvs)) {
     return false;
@@ -386,6 +399,19 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 12.1 deleted_index map
+  if (!meta_reader_->Scan(deleted_index_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(index_map_mutex_);
+    if (!deleted_index_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover deleted_index_meta, count=" << kvs.size();
   kvs.clear();
 
   // 13.index_metrics map
