@@ -1413,17 +1413,24 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
 
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    std::vector<uint64_t> region_id_to_write;
+    std::vector<pb::coordinator_internal::RegionInternal> region_internal_to_write;
     for (int i = 0; i < meta_increment.regions_size(); i++) {
       const auto& region = meta_increment.regions(i);
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // add region to region_map
         // region_map_[region.id()] = region.region();
-        int ret = region_map_.Put(region.id(), region.region());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] success";
-        } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] failed";
-        }
+        // int ret = region_map_.Put(region.id(), region.region());
+        // if (ret > 0) {
+        //   DINGO_LOG(INFO) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] success";
+        // } else {
+        //   DINGO_LOG(WARNING) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] failed";
+        // }
+        region_id_to_write.push_back(region.id());
+        region_internal_to_write.push_back(region.region());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
         // add_store_for_push
         // only create region will push to store now
@@ -1451,9 +1458,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
         }
 
-        // meta_write_kv
-        meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
-
         // update table/index if this is a split region create
         const auto& new_region = region.region();
         if (new_region.region_type() == pb::common::RegionType::STORE_REGION) {
@@ -1461,7 +1465,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
           uint64_t table_id = new_region.definition().table_id();
 
-          ret = table_map_.Get(table_id, table_internal);
+          auto ret = table_map_.Get(table_id, table_internal);
           if (ret < 0) {
             DINGO_LOG(INFO) << "process RegionCreate in fsm table_id not exists, id=" << table_id
                             << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
@@ -1499,7 +1503,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
           uint64_t index_id = new_region.definition().index_id();
 
-          ret = index_map_.Get(index_id, index_internal);
+          auto ret = index_map_.Get(index_id, index_internal);
           if (ret < 0) {
             DINGO_LOG(INFO) << "process RegionCreate in fsm index_id not exists, id=" << index_id
                             << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
@@ -1521,7 +1525,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
               new_part->set_part_id(new_region.definition().part_id());
 
               // update kv_index to kv_index_map
-              ret = index_map_.Put(index_id, index_internal);
+              auto ret = index_map_.Put(index_id, index_internal);
               if (ret > 0) {
                 DINGO_LOG(INFO) << "ApplyMetaIncrement index UPDATE, [id=" << index_id << "] success";
               } else {
@@ -1536,14 +1540,20 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // update region to region_map
-        int ret = region_map_.PutIfExists(region.id(), region.region());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] success";
-          // meta_write_kv
-          meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
-        } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] failed";
-        }
+        // int ret = region_map_.PutIfExists(region.id(), region.region());
+        // if (ret > 0) {
+        //   DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] success";
+        //   // meta_write_kv
+        //   meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
+        // } else {
+        //   DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] failed";
+        // }
+
+        region_id_to_write.push_back(region.id());
+        region_internal_to_write.push_back(region.region());
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // remove region from region_map
@@ -1636,6 +1646,20 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
               meta_write_to_kv.push_back(table_meta_->TransformToKvValue(new_index_internal));
             }
           }
+        }
+      }
+
+      if (!region_id_to_write.empty()) {
+        if (region_id_to_write.size() != region_internal_to_write.size()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement region_id_to_write.size() != region_internal_to_write.size(), size="
+                           << region_id_to_write.size() << " " << region_internal_to_write.size();
+        }
+
+        auto ret = region_map_.MultiPut(region_id_to_write, region_internal_to_write);
+        if (ret < 0) {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] success";
         }
       }
     }
@@ -2618,7 +2642,7 @@ butil::Status CoordinatorControl::SubmitMetaIncrementAsync(google::protobuf::Clo
 
   auto status = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
     return status;
   }
   return butil::Status::OK();

@@ -388,6 +388,24 @@ butil::Status CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& ne
   return butil::Status::OK();
 }
 
+// RollbackCreateTable
+butil::Status CoordinatorControl::RollbackCreateTable(uint64_t schema_id, const std::string& table_name) {
+  // check if table_name exists
+  std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_name);
+  table_name_map_safe_temp_.Erase(new_table_check_name);
+
+  return butil::Status::OK();
+}
+
+// RollbackCreateIndex
+butil::Status CoordinatorControl::RollbackCreateIndex(uint64_t schema_id, const std::string& table_name) {
+  // check if table_name exists
+  std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_name);
+  index_name_map_safe_temp_.Erase(new_table_check_name);
+
+  return butil::Status::OK();
+}
+
 // CreateTable
 // in: schema_id, table_definition
 // out: new_table_id, new_regin_ids meta_increment
@@ -1218,7 +1236,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
                                            table_definition.index_parameter(), new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
-      break;
+      return ret;
     }
 
     DINGO_LOG(INFO) << "CreateIndex create region success, region_id=" << new_region_id;
@@ -1915,6 +1933,7 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
       DINGO_LOG(INFO) << fmt::format("region range illegal, table_id={} region_id={} range={}", table_id, region_id,
                                      part_region.definition().range().ShortDebugString())
                       << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      continue;
     }
 
     auto* range_distribution = table_range.add_range_distribution();

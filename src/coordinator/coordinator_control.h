@@ -280,6 +280,10 @@ class CoordinatorControl : public MetaControl {
   butil::Status DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // delete table_name in safe_map in rollback
+  butil::Status RollbackCreateTable(uint64_t schema_id, const std::string &table_name);
+  butil::Status RollbackCreateIndex(uint64_t schema_id, const std::string &table_name);
+
   // create table_id
   // in: schema_id
   // out: new table_id

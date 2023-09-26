@@ -22,6 +22,7 @@
 
 #include "brpc/controller.h"
 #include "butil/containers/flat_map.h"
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
@@ -1415,6 +1416,20 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
   uint64_t new_table_id = 0;
   butil::Status ret;
   std::vector<uint64_t> region_ids;
+  std::vector<std::string> table_name_to_rollback;
+  std::vector<std::string> index_name_to_rollback;
+
+  std::atomic<bool> table_create_success(false);
+  ON_SCOPE_EXIT([&]() {
+    if (table_create_success.load() == false) {
+      for (const auto &table_name : table_name_to_rollback) {
+        coordinator_control_->RollbackCreateTable(request->schema_id().entity_id(), table_name);
+      }
+      for (const auto &index_name : index_name_to_rollback) {
+        coordinator_control_->RollbackCreateIndex(request->schema_id().entity_id(), index_name);
+      }
+    }
+  });
 
   // process table type
   for (const auto &temp_with_id : request->table_definition_with_ids()) {
@@ -1439,6 +1454,8 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
         response->mutable_error()->set_errmsg(ret.error_str());
         return;
       }
+
+      table_name_to_rollback.push_back(definition.name());
 
       auto *table_id_ptr = response->add_table_ids();
       table_id_ptr->set_entity_id(new_table_id);
@@ -1470,6 +1487,14 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
 
       ret = coordinator_control_->CreateIndex(request->schema_id().entity_id(), definition, new_table_id, new_index_id,
                                               region_ids, meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateTables failed in meta_service, error code=" << ret;
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        response->mutable_error()->set_errmsg(ret.error_str());
+        return;
+      }
+
+      index_name_to_rollback.push_back(definition.name());
 
     } else {
       ret = butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entity type is illegal");
@@ -1497,6 +1522,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
   if (find_table_type) {
     table_index_internal.set_id(new_table_id);
     coordinator_control_->CreateTableIndexesMap(table_index_internal, meta_increment);
+    DINGO_LOG(INFO) << "CreateTableIndexesMap new_table_id=" << new_table_id;
   }
 
   {
@@ -1508,6 +1534,8 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
       response->mutable_error()->set_errmsg(ret1.error_str());
       return;
     }
+
+    table_create_success.store(true);
 
     if (!FLAGS_async_create_table) {
       DINGO_LOG(INFO) << "CreateTables wait for raft done. table_id: " << new_table_id;
