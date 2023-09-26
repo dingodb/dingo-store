@@ -569,6 +569,14 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force) {
   assert(vector_index_wrapper != nullptr);
 
+  if (GetVectorIndexRebuildTaskRuningNum() > Constant::kVectorIndexRebuildTaskRuningNumMaxValue) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.launch][index_id({})] runing rebuild task execeed limit({}/{}), give up.",
+        vector_index_wrapper->Id(), GetVectorIndexRebuildTaskRuningNum(),
+        Constant::kVectorIndexRebuildTaskRuningNumMaxValue);
+    return;
+  }
+
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.launch][index_id({})] Launch rebuild vector index, pending tasks({}) total runing({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRuningNum());
@@ -705,6 +713,13 @@ butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_i
 
 void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
+
+  if (GetVectorIndexSaveTaskRuningNum() > Constant::kVectorIndexSaveTaskRuningNumMaxValue) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.launch][index_id({})] runing save task execeed limit({}/{}), give up.",
+        vector_index_wrapper->Id(), GetVectorIndexSaveTaskRuningNum(), Constant::kVectorIndexSaveTaskRuningNumMaxValue);
+    return;
+  }
 
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.launch][index_id({})] Launch save vector index, pending tasks({}) total runing({}).",

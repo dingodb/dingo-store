@@ -165,9 +165,13 @@ class Constant {
 
   static constexpr uint32_t kRaftElectionTimeoutSDefaultValue = 6;
 
-  static constexpr int32_t kVectorIndexTaskRuninngNumExpectValue = 6;
+  static constexpr int32_t kVectorIndexTaskRuningNumExpectValue = 6;
 
   static constexpr int32_t kPullVectorIndexSnapshotMinApplyLogId = 66;
+
+  static constexpr int32_t kVectorIndexSaveTaskRuningNumMaxValue = 5;
+
+  static constexpr int32_t kVectorIndexRebuildTaskRuningNumMaxValue = 5;
 };
 
 }  // namespace dingodb
