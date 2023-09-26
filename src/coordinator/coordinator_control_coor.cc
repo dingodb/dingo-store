@@ -979,8 +979,8 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
       bool exists;
       auto ret = index_map_.SafeExists(region.definition().index_id(), exists);
       if (ret < 0) {
-        DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, table_id: " << region.definition().table_id()
-                           << " not exists in table_map_";
+        DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, index_id: " << region.definition().index_id()
+                           << " not exists in index_map_";
         continue;
       }
 

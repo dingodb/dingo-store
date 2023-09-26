@@ -48,7 +48,7 @@ IndexServiceImpl::IndexServiceImpl() = default;
 
 void IndexServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
 
-butil::Status IndexServiceImpl::ValidateVectorBatchQueryQequest(
+butil::Status IndexServiceImpl::ValidateVectorBatchQueryRequest(
     const dingodb::pb::index::VectorBatchQueryRequest* request, store::RegionPtr region) {
   if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
@@ -105,7 +105,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   }
 
   // Validate request parameter.
-  butil::Status status = ValidateVectorBatchQueryQequest(request, region);
+  butil::Status status = ValidateVectorBatchQueryRequest(request, region);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -658,7 +658,9 @@ butil::Status IndexServiceImpl::ValidateVectorScanQueryRequest(
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, {request->vector_id_start()});
+  // for VectorScanQuery, client can do scan from any id, so we don't need to check vector id
+  // sdk will merge, sort, limit_cut of all the results for user.
+  return ServiceHelper::ValidateIndexRegion(region, {});
 }
 
 void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controller,

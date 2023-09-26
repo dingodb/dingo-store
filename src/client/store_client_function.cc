@@ -1546,9 +1546,8 @@ void SendVectorAddBatchDebug(uint64_t region_id, uint32_t dimension, uint32_t co
   out.close();
 }
 
-void SendVectorCalcDistance(uint64_t region_id, uint32_t dimension, const std::string& alg_type,
-                            const std::string& metric_type, int32_t left_vector_size, int32_t right_vector_size,
-                            bool is_return_normlize) {
+void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, const std::string& metric_type,
+                            int32_t left_vector_size, int32_t right_vector_size, bool is_return_normlize) {
   ::dingodb::pb::index::VectorCalcDistanceRequest request;
   ::dingodb::pb::index::VectorCalcDistanceResponse response;
 
@@ -2219,7 +2218,7 @@ void TestRegionLifecycle(uint64_t region_id, const std::string& raft_group, std:
   }
 }
 
-void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id,
+void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
                                        int req_num,  // NOLINT (*unused)
                                        const std::string& prefix) {
   // put data

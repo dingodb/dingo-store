@@ -318,6 +318,10 @@ bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::erro
     return true;
   }
 
+  if (errcode == Errno::ERAFT_NOTLEADER) {
+    return false;
+  }
+
   switch (cmd_type) {
     case RegionCmdType::CMD_CREATE:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... create region failed, errcode=" << errcode;
@@ -492,6 +496,17 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
                             << " is meet ERAFT_NOTLEADER, will add to new store_id: " << it_cmd.error().store_id()
                             << ", region_cmd: " << region_cmd.ShortDebugString();
 
+            if (it_cmd.error().store_id() == 0) {
+              DINGO_LOG(ERROR) << "... region_cmd_id=" << region_cmd.id()
+                               << " is meet ERAFT_NOTLEADER, but new store_id is 0, will not add to new store_id";
+              break;
+            } else if (it_cmd.error().store_id() == it.id()) {
+              DINGO_LOG(ERROR)
+                  << "... region_cmd_id=" << region_cmd.id()
+                  << " is meet ERAFT_NOTLEADER, but new store_id is same as old store_id, will not add to new store_id";
+              break;
+            }
+
             auto ret = coordinator_control->AddRegionCmd(it_cmd.error().store_id(), region_cmd, meta_increment);
             if (!ret.ok()) {
               DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << it.id()
@@ -517,9 +532,9 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       auto need_delete = CheckStoreOperationResult(cmd_type, errcode);
       if (!need_delete) {
         DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
-                        << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                        << "][" << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
-                        << " failed, will try this region_cmd future";
+                        << " region_cmd_id=" << it_cmd.region_cmd_id() << "] errcode=["
+                        << pb::error::Errno_Name(it_cmd.error().errcode())
+                        << "] failed, will try this region_cmd future";
         // update region_cmd error
         for (const auto& region_cmd : store_operation.region_cmds()) {
           if (region_cmd.id() == it_cmd.region_cmd_id()) {
@@ -534,7 +549,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
       } else {
         DINGO_LOG(INFO) << "... send store_operation to store_id=" << it.id()
                         << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode()
-                        << "][" << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
+                        << "][" << pb::error::Errno_Name(it_cmd.error().errcode())
                         << " success, will delete this region_cmd";
 
         // delete store_operation

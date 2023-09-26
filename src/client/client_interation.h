@@ -86,26 +86,27 @@ using ServerInteractionPtr = std::shared_ptr<ServerInteraction>;
 template <typename Request, typename Response>
 butil::Status ServerInteraction::SendRequest(const std::string& service_name, const std::string& api_name,
                                              const Request& request, Response& response) {
-  google::protobuf::ServiceDescriptor* service_desc = nullptr;
+  const google::protobuf::MethodDescriptor* method = nullptr;
+
   if (service_name == "CoordinatorService") {
-    service_desc =
-        const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::coordinator::CoordinatorService::descriptor());
+    method = dingodb::pb::coordinator::CoordinatorService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "MetaService") {
-    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::meta::MetaService::descriptor());
+    method = dingodb::pb::meta::MetaService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "StoreService") {
-    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::store::StoreService::descriptor());
+    method = dingodb::pb::store::StoreService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "IndexService") {
-    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::index::IndexService::descriptor());
+    method = dingodb::pb::index::IndexService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "UtilService") {
-    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(dingodb::pb::util::UtilService::descriptor());
+    method = dingodb::pb::util::UtilService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "RegionControlService") {
-    service_desc = const_cast<google::protobuf::ServiceDescriptor*>(
-        dingodb::pb::region_control::RegionControlService::descriptor());
+    method = dingodb::pb::region_control::RegionControlService::descriptor()->FindMethodByName(api_name);
   } else {
     DINGO_LOG(FATAL) << "Unknown service name: " << service_name;
   }
 
-  const ::google::protobuf::MethodDescriptor* method = service_desc->FindMethodByName(api_name);
+  if (method == nullptr) {
+    DINGO_LOG(FATAL) << "Unknown api name: " << api_name;
+  }
 
   int retry_count = 0;
   do {

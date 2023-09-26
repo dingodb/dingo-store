@@ -58,7 +58,7 @@ class IndexServiceImpl : public pb::index::IndexService {
   void SetStorage(std::shared_ptr<Storage> storage);
 
  private:
-  butil::Status ValidateVectorBatchQueryQequest(const dingodb::pb::index::VectorBatchQueryRequest* request,
+  butil::Status ValidateVectorBatchQueryRequest(const dingodb::pb::index::VectorBatchQueryRequest* request,
                                                 store::RegionPtr region);
   butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request,
                                             store::RegionPtr region);
