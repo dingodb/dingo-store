@@ -32,6 +32,7 @@
 #include "client/client_router.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -41,7 +42,7 @@
 #include "proto/util.pb.h"
 
 DECLARE_bool(log_each_request);
-DECLARE_int32(timeout_ms);
+DECLARE_uint64(timeout_ms);
 
 namespace client {
 
