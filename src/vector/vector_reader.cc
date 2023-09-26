@@ -494,6 +494,7 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
 
   if (get_min) {
     IteratorOptions options;
+    options.lower_bound = start_key;
     options.upper_bound = end_key;
     auto iter = reader_->NewIterator(options);
     if (iter == nullptr) {
@@ -521,7 +522,14 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
                                       Helper::StringToHex(region_range.end_key()));
       return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
     }
+
     iter->SeekForPrev(end_key);
+    if (iter->Valid()) {
+      if (iter->Key() == end_key) {
+        iter->Prev();
+      }
+    }
+
     if (!iter->Valid()) {
       vector_id = 0;
       return butil::Status();
@@ -539,10 +547,21 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
                                          std::vector<uint64_t>& vector_ids) {
   std::string seek_key;
   VectorCodec::EncodeVectorData(ctx->partition_id, ctx->start_id, seek_key);
+  std::string range_start_key = VectorCodec::FillVectorDataPrefix(ctx->region_range.start_key());
+  std::string range_end_key = VectorCodec::FillVectorDataPrefix(ctx->region_range.end_key());
 
   IteratorOptions options;
   if (!ctx->is_reverse) {
-    options.upper_bound = VectorCodec::FillVectorDataPrefix(ctx->region_range.end_key());
+    if (seek_key < range_start_key) {
+      seek_key = range_start_key;
+    }
+
+    if (seek_key >= range_end_key) {
+      return butil::Status::OK();
+    }
+
+    options.lower_bound = range_start_key;
+    options.upper_bound = range_end_key;
     auto iter = reader_->NewIterator(options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
@@ -557,10 +576,6 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
         continue;
-      }
-
-      if (vector_id < ctx->start_id) {
-        break;
       }
 
       if (ctx->end_id != 0 && vector_id > ctx->end_id) {
@@ -587,7 +602,15 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       }
     }
   } else {
-    options.lower_bound = VectorCodec::FillVectorDataPrefix(ctx->region_range.start_key());
+    if (seek_key > range_end_key) {
+      seek_key = range_end_key;
+    }
+
+    if (seek_key < range_start_key) {
+      return butil::Status::OK();
+    }
+
+    options.lower_bound = range_start_key;
     auto iter = reader_->NewIterator(options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
@@ -595,17 +618,18 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
                                       Helper::StringToHex(ctx->region_range.end_key()));
       return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
     }
+
     for (iter->SeekForPrev(seek_key); iter->Valid(); iter->Prev()) {
+      if (iter->Key() == range_end_key) {
+        continue;
+      }
+
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
       auto vector_id = VectorCodec::DecodeVectorId(key);
       if (vector_id == 0 || vector_id == UINT64_MAX) {
         continue;
-      }
-
-      if (vector_id > ctx->start_id) {
-        break;
       }
 
       if (ctx->end_id != 0 && vector_id < ctx->end_id) {
