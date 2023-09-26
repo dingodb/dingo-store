@@ -3391,6 +3391,22 @@ pb::common::RegionStatus CoordinatorControl::GenRegionStatus(const pb::common::R
 // Update RegionMap and StoreOperation
 void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics& store_metrics,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // for split/merge partial heartbeat, only 2 region is legal.
+  if (store_metrics.is_partial_region_metrics() && store_metrics.is_update_epoch_version()) {
+    if (store_metrics.region_metrics_map_size() != 2) {
+      DINGO_LOG(ERROR)
+          << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, but region_metrics_map_size != 2, size="
+          << store_metrics.region_metrics_map_size();
+      for (const auto& it : store_metrics.region_metrics_map()) {
+        DINGO_LOG(ERROR) << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, but "
+                            "region_metrics_map_size != 2, region_metrics="
+                         << it.second.ShortDebugString();
+      }
+
+      return;
+    }
+  }
+
   // update region_map
   for (const auto& it : store_metrics.region_metrics_map()) {
     const auto& region_metrics = it.second;
@@ -3445,40 +3461,31 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     //                 << ", leader_store_id: " << region_metrics.leader_store_id();
 
     // if region_epoch is old than region_map_, skip update definition
+    if (region_to_update.definition().epoch().conf_version() <
+            region_metrics.region_definition().epoch().conf_version() ||
+        region_to_update.definition().epoch().version() < region_metrics.region_definition().epoch().version()) {
+      DINGO_LOG(INFO) << "region_metrics has new epoch, region_id = " << region_metrics.id()
+                      << " old conf_version = " << region_to_update.definition().epoch().conf_version()
+                      << " new conf_version = " << region_metrics.region_definition().epoch().conf_version()
+                      << " old version = " << region_to_update.definition().epoch().version()
+                      << " new version = " << region_metrics.region_definition().epoch().version();
+      need_update_region_definition = true;
+      need_update_region_metrics = true;
+    };
+
     if (region_metrics_is_not_leader) {
-      if (region_to_update.definition().epoch().conf_version() <
-              region_metrics.region_definition().epoch().conf_version() ||
-          region_to_update.definition().epoch().version() < region_metrics.region_definition().epoch().version()) {
-        DINGO_LOG(INFO) << "region_metrics has new epoch, region_id = " << region_metrics.id()
-                        << " old conf_version = " << region_to_update.definition().epoch().conf_version()
-                        << " new conf_version = " << region_metrics.region_definition().epoch().conf_version()
-                        << " old version = " << region_to_update.definition().epoch().version()
-                        << " new version = " << region_metrics.region_definition().epoch().version();
-        need_update_region_definition = true;
-        need_update_region_metrics = true;
-      } else if (region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
-                 region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
-                 region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
+      if (region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
+          region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
+          region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
         DINGO_LOG(DEBUG) << "region is not deleted, follower can't update "
                             "region_map, store_id="
                          << store_metrics.id() << " region_id = " << region_metrics.id();
         continue;
       }
     } else {
-      if (region_to_update.definition().epoch().conf_version() <
+      if (region_to_update.definition().epoch().conf_version() >
               region_metrics.region_definition().epoch().conf_version() ||
-          region_to_update.definition().epoch().version() < region_metrics.region_definition().epoch().version()) {
-        DINGO_LOG(INFO) << "region_metrics has new epoch, region_id = " << region_metrics.id()
-                        << " old conf_version = " << region_to_update.definition().epoch().conf_version()
-                        << " new conf_version = " << region_metrics.region_definition().epoch().conf_version()
-                        << " old version = " << region_to_update.definition().epoch().version()
-                        << " new version = " << region_metrics.region_definition().epoch().version();
-        need_update_region_definition = true;
-        need_update_region_metrics = true;
-      } else if (region_to_update.definition().epoch().conf_version() >
-                     region_metrics.region_definition().epoch().conf_version() ||
-                 region_to_update.definition().epoch().version() >
-                     region_metrics.region_definition().epoch().version()) {
+          region_to_update.definition().epoch().version() > region_metrics.region_definition().epoch().version()) {
         DINGO_LOG(WARNING) << "leader region in RegionMap epoch is old, region_id = " << region_metrics.id()
                            << " old conf_version = " << region_metrics.region_definition().epoch().conf_version()
                            << " new conf_version = " << region_to_update.definition().epoch().conf_version()
@@ -3564,8 +3571,17 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       DINGO_LOG(INFO) << "region peers size change region_id = " << region_metrics.id()
                       << " old peers size = " << region_to_update.definition().peers_size()
                       << " new peers size = " << region_metrics.region_definition().peers_size();
-      need_update_region_definition = true;
-      need_update_region_metrics = true;
+      if (!leader_has_old_epoch) {
+        need_update_region_definition = true;
+        need_update_region_metrics = true;
+      }
+    }
+
+    if (store_metrics.is_partial_region_metrics() && !store_metrics.is_update_epoch_version()) {
+      DINGO_LOG(INFO) << "region partial heartbeat with no is_update_epoch_version, it's not split/merge, can not "
+                         "update region definition, region_id = "
+                      << region_metrics.id();
+      need_update_region_definition = false;
     }
 
     if (!(need_update_region_state || need_update_region_definition || need_update_region_metrics)) {
