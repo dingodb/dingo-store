@@ -137,6 +137,8 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                          VectorIndexWrapperPtr vector_index,                              // NOLINT
                                          pb::common::VectorIndexMetrics& region_metrics) override;        // NOLINT
 
+    butil::Status VectorCount(const pb::common::Range& range, uint64_t& count) override;  // NOLINT
+
     butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
                                          std::vector<pb::index::VectorWithDistanceResult>& results,
                                          int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,

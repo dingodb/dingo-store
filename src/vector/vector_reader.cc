@@ -521,6 +521,19 @@ butil::Status VectorReader::VectorGetRegionMetrics(uint64_t /*region_id*/, const
   return butil::Status();
 }
 
+butil::Status VectorReader::VectorCount(const pb::common::Range& range, uint64_t& count) {
+  std::string begin_key = VectorCodec::FillVectorTablePrefix(range.start_key());
+  std::string end_key = VectorCodec::FillVectorTablePrefix(range.end_key());
+
+  IteratorOptions options;
+  options.upper_bound = end_key;
+  auto iter = reader_->NewIterator(options);
+  for (iter->Seek(begin_key); iter->Valid(); iter->Next()) {
+    ++count;
+  }
+
+  return butil::Status::OK();
+}
 // GetBorderId
 butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, bool get_min, uint64_t& vector_id) {
   std::string start_key = VectorCodec::FillVectorDataPrefix(region_range.start_key());

@@ -114,6 +114,8 @@ void SendVectorGetRegionMetrics(uint64_t region_id);
 void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, const std::string& metric_type,
                             int32_t left_vector_size, int32_t right_vector_size, bool is_return_normlize);
 
+void SendVectorCount(uint64_t region_id, uint64_t start_vector_id, uint64_t end_vector_id);
+
 // key/value
 void SendKvGet(uint64_t region_id, const std::string& key, std::string& value);
 void SendKvBatchGet(uint64_t region_id, const std::string& prefix, int count);

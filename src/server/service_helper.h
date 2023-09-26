@@ -47,7 +47,7 @@ class ServiceHelper {
   static butil::Status ValidateKeyInRange(const pb::common::Range& range, const std::vector<std::string_view>& keys);
   static butil::Status ValidateRangeInRange(const pb::common::Range& region_range, const pb::common::Range& req_range);
   static butil::Status ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys);
-  static butil::Status ValidateIndexRegion(store::RegionPtr region, std::vector<uint64_t> vector_ids);
+  static butil::Status ValidateIndexRegion(store::RegionPtr region, const std::vector<uint64_t>& vector_ids);
   static butil::Status ValidateSystemCapacity();
 };
 

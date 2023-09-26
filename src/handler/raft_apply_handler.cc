@@ -445,7 +445,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
+      "[split.spliting][region({}->{})] pre from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
       to_region->Id(), Helper::StringToHex(from_region->RawRange().start_key()),
       Helper::StringToHex(from_region->RawRange().end_key()), Helper::StringToHex(to_region->RawRange().start_key()),
       Helper::StringToHex(to_region->RawRange().end_key()));
@@ -464,10 +464,10 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   from_range.set_start_key(request.split_key());
   from_range.set_end_key(from_region->RawRange().end_key());
   Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]",
-                                 from_region->Id(), to_region->Id(), Helper::StringToHex(from_range.start_key()),
-                                 Helper::StringToHex(from_range.end_key()), Helper::StringToHex(to_range.start_key()),
-                                 Helper::StringToHex(to_range.end_key()));
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.spliting][region({}->{})] post from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
+      to_region->Id(), Helper::StringToHex(from_range.start_key()), Helper::StringToHex(from_range.end_key()),
+      Helper::StringToHex(to_range.start_key()), Helper::StringToHex(to_range.end_key()));
 
   // Set split record
   to_region->SetParentId(from_region->Id());

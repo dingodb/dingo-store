@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "butil/status.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "proto/common.pb.h"
@@ -52,6 +53,7 @@ class VectorReader {
                                        pb::common::VectorIndexMetrics& region_metrics);
 
   butil::Status GetVectorCount(const pb::common::Range& region_range, uint64_t& vector_count);
+  butil::Status VectorCount(const pb::common::Range& range, uint64_t& count);
 
   // This function is for testing only
   butil::Status VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,
