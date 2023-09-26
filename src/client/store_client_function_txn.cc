@@ -43,7 +43,7 @@ const int kBatchSize = 1000;
 
 DECLARE_string(key);
 DECLARE_string(value);
-DECLARE_int32(limit);
+DECLARE_uint64(limit);
 DECLARE_bool(is_reverse);
 DECLARE_string(start_key);
 DECLARE_string(end_key);
