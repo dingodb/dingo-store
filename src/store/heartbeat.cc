@@ -233,6 +233,8 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
 
   coordinator_control->RecycleOrphanRegionOnCoordinator();
 
+  coordinator_control->RecycleDeletedTableAndIndex();
+
   coordinator_control->RemoveOneTimeWatch();
 }
 

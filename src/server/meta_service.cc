@@ -1724,4 +1724,104 @@ void MetaServiceImpl::TsoService(google::protobuf::RpcController *controller,
   tso_control_->Process(controller, request, response, done_guard.release());
 }
 
+void MetaServiceImpl::GetDeletedTable(google::protobuf::RpcController * /*controller*/,
+                                      const pb::meta::GetDeletedTableRequest *request,
+                                      pb::meta::GetDeletedTableResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
+  auto ret = coordinator_control_->GetDeletedTable(request->table_id().entity_id(), table_definition_with_ids);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetDeletedTable failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  for (const auto &table : table_definition_with_ids) {
+    auto *table_definition_with_id = response->add_table_definition_with_ids();
+    *table_definition_with_id = table;
+  }
+}
+
+void MetaServiceImpl::GetDeletedIndex(google::protobuf::RpcController * /*controller*/,
+                                      const pb::meta::GetDeletedIndexRequest *request,
+                                      pb::meta::GetDeletedIndexResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
+  auto ret = coordinator_control_->GetDeletedIndex(request->index_id().entity_id(), table_definition_with_ids);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetDeletedIndex failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  for (const auto &table : table_definition_with_ids) {
+    auto *table_definition_with_id = response->add_table_definition_with_ids();
+    *table_definition_with_id = table;
+  }
+}
+
+void MetaServiceImpl::CleanDeletedTable(google::protobuf::RpcController * /*controller*/,
+                                        const pb::meta::CleanDeletedTableRequest *request,
+                                        pb::meta::CleanDeletedTableResponse *response,
+                                        google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control_->CleanDeletedTable(request->table_id().entity_id());
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CleanDeletedTable failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "CleanDeletedTable Success.";
+}
+
+void MetaServiceImpl::CleanDeletedIndex(google::protobuf::RpcController * /*controller*/,
+                                        const pb::meta::CleanDeletedIndexRequest *request,
+                                        pb::meta::CleanDeletedIndexResponse *response,
+                                        google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control_->CleanDeletedIndex(request->index_id().entity_id());
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CleanDeletedIndex failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "CleanDeletedIndex Success.";
+}
+
 }  // namespace dingodb

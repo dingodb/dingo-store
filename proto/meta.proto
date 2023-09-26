@@ -131,6 +131,10 @@ message TableDefinition {
   repeated ColumnDefinition columns = 30;
   map<string, string> properties = 40;
   dingodb.pb.common.IndexParameter index_parameter = 41;  // for index
+
+  uint64 create_timestamp = 50;
+  uint64 update_timestamp = 51;
+  uint64 delete_timestamp = 52;
 }
 
 // IndexDefinition is for vector/scalar index
@@ -638,6 +642,40 @@ message TsoResponse {
   string leader = 7;
 };
 
+message GetDeletedTableRequest {
+  DingoCommonId table_id = 1;
+}
+
+message GetDeletedTableResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated TableDefinitionWithId table_definition_with_ids = 2;
+}
+
+message CleanDeletedTableRequest {
+  DingoCommonId table_id = 1;
+}
+
+message CleanDeletedTableResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message GetDeletedIndexRequest {
+  DingoCommonId index_id = 1;
+}
+
+message GetDeletedIndexResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated TableDefinitionWithId table_definition_with_ids = 2;
+}
+
+message CleanDeletedIndexRequest {
+  DingoCommonId index_id = 1;
+}
+
+message CleanDeletedIndexResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service MetaService {
   // GetSchemas
   // in: schema_id
@@ -816,6 +854,14 @@ service MetaService {
   // Timestamp Oracle
   // TsoService
   rpc TsoService(TsoRequest) returns (TsoResponse);
+
+  // DeletedTable
+  rpc GetDeletedTable(GetDeletedTableRequest) returns (GetDeletedTableResponse);
+  rpc CleanDeletedTable(CleanDeletedTableRequest) returns (CleanDeletedTableResponse);
+
+  // DeletedIndex
+  rpc GetDeletedIndex(GetDeletedIndexRequest) returns (GetDeletedIndexResponse);
+  rpc CleanDeletedIndex(CleanDeletedIndexRequest) returns (CleanDeletedIndexResponse);
 
   // Operation about Metrics
 }

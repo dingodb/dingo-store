@@ -597,6 +597,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   table_internal.set_table_id(new_table_id);
   auto* definition = table_internal.mutable_definition();
   *definition = table_definition;
+  definition->set_create_timestamp(butil::gettimeofday_ms());
 
   // set part for table_internal
   for (int i = 0; i < new_region_ids.size(); i++) {
@@ -662,13 +663,27 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   // }
 
   // delete table
-  auto* table_to_delete = meta_increment.add_tables();
-  table_to_delete->set_id(table_id);
-  table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  // table_to_delete->set_schema_id(schema_id);
+  {
+    auto* table_to_delete = meta_increment.add_tables();
+    table_to_delete->set_id(table_id);
+    table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    // table_to_delete->set_schema_id(schema_id);
 
-  auto* table_to_delete_table = table_to_delete->mutable_table();
-  *table_to_delete_table = table_internal;
+    auto* table_to_delete_table = table_to_delete->mutable_table();
+    *table_to_delete_table = table_internal;
+  }
+
+  // add deleted_table
+  {
+    auto* table_to_delete = meta_increment.add_deleted_tables();
+    table_to_delete->set_id(table_id);
+    table_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    // table_to_delete->set_schema_id(schema_id);
+
+    auto* table_to_delete_table = table_to_delete->mutable_table();
+    *table_to_delete_table = table_internal;
+    table_to_delete_table->mutable_definition()->set_delete_timestamp(butil::gettimeofday_ms());
+  }
 
   // bump up table map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
@@ -1237,6 +1252,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   table_internal.set_table_id(table_id);
   auto* definition = table_internal.mutable_definition();
   *definition = table_definition;
+  definition->set_create_timestamp(butil::gettimeofday_ms());
 
   // set part for table_internal
   for (int i = 0; i < new_region_ids.size(); i++) {
@@ -1464,13 +1480,27 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
   // }
 
   // delete index
-  auto* index_to_delete = meta_increment.add_indexes();
-  index_to_delete->set_id(index_id);
-  index_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  // index_to_delete->set_schema_id(schema_id);
+  {
+    auto* index_to_delete = meta_increment.add_indexes();
+    index_to_delete->set_id(index_id);
+    index_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    // index_to_delete->set_schema_id(schema_id);
 
-  auto* index_to_delete_index = index_to_delete->mutable_table();
-  *index_to_delete_index = table_internal;
+    auto* index_to_delete_index = index_to_delete->mutable_table();
+    *index_to_delete_index = table_internal;
+  }
+
+  // addd deleted_index
+  {
+    auto* index_to_delete = meta_increment.add_deleted_indexes();
+    index_to_delete->set_id(index_id);
+    index_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
+    // index_to_delete->set_schema_id(schema_id);
+
+    auto* index_to_delete_index = index_to_delete->mutable_table();
+    *index_to_delete_index = table_internal;
+    index_to_delete_index->mutable_definition()->set_delete_timestamp(butil::gettimeofday_ms());
+  }
 
   // bump up index map epoch
   GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
@@ -2681,6 +2711,148 @@ butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t t
       DINGO_LOG(ERROR) << "ERRROR: AddRegionCmd failed, table_id=" << table_id << " region_id=" << region_id;
       return status;
     }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetDeletedTable(
+    uint64_t deleted_table_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+  if (deleted_table_id == 0) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    temp_table_map.init(1000);
+    auto ret = deleted_table_map_.GetRawMapCopy(temp_table_map);
+    if (ret < 0) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted table map failed");
+    }
+
+    for (const auto& deleted_table : temp_table_map) {
+      pb::meta::TableDefinitionWithId table_definition_with_id;
+      table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table.first);
+      *(table_definition_with_id.mutable_table_definition()) = deleted_table.second.definition();
+      table_definition_with_ids.push_back(table_definition_with_id);
+    }
+  } else {
+    pb::coordinator_internal::TableInternal table_internal;
+    auto ret = deleted_table_map_.Get(deleted_table_id, table_internal);
+    if (ret < 0) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted table failed");
+    }
+
+    pb::meta::TableDefinitionWithId table_definition_with_id;
+    table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table_id);
+    *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
+    table_definition_with_ids.push_back(table_definition_with_id);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetDeletedIndex(
+    uint64_t deleted_index_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+  if (deleted_index_id == 0) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    temp_table_map.init(1000);
+    auto ret = deleted_index_map_.GetRawMapCopy(temp_table_map);
+    if (ret < 0) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted index map failed");
+    }
+
+    for (const auto& deleted_table : temp_table_map) {
+      pb::meta::TableDefinitionWithId table_definition_with_id;
+      table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table.first);
+      *(table_definition_with_id.mutable_table_definition()) = deleted_table.second.definition();
+      table_definition_with_ids.push_back(table_definition_with_id);
+    }
+  } else {
+    pb::coordinator_internal::TableInternal table_internal;
+    auto ret = deleted_index_map_.Get(deleted_index_id, table_internal);
+    if (ret < 0) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted index failed");
+    }
+
+    pb::meta::TableDefinitionWithId table_definition_with_id;
+    table_definition_with_id.mutable_table_id()->set_entity_id(deleted_index_id);
+    *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
+    table_definition_with_ids.push_back(table_definition_with_id);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CleanDeletedTable(uint64_t table_id) {
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  if (table_id == 0) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    temp_table_map.init(1000);
+    auto ret = deleted_table_map_.GetRawMapCopy(temp_table_map);
+    if (ret < 0) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted table map failed");
+    }
+
+    for (const auto& deleted_table : temp_table_map) {
+      auto* delete_table = meta_increment.add_deleted_tables();
+      delete_table->set_id(deleted_table.first);
+      delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      auto* delete_table_internal = delete_table->mutable_table();
+      *delete_table_internal = deleted_table.second;
+    }
+  } else {
+    pb::coordinator_internal::TableInternal table_internal;
+    auto ret = deleted_table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
+      return butil::Status::OK();
+    }
+
+    auto* delete_table = meta_increment.add_deleted_tables();
+    delete_table->set_id(table_id);
+    delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    auto* delete_table_internal = delete_table->mutable_table();
+    *delete_table_internal = table_internal;
+  }
+
+  if (meta_increment.ByteSizeLong() > 0) {
+    return SubmitMetaIncrementSync(meta_increment);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CleanDeletedIndex(uint64_t index_id) {
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  if (index_id == 0) {
+    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    temp_table_map.init(1000);
+    auto ret = deleted_index_map_.GetRawMapCopy(temp_table_map);
+    if (ret < 0) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted index map failed");
+    }
+
+    for (const auto& deleted_table : temp_table_map) {
+      auto* delete_table = meta_increment.add_deleted_indexes();
+      delete_table->set_id(deleted_table.first);
+      delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      auto* delete_table_internal = delete_table->mutable_table();
+      *delete_table_internal = deleted_table.second;
+    }
+  } else {
+    pb::coordinator_internal::TableInternal table_internal;
+    auto ret = deleted_index_map_.Get(index_id, table_internal);
+    if (ret < 0) {
+      return butil::Status::OK();
+    }
+
+    auto* delete_table = meta_increment.add_deleted_indexes();
+    delete_table->set_id(index_id);
+    delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    auto* delete_table_internal = delete_table->mutable_table();
+    *delete_table_internal = table_internal;
+  }
+
+  if (meta_increment.ByteSizeLong() > 0) {
+    return SubmitMetaIncrementSync(meta_increment);
   }
 
   return butil::Status::OK();

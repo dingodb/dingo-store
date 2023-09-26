@@ -673,6 +673,14 @@ int CoordinatorSender() {
     SendGetTableMetrics(coordinator_interaction_meta);
   } else if (FLAGS_method == "SwitchAutoSplit") {
     SendSwitchAutoSplit(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetDeletedTable") {
+    SendGetDeletedTable(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetDeletedIndex") {
+    SendGetDeletedIndex(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CleanDeletedTable") {
+    SendCleanDeletedTable(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CleanDeletedIndex") {
+    SendCleanDeletedIndex(coordinator_interaction_meta);
   }
 
   // indexes

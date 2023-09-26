@@ -52,6 +52,9 @@ DECLARE_int32(region_delete_after_deleted_time);
 
 DECLARE_bool(ip2hostname);
 
+DEFINE_uint32(table_delete_after_deleted_time, 604800, "delete table after deleted time in seconds");
+DEFINE_uint32(index_delete_after_deleted_time, 604800, "delete index after deleted time in seconds");
+
 DEFINE_int32(
     region_update_timeout, 25,
     "region update timeout in seconds, will not update region info if no state change and (now - last_update_time) > "
@@ -844,6 +847,55 @@ void CoordinatorControl::GetRegionCount(uint64_t& region_count) { region_count =
 
 void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
 
+void CoordinatorControl::RecycleDeletedTableAndIndex() {
+  DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+
+  butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> delete_tables;
+  butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> delete_indexes;
+
+  delete_tables.init(3000);
+  delete_indexes.init(3000);
+
+  deleted_table_map_.GetRawMapCopy(delete_tables);
+  deleted_index_map_.GetRawMapCopy(delete_indexes);
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  for (const auto& table : delete_tables) {
+    if (table.second.definition().delete_timestamp() + (FLAGS_table_delete_after_deleted_time * 1000) <
+        butil::gettimeofday_ms()) {
+      DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex delete obsolete deleted_table table_id:" << table.first
+                      << " deleted_timestamp: " << table.second.definition().delete_timestamp()
+                      << " table_delete_after_deleted_time: " << FLAGS_table_delete_after_deleted_time;
+
+      auto* deleted_table_increment = meta_increment.add_deleted_tables();
+      deleted_table_increment->set_id(table.second.id());
+      deleted_table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      auto* deleted_table = deleted_table_increment->mutable_table();
+      deleted_table->set_id(table.second.id());
+    }
+  }
+
+  for (const auto& index : delete_indexes) {
+    if (index.second.definition().delete_timestamp() + (FLAGS_index_delete_after_deleted_time * 1000) <
+        butil::gettimeofday_ms()) {
+      DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex delete obsolete deleted_index index_id:" << index.first
+                      << " deleted_timestamp: " << index.second.definition().delete_timestamp()
+                      << " index_delete_after_deleted_time: " << FLAGS_index_delete_after_deleted_time;
+
+      auto* deleted_index_increment = meta_increment.add_deleted_indexes();
+      deleted_index_increment->set_id(index.second.id());
+      deleted_index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
+      auto* deleted_index = deleted_index_increment->mutable_table();
+      deleted_index->set_id(index.second.id());
+    }
+  }
+
+  if (meta_increment.ByteSizeLong() > 0) {
+    SubmitMetaIncrementSync(meta_increment);
+  }
+}
+
 void CoordinatorControl::RecycleOrphanRegionOnStore() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
@@ -963,30 +1015,30 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
     const auto& region = it.second;
     if (region.definition().table_id() > 0) {
       bool exists = true;
-      auto ret = table_map_.SafeExists(region.definition().table_id(), exists);
+      auto ret = deleted_table_map_.SafeExists(region.definition().table_id(), exists);
       if (ret < 0) {
         DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, table_id: " << region.definition().table_id()
                            << " not exists in table_map_";
         continue;
       }
 
-      if (!exists) {
+      if (exists) {
         DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
-                        << " table_id: " << region.definition().table_id() << " is not exists";
+                        << " table_id: " << region.definition().table_id() << " is deleted";
         delete_region_ids.push_back(region.id());
       }
     } else if (region.definition().index_id() > 0) {
       bool exists;
-      auto ret = index_map_.SafeExists(region.definition().index_id(), exists);
+      auto ret = deleted_index_map_.SafeExists(region.definition().index_id(), exists);
       if (ret < 0) {
         DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, index_id: " << region.definition().index_id()
                            << " not exists in index_map_";
         continue;
       }
 
-      if (!exists) {
+      if (exists) {
         DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
-                        << " index_id: " << region.definition().index_id() << " is not exists";
+                        << " index_id: " << region.definition().index_id() << " is deleted";
         delete_region_ids.push_back(region.id());
       }
     } else {

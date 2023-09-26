@@ -246,11 +246,11 @@ message MetaIncrementTable {
 }
 
 // @Deprecated
-message MetaIncrementIndex {
-  uint64 id = 1;
-  IndexInternal index = 2;
-  MetaIncrementOpType op_type = 3;
-}
+// message MetaIncrementIndex {
+//   uint64 id = 1;
+//   IndexInternal index = 2;
+//   MetaIncrementOpType op_type = 3;
+// }
 
 message MetaIncrementTableIndex {
   uint64 id = 1;
@@ -402,6 +402,8 @@ message MetaIncrement {
   repeated MetaIncrementAutoIncrement auto_increment = 20;
   repeated MetaIncrementTso timestamp_oracles = 21;
   repeated MetaIncrementRegion deleted_regions = 30;
+  repeated MetaIncrementTable deleted_tables = 31;
+  repeated MetaIncrementTable deleted_indexes = 32;
 
   repeated MetaIncrementLease leases = 40;
   repeated MetaIncrementKvIndex kv_indexes = 41;
@@ -438,6 +440,8 @@ message MetaSnapshotFile {
   TsoStorage tso_storage = 23;
 
   repeated dingodb.pb.common.KeyValue deleted_region_map_kvs = 30;
+  repeated dingodb.pb.common.KeyValue deleted_table_map_kvs = 31;
+  repeated dingodb.pb.common.KeyValue deleted_index_map_kvs = 32;
 
   repeated dingodb.pb.common.KeyValue lease_map_kvs = 40;
   repeated dingodb.pb.common.KeyValue kv_index_map_kvs = 41;

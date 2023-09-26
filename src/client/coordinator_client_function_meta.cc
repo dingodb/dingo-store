@@ -1072,3 +1072,67 @@ void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_int
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
+
+void SendGetDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetDeletedTableRequest request;
+  dingodb::pb::meta::GetDeletedTableResponse response;
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (!FLAGS_id.empty()) {
+    table_id->set_entity_id(std::stol(FLAGS_id));
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetDeletedTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendGetDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetDeletedIndexRequest request;
+  dingodb::pb::meta::GetDeletedIndexResponse response;
+
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (!FLAGS_id.empty()) {
+    index_id->set_entity_id(std::stol(FLAGS_id));
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetDeletedIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendCleanDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CleanDeletedTableRequest request;
+  dingodb::pb::meta::CleanDeletedTableResponse response;
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (!FLAGS_id.empty()) {
+    table_id->set_entity_id(std::stol(FLAGS_id));
+  }
+
+  auto status = coordinator_interaction->SendRequest("CleanDeletedTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendCleanDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CleanDeletedIndexRequest request;
+  dingodb::pb::meta::CleanDeletedIndexResponse response;
+
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  if (!FLAGS_id.empty()) {
+    index_id->set_entity_id(std::stol(FLAGS_id));
+  }
+
+  auto status = coordinator_interaction->SendRequest("CleanDeletedIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
