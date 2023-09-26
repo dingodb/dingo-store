@@ -347,8 +347,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendVectorAddBatchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
                                       FLAGS_vector_index_add_cost_file);
     } else if (method == "VectorCalcDistance") {
-      client::SendVectorCalcDistance(FLAGS_region_id, FLAGS_dimension, FLAGS_alg_type, FLAGS_metric_type,
-                                     FLAGS_left_vector_size, FLAGS_right_vector_size, FLAGS_is_return_normlize);
+      client::SendVectorCalcDistance(FLAGS_dimension, FLAGS_alg_type, FLAGS_metric_type, FLAGS_left_vector_size,
+                                     FLAGS_right_vector_size, FLAGS_is_return_normlize);
 
       // Test
     } else if (method == "TestBatchPut") {
