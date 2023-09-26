@@ -23,20 +23,21 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
 DECLARE_bool(log_each_request);
-DECLARE_int32(timeout_ms);
+DECLARE_uint64(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
-DECLARE_int64(schema_id);
-DECLARE_int64(table_id);
-DECLARE_int64(replica);
-DECLARE_int64(max_elements);
-DECLARE_int64(dimension);
-DECLARE_int64(efconstruction);
-DECLARE_int64(nlinks);
+DECLARE_uint64(schema_id);
+DECLARE_uint64(table_id);
+DECLARE_uint64(replica);
+DECLARE_uint32(max_elements);
+DECLARE_uint32(dimension);
+DECLARE_uint32(efconstruction);
+DECLARE_uint32(nlinks);
 DECLARE_bool(with_auto_increment);
 DECLARE_string(vector_index_type);
 DECLARE_bool(auto_split);

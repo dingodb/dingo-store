@@ -67,6 +67,8 @@ DEFINE_int32(
 
 DEFINE_uint64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
 
+DEFINE_uint32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
+
 DEFINE_uint32(max_send_region_cmd_per_store, 50, "max send region cmd per store");
 
 // TODO: add epoch logic
@@ -1512,10 +1514,12 @@ butil::Status CoordinatorControl::CreateShadowRegion(
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==
         pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      uint32_t dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
-      uint32_t max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
+      auto dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
+      auto max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
+      auto nlinks = new_index_parameter.vector_index_parameter().hnsw_parameter().nlinks();
 
-      uint32_t max_elements_limit = FLAGS_max_hnsw_memory_size_of_region / dimension / 4;
+      auto max_elements_limit =
+          Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, dimension, nlinks);
       if (max_elements > max_elements_limit) {
         DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
                            << max_elements << ", max_elements_limit=" << max_elements_limit
@@ -1638,10 +1642,12 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==
         pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      uint32_t dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
-      uint32_t max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
+      auto dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
+      auto max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
+      auto nlinks = new_index_parameter.vector_index_parameter().hnsw_parameter().nlinks();
 
-      uint32_t max_elements_limit = FLAGS_max_hnsw_memory_size_of_region / dimension / 4;
+      auto max_elements_limit =
+          Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, dimension, nlinks);
       if (max_elements > max_elements_limit) {
         DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
                            << max_elements << ", max_elements_limit=" << max_elements_limit

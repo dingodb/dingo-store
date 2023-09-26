@@ -35,6 +35,7 @@
 namespace dingodb {
 
 DECLARE_uint64(max_hnsw_memory_size_of_region);
+DECLARE_uint32(max_hnsw_nlinks_of_region);
 DECLARE_uint64(max_partition_num_of_table);
 
 DEFINE_uint32(max_check_region_state_count, 600, "max check region state count");
@@ -1127,13 +1128,20 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
       response->mutable_error()->set_errmsg("hnsw dimension is too small");
       return;
     }
-    if (hnsw_parameter->max_elements() > FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension()) {
+    auto max_elements_limit = Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region,
+                                                              hnsw_parameter->dimension(), hnsw_parameter->nlinks());
+    if (hnsw_parameter->max_elements() > max_elements_limit) {
       DINGO_LOG(WARNING) << "CreateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
                          << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
                          << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
-                         << ", max elements in this dimention="
-                         << FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension();
-      hnsw_parameter->set_max_elements(FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension());
+                         << ", max elements in this dimention=" << max_elements_limit;
+      hnsw_parameter->set_max_elements(max_elements_limit);
+    }
+
+    if (hnsw_parameter->nlinks() > FLAGS_max_hnsw_nlinks_of_region) {
+      DINGO_LOG(WARNING) << "CreateIndex warning in meta_service, hnsw nlinks is too big, nlinks="
+                         << hnsw_parameter->nlinks() << ", max_nlinks=" << FLAGS_max_hnsw_nlinks_of_region;
+      hnsw_parameter->set_nlinks(FLAGS_max_hnsw_nlinks_of_region);
     }
   }
 
@@ -1271,14 +1279,22 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
       response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
       response->mutable_error()->set_errmsg("hnsw dimension is too small");
     }
-    if (hnsw_parameter->max_elements() > FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension()) {
+    auto max_elements_limit = Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region,
+                                                              hnsw_parameter->dimension(), hnsw_parameter->nlinks());
+    if (hnsw_parameter->max_elements() > max_elements_limit) {
       DINGO_LOG(ERROR) << "UpdateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
                        << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
                        << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
-                       << ", max elements in this dimention="
-                       << FLAGS_max_hnsw_memory_size_of_region / 4 / hnsw_parameter->dimension();
+                       << ", max elements in this dimention=" << max_elements_limit;
       response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
       response->mutable_error()->set_errmsg("hnsw max_elements is too big");
+    }
+
+    if (hnsw_parameter->nlinks() > FLAGS_max_hnsw_nlinks_of_region) {
+      DINGO_LOG(ERROR) << "UpdateIndex warning in meta_service, hnsw nlinks is too big, nlinks="
+                       << hnsw_parameter->nlinks() << ", max_nlinks=" << FLAGS_max_hnsw_nlinks_of_region;
+      response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("hnsw nlinks is too big");
     }
   }
 

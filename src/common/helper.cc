@@ -24,6 +24,7 @@
 #include <cctype>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -1283,6 +1284,26 @@ butil::Status Helper::ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRa
   }
 
   return butil::Status();
+}
+
+// calc hnsw count from memory
+uint32_t Helper::CalcHnswCountFromMemory(uint64_t memory_size_limit, uint64_t dimension, uint64_t nlinks) {
+  // size_links_level0_ = maxM0_ * sizeof(tableint) + sizeof(linklistsizeint);
+  uint64_t size_links_level0 = nlinks * 2 + sizeof(uint64_t) + sizeof(uint64_t);
+
+  // uint64_t size_data_per_element_ = size_links_level0_ + data_size_ + sizeof(labeltype);
+  uint64_t size_data_per_element = size_links_level0 + sizeof(float_t) * dimension + sizeof(uint64_t);
+
+  // uint64_t size_link_list_per_element =  sizeof(void*);
+  uint64_t size_link_list_per_element = sizeof(uint64_t);
+
+  uint64_t count = memory_size_limit / (size_data_per_element + size_link_list_per_element);
+
+  if (count > UINT32_MAX) {
+    count = UINT32_MAX;
+  }
+
+  return static_cast<uint32_t>(count);
 }
 
 }  // namespace dingodb
