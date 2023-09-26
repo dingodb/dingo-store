@@ -117,6 +117,11 @@ void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendSwitchAutoSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+void SendGetDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCleanDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCleanDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // table index
 void SendGenerateTableIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

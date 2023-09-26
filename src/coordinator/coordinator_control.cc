@@ -63,6 +63,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
       new MetaSafeMapStorage<pb::coordinator_internal::RegionInternal>(&deleted_region_map_, "deleted_region_map_");
   region_metrics_meta_ = new MetaSafeMapStorage<pb::common::RegionMetrics>(&region_metrics_map_, "region_metrics_map_");
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_, "table_map_");
+  deleted_table_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&deleted_table_map_, "deleted_table_map_");
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, "id_epoch_map_");
   executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_, "executor_map_");
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_, "store_metrics_map_");
@@ -76,6 +78,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
       &executor_user_map_, "executor_user_map_");
   task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, "task_list_map_");
   index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_, "index_map_");
+  deleted_index_meta_ =
+      new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&deleted_index_map_, "deleted_index_map_");
   index_metrics_meta_ =
       new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_, "index_metrics_map_");
 
@@ -103,6 +107,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_cmd_map_.Init(2000);             // region_cmd_map_ is a big map
   schema_map_.Init(10000);                // schema_map_ is a big map
   table_map_.Init(10000);                 // table_map_ is a big map
+  deleted_table_map_.Init(10000);         // deleted_table_map_ is a big map
   region_map_.Init(30000);                // region_map_ is a big map
   deleted_region_map_.Init(30000);        // deleted_region_map_ is a big map
   region_metrics_map_.Init(30000);        // region_metrics_map_ is a big map
@@ -114,6 +119,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   task_list_map_.Init(100);               // task_list_map_ is a small map
   index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
   index_map_.Init(10000);                 // index_map_ is a big map
+  deleted_index_map_.Init(10000);         // deleted_index_map_ is a big map
   index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
   // version kv
   lease_map_.Init(10000);

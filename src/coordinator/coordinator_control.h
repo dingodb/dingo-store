@@ -508,6 +508,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status CleanDeletedRegionMap(uint64_t region_id);
   void GetRegionCount(uint64_t &region_count);
   void GetRegionIdsInMap(std::vector<uint64_t> &region_ids);
+  void RecycleDeletedTableAndIndex();
   void RecycleOrphanRegionOnStore();
   void RecycleOrphanRegionOnCoordinator();
   void DeleteRegionBvar(uint64_t region_id);
@@ -839,6 +840,14 @@ class CoordinatorControl : public MetaControl {
   butil::Status TriggerOneWatch(const std::string &key, pb::version::Event::EventType event_type,
                                 pb::version::Kv &new_kv, pb::version::Kv &prev_kv);
 
+  // deleted table and index
+  butil::Status GetDeletedTable(uint64_t deleted_table_id,
+                                std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+  butil::Status GetDeletedIndex(uint64_t deleted_index_id,
+                                std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
+  butil::Status CleanDeletedTable(uint64_t table_id);
+  butil::Status CleanDeletedIndex(uint64_t index_id);
+
  private:
   butil::Status ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id);
 
@@ -893,6 +902,8 @@ class CoordinatorControl : public MetaControl {
   // TableInternal is combination of Table & TableDefinition
   DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> deleted_table_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *deleted_table_meta_;
 
   // table map temp, only for leader use, is out of state machine
   // table_name -> table-id
@@ -926,6 +937,8 @@ class CoordinatorControl : public MetaControl {
   // 12.indexes
   DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *index_meta_;
+  DingoSafeMap<uint64_t, pb::coordinator_internal::TableInternal> deleted_index_map_;
+  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *deleted_index_meta_;
 
   // index map temp, only for leader use, is out of state machine
   // index_name -> index-id

@@ -272,6 +272,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot table_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 6.1 deleted table map
+  if (!meta_reader_->Scan(snapshot, deleted_table_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_deleted_table_map_kvs();
+    *snapshot_file_kv = kv;
+  }
+  DINGO_LOG(INFO) << "Snapshot deleted_table_meta, count=" << kvs.size();
+  kvs.clear();
+
   // 7.store_metrics map
   // if (!meta_reader_->Scan(snapshot, store_metrics_meta_->Prefix(), kvs)) {
   //   return false;
@@ -353,6 +365,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
     *snapshot_file_kv = kv;
   }
   DINGO_LOG(INFO) << "Snapshot index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 12.1 deleted_index map
+  if (!meta_reader_->Scan(snapshot, deleted_index_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_deleted_index_map_kvs();
+    *snapshot_file_kv = kv;
+  }
+  DINGO_LOG(INFO) << "Snapshot deleted_index_meta, count=" << kvs.size();
   kvs.clear();
 
   // 13.index_metrics map
@@ -647,6 +671,34 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 6..1 deleted table map
+  kvs.reserve(meta_snapshot_file.deleted_table_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.deleted_table_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.deleted_table_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(deleted_table_map_mutex_);
+    if (!deleted_table_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(deleted_table_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete deleted_table_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range deleted_table_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write deleted_table_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put deleted_table_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot deleted_table_meta, count=" << kvs.size();
+  kvs.clear();
+
   // 7.store_metrics map
   // kvs.reserve(meta_snapshot_file.store_metrics_map_kvs_size());
   // for (int i = 0; i < meta_snapshot_file.store_metrics_map_kvs_size(); i++) {
@@ -839,6 +891,34 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     DINGO_LOG(INFO) << "Coordinator put index_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 12.1 deleted_index map
+  kvs.reserve(meta_snapshot_file.deleted_index_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.deleted_index_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.deleted_index_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(deleted_index_map_mutex_);
+    if (!deleted_index_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(deleted_index_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete deleted_index_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range deleted_index_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write deleted_index_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put deleted_index_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot deleted_index_meta, count=" << kvs.size();
   kvs.clear();
 
   // 13.index_metrics map
@@ -1730,6 +1810,62 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
+  // 6.1 deleted table map
+  {
+    if (meta_increment.deleted_tables_size() > 0) {
+      DINGO_LOG(INFO) << "6.deleted_tables_size=" << meta_increment.deleted_tables_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(deleted_table_map_mutex_);
+    for (int i = 0; i < meta_increment.deleted_tables_size(); i++) {
+      const auto& deleted_table = meta_increment.deleted_tables(i);
+      if (deleted_table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // need to update schema, so acquire lock
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
+        // add deleted_table to deleted_table_map
+        // deleted_table_map_[deleted_table.id()] = deleted_table.deleted_table();
+        int ret = deleted_table_map_.Put(deleted_table.id(), deleted_table.table());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table CREATE, [id=" << deleted_table.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_table CREATE, [id=" << deleted_table.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(deleted_table_meta_->TransformToKvValue(deleted_table.table()));
+
+      } else if (deleted_table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update deleted_table to deleted_table_map
+
+        int ret = deleted_table_map_.Put(deleted_table.id(), deleted_table.table());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table UPDATE, [id=" << deleted_table.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_table UPDATE, [id=" << deleted_table.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(deleted_table_meta_->TransformToKvValue(deleted_table.table()));
+
+      } else if (deleted_table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // need to update schema, so acquire lock
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
+        // delete deleted_table from deleted_table_map
+        int ret = deleted_table_map_.Erase(deleted_table.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table DELETE, [id=" << deleted_table.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_table DELETE, [id=" << deleted_table.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(deleted_table_meta_->TransformToKvValue(deleted_table.table()));
+      }
+    }
+  }
+
   // 7.store_metrics map
   // {
   //   if (meta_increment.store_metrics_size() > 0) {
@@ -2164,6 +2300,61 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
         // meta_delete_kv
         meta_delete_to_kv.push_back(index_meta_->TransformToKvValue(index.table()));
+      }
+    }
+  }
+
+  // 12.1 deleted index map
+  {
+    if (meta_increment.deleted_indexes_size() > 0) {
+      DINGO_LOG(INFO) << "6.deleted_indexes_size=" << meta_increment.deleted_indexes_size();
+    }
+
+    // BAIDU_SCOPED_LOCK(deleted_index_map_mutex_);
+    for (int i = 0; i < meta_increment.deleted_indexes_size(); i++) {
+      const auto& deleted_index = meta_increment.deleted_indexes(i);
+      if (deleted_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        // need to update schema, so acquire lock
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
+        // add deleted_index to deleted_index_map
+        int ret = deleted_index_map_.Put(deleted_index.id(), deleted_index.table());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index CREATE, [id=" << deleted_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_index CREATE, [id=" << deleted_index.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(deleted_index_meta_->TransformToKvValue(deleted_index.table()));
+
+      } else if (deleted_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update deleted_index to deleted_index_map
+
+        int ret = deleted_index_map_.Put(deleted_index.id(), deleted_index.table());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index UPDATE, [id=" << deleted_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_index UPDATE, [id=" << deleted_index.id() << "] failed";
+        }
+
+        // meta_write_kv
+        meta_write_to_kv.push_back(deleted_index_meta_->TransformToKvValue(deleted_index.table()));
+
+      } else if (deleted_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // need to update schema, so acquire lock
+        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+
+        // delete deleted_index from deleted_index_map
+        int ret = deleted_index_map_.Erase(deleted_index.id());
+        if (ret > 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index DELETE, [id=" << deleted_index.id() << "] success";
+        } else {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_index DELETE, [id=" << deleted_index.id() << "] failed";
+        }
+
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(deleted_index_meta_->TransformToKvValue(deleted_index.table()));
       }
     }
   }
