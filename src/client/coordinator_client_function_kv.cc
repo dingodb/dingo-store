@@ -32,7 +32,7 @@ DECLARE_string(key);
 DECLARE_uint64(revision);
 DECLARE_uint64(sub_revision);
 DECLARE_string(range_end);
-DECLARE_int32(limit);
+DECLARE_uint64(limit);
 DECLARE_string(value);
 DECLARE_bool(count_only);
 DECLARE_bool(keys_only);
