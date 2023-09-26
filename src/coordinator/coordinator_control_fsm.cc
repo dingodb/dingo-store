@@ -671,7 +671,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot table_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 6..1 deleted table map
+  // 6.1 deleted table map
   kvs.reserve(meta_snapshot_file.deleted_table_map_kvs_size());
   for (int i = 0; i < meta_snapshot_file.deleted_table_map_kvs_size(); i++) {
     kvs.push_back(meta_snapshot_file.deleted_table_map_kvs(i));
