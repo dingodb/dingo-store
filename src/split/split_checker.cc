@@ -215,9 +215,9 @@ void SplitCheckTask::SplitCheck() {
       break;
     }
     int runing_num = VectorIndexManager::GetVectorIndexTaskRuningNum();
-    if (runing_num > Constant::kVectorIndexTaskRuninngNumExpectValue) {
+    if (runing_num > Constant::kVectorIndexTaskRuningNumExpectValue) {
       reason = fmt::format("runing vector index task num({}) too many, exceed expect num({})", runing_num,
-                           Constant::kVectorIndexTaskRuninngNumExpectValue);
+                           Constant::kVectorIndexTaskRuningNumExpectValue);
       need_split = false;
       break;
     }
@@ -365,10 +365,10 @@ void PreSplitCheckTask::PreSplitCheck() {
         break;
       }
       int runing_num = VectorIndexManager::GetVectorIndexTaskRuningNum();
-      if (runing_num > Constant::kVectorIndexTaskRuninngNumExpectValue) {
+      if (runing_num > Constant::kVectorIndexTaskRuningNumExpectValue) {
         need_scan_check = false;
         reason = fmt::format("runing vector index task num({}) too many, exceed expect num({})", runing_num,
-                             Constant::kVectorIndexTaskRuninngNumExpectValue);
+                             Constant::kVectorIndexTaskRuningNumExpectValue);
         break;
       }
     } while (false);

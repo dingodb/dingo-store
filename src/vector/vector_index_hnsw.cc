@@ -168,7 +168,6 @@ VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParam
     user_max_elements_ = hnsw_parameter.max_elements();
     uint32_t actual_max_elements = user_max_elements_ + Constant::kHnswMaxElementsExpandNum;
 
-    DINGO_LOG(INFO) << "actual_max_elements: " << actual_max_elements;
     hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, actual_max_elements, hnsw_parameter.nlinks(),
                                                       hnsw_parameter.efconstruction(), 100, false);
   }
@@ -277,8 +276,9 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
   // FIXME: need to prevent SEGV when delete old_hnsw_index
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     auto* old_hnsw_index = hnsw_index_;
-    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, path, false,
-                                                      vector_index_parameter.hnsw_parameter().max_elements(), true);
+    uint32_t actual_max_elements =
+        vector_index_parameter.hnsw_parameter().max_elements() + Constant::kHnswMaxElementsExpandNum;
+    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, path, false, actual_max_elements, true);
     delete old_hnsw_index;
     return butil::Status::OK();
   } else {
