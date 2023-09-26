@@ -917,7 +917,7 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<int64_t, pb::common::RegionMetrics> region_metrics_map_;
   MetaSafeMapStorage<pb::common::RegionMetrics> *region_metrics_meta_;
   // 5.3 range->region map
-  DingoSafeStdMap<std::string, uint64_t> range_region_map_;
+  DingoSafeStdMap<std::string, pb::coordinator_internal::RegionInternal> range_region_map_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition

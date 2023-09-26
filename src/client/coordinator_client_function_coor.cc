@@ -64,7 +64,7 @@ DECLARE_uint64(vector_id);
 DECLARE_string(key);
 DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
-DECLARE_int32(limit);
+DECLARE_uint64(limit);
 DECLARE_uint64(safe_point);
 
 // raft control
