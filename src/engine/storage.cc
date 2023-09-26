@@ -337,6 +337,21 @@ butil::Status Storage::VectorGetRegionMetrics(uint64_t region_id, const pb::comm
   return butil::Status();
 }
 
+butil::Status Storage::VectorCount(uint64_t region_id, const pb::common::Range& range, uint64_t& count) {
+  auto status = ValidateLeader(region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  status = reader->VectorCount(range, count);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::VectorCalcDistance([[maybe_unused]] std::shared_ptr<Context> ctx,
                                           [[maybe_unused]] uint64_t region_id,
                                           const ::dingodb::pb::index::VectorCalcDistanceRequest& request,

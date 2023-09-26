@@ -36,6 +36,7 @@
 #include "proto/store.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
+#include "vector/codec.h"
 
 using dingodb::pb::error::Errno;
 
@@ -836,6 +837,121 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   }
 
   *(response->mutable_metrics()) = metrics;
+}
+
+butil::Status IndexServiceImpl::ValidateVectorCountRequest(const dingodb::pb::index::VectorCountRequest* request,
+                                                           store::RegionPtr region) {
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  if (request->vector_id_start() > request->vector_id_end()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_id_start/vector_id_end range is error");
+  }
+
+  auto status = storage_->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
+  std::vector<uint64_t> vector_ids;
+  if (request->vector_id_start() != 0) {
+    vector_ids.push_back(request->vector_id_start());
+  }
+  if (request->vector_id_end() != 0) {
+    vector_ids.push_back(request->vector_id_end());
+  }
+  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
+}
+
+static pb::common::Range GenCountRange(store::RegionPtr region, uint64_t start_vector_id,  // NOLINT
+                                       uint64_t end_vector_id) {                           // NOLINT
+  pb::common::Range range;
+
+  if (start_vector_id == 0) {
+    range.set_start_key(region->RawRange().start_key());
+  } else {
+    std::string key;
+    VectorCodec::EncodeVectorKey(region->PartitionId(), start_vector_id, key);
+    range.set_start_key(key);
+  }
+
+  if (end_vector_id == 0) {
+    range.set_end_key(region->RawRange().end_key());
+  } else {
+    std::string key;
+    VectorCodec::EncodeVectorKey(region->PartitionId(), end_vector_id, key);
+    range.set_end_key(key);
+  }
+
+  return range;
+}
+
+void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
+                                   const ::dingodb::pb::index::VectorCountRequest* request,
+                                   ::dingodb::pb::index::VectorCountResponse* response,
+                                   ::google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "VectorCount request: " << request->ShortDebugString();
+
+  // check if region_epoch is match
+  auto epoch_ret =
+      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!epoch_ret.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+    err->set_errmsg(epoch_ret.error_str());
+    ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return;
+  }
+
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->context().region_id());
+  if (region == nullptr) {
+    auto* err = response->mutable_error();
+    err->set_errcode(pb::error::EREGION_NOT_FOUND);
+    err->set_errmsg(
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+    return;
+  }
+
+  // Validate request parameter.
+  butil::Status status = ValidateVectorCountRequest(request, region);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
+    return;
+  }
+
+  uint64_t count = 0;
+  status = storage_->VectorCount(region->Id(),
+                                 GenCountRange(region, request->vector_id_start(), request->vector_id_end()), count);
+  if (!status.ok()) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(status.error_code()));
+    err->set_errmsg(status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    DINGO_LOG(ERROR) << fmt::format("VectorCount request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
+  response->set_count(count);
 }
 
 void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* controller,

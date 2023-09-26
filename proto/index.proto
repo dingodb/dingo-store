@@ -192,6 +192,17 @@ message VectorSearchDebugResponse {
   int64 search_time_us = 6;
 }
 
+message VectorCountRequest {
+  dingodb.pb.store.Context context = 1;
+  uint64 vector_id_start = 2;  // default region range start_key
+  uint64 vector_id_end = 3;    // default region range end_key
+}
+
+message VectorCountResponse {
+  dingodb.pb.error.Error error = 1;
+  uint64 count = 2;
+}
+
 service IndexService {
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
@@ -202,6 +213,7 @@ service IndexService {
   rpc VectorScanQuery(VectorScanQueryRequest) returns (VectorScanQueryResponse);
   rpc VectorGetRegionMetrics(VectorGetRegionMetricsRequest) returns (VectorGetRegionMetricsResponse);
   rpc VectorCalcDistance(VectorCalcDistanceRequest) returns (VectorCalcDistanceResponse);
+  rpc VectorCount(VectorCountRequest) returns (VectorCountResponse);
 
   // debug
   // test  vector search performance

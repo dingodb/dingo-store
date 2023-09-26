@@ -180,7 +180,7 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, std::vector<uint64_t> vector_ids) {
+butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const std::vector<uint64_t>& vector_ids) {
   auto status = ValidateRegionState(region);
   if (!status.ok()) {
     return status;

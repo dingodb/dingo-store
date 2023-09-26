@@ -30,6 +30,7 @@
 
 #include "bthread/bthread.h"
 #include "client/client_helper.h"
+#include "client/client_router.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
@@ -1641,6 +1642,19 @@ void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, con
   InteractionManager::GetInstance().SendRequestWithoutContext("UtilService", "VectorCalcDistance", request, response);
 
   DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
+}
+
+void SendVectorCount(uint64_t region_id, uint64_t start_vector_id, uint64_t end_vector_id) {
+  ::dingodb::pb::index::VectorCountRequest request;
+  ::dingodb::pb::index::VectorCountResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.set_vector_id_start(start_vector_id);
+  request.set_vector_id_end(end_vector_id);
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCount", request, response);
+
+  DINGO_LOG(INFO) << "VectorCount response: " << response.DebugString();
 }
 
 void SendKvGet(uint64_t region_id, const std::string& key, std::string& value) {

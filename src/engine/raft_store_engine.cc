@@ -419,6 +419,11 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(uint64_t reg
   return vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
 }
 
+butil::Status RaftStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, uint64_t& count) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorCount(range, count);
+}
+
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
     std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
     std::vector<pb::index::VectorWithDistanceResult>& results, int64_t& deserialization_id_time_us,

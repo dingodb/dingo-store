@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/context.h"
 #include "common/logging.h"
 #include "config/config.h"
@@ -32,6 +33,7 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/raft.pb.h"
+#include "serial/buf.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {
@@ -117,6 +119,8 @@ class Engine {
     virtual butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
                                                  VectorIndexWrapperPtr vector_index,
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
+
+    virtual butil::Status VectorCount(const pb::common::Range& range, uint64_t& count) = 0;
 
     // This function is for testing only
     virtual butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,

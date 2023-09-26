@@ -80,6 +80,8 @@ class Storage {
                                        VectorIndexWrapperPtr vector_index_wrapper,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
+  butil::Status VectorCount(uint64_t region_id, const pb::common::Range& range, uint64_t& count);
+
   static butil::Status VectorCalcDistance(
       std::shared_ptr<Context> ctx, uint64_t region_id, const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
       std::vector<std::vector<float>>& distances,                            // NOLINT
