@@ -214,10 +214,10 @@ void SplitCheckTask::SplitCheck() {
       need_split = false;
       break;
     }
-    int runing_num = VectorIndexManager::GetVectorIndexTaskRuningNum();
-    if (runing_num > Constant::kVectorIndexTaskRuningNumExpectValue) {
+    int runing_num = VectorIndexManager::GetVectorIndexTaskRunningNum();
+    if (runing_num > Constant::kVectorIndexTaskRunningNumExpectValue) {
       reason = fmt::format("runing vector index task num({}) too many, exceed expect num({})", runing_num,
-                           Constant::kVectorIndexTaskRuningNumExpectValue);
+                           Constant::kVectorIndexTaskRunningNumExpectValue);
       need_split = false;
       break;
     }
@@ -364,11 +364,11 @@ void PreSplitCheckTask::PreSplitCheck() {
         reason = "region approximate size too small";
         break;
       }
-      int runing_num = VectorIndexManager::GetVectorIndexTaskRuningNum();
-      if (runing_num > Constant::kVectorIndexTaskRuningNumExpectValue) {
+      int runing_num = VectorIndexManager::GetVectorIndexTaskRunningNum();
+      if (runing_num > Constant::kVectorIndexTaskRunningNumExpectValue) {
         need_scan_check = false;
         reason = fmt::format("runing vector index task num({}) too many, exceed expect num({})", runing_num,
-                             Constant::kVectorIndexTaskRuningNumExpectValue);
+                             Constant::kVectorIndexTaskRunningNumExpectValue);
         break;
       }
     } while (false);

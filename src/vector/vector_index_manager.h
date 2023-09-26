@@ -95,27 +95,27 @@ class VectorIndexManager {
   // Launch save vector index at execute queue.
   static void LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
 
-  // Invoke when server runing.
+  // Invoke when server running.
   static butil::Status RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
   // Launch rebuild vector index at execute queue.
   static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force);
 
   static butil::Status ScrubVectorIndex();
 
-  static std::atomic<int> vector_index_task_runinng_num;
-  static int GetVectorIndexTaskRuningNum() { return vector_index_task_runinng_num.load(); }
-  static void IncVectorIndexTaskRuningNum() { vector_index_task_runinng_num.fetch_add(1); }
-  static void DecVectorIndexTaskRuningNum() { vector_index_task_runinng_num.fetch_sub(1); }
+  static std::atomic<int> vector_index_task_running_num;
+  static int GetVectorIndexTaskRunningNum() { return vector_index_task_running_num.load(); }
+  static void IncVectorIndexTaskRunningNum() { vector_index_task_running_num.fetch_add(1); }
+  static void DecVectorIndexTaskRunningNum() { vector_index_task_running_num.fetch_sub(1); }
 
-  static std::atomic<int> vector_index_rebuild_task_runinng_num;
-  static int GetVectorIndexRebuildTaskRuningNum() { return vector_index_rebuild_task_runinng_num.load(); }
-  static void IncVectorIndexRebuildTaskRuningNum() { vector_index_rebuild_task_runinng_num.fetch_add(1); }
-  static void DecVectorIndexRebuildTaskRuningNum() { vector_index_rebuild_task_runinng_num.fetch_sub(1); }
+  static std::atomic<int> vector_index_rebuild_task_running_num;
+  static int GetVectorIndexRebuildTaskRunningNum() { return vector_index_rebuild_task_running_num.load(); }
+  static void IncVectorIndexRebuildTaskRunningNum() { vector_index_rebuild_task_running_num.fetch_add(1); }
+  static void DecVectorIndexRebuildTaskRunningNum() { vector_index_rebuild_task_running_num.fetch_sub(1); }
 
-  static std::atomic<int> vector_index_save_task_runinng_num;
-  static int GetVectorIndexSaveTaskRuningNum() { return vector_index_save_task_runinng_num.load(); }
-  static void IncVectorIndexSaveTaskRuningNum() { vector_index_save_task_runinng_num.fetch_add(1); }
-  static void DecVectorIndexSaveTaskRuningNum() { vector_index_save_task_runinng_num.fetch_sub(1); }
+  static std::atomic<int> vector_index_save_task_running_num;
+  static int GetVectorIndexSaveTaskRunningNum() { return vector_index_save_task_running_num.load(); }
+  static void IncVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_add(1); }
+  static void DecVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_sub(1); }
 
  private:
   // Build vector index with original data(rocksdb).

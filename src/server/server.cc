@@ -301,7 +301,7 @@ bool Server::InitCrontabManager() {
       {pb::common::STORE, pb::common::INDEX},
       GetInterval(config, "server.heartbeat_interval_s", Constant::kHeartbeatIntervalS) * 1000,
       false,
-      [](void*) { Heartbeat::TriggerStoreHeartbeat(0); },
+      [](void*) { Heartbeat::TriggerStoreHeartbeat({}, true); },
   });
 
   // Add store region metrics crontab

@@ -36,9 +36,7 @@ enum Engine {
   ENG_BTREE = 5;
 };
 
-enum RawEngine {
-  RAW_ENG_ROCKSDB = 0;
-};
+enum RawEngine { RAW_ENG_ROCKSDB = 0; };
 
 message Location {
   string host = 1;
@@ -789,6 +787,8 @@ message StoreMetrics {
   map<uint64, RegionMetrics> region_metrics_map = 40;
   // true: region_metrics_map only contain partial region metrics, false: contain full region metrics
   bool is_partial_region_metrics = 41;
+  // allow update epoch version(split/merge), leader change not allow update epoch version.
+  bool is_update_epoch_version = 42;
 }
 
 // CoordinatorServiceType

@@ -139,7 +139,7 @@ void CreateRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 
@@ -257,7 +257,7 @@ void DeleteRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 
@@ -400,7 +400,7 @@ void SplitRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 
@@ -493,7 +493,7 @@ void ChangeRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 
@@ -556,7 +556,7 @@ void TransferLeaderTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 
@@ -615,7 +615,7 @@ void PurgeRegionTask::Run() {
 
   // Notify coordinator
   if (region_cmd_->is_notify()) {
-    Heartbeat::TriggerStoreHeartbeat(region_cmd_->region_id());
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 
