@@ -506,13 +506,6 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // check if table_name exists
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
 
-  std::atomic<bool> table_create_success(false);
-  ON_SCOPE_EXIT([&]() {
-    if (table_create_success.load() == false) {
-      table_name_map_safe_temp_.Erase(new_table_check_name);
-    }
-  });
-
   uint64_t value = 0;
   table_name_map_safe_temp_.Get(new_table_check_name, value);
   if (value != 0) {
@@ -528,6 +521,13 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
     return butil::Status(pb::error::Errno::ETABLE_EXISTS,
                          fmt::format("table_name[{}] is exist in put if absent", table_definition.name().c_str()));
   }
+
+  std::atomic<bool> table_create_success(false);
+  ON_SCOPE_EXIT([&]() {
+    if (table_create_success.load() == false) {
+      table_name_map_safe_temp_.Erase(new_table_check_name);
+    }
+  });
 
   // if new_table_id is not given, create a new table_id
   if (new_table_id <= 0) {
@@ -1209,6 +1209,13 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
                          fmt::format("index_name[{}] is exist in put if absent", table_definition.name()));
   }
 
+  std::atomic<bool> index_create_success(false);
+  ON_SCOPE_EXIT([&]() {
+    if (index_create_success.load() == false) {
+      index_name_map_safe_temp_.Erase(new_index_check_name);
+    }
+  });
+
   // create index
   // extract part info, create region for each part
 
@@ -1255,8 +1262,6 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
       }
     }
 
-    // remove index_name from map
-    index_name_map_safe_temp_.Erase(new_index_check_name);
     return butil::Status(pb::error::Errno::EINDEX_REGION_CREATE_FAILED, "Not enough regions is created");
   }
 
@@ -1290,6 +1295,8 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 
   auto* index_increment_index = index_increment->mutable_table();
   *index_increment_index = table_internal;
+
+  index_create_success.store(true);
 
   // return region_ids
   for (const auto& regin_id : new_region_ids) {
