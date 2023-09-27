@@ -280,6 +280,15 @@ public class IndexServiceClient {
         return response.getKeyStatesList();
     }
 
+    public Long vectorCount(DingoCommonId indexId, DingoCommonId regionId) {
+        Index.VectorCountRequest.Builder builder = Index.VectorCountRequest.newBuilder();
+
+        Index.VectorCountResponse response = exec(stub -> stub.vectorCount(
+                builder.setContext(mapping(contextCache.get(regionId))).build()), retryTimes, indexId, regionId);
+
+        return response.getCount();
+    }
+
     private <R> R exec(
             Function<IndexServiceGrpc.IndexServiceBlockingStub, R> function,
             int retryTimes,
