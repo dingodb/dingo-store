@@ -126,36 +126,56 @@ class VectorIndex {
   };
 
   // List filter just for flat
+  // class FlatListFilterFunctor : public FilterFunctor {
+  //  public:
+  //   explicit FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
+  //       : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {}
+  //   FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
+  //   FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
+  //   FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
+  //   FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
+
+  //   void Build(std::vector<faiss::idx_t>& id_map) override {
+  //     this->id_map_ = &id_map;
+
+  //     for (auto vector_id : vector_ids_) {
+  //       array_indexs_.insert(vector_id);
+  //     }
+  //   }
+
+  //   bool Check(uint64_t index) override {
+  //     if (index >= (*id_map_).size()) {
+  //       return false;
+  //     }
+
+  //     auto vector_id = (*id_map_)[index];
+  //     return array_indexs_.find(vector_id) != array_indexs_.end();
+  //   }
+
+  //  private:
+  //   std::vector<uint64_t> vector_ids_;
+  //   std::unordered_set<uint64_t> array_indexs_;
+  //   std::vector<faiss::idx_t>* id_map_{nullptr};
+  // };
+
   class FlatListFilterFunctor : public FilterFunctor {
    public:
     explicit FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
-        : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {}
+        : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {
+      // highly optimized code, do not modify it
+      array_indexs_.rehash(vector_ids_.size());
+      array_indexs_.insert(vector_ids_.begin(), vector_ids_.end());
+    }
     FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
     FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
     FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
     FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
 
-    void Build(std::vector<faiss::idx_t>& id_map) override {
-      this->id_map_ = &id_map;
-
-      for (auto vector_id : vector_ids_) {
-        array_indexs_.insert(vector_id);
-      }
-    }
-
-    bool Check(uint64_t index) override {
-      if (index >= (*id_map_).size()) {
-        return false;
-      }
-
-      auto vector_id = (*id_map_)[index];
-      return array_indexs_.find(vector_id) != array_indexs_.end();
-    }
+    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
 
    private:
     std::vector<uint64_t> vector_ids_;
     std::unordered_set<uint64_t> array_indexs_;
-    std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
   // List filter just for ivf flat

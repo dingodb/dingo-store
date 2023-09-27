@@ -244,17 +244,25 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     }
   }
 
+  faiss::SearchParameters flat_search_parameters;
+
   {
     BAIDU_SCOPED_LOCK(mutex_);
     // use std::thread to call faiss functions
     std::thread t([&]() {
       if (!filters.empty()) {
-        // Build array index list.
-        for (auto& filter : filters) {
-          filter->Build(index_id_map2_->id_map);
-        }
+        //   // Build array index list.
+        //   for (auto& filter : filters) {
+        //     filter->Build(index_id_map2_->id_map);
+        //   }
+        //   auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
+        //   SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), flat_filter);
+
+        // use faiss's search_param to do pre-filter
         auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
-        SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(), flat_filter);
+        flat_search_parameters.sel = flat_filter.get();
+        index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+                               &flat_search_parameters);
       } else {
         index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
       }
