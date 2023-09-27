@@ -194,8 +194,9 @@ message VectorSearchDebugResponse {
 
 message VectorCountRequest {
   dingodb.pb.store.Context context = 1;
+  // [vector_id_start, vector_id_end)
   uint64 vector_id_start = 2;  // default region range start_key
-  uint64 vector_id_end = 3;    // default region range end_key
+  uint64 vector_id_end = 3;    // default region range end_key, not include
 }
 
 message VectorCountResponse {

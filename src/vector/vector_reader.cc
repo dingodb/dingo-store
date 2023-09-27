@@ -441,33 +441,6 @@ butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::GetVectorCount(const pb::common::Range& region_range, uint64_t& vector_count) {
-  std::string start_key = VectorCodec::FillVectorDataPrefix(region_range.start_key());
-  std::string end_key = VectorCodec::FillVectorDataPrefix(region_range.end_key());
-
-  IteratorOptions options;
-  options.lower_bound = start_key;
-  options.upper_bound = end_key;
-  auto iter = reader_->NewIterator(options);
-  if (iter == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                    Helper::StringToHex(region_range.start_key()),
-                                    Helper::StringToHex(region_range.end_key()));
-    return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
-  }
-
-  iter->Seek(start_key);
-
-  vector_count = 0;
-
-  while (iter->Valid()) {
-    vector_count++;
-    iter->Next();
-  }
-
-  return butil::Status::OK();
-}
-
 butil::Status VectorReader::VectorGetRegionMetrics(uint64_t /*region_id*/, const pb::common::Range& region_range,
                                                    VectorIndexWrapperPtr vector_index,
                                                    pb::common::VectorIndexMetrics& region_metrics) {
@@ -482,12 +455,7 @@ butil::Status VectorReader::VectorGetRegionMetrics(uint64_t /*region_id*/, const
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", vector_index->Id());
   }
 
-  // need to use accurate vector count here
-  // auto status = inner_vector_index->GetCount(total_vector_count);
-  // if (!status.ok()) {
-  //   return status;
-  // }
-  auto status = GetVectorCount(region_range, total_vector_count);
+  auto status = inner_vector_index->GetCount(total_vector_count);
   if (!status.ok()) {
     return status;
   }

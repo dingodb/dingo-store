@@ -52,7 +52,6 @@ class VectorReader {
                                        VectorIndexWrapperPtr vector_index,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
-  butil::Status GetVectorCount(const pb::common::Range& region_range, uint64_t& vector_count);
   butil::Status VectorCount(const pb::common::Range& range, uint64_t& count);
 
   // This function is for testing only
