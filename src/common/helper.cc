@@ -1191,13 +1191,13 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
   return false;
 }
 
-std::string Helper::EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id) {
-  Buf buf(16);
-  buf.WriteLong(partition_id);
-  buf.WriteLong(vector_id);
+// std::string Helper::EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id) {
+//   Buf buf(16);
+//   buf.WriteLong(partition_id);
+//   buf.WriteLong(vector_id);
 
-  return buf.GetString();
-}
+//   return buf.GetString();
+// }
 
 std::string Helper::ToUpper(const std::string& str) {
   std::string result;

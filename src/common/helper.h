@@ -242,7 +242,7 @@ class Helper {
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
   // for index region, encode raw_range
-  static std::string EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id);
+  // static std::string EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id);
 
   // Upper string
   static std::string ToUpper(const std::string& str);

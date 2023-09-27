@@ -31,6 +31,14 @@ void DingoSchema<std::optional<int64_t>>::InternalEncodeNull(Buf* buf) {
   buf->Write(0);
 }
 
+void DingoSchema<std::optional<int64_t>>::InternalEncodeKey(Buf* buf, int64_t data) {
+  if (buf->IsLe()) {
+    LeInternalEncodeKey(buf, data);
+  } else {
+    BeInternalEncodeKey(buf, data);
+  }
+}
+
 void DingoSchema<std::optional<int64_t>>::LeInternalEncodeKey(Buf* buf, int64_t data) {
   uint64_t* l = (uint64_t*)&data;
   buf->Write(*l >> 56 ^ 0x80);
@@ -132,6 +140,22 @@ void DingoSchema<std::optional<int64_t>>::EncodeKey(Buf* buf, std::optional<int6
 
 void DingoSchema<std::optional<int64_t>>::EncodeKeyPrefix(Buf* buf, std::optional<int64_t> data) {
   EncodeKey(buf, data);
+}
+
+int64_t DingoSchema<std::optional<int64_t>>::InternalDecodeKey(Buf* buf) {
+  uint64_t l = buf->Read() & 0xFF ^ 0x80;
+  if (buf->IsLe()) {
+    for (int i = 0; i < 7; i++) {
+      l <<= 8;
+      l |= buf->Read() & 0xFF;
+    }
+  } else {
+    for (int i = 1; i < 8; i++) {
+      l |= (((uint64_t)buf->Read() & 0xFF) << (8 * i));
+    }
+  }
+
+  return l;
 }
 
 std::optional<int64_t> DingoSchema<std::optional<int64_t>>::DecodeKey(Buf* buf) {

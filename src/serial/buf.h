@@ -60,6 +60,7 @@ class Buf {
   std::string* GetBytes();
   int GetBytes(std::string& s);
   std::string GetString();
+  bool IsLe() const;
 };
 
 }  // namespace dingodb

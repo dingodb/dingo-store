@@ -246,4 +246,6 @@ std::string Buf::GetString() {
   return s;
 }
 
+bool Buf::IsLe() const { return this->le_; }
+
 }  // namespace dingodb

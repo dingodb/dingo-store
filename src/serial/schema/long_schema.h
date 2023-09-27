@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <optional>
+
 #include "dingo_schema.h"
 
 namespace dingodb {
@@ -24,10 +25,14 @@ namespace dingodb {
 template <>
 
 class DingoSchema<std::optional<int64_t>> : public BaseSchema {
+ public:
+  static void InternalEncodeKey(Buf* buf, int64_t data);
+  static int64_t InternalDecodeKey(Buf* buf);
+
  private:
   int index_;
   bool key_, allow_null_;
-  bool le_=true;
+  bool le_ = true;
 
   static int GetDataLength();
   static int GetWithNullTagLength();
