@@ -23,6 +23,7 @@
 #include "brpc/http_status_code.h"
 #include "brpc/server.h"
 #include "common/logging.h"
+#include "common/version.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
@@ -30,7 +31,7 @@ namespace dingodb {
 
 void ClusterStatImpl::GetTabInfo(brpc::TabInfoList* info_list) const {
   brpc::TabInfo* info = info_list->add();
-  info->tab_name = "Cluster";
+  info->tab_name = "dingo";
   info->path = "/ClusterStat";
 }
 
@@ -45,7 +46,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   cntl->http_response().set_content_type("text/html");
 
   butil::IOBufBuilder os;
-  const std::string header_in_str = "Table, Index and Region In DingoStore Cluster";
+  const std::string header_in_str = "Table/Index Information (" + std::string(GIT_VERSION) + ")";
   // If Current Request is HTML mode, then construct HTML HEADER
   os << "<!DOCTYPE html><html><head>\n"
      << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
