@@ -329,6 +329,7 @@ public class EntityConversion {
             return null;
         }
         SCHEMA.setIsKey(true);
+	SCHEMA.setAllowNull(false);
         DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
         List<PartitionDetail> details = partition.getPartitionsList().stream()
                 .map(Meta.Partition::getRange)
@@ -366,6 +367,7 @@ public class EntityConversion {
 
     public static Meta.IndexDefinition mapping(long id, Index index, List<Meta.DingoCommonId> partitionIds) {
         SCHEMA.setIsKey(true);
+        SCHEMA.setAllowNull(false);
         DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
         Iterator<byte[]> keys = Optional.<Partition, Stream<byte[]>>mapOrGet(
                 index.getIndexPartition(), __ -> encodePartitionDetails(__.getDetails(), codec),

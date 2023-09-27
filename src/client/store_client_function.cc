@@ -39,6 +39,7 @@
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
 #include "serial/buf.h"
+#include "serial/schema/long_schema.h"
 
 const int kBatchSize = 1000;
 
@@ -1118,7 +1119,8 @@ uint64_t DecodeVectorId(const std::string& value) {
     return 0;
   }
 
-  return buf.ReadLong();
+  // return buf.ReadLong();
+  return dingodb::DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
 }
 
 bool QueryRegionIdByVectorId(dingodb::pb::meta::IndexRange& index_range, uint64_t vector_id,  // NOLINT

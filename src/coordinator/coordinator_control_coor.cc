@@ -35,6 +35,7 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -54,6 +55,9 @@ DECLARE_bool(ip2hostname);
 
 DEFINE_uint32(table_delete_after_deleted_time, 604800, "delete table after deleted time in seconds");
 DEFINE_uint32(index_delete_after_deleted_time, 604800, "delete index after deleted time in seconds");
+
+DEFINE_uint32(vector_regon_range_key_min_len, 8, "vector regon range key min len");
+DEFINE_uint32(vector_regon_range_key_max_len, 16, "vector regon range key max len");
 
 DEFINE_int32(
     region_update_timeout, 25,
@@ -1511,6 +1515,24 @@ butil::Status CoordinatorControl::CreateShadowRegion(
   if (region_type == pb::common::RegionType::INDEX_REGION && new_index_parameter.has_vector_index_parameter()) {
     store_type = pb::common::StoreType::NODE_TYPE_INDEX;
 
+    // validate vector index region range
+    // range's start_key and end_key must be less than 16 bytes
+    if (region_range.start_key().length() != FLAGS_vector_regon_range_key_min_len &&
+        region_range.start_key().size() != FLAGS_vector_regon_range_key_max_len) {
+      DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
+                       << Helper::StringToHex(region_range.start_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "vector index region range start_key size is not 8 or 16 bytes");
+    }
+
+    if (region_range.end_key().length() != FLAGS_vector_regon_range_key_min_len &&
+        region_range.end_key().size() != FLAGS_vector_regon_range_key_max_len) {
+      DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
+                       << Helper::StringToHex(region_range.end_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "vector index region range end_key size is not 8 or 16 bytes");
+    }
+
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==
         pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -1638,6 +1660,24 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
   if (region_type == pb::common::RegionType::INDEX_REGION && new_index_parameter.has_vector_index_parameter()) {
     store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+
+    // validate vector index region range
+    // range's start_key and end_key must be less than 16 bytes
+    if (region_range.start_key().length() != FLAGS_vector_regon_range_key_min_len &&
+        region_range.start_key().size() != FLAGS_vector_regon_range_key_max_len) {
+      DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
+                       << Helper::StringToHex(region_range.start_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "vector index region range start_key size is not 8 or 16 bytes");
+    }
+
+    if (region_range.end_key().length() != FLAGS_vector_regon_range_key_min_len &&
+        region_range.end_key().size() != FLAGS_vector_regon_range_key_max_len) {
+      DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
+                       << Helper::StringToHex(region_range.end_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "vector index region range end_key size is not 8 or 16 bytes");
+    }
 
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==

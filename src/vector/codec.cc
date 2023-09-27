@@ -20,13 +20,15 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "serial/buf.h"
+#include "serial/schema/long_schema.h"
 
 namespace dingodb {
 
 void VectorCodec::EncodeVectorKey(uint64_t partition_id, uint64_t vector_id, std::string& result) {
   Buf buf(16);
   buf.WriteLong(partition_id);
-  buf.WriteLong(vector_id);
+  // buf.WriteLong(vector_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
 
   buf.GetBytes(result);
 }
@@ -35,7 +37,8 @@ void VectorCodec::EncodeVectorData(uint64_t partition_id, uint64_t vector_id, st
   Buf buf(17);
   buf.Write(Constant::kVectorDataPrefix);
   buf.WriteLong(partition_id);
-  buf.WriteLong(vector_id);
+  // buf.WriteLong(vector_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
 
   buf.GetBytes(result);
 }
@@ -44,7 +47,8 @@ void VectorCodec::EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, 
   Buf buf(17);
   buf.Write(Constant::kVectorScalarPrefix);
   buf.WriteLong(partition_id);
-  buf.WriteLong(vector_id);
+  // buf.WriteLong(vector_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
 
   buf.GetBytes(result);
 }
@@ -53,7 +57,8 @@ void VectorCodec::EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, s
   Buf buf(17);
   buf.Write(Constant::kVectorTablePrefix);
   buf.WriteLong(partition_id);
-  buf.WriteLong(vector_id);
+  // buf.WriteLong(vector_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
 
   buf.GetBytes(result);
 }
@@ -72,7 +77,8 @@ uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
     return 0;
   }
 
-  return buf.ReadLong();
+  // return buf.ReadLong();
+  return DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
 }
 
 uint64_t VectorCodec::DecodePartitionId(const std::string& value) {
@@ -86,6 +92,12 @@ uint64_t VectorCodec::DecodePartitionId(const std::string& value) {
 }
 
 std::string VectorCodec::FillVectorDataPrefix(const std::string& value) {
+  if (value.length() > 16) {
+    DINGO_LOG(ERROR) << "FillVectorDataPrefix failed, value length is greater than 16, value:["
+                     << Helper::StringToHex(value) << "]";
+    return std::string();
+  }
+
   Buf buf(17);
   buf.Write(Constant::kVectorDataPrefix);
   buf.Write(value);
@@ -94,6 +106,12 @@ std::string VectorCodec::FillVectorDataPrefix(const std::string& value) {
 }
 
 std::string VectorCodec::FillVectorScalarPrefix(const std::string& value) {
+  if (value.length() > 16) {
+    DINGO_LOG(ERROR) << "FillVectorScalarPrefix failed, value length is greater than 16, value:["
+                     << Helper::StringToHex(value) << "]";
+    return std::string();
+  }
+
   Buf buf(17);
   buf.Write(Constant::kVectorScalarPrefix);
   buf.Write(value);
@@ -102,6 +120,12 @@ std::string VectorCodec::FillVectorScalarPrefix(const std::string& value) {
 }
 
 std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
+  if (value.length() > 16) {
+    DINGO_LOG(ERROR) << "FillVectorTablePrefix failed, value length is greater than 16, value:["
+                     << Helper::StringToHex(value) << "]";
+    return std::string();
+  }
+
   Buf buf(17);
   buf.Write(Constant::kVectorTablePrefix);
   buf.Write(value);

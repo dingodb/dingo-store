@@ -1234,12 +1234,12 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
     // TODO: after sdk support part_id, this should be removed
-    pb::common::Range raw_range;
-    raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id, 0));
-    raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id, UINT64_MAX));
+    // pb::common::Range raw_range;
+    // raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id, 0));
+    // raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id, UINT64_MAX));
 
     auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, "", replica,
-                                           new_part_range, raw_range, schema_id, 0, new_index_id, new_part_id,
+                                           new_part_range, new_part_range, schema_id, 0, new_index_id, new_part_id,
                                            table_definition.index_parameter(), new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();

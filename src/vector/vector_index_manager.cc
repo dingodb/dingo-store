@@ -494,8 +494,12 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
+  DINGO_LOG(INFO) << "[vector_index.build] Build vector index, range start_key: "
+                  << Helper::StringToHex(range.start_key()) << " end_key: " << Helper::StringToHex(range.end_key());
+
   std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
   std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
+
   DINGO_LOG(INFO) << fmt::format("[vector_index.build][index_id({})] Build vector index, range: [{}({})-{}({}))",
                                  vector_index_id, Helper::StringToHex(start_key),
                                  VectorCodec::DecodeVectorId(start_key), Helper::StringToHex(end_key),
