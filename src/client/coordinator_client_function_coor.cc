@@ -60,6 +60,7 @@ DECLARE_uint64(count);
 DECLARE_bool(store_create_region);
 DECLARE_uint64(start_region_cmd_id);
 DECLARE_uint64(end_region_cmd_id);
+DECLARE_uint64(vector_id);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1170,8 +1171,13 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     const auto& end_key = query_response.region().definition().range().end_key();
 
     std::string real_mid;
-    if (query_response.region().region_type() == dingodb::pb::common::INDEX_REGION) {
-      real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
+    if (query_response.region().definition().index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      if (FLAGS_vector_id > 0) {
+        uint64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
+        dingodb::VectorCodec::EncodeVectorKey(partition_id, FLAGS_vector_id, real_mid);
+      } else {
+        real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
+      }
     } else {
       real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
     }
