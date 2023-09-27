@@ -26,6 +26,7 @@
 
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
+#include "common/logging.h"
 #include "serial/buf.h"
 #include "vector/codec.h"
 
@@ -172,6 +173,7 @@ class Helper {
     max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
     uint64_t mid_vector_id = min_vector_id + (max_vector_id - min_vector_id) / 2;
 
+    DINGO_LOG(INFO) << "mid_vector_id: " << mid_vector_id;
     std::string result;
     dingodb::VectorCodec::EncodeVectorKey(partition_id, mid_vector_id, result);
     return result;
