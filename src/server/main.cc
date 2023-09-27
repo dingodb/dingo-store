@@ -26,6 +26,7 @@
 #include "gflags/gflags_declare.h"
 
 #endif
+
 #include <backtrace.h>
 #include <cxxabi.h>
 #include <dlfcn.h>
@@ -33,6 +34,7 @@
 #include <unistd.h>
 
 #include <csignal>
+#include <cstdlib>  // Replace stdlib.h with cstdlib
 #include <filesystem>
 #include <iostream>
 
@@ -70,14 +72,16 @@ DEFINE_uint32(h2_server_connection_window_size, 1024 * 1024 * 1024, "connection 
 DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
 DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
 
-DEFINE_uint32(omp_num_threads, 32, "omp num threads");
+DEFINE_uint32(omp_num_threads, 0, "omp num threads");
 
 extern "C" {
-extern void omp_set_num_threads(int) noexcept;  // NOLINT
-extern int omp_get_num_threads(void) noexcept;  // NOLINT
-extern int omp_get_max_threads(void) noexcept;  // NOLINT
-extern int omp_get_thread_num(void) noexcept;   // NOLINT
-extern int omp_get_num_procs(void) noexcept;    // NOLINT
+extern void omp_set_dynamic(int dynamic_threads) noexcept;  // NOLINT
+extern int omp_get_dynamic(void) noexcept;                  // NOLINT
+extern void omp_set_num_threads(int) noexcept;              // NOLINT
+extern int omp_get_num_threads(void) noexcept;              // NOLINT
+extern int omp_get_max_threads(void) noexcept;              // NOLINT
+extern int omp_get_thread_num(void) noexcept;               // NOLINT
+extern int omp_get_num_procs(void) noexcept;                // NOLINT
 }
 
 namespace bvar {
@@ -502,16 +506,33 @@ int main(int argc, char *argv[]) {
   }
   DINGO_LOG(INFO) << "DoSystemCheck ret:" << ret;
 
+  const char *omp_num_threads = "OMP_NUM_THREADS";
+  const char *omp_num_threads_value = std::getenv(omp_num_threads);
+  if (omp_num_threads_value == nullptr) {
+    DINGO_LOG(ERROR) << "Environment variable " << omp_num_threads << " is not set";
+  }
+  DINGO_LOG(INFO) << "Environment variable " << omp_num_threads << " is set to " << omp_num_threads_value;
+
   // setup omp_num_threads
   if (FLAGS_omp_num_threads > 0) {
+    omp_set_dynamic(FLAGS_omp_num_threads);
     omp_set_num_threads(FLAGS_omp_num_threads);
     DINGO_LOG(INFO) << "omp_set_num_threads: " << FLAGS_omp_num_threads;
+
+    // const char *value = std::to_string(FLAGS_omp_num_threads).c_str();
+    int overwrite = 1;  // set to 1 to overwrite existing value, 0 to keep existing value
+
+    int result = setenv(omp_num_threads, std::to_string(FLAGS_omp_num_threads).c_str(), overwrite);
+    if (result != 0) {
+      DINGO_LOG(ERROR) << "Failed to set environment variable " << omp_num_threads;
+    }
   }
 
   // setup omp_num_threads
   DINGO_LOG(INFO) << "omp_get_num_threads: " << omp_get_num_threads();
   DINGO_LOG(INFO) << "omp_get_max_threads: " << omp_get_max_threads();
   DINGO_LOG(INFO) << "omp_get_thread_num: " << omp_get_thread_num();
+  DINGO_LOG(INFO) << "omp_get_dynamic: " << omp_get_dynamic();
   DINGO_LOG(INFO) << "omp_get_num_procs: " << omp_get_num_procs();
 
   dingo_server->SetServerEndpoint(GetServerEndPoint(config));

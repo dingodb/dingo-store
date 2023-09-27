@@ -22,6 +22,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -267,15 +268,19 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
     ivf_search_parameters.max_codes = 0;
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
 
-    if (!filters.empty()) {
-      auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
-      ivf_search_parameters.sel = ivf_flat_filter.get();
-      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
-                     &ivf_search_parameters);
-    } else {
-      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
-                     &ivf_search_parameters);
-    }
+    // use std::thread to call faiss functions
+    std::thread t([&]() {
+      if (!filters.empty()) {
+        auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+        ivf_search_parameters.sel = ivf_flat_filter.get();
+        index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+                       &ivf_search_parameters);
+      } else {
+        index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+                       &ivf_search_parameters);
+      }
+    });
+    t.join();
   }
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {

@@ -44,7 +44,7 @@
 
 namespace dingodb {
 
-DEFINE_uint32(max_hnsw_parallel_thread_num, 4, "max hnsw parallel thread num");
+DEFINE_uint32(max_hnsw_parallel_thread_num, 0, "max hnsw parallel thread num");
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
@@ -86,8 +86,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
       fn(id, 0);
     }
   } else {
-    // std::vector<std::thread> threads;
-    std::vector<Bthread> threads;
+    std::vector<std::thread> threads;
+    // std::vector<Bthread> threads;
     std::atomic<size_t> current(start);
 
     // keep track of exceptions in threads
@@ -96,8 +96,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
     std::mutex last_except_mutex;
 
     for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
-      // threads.push_back(std::thread([&, thread_id] {
-      threads.push_back(Bthread([&, thread_id] {
+      threads.push_back(std::thread([&, thread_id] {
+        // threads.push_back(Bthread([&, thread_id] {
         while (true) {
           size_t id = current.fetch_add(1);
 
@@ -123,8 +123,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
       }));
     }
     for (auto& thread : threads) {
-      // thread.join();
-      thread.Join();
+      thread.join();
+      // thread.Join();
     }
     if (last_exception) {
       std::rethrow_exception(last_exception);
