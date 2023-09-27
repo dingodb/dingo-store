@@ -256,24 +256,24 @@ class Helper {
 
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
-  // for index region, encode raw_range
-  // static std::string EncodeIndexRegionHeader(int64_t partition_id, int64_t vector_id);
+  // for vector index region, encode range
+  static std::string EncodeVectorIndexRegionHeader(int64_t partition_id, int64_t vector_id);
 
   // for index region transaction, decode vector_id from key
-  static uint64_t DecodeVectorId(const std::string& value);
+  static int64_t DecodeVectorId(const std::string& value);
 
   // for txn, encode start_ts/commit_ts to std::string
-  static std::string EncodeTso(uint64_t ts);
+  static std::string EncodeTso(int64_t ts);
   // for txn, padding user key
   static std::string PaddingUserKey(const std::string& key);
   static std::string UnpaddingUserKey(const std::string& padding_key);
   // for txn, encode data/write key
-  static std::string EncodeTxnKey(const std::string& key, uint64_t ts);
-  static std::string EncodeTxnKey(const std::string_view& key, uint64_t ts);
+  static std::string EncodeTxnKey(const std::string& key, int64_t ts);
+  static std::string EncodeTxnKey(const std::string_view& key, int64_t ts);
   // for txn, encode data/write key
-  static butil::Status DecodeTxnKey(const std::string& txn_key, std::string& key, uint64_t& ts);
+  static butil::Status DecodeTxnKey(const std::string& txn_key, std::string& key, int64_t& ts);
   // for txn, encode data/write key
-  static butil::Status DecodeTxnKey(const std::string_view& txn_key, std::string& key, uint64_t& ts);
+  static butil::Status DecodeTxnKey(const std::string_view& txn_key, std::string& key, int64_t& ts);
 
   // Upper string
   static std::string ToUpper(const std::string& str);
