@@ -36,6 +36,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <random>
 #include <ratio>
 #include <regex>
@@ -58,6 +59,7 @@
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "serial/buf.h"
+#include "serial/schema/long_schema.h"
 
 namespace dingodb {
 
@@ -1249,15 +1251,16 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
   return false;
 }
 
-// std::string Helper::EncodeIndexRegionHeader(int64_t partition_id, int64_t vector_id) {
-//   Buf buf(16);
-//   buf.WriteLong(partition_id);
-//   buf.WriteLong(vector_id);
+std::string Helper::EncodeVectorIndexRegionHeader(int64_t partition_id, int64_t vector_id) {
+  Buf buf(16);
+  buf.WriteLong(partition_id);
+  // buf.WriteLong(vector_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
 
-//   return buf.GetString();
-// }
+  return buf.GetString();
+}
 
-uint64_t Helper::DecodeVectorId(const std::string& value) {
+int64_t Helper::DecodeVectorId(const std::string& value) {
   dingodb::Buf buf(value);
   if (value.size() == 17) {
     buf.Skip(9);
@@ -1276,7 +1279,7 @@ uint64_t Helper::DecodeVectorId(const std::string& value) {
 }
 
 // for txn, encode start_ts/commit_ts to std::string
-std::string Helper::EncodeTso(uint64_t ts) {
+std::string Helper::EncodeTso(int64_t ts) {
   Buf buf(8);
   buf.WriteLongWithNegation(ts);
 
@@ -1336,7 +1339,7 @@ std::string Helper::UnpaddingUserKey(const std::string& padding_key) {
 }
 
 // for txn, encode data/write key
-std::string Helper::EncodeTxnKey(const std::string& key, uint64_t ts) {
+std::string Helper::EncodeTxnKey(const std::string& key, int64_t ts) {
   std::string padding_key = Helper::PaddingUserKey(key);
   Buf buf(padding_key.length() + 8);
   buf.Write(padding_key);
@@ -1345,7 +1348,7 @@ std::string Helper::EncodeTxnKey(const std::string& key, uint64_t ts) {
   return buf.GetString();
 }
 
-std::string Helper::EncodeTxnKey(const std::string_view& key, uint64_t ts) {
+std::string Helper::EncodeTxnKey(const std::string_view& key, int64_t ts) {
   std::string padding_key = Helper::PaddingUserKey(std::string(key));
   Buf buf(padding_key.length() + 8);
   buf.Write(padding_key);
@@ -1355,7 +1358,7 @@ std::string Helper::EncodeTxnKey(const std::string_view& key, uint64_t ts) {
 }
 
 // for txn, encode data/write key
-butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key, uint64_t& ts) {
+butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key, int64_t& ts) {
   if (txn_key.length() <= 8) {
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, txn_key length <= 8");
   }
@@ -1374,7 +1377,7 @@ butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key,
 }
 
 // for txn, encode data/write key
-butil::Status Helper::DecodeTxnKey(const std::string_view& txn_key, std::string& key, uint64_t& ts) {
+butil::Status Helper::DecodeTxnKey(const std::string_view& txn_key, std::string& key, int64_t& ts) {
   if (txn_key.length() <= 8) {
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, txn_key length <= 8");
   }

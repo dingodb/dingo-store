@@ -96,7 +96,7 @@ std::string StringToHex(const std::string& key) { return dingodb::Helper::String
 std::string HexToString(const std::string& hex) { return dingodb::Helper::HexToString(hex); }
 
 std::string VectorPrefixToHex(uint64_t part_id, uint64_t vector_id) {
-  std::string key = dingodb::Helper::EncodeIndexRegionHeader(part_id, vector_id);
+  std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id);
   return dingodb::Helper::StringToHex(key);
 }
 
@@ -806,7 +806,7 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Put);
 
-    mutation->set_key(dingodb::Helper::EncodeIndexRegionHeader(part_id, vector_id));
+    mutation->set_key(dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id));
 
     dingodb::pb::common::VectorWithId vector_with_id;
 
@@ -823,12 +823,12 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
   } else if (FLAGS_mutation_op == "delete") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Delete);
-    mutation->set_key(dingodb::Helper::EncodeIndexRegionHeader(part_id, vector_id));
+    mutation->set_key(dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id));
   } else if (FLAGS_mutation_op == "insert") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
 
-    mutation->set_key(dingodb::Helper::EncodeIndexRegionHeader(part_id, vector_id));
+    mutation->set_key(dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id));
 
     dingodb::pb::common::VectorWithId vector_with_id;
 
