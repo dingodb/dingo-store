@@ -151,6 +151,7 @@ DEFINE_bool(store_create_region, false, "store create region");
 DEFINE_string(db_path, "", "rocksdb path");
 
 DEFINE_bool(show_vector, false, "show vector data");
+DEFINE_string(metrics_type, "L2", "metrics type");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 

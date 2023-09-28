@@ -24,6 +24,7 @@
 
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
+#include "butil/time.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
@@ -1996,6 +1997,25 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
         // transform ip to hostname
         Server::GetInstance()->Ip2Hostname(*learner_location->mutable_host());
       }
+    }
+
+    // if leader_location is null, set up a default value
+    // this is only for fist time refresh route table
+    if (leader_location->host().empty()) {
+      std::srand(std::time(nullptr));
+      int random_int = std::rand() % (part_region.definition().peers_size());  // NOLINT
+
+      *leader_location = part_region.definition().peers(random_int).server_location();
+
+      // transform ip to hostname
+      Server::GetInstance()->Ip2Hostname(*leader_location->mutable_host());
+
+      DINGO_LOG(WARNING) << fmt::format("leader_location is null, set up a default value, table_id={} region_id={}",
+                                        table_id, region_id)
+                         << ", leader_location: " << leader_location->ShortDebugString()
+                         << ", peers_size: " << part_region.definition().peers_size()
+                         << ", region_create_timestamp: " << part_region.create_timestamp()
+                         << ", life span(ms): " << butil::gettimeofday_ms() - part_region.create_timestamp();
     }
 
     // range_distribution regionmap_epoch

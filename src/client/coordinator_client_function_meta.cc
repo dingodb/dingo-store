@@ -43,6 +43,7 @@ DECLARE_string(vector_index_type);
 DECLARE_bool(auto_split);
 DECLARE_uint32(part_count);
 DECLARE_uint32(ncentroids);
+DECLARE_string(metrics_type);
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -725,6 +726,19 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     return;
   }
 
+  dingodb::pb::common::MetricType metric_type;
+
+  if (FLAGS_metrics_type == "L2" || FLAGS_metrics_type == "l2") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_L2;
+  } else if (FLAGS_metrics_type == "IP" || FLAGS_metrics_type == "ip") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
+  } else if (FLAGS_metrics_type == "COSINE" || FLAGS_metrics_type == "cosine") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+  } else {
+    DINGO_LOG(WARNING) << "metrics_type is invalid, now only support L2, IP and COSINE";
+    return;
+  }
+
   if (FLAGS_vector_index_type == "hnsw") {
     if (FLAGS_max_elements == 0) {
       DINGO_LOG(WARNING) << "max_elements is empty";
@@ -744,18 +758,18 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
 
     hsnw_index_parameter->set_dimension(FLAGS_dimension);
-    hsnw_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    hsnw_index_parameter->set_metric_type(metric_type);
     hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
     hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
     hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
   } else if (FLAGS_vector_index_type == "flat") {
     auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
     flat_index_parameter->set_dimension(FLAGS_dimension);
-    flat_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    flat_index_parameter->set_metric_type(metric_type);
   } else if (FLAGS_vector_index_type == "ivf_flat") {
     auto* ivf_flat_index_parameter = vector_index_parameter->mutable_ivf_flat_parameter();
     ivf_flat_index_parameter->set_dimension(FLAGS_dimension);
-    ivf_flat_index_parameter->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    ivf_flat_index_parameter->set_metric_type(metric_type);
     ivf_flat_index_parameter->set_ncentroids(FLAGS_ncentroids);
   }
 

@@ -624,7 +624,9 @@ void CoordinatorControl::UpdateRegionState() {
     pb::common::RegionMetrics region_metrics;
     auto ret = region_metrics_map_.Get(it.first, region_metrics);
     if (ret < 0) {
-      DINGO_LOG(WARNING) << "UpdateRegionState... Get region_metrics failed, region_id=" << it.first;
+      if (it.second.state() != pb::common::RegionState::REGION_NEW) {
+        DINGO_LOG(WARNING) << "UpdateRegionState... Get region_metrics failed, region_id=" << it.first;
+      }
       continue;
     }
 
