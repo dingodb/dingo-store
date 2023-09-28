@@ -73,7 +73,7 @@ DEFINE_uint64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory
 
 DEFINE_uint32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 
-DEFINE_uint32(max_send_region_cmd_per_store, 50, "max send region cmd per store");
+DEFINE_uint32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
@@ -2236,6 +2236,11 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   //   *(meta_increment.add_tables())=it;
   // }
 
+  // build split_region pre_check for each store region
+  for (const auto& it : store_operations) {
+    AddCheckStoreRegionTask(new_task_list, it.id(), new_region_id);
+  }
+
   // build split_region task
   AddSplitTask(new_task_list, leader_store_id, split_from_region_id, new_region_id, split_watershed_key,
                store_create_region);
@@ -2548,11 +2553,12 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     AddCreateTask(increment_task_list, new_store_ids_diff_more.at(0), region_id, new_region_definition);
 
     // this change peer check task, no store_operation, only for check
-    auto* change_peer_check_task = increment_task_list->add_tasks();
-    auto* region_check = change_peer_check_task->mutable_pre_check();
-    region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
-    region_check->mutable_store_region_check()->set_store_id(new_store_ids_diff_more.at(0));
-    region_check->mutable_store_region_check()->set_region_id(region_id);
+    // auto* change_peer_check_task = increment_task_list->add_tasks();
+    // auto* region_check = change_peer_check_task->mutable_pre_check();
+    // region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+    // region_check->mutable_store_region_check()->set_store_id(new_store_ids_diff_more.at(0));
+    // region_check->mutable_store_region_check()->set_region_id(region_id);
+    AddCheckStoreRegionTask(increment_task_list, new_store_ids_diff_more.at(0), region_id);
 
     // this is change peer task
     AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition);
@@ -3969,16 +3975,48 @@ int CoordinatorControl::GetStoreOperationForSend(uint64_t store_id, pb::coordina
       continue;
     }
 
+    if (region_cmd.region_cmd().region_cmd_type() == ::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE) {
+      DINGO_LOG(DEBUG) << "first round skip CMD_DELETE region_cmd_id = " << region_cmd.region_cmd().id()
+                       << " region_id = " << region_cmd.region_cmd().region_id() << " store_id = " << store_id
+                       << " region_cmd_type = "
+                       << ::dingodb::pb::coordinator::RegionCmdType_Name(region_cmd.region_cmd().region_cmd_type());
+      continue;
+    }
+
     *(store_operation.add_region_cmds()) = region_cmd.region_cmd();
 
     region_cmd_count++;
 
     if (region_cmd_count > FLAGS_max_send_region_cmd_per_store) {
-      DINGO_LOG(WARNING) << "GetStoreOperationForSend region_cmd_count > "
+      DINGO_LOG(WARNING) << "GetStoreOperationForSend first_round region_cmd_count > "
                             "FLAGS_max_send_region_cmd_per_store, store_id = "
                          << store_id << " send_region_cmd_count = " << region_cmd_count
                          << ", real_region_cmd_count = " << store_operation_internal.region_cmd_ids_size();
-      break;
+      return 0;
+    }
+  }
+
+  for (auto region_cmd_id : store_operation_internal.region_cmd_ids()) {
+    pb::coordinator_internal::RegionCmdInternal region_cmd;
+    ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+    if (ret < 0) {
+      continue;
+    }
+
+    if (region_cmd.region_cmd().region_cmd_type() != ::dingodb::pb::coordinator::RegionCmdType::CMD_DELETE) {
+      continue;
+    }
+
+    *(store_operation.add_region_cmds()) = region_cmd.region_cmd();
+
+    region_cmd_count++;
+
+    if (region_cmd_count > FLAGS_max_send_region_cmd_per_store) {
+      DINGO_LOG(WARNING) << "GetStoreOperationForSend second round region_cmd_count > "
+                            "FLAGS_max_send_region_cmd_per_store, store_id = "
+                         << store_id << " send_region_cmd_count = " << region_cmd_count
+                         << ", real_region_cmd_count = " << store_operation_internal.region_cmd_ids_size();
+      return 0;
     }
   }
 
@@ -4180,6 +4218,16 @@ void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_
   region_cmd_to_add->mutable_hold_vector_index_request()->set_is_hold(true);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
+}
+
+void CoordinatorControl::AddCheckStoreRegionTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
+                                                 uint64_t region_id) {
+  // build check_vector_index task
+  auto* check_region_task = task_list->add_tasks();
+  auto* region_check = check_region_task->mutable_pre_check();
+  region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+  region_check->mutable_store_region_check()->set_store_id(store_id);
+  region_check->mutable_store_region_check()->set_region_id(region_id);
 }
 
 bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& task_pre_check) {
