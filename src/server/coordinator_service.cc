@@ -818,6 +818,11 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   pb::common::Location auto_increment_leader_location;
   auto_increment_control_->GetLeaderLocation(auto_increment_leader_location);
   *(response->mutable_auto_increment_leader_location()) = auto_increment_leader_location;
+
+  // get tso leader location
+  pb::common::Location tso_leader_location;
+  tso_control_->GetLeaderLocation(tso_leader_location);
+  *(response->mutable_tso_leader_location()) = tso_leader_location;
 }
 
 // Region services

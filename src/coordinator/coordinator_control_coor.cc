@@ -574,7 +574,7 @@ void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInt
     return;
   }
 
-  DINGO_LOG(ERROR) << "GenRegionFull... Get region_metrics succ, region_id=" << region_internal.id()
+  DINGO_LOG(DEBUG) << "GenRegionFull... Get region_metrics succ, region_id=" << region_internal.id()
                    << " region_metrics=" << region_metrics.DebugString();
 
   region.set_leader_store_id(region_metrics.leader_store_id());
@@ -3484,11 +3484,12 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     pb::common::RegionMetrics region_metrics_to_update;
     auto ret1 = region_metrics_map_.Get(region_metrics.id(), region_metrics_to_update);
     if (ret1 < 0) {
-      DINGO_LOG(WARNING) << "region_metrics_to_update is not found in region_metrics_map_, region_id = "
-                         << region_metrics.id();
       region_metrics_to_update = region_metrics;
       *(region_metrics_to_update.mutable_region_status()) = GenRegionStatus(region_metrics);
       region_metrics_map_.Put(region_metrics.id(), region_metrics_to_update);
+
+      DINGO_LOG(INFO) << "region_metrics_to_update is first time put into region_metrics_map_, region_id = "
+                      << region_metrics.id() << ", from store_id: " << store_metrics.id();
     }
 
     // this will update to RegionMetrics

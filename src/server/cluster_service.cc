@@ -14,8 +14,10 @@
 
 #include "server/cluster_service.h"
 
+#include <cstdint>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "brpc/builtin/common.h"
 #include "brpc/closure_guard.h"
@@ -45,8 +47,17 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   cntl->http_response().set_content_type("text/html");
 
+  uint64_t cluster_id = 0;
+  uint64_t epoch = 0;
+  pb::common::Location coordinator_leader_location;
+  std::vector<pb::common::Location> locations;
+  controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
+
+  pb::common::StoreMap store_map;
+  controller_->GetStoreMap(store_map);
+
   butil::IOBufBuilder os;
-  const std::string header_in_str = "Table/Index Information (" + std::string(GIT_VERSION) + ")";
+  const std::string header_in_str = "Cluster Information (" + std::string(GIT_VERSION) + ")";
   // If Current Request is HTML mode, then construct HTML HEADER
   os << "<!DOCTYPE html><html><head>\n"
      << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
@@ -55,6 +66,20 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   cntl->server()->PrintTabsBody(os, "Cluster");
 
   os << "<h1 style=\"text-align: center;\">" << header_in_str << "</h1>";
+
+  os << "<p style=\"text-align: center; \">Coordinator Leader:<a href=http://" + coordinator_leader_location.host() +
+            ":" + std::to_string(coordinator_leader_location.port()) + "/ClusterStat>" +
+            coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a></p>";
+
+  for (const auto& store : store_map.stores()) {
+    os << "<p style=\"text-align: center; \">" + pb::common::StoreType_Name(store.store_type()) + ":" +
+              std::to_string(store.id()) + " " + pb::common::StoreState_Name(store.state()) + " <a href=http://" +
+              store.server_location().host() + ":" + std::to_string(store.server_location().port()) +
+              "> server:" + store.server_location().host() + ":" + std::to_string(store.server_location().port()) +
+              "</a> <a href=http://" + store.raft_location().host() + ":" +
+              std::to_string(store.raft_location().port()) + "> raft:" + store.raft_location().host() + ":" +
+              std::to_string(store.raft_location().port()) + "</a></p>";
+  }
 
   // 1. Get All Schema
   std::vector<pb::meta::Schema> schemas;
@@ -144,7 +169,7 @@ bool ClusterStatImpl::GetRegionInfo(uint64_t region_id, const pb::common::Region
 }
 
 void ClusterStatImpl::PrintSchema(std::ostream& os, const std::string& schema_name) {
-  os << "<p style=\"text-align: center; font-size: 25px;\"><strong>Schema:" + schema_name + "</strong></p>";
+  os << "<p style=\"text-align: center;\">Schema:" + schema_name + "</p>";
 }
 
 void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region& region) {

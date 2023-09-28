@@ -610,6 +610,7 @@ int main(int argc, char *argv[]) {
 
     coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
     coordinator_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
+    coordinator_service.SetTsoControl(dingo_server->GetTsoControl());
     meta_service.SetControl(dingo_server->GetCoordinatorControl());
     meta_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
     meta_service.SetTsoControl(dingo_server->GetTsoControl());

@@ -23,6 +23,7 @@
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
+#include "coordinator/tso_control.h"
 #include "engine/engine.h"
 #include "proto/coordinator.pb.h"
 #include "raft/raft_node.h"
@@ -110,6 +111,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
     auto_increment_control_ = auto_increment_control;
   };
+  void SetTsoControl(std::shared_ptr<TsoControl> tso_control) { tso_control_ = tso_control; };
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
@@ -256,6 +258,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
+  std::shared_ptr<TsoControl> tso_control_;
   std::shared_ptr<Engine> engine_;
 };
 
