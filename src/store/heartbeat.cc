@@ -122,20 +122,20 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
   }
 
-  DINGO_LOG(DEBUG) << "StoreHeartbeat request: " << request.ShortDebugString();
-  DINGO_LOG(INFO) << "StoreHeartbeatRequest size: " << request.ByteSizeLong()
-                  << " used time: " << Helper::TimestampMs() - start_time;
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] request region count({}) size({}) elapsed time({} ms)",
+                                 mut_region_metrics_map->size(), request.ByteSizeLong(),
+                                 Helper::TimestampMs() - start_time);
   start_time = Helper::TimestampMs();
   pb::coordinator::StoreHeartbeatResponse response;
   auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("Store heartbeat failed, error: {} {}",
+    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] store heartbeat failed, error: {} {}",
                                       pb::error::Errno_Name(status.error_code()), status.error_str());
     return;
   }
 
-  DINGO_LOG(INFO) << "StoreHeartbeatResponse size: " << response.ByteSizeLong()
-                  << " used time: " << Helper::TimestampMs() - start_time;
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] response size({}) elapsed time({} ms)", response.ByteSizeLong(),
+                                 Helper::TimestampMs() - start_time);
 
   HeartbeatTask::HandleStoreHeartbeatResponse(store_meta_manager, response);
 }
@@ -199,19 +199,21 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   auto remote_stores = response.storemap().stores();
 
   auto new_stores = GetNewStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << "new store size: " << new_stores.size() << " / " << local_stores.size();
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] new store size: {} / {}", new_stores.size(), local_stores.size());
   for (const auto& store : new_stores) {
     store_server_meta->AddStore(store);
   }
 
   auto changed_stores = GetChangedStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << "changed store size: " << changed_stores.size() << " / " << local_stores.size();
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] changed store size: {} / {}", changed_stores.size(),
+                                 local_stores.size());
   for (const auto& store : changed_stores) {
     store_server_meta->UpdateStore(store);
   }
 
   auto deleted_stores = GetDeletedStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << "deleted store size: " << deleted_stores.size() << " / " << local_stores.size();
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] deleted store size: {} / {}", deleted_stores.size(),
+                                 local_stores.size());
   for (const auto& store : deleted_stores) {
     store_server_meta->DeleteStore(store->id());
   }
