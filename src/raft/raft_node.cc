@@ -76,17 +76,17 @@ int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, i
 }
 
 void RaftNode::Stop() {
-  DINGO_LOG(DEBUG) << fmt::format("[raft.node][node_id({})] stop raft node shutdown.", node_id_);
+  DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] stop raft node shutdown.", node_id_);
   node_->shutdown(nullptr);
   node_->join();
-  DINGO_LOG(DEBUG) << fmt::format("[raft.node][node_id({})] stop raft node shutdown finish.", node_id_);
+  DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] stop raft node shutdown finish.", node_id_);
 }
 
 void RaftNode::Destroy() {
   Stop();
   // Delete file directory
   Helper::RemoveAllFileOrDirectory(path_);
-  DINGO_LOG(DEBUG) << fmt::format("[raft.node][node_id({})] delete file directory", node_id_);
+  DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] delete file directory", node_id_);
 }
 
 // Commit message to raft

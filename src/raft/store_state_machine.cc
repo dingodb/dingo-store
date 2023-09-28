@@ -149,6 +149,7 @@ void StoreStateMachine::on_shutdown() {
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_shutdown", region_->Id());
   auto event = std::make_shared<SmShutdownEvent>();
   DispatchEvent(EventType::kSmShutdown, event);
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_shutdown done", region_->Id());
 }
 
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
@@ -191,6 +192,12 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   reader->load_meta(&meta);
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load snapshot({}-{}) applied_index({})",
                                  region_->Id(), meta.last_included_term(), meta.last_included_index(), applied_index_);
+
+  if (region_->State() == pb::common::STANDBY) {
+    DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is STANDBY state, ignore load snapshot.",
+                                      region_->Id());
+    return 0;
+  }
 
   // Todo: 1. When loading snapshot panic, need handle the corner case.
   //       2. When restart server, maybe meta.last_included_index() > applied_index_.
