@@ -205,6 +205,11 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
     return butil::Status::OK();
   }
 
+  if (!DoIsTrained()) {
+    DINGO_LOG(WARNING) << "ivf flat not train. train first. vector_index_id: " << Id();
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, "ivf flat not train. train first.");
+  }
+
   int32_t nprobe = parameter.ivf_flat().nprobe();
   if (BAIDU_UNLIKELY(nprobe <= 0)) {
     DINGO_LOG(WARNING) << fmt::format("pb::common::VectorSearchParameter ivf_flat nprobe : {} <=0. use default",

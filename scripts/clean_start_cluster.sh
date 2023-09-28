@@ -17,10 +17,10 @@ fi
 echo "DEPLOY_PARAMETER="${DEPLOY_PARAMETER}
 echo "DEPLOY_SERVER_NUM="${DEPLOY_SERVER_NUM}
 
-./stop.sh --role coordinator
-./stop.sh --role store
-./stop.sh --role index
-echo "stop all"
+./stop.sh --role coordinator --force=1
+./stop.sh --role store --force=1
+./stop.sh --role index --force=1
+echo "force stop all"
 sleep 1
 
 ./deploy_server.sh --role coordinator --clean_db --clean_raft --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
