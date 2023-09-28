@@ -287,6 +287,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "KvBatchPut request: " << request->ShortDebugString();
+  DINGO_LOG(INFO) << "KvBatchPut request_count: " << request->kvs_size();
   if (request->kvs().empty()) {
     return;
   }
@@ -310,7 +311,11 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
+
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      DINGO_LOG(ERROR) << fmt::format("KvBatchPut NOTLEADER request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
+
       err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
                                   Server::GetInstance()->ServerAddr(), request->context().region_id(),
                                   status.error_str()));
