@@ -56,11 +56,11 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(DEBUG) << "PushStoreOperation request: " << request->ShortDebugString();
+  DINGO_LOG(DEBUG) << "[push.store] request: " << request->ShortDebugString();
 
   if (request->store_operation().id() != Server::GetInstance()->Id()) {
-    DINGO_LOG(ERROR) << "PushStoreOperation request id: " << request->store_operation().id()
-                     << " not equal to server id: " << Server::GetInstance()->Id();
+    DINGO_LOG(ERROR) << fmt::format("[push.store] store id not match, req/local store id({} / {})",
+                                    request->store_operation().id(), Server::GetInstance()->Id());
     return;
   }
 
@@ -87,16 +87,11 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     butil::Status status;
     auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
 
-    // Tmp code.
-    if (command.region_cmd_type() == pb::coordinator::CMD_SPLIT) {
-      bthread_usleep(1000 * 1000);
-    }
-
     auto validate_func = RegionController::GetValidater(command.region_cmd_type());
     status = (validate_func != nullptr) ? validate_func(command)
                                         : butil::Status(pb::error::EINTERNAL, "Unknown region command");
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("PushStoreOperation validate error: {} {} command: {}",
+      DINGO_LOG(ERROR) << fmt::format("[push.store] validate failed, error: {} {} command: {}",
                                       pb::error::Errno_Name(status.error_code()), status.error_str(),
                                       command.ShortDebugString());
       error_func(command.id(), command.region_cmd_type(), status);
@@ -107,7 +102,7 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     status =
         region_controller->DispatchRegionControlCommand(ctx, std::make_shared<pb::coordinator::RegionCmd>(command));
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("PushStoreOperation dispatch error: {} command: {}", status.error_str(),
+      DINGO_LOG(ERROR) << fmt::format("[push.store] dispatch failed, error: {} command: {}", status.error_str(),
                                       command.ShortDebugString());
     }
     // coordinator need to get all region_cmd results, so add all results to response here
@@ -121,8 +116,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
         break;
       }
     }
-    DINGO_LOG(INFO) << "PushStoreOperation response: " << response->ShortDebugString()
-                    << " request: " << request->ShortDebugString();
+    DINGO_LOG(INFO) << fmt::format("[push.store] response: {} request: {}", response->ShortDebugString(),
+                                   request->ShortDebugString());
   }
 }
 
