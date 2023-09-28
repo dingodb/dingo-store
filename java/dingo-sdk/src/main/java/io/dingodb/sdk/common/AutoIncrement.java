@@ -29,7 +29,6 @@ public class AutoIncrement {
         this.increment = increment;
         this.offset = offset;
         this.fetcher = fetcher;
-        fetch();
     }
 
     public long current() {
