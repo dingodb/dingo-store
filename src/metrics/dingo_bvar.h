@@ -139,8 +139,8 @@ inline DingoMultiDimension<T>::DingoMultiDimension(const butil::StringPiece& pre
 
 template <typename T>
 DingoMultiDimension<T>::~DingoMultiDimension() {
-  delete_stats();
   hide();
+  delete_stats();
 }
 
 template <typename T>
