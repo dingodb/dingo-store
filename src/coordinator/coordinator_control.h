@@ -704,6 +704,7 @@ class CoordinatorControl : public MetaControl {
                            uint64_t merge_to_region_id);
   static void AddSplitTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id,
                            uint64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region);
+  static void AddCheckSplitResultTask(pb::coordinator::TaskList *task_list, uint64_t split_to_region_id);
   static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
   static void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);
   static void AddCheckStoreRegionTask(pb::coordinator::TaskList *task_list, uint64_t store_id, uint64_t region_id);

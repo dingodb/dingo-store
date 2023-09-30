@@ -2245,6 +2245,9 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   AddSplitTask(new_task_list, leader_store_id, split_from_region_id, new_region_id, split_watershed_key,
                store_create_region);
 
+  // check if split_to_region'state change to NORMAL, this state change means split is fininshed.
+  AddCheckSplitResultTask(new_task_list, new_region_id);
+
   return butil::Status::OK();
 }
 
@@ -3459,6 +3462,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
 
       return;
     }
+
+    DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, region_metrics_map_size = "
+                    << store_metrics.region_metrics_map_size()
+                    << ", region_metrics=" << store_metrics.ShortDebugString();
   }
 
   // update region_map
@@ -3536,6 +3543,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                             "region_map, store_id="
                          << store_metrics.id() << " region_id = " << region_metrics.id();
         continue;
+      } else {
+        DINGO_LOG(INFO) << "follower will update RegionMape, store_id=" << store_metrics.id()
+                        << " region_id = " << region_metrics.id();
       }
     } else {
       if (region_to_update.definition().epoch().conf_version() >
@@ -4185,6 +4195,15 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint
   region_cmd_to_add->mutable_split_request()->set_store_create_region(store_create_region);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
+}
+
+void CoordinatorControl::AddCheckSplitResultTask(pb::coordinator::TaskList* task_list, uint64_t split_to_region_id) {
+  // build split_region task
+  auto* split_result_check_task = task_list->add_tasks();
+  auto* split_result_check = split_result_check_task->mutable_pre_check();
+  split_result_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::REGION_CHECK);
+  split_result_check->mutable_region_check()->set_region_id(split_to_region_id);
+  split_result_check->mutable_region_check()->set_state(pb::common::RegionState::REGION_NORMAL);
 }
 
 void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
