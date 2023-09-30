@@ -3529,10 +3529,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     };
 
     if (region_metrics_is_not_leader) {
-      if (region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
+      if ((!need_update_region_definition) && region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
           region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
           region_to_update.state() != pb::common::RegionState::REGION_DELETED) {
-        DINGO_LOG(DEBUG) << "region is not deleted, follower can't update "
+        DINGO_LOG(DEBUG) << "region is not deleted and need_update_region_definition is false, follower can't update "
                             "region_map, store_id="
                          << store_metrics.id() << " region_id = " << region_metrics.id();
         continue;
