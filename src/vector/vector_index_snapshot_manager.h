@@ -64,6 +64,8 @@ class VectorIndexSnapshotManager {
 
   static std::string GetSnapshotParentPath(uint64_t vector_index_id);
 
+  static butil::Status GetSnapshotList(uint64_t vector_index_id, std::vector<std::string>& paths);
+
  private:
   static std::string GetSnapshotTmpPath(uint64_t vector_index_id);
   static std::string GetSnapshotNewPath(uint64_t vector_index_id, uint64_t snapshot_log_id);
