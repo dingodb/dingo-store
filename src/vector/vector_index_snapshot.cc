@@ -62,8 +62,15 @@ bool SnapshotMeta::Init() {
   path.filename();
 
   uint64_t snapshot_index_id = 0;
-  int match = sscanf(path.filename().c_str(), "snapshot_%020" PRId64, &snapshot_index_id);
-  if (match != 1) {
+  // int match = sscanf(path.filename().c_str(), "snapshot_%020" PRId64, &snapshot_index_id);  // NOLINT
+  try {
+    char* endptr;
+    snapshot_index_id = strtoull(path.filename().c_str() + 9, &endptr, 10);
+    if (*endptr != '\0') {
+      DINGO_LOG(ERROR) << fmt::format("Parse snapshot index id failed from snapshot name, {}", path_);
+      return false;
+    }
+  } catch (const std::exception& e) {
     DINGO_LOG(ERROR) << fmt::format("Parse snapshot index id failed from snapshot name, {}", path_);
     return false;
   }

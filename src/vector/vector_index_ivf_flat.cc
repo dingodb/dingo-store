@@ -322,6 +322,8 @@ void VectorIndexIvfFlat::LockWrite() { bthread_mutex_lock(&mutex_); }
 
 void VectorIndexIvfFlat::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 
+bool VectorIndexIvfFlat::SupportSave() { return true; }
+
 butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   if (BAIDU_UNLIKELY(path.empty())) {
     std::string s = fmt::format("path empty. not support");

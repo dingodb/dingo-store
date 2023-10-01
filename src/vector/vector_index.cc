@@ -31,7 +31,7 @@
 
 namespace dingodb {
 
-DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
+DEFINE_uint64(hnsw_need_save_count, 1, "hnsw need save count");
 
 void VectorIndex::SetSnapshotLogId(uint64_t snapshot_log_id) {
   this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
@@ -338,6 +338,15 @@ bool VectorIndexWrapper::NeedToRebuild() {
   }
 
   return vector_index->NeedToRebuild();
+}
+
+bool VectorIndexWrapper::SupportSave() {
+  auto vector_index = GetOwnVectorIndex();
+  if (vector_index == nullptr) {
+    return false;
+  }
+
+  return vector_index->SupportSave();
 }
 
 bool VectorIndexWrapper::NeedToSave(uint64_t last_save_log_behind) {

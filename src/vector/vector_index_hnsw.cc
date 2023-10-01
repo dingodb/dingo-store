@@ -260,6 +260,8 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {
   return ret;
 }
 
+bool VectorIndexHnsw::SupportSave() { return true; }
+
 butil::Status VectorIndexHnsw::Save(const std::string& path) {
   // Save need the caller to do LockWrite() and UnlockWrite()
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
