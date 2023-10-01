@@ -229,6 +229,7 @@ class VectorIndex {
   virtual bool NeedToRebuild() = 0;
   virtual bool NeedTrain() { return false; }
   virtual bool IsTrained() { return true; }
+  virtual bool SupportSave() { return false; }
 
   uint64_t Id() const { return id; }
 
@@ -369,6 +370,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   bool NeedToRebuild();
   bool NeedToSave(uint64_t last_save_log_behind);
+  bool SupportSave();
 
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids);

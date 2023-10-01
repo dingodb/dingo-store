@@ -77,6 +77,7 @@ class VectorIndexIvfFlat : public VectorIndex {
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
+  bool SupportSave() override;
 
   // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
