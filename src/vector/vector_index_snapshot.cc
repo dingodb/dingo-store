@@ -75,6 +75,9 @@ bool SnapshotMeta::Init() {
     return false;
   }
 
+  DINGO_LOG(INFO) << fmt::format("Load vector index snapshot meta, vector index id: {}, snapshot index id: {}",
+                                 vector_index_id_, snapshot_index_id);
+
   snapshot_log_id_ = snapshot_index_id;
 
   return true;

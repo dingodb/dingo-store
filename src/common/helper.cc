@@ -1046,12 +1046,33 @@ bool Helper::GetSystemDiskIoUtil(const std::string& device_name, std::map<std::s
   }
 }
 
-std::vector<std::string> Helper::TraverseDirectory(const std::string& path) {
+std::vector<std::string> Helper::TraverseDirectory(const std::string& path, bool ignore_dir, bool ignore_file) {
+  return TraverseDirectory(path, "", ignore_dir, ignore_file);
+}
+
+std::vector<std::string> Helper::TraverseDirectory(const std::string& path, const std::string& prefix, bool ignore_dir,
+                                                   bool ignore_file) {
   std::vector<std::string> filenames;
   try {
     if (std::filesystem::exists(path)) {
       for (const auto& fe : std::filesystem::directory_iterator(path)) {
-        filenames.push_back(fe.path().filename().string());
+        if (ignore_dir && fe.is_directory()) {
+          continue;
+        }
+
+        if (ignore_file && fe.is_regular_file()) {
+          continue;
+        }
+
+        if (prefix.empty()) {
+          filenames.push_back(fe.path().filename().string());
+        } else {
+          // check if the filename start with prefix
+          auto filename = fe.path().filename().string();
+          if (filename.find(prefix) == 0L) {
+            filenames.push_back(filename);
+          }
+        }
       }
     }
   } catch (std::filesystem::filesystem_error const& ex) {

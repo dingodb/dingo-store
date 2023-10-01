@@ -127,6 +127,20 @@ static uint64_t ParseMetaLogId(const std::string& path) {
   return 0;
 }
 
+butil::Status VectorIndexSnapshotManager::GetSnapshotList(uint64_t vector_index_id, std::vector<std::string>& paths) {
+  std::string snapshot_parent_path = GetSnapshotParentPath(vector_index_id);
+
+  auto sub_paths = Helper::TraverseDirectory(snapshot_parent_path, "snapshot", false, true);
+
+  std::sort(sub_paths.begin(), sub_paths.end());
+
+  for (const auto& sub_path : sub_paths) {
+    paths.push_back(fmt::format("{}/{}", snapshot_parent_path, sub_path));
+  }
+
+  return butil::Status();
+}
+
 std::string VectorIndexSnapshotManager::GetSnapshotParentPath(uint64_t vector_index_id) {
   return fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), vector_index_id);
 }

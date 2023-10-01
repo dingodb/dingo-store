@@ -28,10 +28,11 @@
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
+#include "vector/vector_index_snapshot_manager.h"
 
 namespace dingodb {
 
-DEFINE_uint64(hnsw_need_save_count, 1, "hnsw need save count");
+DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 void VectorIndex::SetSnapshotLogId(uint64_t snapshot_log_id) {
   this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
@@ -109,6 +110,24 @@ bool VectorIndexWrapper::Recover() {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] vector index recover failed, error: {}", Id(),
                                     status.error_str());
     return false;
+  }
+
+  // recover snapshot_set_
+  std::vector<std::string> snapshot_paths;
+  VectorIndexSnapshotManager::GetSnapshotList(this->Id(), snapshot_paths);
+
+  for (const auto& snapshot_path : snapshot_paths) {
+    auto new_snapshot = vector_index::SnapshotMeta::New(this->Id(), snapshot_path);
+    if (!new_snapshot->Init()) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[vector_index.wrapper][index_id({})] vector index recover init snapshot_meta faild, path: {}", Id(),
+          snapshot_path);
+      continue;
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index recover snapshot_meta, path: {}",
+                                   Id(), snapshot_path);
+    snapshot_set_->AddSnapshot(new_snapshot);
   }
 
   if (IsHoldVectorIndex()) {

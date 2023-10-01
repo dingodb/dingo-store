@@ -231,7 +231,10 @@ class Helper {
   static std::vector<uint8_t> AddByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
 
   // filesystem operations
-  static std::vector<std::string> TraverseDirectory(const std::string& path);
+  static std::vector<std::string> TraverseDirectory(const std::string& path, bool ignore_dir = false,
+                                                    bool ignore_file = false);
+  static std::vector<std::string> TraverseDirectory(const std::string& path, const std::string& prefix,
+                                                    bool ignore_dir = false, bool ignore_file = false);
   static std::string FindFileInDirectory(const std::string& dirpath, const std::string& prefix);
   static bool CreateDirectory(const std::string& path);
   static bool RemoveFileOrDirectory(const std::string& path);
