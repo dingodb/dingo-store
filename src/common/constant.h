@@ -64,7 +64,7 @@ class Constant {
   static const uint64_t kStoreRegionMetaInitCapacity = 1024;
 
   // rocksdb config
-  inline static const std::string kDbPath = "store.path";
+  inline static const std::string kStorePathConfigName = "store.path";
   inline static const std::string kColumnFamilies = "store.column_families";
   inline static const std::string kBaseColumnFamily = "store.base";
 
@@ -136,10 +136,6 @@ class Constant {
 
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;
-
-  // system resource usage
-  static constexpr double kSystemDiskCapacityFreeRatio = 0.05;
-  static constexpr double kSystemMemoryCapacityFreeRatio = 0.01;
 
   // crontab default interval
   static const int32_t kHeartbeatIntervalS = 10;

@@ -26,15 +26,6 @@ function deploy_store() {
   if [ ! -d "$dstpath/data" ]; then
     mkdir "$dstpath/data"
   fi
-  if [ ! -d "$dstpath/data/${role}" ]; then
-    mkdir $dstpath/data/${role}
-  fi
-  if [ ! -d "$dstpath/data/${role}/raft" ]; then
-    mkdir $dstpath/data/${role}/raft
-  fi
-  if [ ! -d "$dstpath/data/${role}/db" ]; then
-    mkdir $dstpath/data/${role}/db
-  fi
 
   cp ${coor_service_file} $dstpath/conf/coor_list
 
@@ -60,17 +51,21 @@ function deploy_store() {
   fi
 
   if [ "${FLAGS_clean_db}" == "0" ]; then
-    rm -rf $dstpath/data/${role}/db/*
+    rm -rf "$dstpath/data/db"
   fi
   if [ "${FLAGS_clean_raft}" == "0" ]; then
-    rm -rf $dstpath/data/${role}/raft/*
-    rm -rf $dstpath/data/${role}/log/*
+    rm -rf "$dstpath/data/raft_data/"
+    rm -rf "$dstpath/data/raft_log/"
   fi
   if [ "${FLAGS_clean_log}" == "0" ]; then
-    rm -rf $dstpath/log/*
+    rm -rf "$dstpath/log/*"
   fi
   if [ "${FLAGS_clean_idx}" == "0" ]; then
-    rm -rf $dstpath/data/${role}/idx/*
+    rm -rf "$dstpath/data/vector_index_snapshot/"
+  fi
+  if [ "${FLAGS_clean_all}" == "0" ]; then
+    rm -rf "$dstpath/data/*"
+    echo "CLEAN ALL $dstpath/data/*"
   fi
 }
 

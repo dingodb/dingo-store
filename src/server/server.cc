@@ -125,11 +125,44 @@ bool Server::InitServerID() {
 bool Server::InitDirectory() {
   auto config = ConfigManager::GetInstance()->GetConfig(role_);
 
-  std::filesystem::path db_path(config->GetString("store.path"));
-  checkpoint_path_ = fmt::format("{}/checkpoint", db_path.parent_path().string());
-  if (!std::filesystem::exists(checkpoint_path_)) {
-    if (!std::filesystem::create_directories(checkpoint_path_)) {
-      DINGO_LOG(ERROR) << "Create checkpoint directory failed: " << checkpoint_path_;
+  // db path
+  auto db_path = config->GetString("store.path");
+  auto ret = Helper::CreateDirectories(db_path);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Create data directory failed: " << db_path;
+    return false;
+  }
+
+  // checkpoint path
+  checkpoint_path_ = fmt::format("{}/rocksdb_checkpoint", db_path);
+  ret = Helper::CreateDirectories(checkpoint_path_);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Create checkpoint directory failed: " << checkpoint_path_;
+    return false;
+  }
+
+  // raft path
+  auto raft_path = config->GetString("raft.path");
+  ret = Helper::CreateDirectories(raft_path);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Create raft directory failed: " << raft_path;
+    return false;
+  }
+
+  // raft log path
+  auto log_path = config->GetString("raft.log_path");
+  ret = Helper::CreateDirectories(log_path);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Create raft log directory failed: " << log_path;
+    return false;
+  }
+
+  // vector index path
+  if (role_ == pb::common::INDEX) {
+    auto vector_index_path = config->GetString("vector.index_path");
+    ret = Helper::CreateDirectories(vector_index_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create vector index directory failed: " << vector_index_path;
       return false;
     }
   }

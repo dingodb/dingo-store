@@ -16,8 +16,8 @@ region:
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
-  path: $BASE_PATH$/data/index/raft
-  log_path: $BASE_PATH$/data/index/log
+  path: $BASE_PATH$/data/raft_data
+  log_path: $BASE_PATH$/data/raft_log
   election_timeout_s: 6
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32M
@@ -25,12 +25,12 @@ log:
   level: INFO
   path: $BASE_PATH$/log
 vector:
-  index_path: $BASE_PATH$/data/index/idx
+  index_path: $BASE_PATH$/data/vector_index_snapshot
   enable_follower_hold_index: false
   # save hnsw vector index snapshot when write key num exceed threshold.
   hnsw_save_threshold_write_key_num: 10000
 store:
-  path: $BASE_PATH$/data/index/db
+  path: $BASE_PATH$/data/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   stats_dump_period_s: 120

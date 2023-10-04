@@ -11,6 +11,7 @@ DEFINE_boolean clean_db 1 'clean db'
 DEFINE_boolean clean_idx 1 'clean idx'
 DEFINE_boolean clean_raft 1 'clean raft'
 DEFINE_boolean clean_log 0 'clean log'
+DEFINE_boolean clean_all 1 'clean all'
 DEFINE_boolean replace_conf 0 'replace conf'
 DEFINE_string parameters 'deploy_parameters' 'server role'
 
