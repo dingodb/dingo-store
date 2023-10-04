@@ -141,19 +141,19 @@ bool Server::InitDirectory() {
     return false;
   }
 
-  // raft path
-  auto raft_path = config->GetString("raft.path");
-  ret = Helper::CreateDirectories(raft_path);
+  // raft data path
+  auto raft_data_path = config->GetString("raft.path");
+  ret = Helper::CreateDirectories(raft_data_path);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create raft directory failed: " << raft_path;
+    DINGO_LOG(ERROR) << "Create raft directory failed: " << raft_data_path;
     return false;
   }
 
   // raft log path
-  auto log_path = config->GetString("raft.log_path");
-  ret = Helper::CreateDirectories(log_path);
+  auto raft_log_path = config->GetString("raft.log_path");
+  ret = Helper::CreateDirectories(raft_log_path);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create raft log directory failed: " << log_path;
+    DINGO_LOG(ERROR) << "Create raft log directory failed: " << raft_log_path;
     return false;
   }
 
@@ -165,6 +165,14 @@ bool Server::InitDirectory() {
       DINGO_LOG(ERROR) << "Create vector index directory failed: " << vector_index_path;
       return false;
     }
+  }
+
+  // program log path
+  auto log_path = config->GetString("log.path");
+  ret = Helper::CreateDirectories(log_path);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Create log directory failed: " << log_path;
+    return false;
   }
 
   return true;
