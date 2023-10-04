@@ -35,7 +35,7 @@
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 
-DEFINE_bool(log_each_request, true, "Print log for each request");
+DEFINE_bool(log_each_request, false, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_uint32(thread_num, 1, "Number of threads sending requests");
 DEFINE_uint64(timeout_ms, 500, "Timeout for each request");
@@ -441,10 +441,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
         return;
       }
       client::DumpVectorIndexDb(ctx);
-    }
-
-    // illegal method
-    else {
+      // illegal method
+    } else {
       DINGO_LOG(ERROR) << "Unknown method: " << method;
       return;
     }
