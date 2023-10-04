@@ -36,10 +36,12 @@
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
+#include "server/server.h"
 
 namespace dingodb {
 
-DEFINE_uint32(MAX_CREATE_ID_COUNT, 2048, "max create id count");
+DEFINE_uint32(max_create_id_count, 2048, "max create id count");
+DEFINE_bool(force_cluster_read_only, false, "force cluster read only");
 
 void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controller*/,
                                    const pb::coordinator::HelloRequest *request,
@@ -57,6 +59,12 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
   if (request->get_memory_info()) {
     auto *memory_info = response->mutable_memory_info();
     this->coordinator_control_->GetMemoryInfo(*memory_info);
+  }
+
+  // response cluster state
+  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  if (is_read_only || FLAGS_force_cluster_read_only) {
+    response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
   }
 }
 
@@ -553,6 +561,12 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
     this->coordinator_control_->UpdateStoreMetrics(request->store_metrics(), meta_increment);
   }
 
+  // response cluster state
+  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  if (is_read_only || FLAGS_force_cluster_read_only) {
+    response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+  }
+
   // if no need to update meta, just return
   if (meta_increment.ByteSizeLong() == 0) {
     DINGO_LOG(DEBUG) << "StoreHeartbeat no need to update meta, store_id=" << request->store().id();
@@ -842,9 +856,9 @@ void CoordinatorServiceImpl::CreateRegionId(google::protobuf::RpcController *con
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(Errno::EILLEGAL_PARAMTETERS));
     response->mutable_error()->set_errmsg("count must be greater than 0");
     return;
-  } else if (request->count() > FLAGS_MAX_CREATE_ID_COUNT) {
+  } else if (request->count() > FLAGS_max_create_id_count) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(Errno::EILLEGAL_PARAMTETERS));
-    response->mutable_error()->set_errmsg("count must be less than " + std::to_string(FLAGS_MAX_CREATE_ID_COUNT));
+    response->mutable_error()->set_errmsg("count must be less than " + std::to_string(FLAGS_max_create_id_count));
     return;
   }
 

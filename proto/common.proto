@@ -758,24 +758,26 @@ message VectorIndexStatus {
 }
 
 message StoreOwnMetrics {
-  uint64 id = 1;                     // store id
-  uint64 system_total_capacity = 2;  // total capacity of this store
-  uint64 system_free_capacity = 3;   // free capacity of this store
+  uint64 id = 1;           // store id
+  bool is_ready_only = 2;  // is read only
 
-  uint64 system_cpu_usage = 4;          // cpu usage of this store process
-  uint64 system_total_memory = 5;       // total memory of the host this store process running on
-  uint64 system_free_memory = 6;        // total free memory of the host this store process running on
-  uint64 system_shared_memory = 7;      // shared memory of the host this store process running on
-  uint64 system_buffer_memory = 8;      // buffer memory of the host this store process running on
-  uint64 system_cached_memory = 9;      // cache memory of the host this store process running on
-  uint64 system_available_memory = 10;  // available memory of the host this store process running on
-  uint64 system_total_swap = 11;        // total swap of the host this store process running on
-  uint64 system_free_swap = 12;         // total free swap of the host this store process running on
-  uint64 system_io_util = 13;           // io utilization of the host this store process running on , NOT IMPLEMENTED
+  uint64 system_total_capacity = 11;  // total capacity of this store
+  uint64 system_free_capacity = 12;   // free capacity of this store
 
-  uint64 process_used_cpu = 21;       // cpu usage of this store process, this value / 100 is the real cpu usage percent
-  uint64 process_used_memory = 22;    // total used memory of this store process
-  uint64 process_used_capacity = 23;  // free capacity of this store , NOT IMPLEMENTED
+  uint64 system_cpu_usage = 13;         // cpu usage of this store process
+  uint64 system_total_memory = 14;      // total memory of the host this store process running on
+  uint64 system_free_memory = 15;       // total free memory of the host this store process running on
+  uint64 system_shared_memory = 16;     // shared memory of the host this store process running on
+  uint64 system_buffer_memory = 17;     // buffer memory of the host this store process running on
+  uint64 system_cached_memory = 18;     // cache memory of the host this store process running on
+  uint64 system_available_memory = 19;  // available memory of the host this store process running on
+  uint64 system_total_swap = 20;        // total swap of the host this store process running on
+  uint64 system_free_swap = 21;         // total free swap of the host this store process running on
+  uint64 system_io_util = 22;           // io utilization of the host this store process running on , NOT IMPLEMENTED
+
+  uint64 process_used_cpu = 23;       // cpu usage of this store process, this value / 100 is the real cpu usage percent
+  uint64 process_used_memory = 24;    // total used memory of this store process
+  uint64 process_used_capacity = 25;  // free capacity of this store , NOT IMPLEMENTED
 }
 
 // StoreMetrics

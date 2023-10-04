@@ -51,20 +51,20 @@ function deploy_store() {
   fi
 
   if [ "${FLAGS_clean_db}" == "0" ]; then
-    rm -rf "$dstpath/data/db"
+    rm -rf $dstpath/data/db
   fi
   if [ "${FLAGS_clean_raft}" == "0" ]; then
-    rm -rf "$dstpath/data/raft_data/"
-    rm -rf "$dstpath/data/raft_log/"
+    rm -rf $dstpath/data/raft_data/
+    rm -rf $dstpath/data/raft_log/
   fi
   if [ "${FLAGS_clean_log}" == "0" ]; then
-    rm -rf "$dstpath/log/*"
+    rm -rf $dstpath/log/*
   fi
   if [ "${FLAGS_clean_idx}" == "0" ]; then
-    rm -rf "$dstpath/data/vector_index_snapshot/"
+    rm -rf $dstpath/data/vector_index_snapshot/
   fi
   if [ "${FLAGS_clean_all}" == "0" ]; then
-    rm -rf "$dstpath/data/*"
+    rm -rf $dstpath/data/*
     echo "CLEAN ALL $dstpath/data/*"
   fi
 }

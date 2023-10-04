@@ -191,7 +191,7 @@ butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::strin
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
   if (!scan) {
-    DINGO_LOG(ERROR) << fmt::format("scan_id : %s not found", scan_id.c_str());
+    DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
@@ -211,7 +211,7 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
   butil::Status status;
   if (!scan) {
-    DINGO_LOG(ERROR) << fmt::format("scan_id : %s not found", scan_id.c_str());
+    DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 

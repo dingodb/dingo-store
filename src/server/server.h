@@ -199,6 +199,9 @@ class Server {
     return config == nullptr ? "" : config->GetString("vector.index_path");
   }
 
+  bool IsReadOnly() const { return is_read_only_; }
+  void SetReadOnly(bool is_read_only) { is_read_only_ = is_read_only; }
+
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker() { return pre_split_checker_; }
 
   Server(const Server&) = delete;
@@ -288,6 +291,9 @@ class Server {
 
   // Crontab config
   std::vector<CrontabConfig> crontab_configs_;
+
+  // Is cluster read-only
+  bool is_read_only_ = false;
 };
 
 }  // namespace dingodb

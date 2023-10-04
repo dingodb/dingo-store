@@ -46,6 +46,7 @@
 
 namespace dingodb {
 
+DECLARE_bool(force_cluster_read_only);
 DECLARE_int32(executor_heartbeat_timeout);
 DECLARE_int32(store_heartbeat_timeout);
 DECLARE_int32(region_heartbeat_timeout);
@@ -606,6 +607,24 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
 
   if (region_internal.definition().index_parameter().has_vector_index_parameter()) {
     *(region.mutable_metrics()->mutable_vector_index_status()) = region_metrics.vector_index_status();
+  }
+}
+
+void CoordinatorControl::UpdateClusterReadOnly() {
+  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  bool cluster_is_read_only = false;
+  for (const auto& store_metrics : store_metrics_map_) {
+    if (store_metrics.second.store_own_metrics().is_ready_only()) {
+      DINGO_LOG(WARNING) << "UpdateClusterReadOnly... store_id=" << store_metrics.first
+                         << " is_read_only=" << store_metrics.second.store_own_metrics().is_ready_only();
+      cluster_is_read_only = true;
+      break;
+    }
+  }
+
+  if (Server::GetInstance()->IsReadOnly() != cluster_is_read_only) {
+    DINGO_LOG(WARNING) << "UpdateClusterReadOnly... cluster_is_read_only=" << cluster_is_read_only;
+    Server::GetInstance()->SetReadOnly(cluster_is_read_only);
   }
 }
 
@@ -1509,6 +1528,11 @@ butil::Status CoordinatorControl::CreateShadowRegion(
                   << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
 
+  if (Server::GetInstance()->IsReadOnly() || FLAGS_force_cluster_read_only) {
+    DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region";
+    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  }
+
   std::vector<pb::common::Store> selected_stores_for_regions;
   pb::common::IndexParameter new_index_parameter = index_parameter;
 
@@ -1654,6 +1678,11 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
                   << ", table_id=" << table_id << ", index_id=" << index_id << ", part_id=" << part_id
                   << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
+
+  if (Server::GetInstance()->IsReadOnly() || FLAGS_force_cluster_read_only) {
+    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
+    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  }
 
   std::vector<pb::common::Store> selected_stores_for_regions;
   pb::common::IndexParameter new_index_parameter = index_parameter;

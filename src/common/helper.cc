@@ -803,6 +803,8 @@ bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string
   output["system_total_capacity"] = total_space;
   output["system_free_capacity"] = free_space;
 
+  DINGO_LOG(INFO) << fmt::format("Disk total space: {} bytes, free space: {} bytes", total_space, free_space);
+
   return true;
 }
 
@@ -810,10 +812,10 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
   // system memory info
   struct sysinfo mem_info;
   if (sysinfo(&mem_info) != -1) {
-    DINGO_LOG(INFO) << fmt::format("Total RAM: {} bytes", mem_info.totalram * mem_info.mem_unit);
-    DINGO_LOG(INFO) << fmt::format("Available RAM: {} bytes", mem_info.freeram * mem_info.mem_unit);
-    DINGO_LOG(INFO) << fmt::format("Total Swap: {} bytes", mem_info.totalswap * mem_info.mem_unit);
-    DINGO_LOG(INFO) << fmt::format("Available Swap: {} bytes", mem_info.freeswap * mem_info.mem_unit);
+    DINGO_LOG(INFO) << "Total RAM: " << mem_info.totalram * mem_info.mem_unit << " bytes, "
+                    << "Available RAM: " << mem_info.freeram * mem_info.mem_unit << " bytes, "
+                    << "Total Swap: " << mem_info.totalswap * mem_info.mem_unit << " bytes, "
+                    << "Available Swap: " << mem_info.freeswap * mem_info.mem_unit << " bytes";
 
     output["system_total_memory"] = mem_info.totalram * mem_info.mem_unit;
     output["system_free_memory"] = mem_info.freeram * mem_info.mem_unit;
@@ -874,14 +876,18 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
     return false;
   }
 
+  DINGO_LOG(INFO) << "Available RAM (proc/meminfo): " << output["system_available_memory"] << " bytes, "
+                  << "Cached RAM (proc/meminfo): " << output["system_cached_memory"] << " bytes";
+
   return true;
 }
 
 bool Helper::GetProcessMemoryInfo(std::map<std::string, uint64_t>& output) {
   struct rusage usage;
   if (getrusage(RUSAGE_SELF, &usage) != -1) {
-    DINGO_LOG(INFO) << fmt::format("Memory usage: {} kilobytes", usage.ru_maxrss);
     output["process_used_memory"] = usage.ru_maxrss;
+    DINGO_LOG(INFO) << "Process Memory usage: " << usage.ru_maxrss << " kilobytes, "
+                    << "Shared memory size: " << usage.ru_ixrss << " kilobytes";
     return true;
   } else {
     DINGO_LOG(INFO) << "Failed to retrieve memory usage using getrusage.";
