@@ -21,11 +21,15 @@
 #include "butil/status.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
 namespace dingodb {
+
+DEFINE_double(min_system_disk_capacity_free_ratio, 0.05, "Min system disk capacity free ratio");
+DEFINE_double(min_system_memory_capacity_free_ratio, 0.10, "Min system memory capacity free ratio");
 
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
@@ -221,7 +225,7 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
   uint64_t total_capacity = metrics->store_own_metrics().system_total_capacity();
   if (total_capacity != 0) {
     double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
-    if (disk_free_capacity_ratio < Constant::kSystemDiskCapacityFreeRatio) {
+    if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
       std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
                                   total_capacity, disk_free_capacity_ratio);
       DINGO_LOG(WARNING) << s;
@@ -233,7 +237,7 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
   uint64_t total_memory = metrics->store_own_metrics().system_total_memory();
   if (total_memory != 0 && available_memory != UINT64_MAX) {
     double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
-    if (memory_free_capacity_ratio < Constant::kSystemMemoryCapacityFreeRatio) {
+    if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
       std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
                                   total_memory, memory_free_capacity_ratio);
       DINGO_LOG(WARNING) << s;

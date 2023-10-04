@@ -35,6 +35,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 #include "vector/codec.h"
 #include "vector/vector_index_manager.h"
 
@@ -315,6 +316,14 @@ static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<RawEngine
 }
 
 void PreSplitCheckTask::PreSplitCheck() {
+  // if system capacity is very low, suspend all split check to avoid split region.
+  auto ret = ServiceHelper::ValidateSystemCapacity();
+  if (!ret.ok()) {
+    DINGO_LOG(INFO) << fmt::format("[split.check] system capacity is very low, suspend all split check, error: {} {}",
+                                   pb::error::Errno_Name(ret.error_code()), ret.error_str());
+    return;
+  }
+
   auto raw_engine = Server::GetInstance()->GetRawEngine();
   auto metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto regions = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
