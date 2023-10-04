@@ -15,6 +15,7 @@
 #include "client/store_client_function.h"
 
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -36,6 +37,7 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
 #include "serial/buf.h"
@@ -1754,6 +1756,7 @@ void SendKvDeleteRange(uint64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvDeleteRangeResponse response;
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  auto start_key = dingodb::Helper::StringToHex(prefix);
   request.mutable_range()->mutable_range()->set_start_key(prefix);
   request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
@@ -1768,8 +1771,10 @@ void SendKvScan(uint64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvScanBeginResponse response;
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
-  request.mutable_range()->mutable_range()->set_start_key(prefix);
-  request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
+
+  auto start_key = dingodb::Helper::HexToString(prefix);
+  request.mutable_range()->mutable_range()->set_start_key(start_key);
+  request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(start_key));
   request.mutable_range()->set_with_start(true);
   request.mutable_range()->set_with_end(false);
 
