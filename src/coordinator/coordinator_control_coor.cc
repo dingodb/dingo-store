@@ -571,7 +571,7 @@ void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInt
   pb::common::RegionMetrics region_metrics;
   auto ret = region_metrics_map_.Get(region_internal.id(), region_metrics);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "GenRegionFull... Get region_metrics failed, region_id=" << region_internal.id();
+    DINGO_LOG(INFO) << "GenRegionFull... Get region_metrics failed, region_id=" << region_internal.id();
     return;
   }
 
@@ -615,6 +615,20 @@ void CoordinatorControl::UpdateClusterReadOnly() {
   bool cluster_is_read_only = false;
   for (const auto& store_metrics : store_metrics_map_) {
     if (store_metrics.second.store_own_metrics().is_ready_only()) {
+      pb::common::Store store;
+      auto ret = store_map_.Get(store_metrics.first, store);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "UpdateClusterReadOnly... Get store failed, store_id=" << store_metrics.first;
+        continue;
+      }
+
+      if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+        DINGO_LOG(WARNING) << "UpdateClusterReadOnly... store_id=" << store_metrics.first
+                           << " is_read_only=" << store_metrics.second.store_own_metrics().is_ready_only()
+                           << " but store.state()=" << store.state();
+        continue;
+      }
+
       DINGO_LOG(WARNING) << "UpdateClusterReadOnly... store_id=" << store_metrics.first
                          << " is_read_only=" << store_metrics.second.store_own_metrics().is_ready_only();
       cluster_is_read_only = true;

@@ -364,7 +364,7 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     }
   }
 
-  status = ServiceHelper::ValidateSystemCapacity();
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
   }
