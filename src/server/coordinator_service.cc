@@ -559,6 +559,12 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   // update store metrics
   if (request->has_store_metrics()) {
     this->coordinator_control_->UpdateStoreMetrics(request->store_metrics(), meta_increment);
+
+    // update is_read_only
+    auto is_read_only_from_store = request->store_metrics().store_own_metrics().is_ready_only();
+    if (is_read_only_from_store) {
+      Server::GetInstance()->SetReadOnly(true);
+    }
   }
 
   // response cluster state

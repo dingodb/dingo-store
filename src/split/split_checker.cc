@@ -317,9 +317,9 @@ static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<RawEngine
 
 void PreSplitCheckTask::PreSplitCheck() {
   // if system capacity is very low, suspend all split check to avoid split region.
-  auto ret = ServiceHelper::ValidateSystemCapacity();
+  auto ret = ServiceHelper::ValidateClusterReadOnly();
   if (!ret.ok()) {
-    DINGO_LOG(INFO) << fmt::format("[split.check] system capacity is very low, suspend all split check, error: {} {}",
+    DINGO_LOG(INFO) << fmt::format("[split.check] cluster is read-only, suspend all split check, error: {} {}",
                                    pb::error::Errno_Name(ret.error_code()), ret.error_str());
     return;
   }

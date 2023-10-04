@@ -37,6 +37,7 @@
 #include "proto/error.pb.h"
 #include "proto/push.pb.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 #include "store/region_controller.h"
 
 namespace dingodb {
@@ -53,6 +54,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
 
   pb::coordinator::StoreHeartbeatRequest request;
+
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
 
   request.set_self_storemap_epoch(store_meta_manager->GetStoreServerMeta()->GetEpoch());

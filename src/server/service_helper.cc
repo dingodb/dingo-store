@@ -28,9 +28,6 @@
 
 namespace dingodb {
 
-DEFINE_double(min_system_disk_capacity_free_ratio, 0.05, "Min system disk capacity free ratio");
-DEFINE_double(min_system_memory_capacity_free_ratio, 0.10, "Min system memory capacity free ratio");
-
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
@@ -208,7 +205,9 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateSystemCapacity() {
+// if one store is set to read-only, all stores are set to read-only
+// this flag is set by coordinator and send to all stores using store heartbeat
+butil::Status ServiceHelper::ValidateClusterReadOnly() {
   auto is_read_only = Server::GetInstance()->IsReadOnly();
   if (is_read_only) {
     DINGO_LOG(WARNING) << "cluster is set to read-only from coordinator.";
@@ -216,43 +215,47 @@ butil::Status ServiceHelper::ValidateSystemCapacity() {
                          "ESYSTEM_CLUSTER_READ_ONLY: cluster is set to read-only from coordinator.");
   }
 
-  auto store_metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
-  if (store_metrics_manager == nullptr) {
-    DINGO_LOG(WARNING) << "store metrics manager is nullptr.";
-    return butil::Status();
-  }
-
-  auto metrics = store_metrics_manager->GetStoreMetrics()->Metrics();
-  if (metrics == nullptr) {
-    DINGO_LOG(WARNING) << "store metrics is nullptr.";
-    return butil::Status();
-  }
-
-  uint64_t free_capacity = metrics->store_own_metrics().system_free_capacity();
-  uint64_t total_capacity = metrics->store_own_metrics().system_total_capacity();
-  if (total_capacity != 0) {
-    double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
-    if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
-      std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
-                                  total_capacity, disk_free_capacity_ratio);
-      DINGO_LOG(WARNING) << s;
-      return butil::Status(pb::error::ESYSTEM_DISK_CAPACITY_FULL, s);
-    }
-  }
-
-  uint64_t available_memory = metrics->store_own_metrics().system_available_memory();
-  uint64_t total_memory = metrics->store_own_metrics().system_total_memory();
-  if (total_memory != 0 && available_memory != UINT64_MAX) {
-    double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
-    if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
-      std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
-                                  total_memory, memory_free_capacity_ratio);
-      DINGO_LOG(WARNING) << s;
-      return butil::Status(pb::error::ESYSTEM_MEMORY_CAPACITY_FULL, s);
-    }
-  }
-
   return butil::Status();
 }
+
+// butil::Status ServiceHelper::CheckSystemCapacity() {
+//   auto store_metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
+//   if (store_metrics_manager == nullptr) {
+//     DINGO_LOG(WARNING) << "store metrics manager is nullptr.";
+//     return butil::Status();
+//   }
+
+//   auto metrics = store_metrics_manager->GetStoreMetrics()->Metrics();
+//   if (metrics == nullptr) {
+//     DINGO_LOG(WARNING) << "store metrics is nullptr.";
+//     return butil::Status();
+//   }
+
+//   uint64_t free_capacity = metrics->store_own_metrics().system_free_capacity();
+//   uint64_t total_capacity = metrics->store_own_metrics().system_total_capacity();
+//   if (total_capacity != 0) {
+//     double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
+//     if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
+//       std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
+//                                   total_capacity, disk_free_capacity_ratio);
+//       DINGO_LOG(WARNING) << s;
+//       return butil::Status(pb::error::ESYSTEM_DISK_CAPACITY_FULL, s);
+//     }
+//   }
+
+//   uint64_t available_memory = metrics->store_own_metrics().system_available_memory();
+//   uint64_t total_memory = metrics->store_own_metrics().system_total_memory();
+//   if (total_memory != 0 && available_memory != UINT64_MAX) {
+//     double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
+//     if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
+//       std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
+//                                   total_memory, memory_free_capacity_ratio);
+//       DINGO_LOG(WARNING) << s;
+//       return butil::Status(pb::error::ESYSTEM_MEMORY_CAPACITY_FULL, s);
+//     }
+//   }
+
+//   return butil::Status();
+// }
 
 }  // namespace dingodb

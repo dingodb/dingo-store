@@ -203,7 +203,7 @@ butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* reque
     return status;
   }
 
-  status = ServiceHelper::ValidateSystemCapacity();
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
   }
@@ -272,7 +272,7 @@ butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequ
     return status;
   }
 
-  status = ServiceHelper::ValidateSystemCapacity();
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
   }
@@ -346,7 +346,7 @@ butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbse
     return status;
   }
 
-  status = ServiceHelper::ValidateSystemCapacity();
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
   }
@@ -417,7 +417,7 @@ butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatc
     return status;
   }
 
-  status = ServiceHelper::ValidateSystemCapacity();
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
   }
