@@ -21,8 +21,8 @@ coordinator:
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
-  path: $BASE_PATH$/data/coordinator/raft
-  log_path: $BASE_PATH$/data/coordinator/log
+  path: $BASE_PATH$/data/raft_data
+  log_path: $BASE_PATH$/data/raft_log
   election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
   snapshot_interval_s: 300
@@ -31,7 +31,7 @@ log:
   level: INFO
   path: $BASE_PATH$/log
 store:
-  path: $BASE_PATH$/data/coordinator/db
+  path: $BASE_PATH$/data/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   stats_dump_period_s: 120

@@ -204,9 +204,9 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
     return false;
   }
 
-  std::string store_db_path_value = config->GetString(Constant::kDbPath);
+  std::string store_db_path_value = config->GetString(Constant::kStorePathConfigName) + "/rocksdb";
   if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("can not find : {}", Constant::kDbPath);
+    DINGO_LOG(ERROR) << fmt::format("can not find : {}", Constant::kStorePathConfigName) + "/rocksdb";
     return false;
   }
 

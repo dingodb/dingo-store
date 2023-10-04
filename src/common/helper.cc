@@ -1110,6 +1110,22 @@ bool Helper::CreateDirectory(const std::string& path) {
   return true;
 }
 
+butil::Status Helper::CreateDirectories(const std::string& path) {
+  std::error_code ec;
+  if (std::filesystem::exists(path)) {
+    DINGO_LOG(INFO) << fmt::format("Directory already exists, path: {}", path);
+    return butil::Status::OK();
+  }
+
+  if (!std::filesystem::create_directories(path, ec)) {
+    DINGO_LOG(ERROR) << fmt::format("Create directory {} failed, error: {} {}", path, ec.value(), ec.message());
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Create directory failed, error: {}", ec.message()));
+  }
+
+  DINGO_LOG(INFO) << fmt::format("Create directory success, path: {}", path);
+  return butil::Status::OK();
+}
+
 bool Helper::RemoveFileOrDirectory(const std::string& path) {
   std::error_code ec;
   DINGO_LOG(INFO) << fmt::format("Remove file or directory, path: {}", path);
