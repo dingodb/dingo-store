@@ -183,6 +183,7 @@ enum Errno {
   // system resource
   ESYSTEM_DISK_CAPACITY_FULL = 90000;
   ESYSTEM_MEMORY_CAPACITY_FULL = 90001;
+  ESYSTEM_CLUSTER_READ_ONLY = 90002;
 }
 
 message StoreRegionInfo {

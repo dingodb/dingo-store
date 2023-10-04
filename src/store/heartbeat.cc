@@ -217,6 +217,13 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   for (const auto& store : deleted_stores) {
     store_server_meta->DeleteStore(store->id());
   }
+
+  // set up read-only
+  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  if (is_read_only != response.cluster_state().cluster_is_read_only()) {
+    Server::GetInstance()->SetReadOnly(response.cluster_state().cluster_is_read_only());
+    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] cluster set read-only to {}", is_read_only);
+  }
 }
 
 static std::atomic<bool> g_store_recycle_orphan_running(false);
@@ -295,6 +302,9 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
   //     continue;
   //   }
   // }
+
+  // update cluster is_read_only
+  coordinator_control->UpdateClusterReadOnly();
 }
 
 // this is for coordinator

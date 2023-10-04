@@ -235,12 +235,12 @@ static void SignalHandler(int signo) {
     }
   }
 
-  // clean temp directory
-  dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
-
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
-    DINGO_LOG(ERROR) << "graceful shutdown";
+    // clean temp directory
+    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
+    DINGO_LOG(ERROR) << "graceful shutdown, clean up checkpoint dir: "
+                     << dingodb::Server::GetInstance()->GetCheckpointPath();
     exit(0);
   } else {
     // call abort() to generate core dump
@@ -308,12 +308,12 @@ static void SignalHandlerWithoutLineno(int signo) {
 
   } while (unw_step(&cursor) > 0);
 
-  // clean temp directory
-  dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
-
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
-    DINGO_LOG(ERROR) << "graceful shutdown";
+    // clean temp directory
+    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
+    DINGO_LOG(ERROR) << "graceful shutdown, clean up checkpoint dir: "
+                     << dingodb::Server::GetInstance()->GetCheckpointPath();
     exit(0);
   } else {
     // call abort() to generate core dump

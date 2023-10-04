@@ -518,6 +518,7 @@ class CoordinatorControl : public MetaControl {
   void DeleteRegionBvar(uint64_t region_id);
 
   void UpdateRegionState();
+  void UpdateClusterReadOnly();
 
   // get schemas
   butil::Status GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema> &schemas);

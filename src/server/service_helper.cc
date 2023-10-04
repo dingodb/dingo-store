@@ -209,6 +209,13 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
 }
 
 butil::Status ServiceHelper::ValidateSystemCapacity() {
+  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  if (is_read_only) {
+    DINGO_LOG(WARNING) << "cluster is set to read-only from coordinator.";
+    return butil::Status(pb::error::ESYSTEM_CLUSTER_READ_ONLY,
+                         "ESYSTEM_CLUSTER_READ_ONLY: cluster is set to read-only from coordinator.");
+  }
+
   auto store_metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
   if (store_metrics_manager == nullptr) {
     DINGO_LOG(WARNING) << "store metrics manager is nullptr.";
