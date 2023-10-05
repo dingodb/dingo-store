@@ -208,12 +208,6 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
     return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
-  uint32_t topk_org = topk;
-  // bugs. faiss internal bug . topk = 1 and  L2 . Bypass this bug.
-  if (pb::common::MetricType::METRIC_TYPE_L2 == metric_type_ && 1 == topk) {
-    topk = 2;
-    DINGO_LOG(INFO) << "metric_type = METRIC_TYPE_L2 and topk = 1. make topk = 2.";
-  }
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk * vector_with_ids.size(), 0.0f);
   std::vector<faiss::idx_t> labels;
@@ -279,7 +273,7 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {
     auto& result = results.emplace_back();
 
-    for (size_t i = 0; i < topk && i < topk_org; i++) {
+    for (size_t i = 0; i < topk; i++) {
       size_t pos = row * topk + i;
       if (labels[pos] < 0) {
         continue;
