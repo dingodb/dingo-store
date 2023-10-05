@@ -431,6 +431,9 @@ void SplitHandler::SplitClosure::Run() {
   }
 
   store_region_meta->UpdateNeedBootstrapDoSnapshot(region_, false);
+
+  // update StoreRegionState after do snapshot
+  store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
 }
 
 // Pre create region split
@@ -481,9 +484,6 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateTemporaryDisableChange(from_region, true);
   store_region_meta->UpdateTemporaryDisableChange(to_region, true);
 
-  // Set region state spliting
-  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
-
   DINGO_LOG(INFO) << fmt::format(
       "[split.spliting][region({}->{})] pre from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
       to_region->Id(), Helper::StringToHex(from_region->RawRange().start_key()),
@@ -517,9 +517,11 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   record.set_split_time(Helper::NowTime());
   from_region->AddChild(record);
 
-  // Increase region version
+  // Increase region version and update StoreRegionState to SPLITTING
   store_region_meta->UpdateEpochVersion(from_region, from_region->Epoch().version() + 1);
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
   store_region_meta->UpdateEpochVersion(to_region, to_region->Epoch().version() + 1);
+  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
                                  to_region->Id());
@@ -549,8 +551,9 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     from_region->VectorIndexWrapper()->SetIsHoldVectorIndex(false);
   }
 
-  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
-  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
+  // update StoreRegionState to NORMAL is executed after save snapshot in SplitClosure::Run
+  // store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
+  // store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
 
   return true;
