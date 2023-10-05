@@ -37,6 +37,7 @@ std::shared_ptr<Handler> HandlerCollection::GetHandler(HandlerType type) {
 
 std::vector<std::shared_ptr<Handler>> HandlerCollection::GetHandlers() {
   std::vector<std::shared_ptr<Handler>> handlers;
+  handlers.reserve(handlers_.size());
   for (auto [_, handler] : handlers_) {
     handlers.push_back(handler);
   }

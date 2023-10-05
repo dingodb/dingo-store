@@ -86,7 +86,9 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
   return 0;
 }
 
-int VectorIndexFollowerStopHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) { return 0; }
+int VectorIndexFollowerStopHandler::Handle(store::RegionPtr /*region*/, const braft::LeaderChangeContext & /*ctx*/) {
+  return 0;
+}
 
 std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();

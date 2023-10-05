@@ -48,8 +48,10 @@ message StoreRegionCheck {
   // check vector index
   // if check_vector_index is true, check vector index status equal to is_hold_vector_index
   // else ignore vector index status
-  bool check_vector_index = 7;
+  bool check_vector_index_is_hold = 7;
   bool is_hold_vector_index = 8;
+  bool check_vector_index_is_ready = 9;
+  bool is_ready = 10;
 }
 
 message TaskPreCheck {
