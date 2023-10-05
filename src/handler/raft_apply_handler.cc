@@ -58,10 +58,17 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   }
 
   auto writer = engine->NewWriter(request.cf_name());
+  if (!writer) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+  }
   if (request.kvs().size() == 1) {
     status = writer->KvPut(request.kvs().Get(0));
   } else {
     status = writer->KvBatchPut(Helper::PbRepeatedToVector(request.kvs()));
+  }
+
+  if (status.error_code() == pb::error::Errno::EINTERNAL) {
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] put failed, error: {}", region->Id(), status.error_str());
   }
 
   if (ctx) {
@@ -98,11 +105,19 @@ int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   std::vector<bool> key_states;  // NOLINT
   bool key_state;
   auto writer = engine->NewWriter(request.cf_name());
+  if (!writer) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+  }
   bool const is_write_batch = (request.kvs().size() != 1);
   if (!is_write_batch) {
     status = writer->KvPutIfAbsent(request.kvs().Get(0), key_state);
   } else {
     status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), key_states, request.is_atomic());
+  }
+
+  if (status.error_code() == pb::error::Errno::EINTERNAL) {
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] put_if_absent failed, error: {}", region->Id(),
+                                    status.error_str());
   }
 
   if (ctx) {
@@ -157,10 +172,18 @@ int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   std::vector<bool> key_states;  // NOLINT
 
   auto writer = engine->NewWriter(request.cf_name());
+  if (!writer) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+  }
   bool const is_write_batch = (request.kvs().size() != 1);
   status = writer->KvBatchCompareAndSet(Helper::PbRepeatedToVector(request.kvs()),
                                         Helper::PbRepeatedToVector(request.expect_values()), key_states,
                                         request.is_atomic());
+
+  if (status.error_code() == pb::error::Errno::EINTERNAL) {
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] compare_and_set failed, error: {}", region->Id(),
+                                    status.error_str());
+  }
 
   if (ctx) {
     ctx->SetStatus(status);
@@ -232,7 +255,13 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   auto reader = engine->NewReader(request.cf_name());
+  if (!reader) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewReader failed";
+  }
   auto writer = engine->NewWriter(request.cf_name());
+  if (!writer) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+  }
   uint64_t delete_count = 0;
   if (1 == request.ranges().size()) {
     uint64_t internal_delete_count = 0;
@@ -295,6 +324,9 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   auto reader = engine->NewReader(request.cf_name());
+  if (!reader) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewReader failed";
+  }
   std::vector<bool> key_states(request.keys().size(), false);
   auto snapshot = engine->GetSnapshot();
   size_t i = 0;
@@ -308,10 +340,18 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   auto writer = engine->NewWriter(request.cf_name());
+  if (!writer) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+  }
   if (request.keys().size() == 1) {
     status = writer->KvDelete(request.keys().Get(0));
   } else {
     status = writer->KvBatchDelete(Helper::PbRepeatedToVector(request.keys()));
+  }
+
+  if (status.error_code() == pb::error::Errno::EINTERNAL) {
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete failed, error: {}", region->Id(),
+                                    status.error_str());
   }
 
   if (ctx && ctx->Response()) {
@@ -833,7 +873,15 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   // Store vector
   if (!kvs.empty() && status.ok()) {
     auto writer = engine->NewWriter(request.cf_name());
+    if (!writer) {
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+                       << ")] NewWriter failed";
+    }
     status = writer->KvBatchPut(kvs);
+    if (status.error_code() == pb::error::Errno::EINTERNAL) {
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+                       << ")] VectorAdd->KvBatchPut failed, error: " << status.error_str();
+    }
 
     if (is_ready) {
       // Update the ApplyLogIndex of the vector index to the current log_id
@@ -888,7 +936,15 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   auto reader = engine->NewReader(request.cf_name());
+  if (!reader) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+                     << ")] NewReader failed";
+  }
   auto snapshot = engine->GetSnapshot();
+  if (!snapshot) {
+    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+                     << ")] GetSnapshot failed";
+  }
 
   if (request.ids_size() == 0) {
     DINGO_LOG(WARNING) << fmt::format("vector_delete ids_size is 0, region_id={}", region->Id());
@@ -979,7 +1035,15 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   // Delete vector and write wal
   if (!keys.empty() && status.ok()) {
     auto writer = engine->NewWriter(request.cf_name());
+    if (!writer) {
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+                       << ")] NewWriter failed";
+    }
     status = writer->KvBatchDelete(keys);
+    if (status.error_code() == pb::error::Errno::EINTERNAL) {
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+                       << ")] VectorDelete->KvBatchDelete failed, error: " << status.error_str();
+    }
 
     if (is_ready) {
       // Update the ApplyLogIndex of the vector index to the current log_id
