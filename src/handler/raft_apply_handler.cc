@@ -652,9 +652,6 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   // temporary disable split, avoid overlap change.
   store_region_meta->UpdateTemporaryDisableChange(parent_region, true);
 
-  // Set region state spliting
-  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::SPLITTING);
-
   pb::common::Range child_range;
   // Set child range
   child_range.set_start_key(old_range.start_key());
@@ -685,6 +682,9 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
       "[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]", parent_region_id,
       child_region_id, Helper::StringToHex(parent_range.start_key()), Helper::StringToHex(parent_range.end_key()),
       Helper::StringToHex(child_range.start_key()), Helper::StringToHex(child_range.end_key()));
+  // Set region state spliting
+  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::SPLITTING);
+  store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::SPLITTING);
 
   // Set split record
   parent_region->UpdateLastSplitTimestamp();
@@ -705,7 +705,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   // Set do snapshot when bootstrap
   store_region_meta->UpdateNeedBootstrapDoSnapshot(child_region, true);
 
-  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
+  // update to NORMAL after save snapshot in SplitClosure::Run
+  // store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
   Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
 
   return true;

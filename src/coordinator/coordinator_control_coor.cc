@@ -4257,8 +4257,10 @@ void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task
   region_check->set_type(::dingodb::pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
   region_check->mutable_store_region_check()->set_store_id(store_id);
   region_check->mutable_store_region_check()->set_region_id(region_id);
-  region_check->mutable_store_region_check()->set_check_vector_index(true);
+  region_check->mutable_store_region_check()->set_check_vector_index_is_hold(true);
   region_check->mutable_store_region_check()->set_is_hold_vector_index(true);
+  region_check->mutable_store_region_check()->set_check_vector_index_is_ready(true);
+  region_check->mutable_store_region_check()->set_is_ready(true);
 }
 
 void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
@@ -4405,12 +4407,32 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
     }
 
     // check vector_index
-    if (region_check.check_vector_index()) {
-      if (region_check.is_hold_vector_index() != region.vector_index_status().is_hold_vector_index()) {
+    if (region_check.check_vector_index_is_hold()) {
+      if (!region.has_vector_index_status()) {
+        DINGO_LOG(INFO) << "check vector_index faild, region.has_vector_index_status() is false, can't do check, wait "
+                           "for heartbeat. store_id="
+                        << region_check.store_id() << ", region_id=" << region_check.region_id();
+        check_passed = false;
+      } else if (region_check.is_hold_vector_index() != region.vector_index_status().is_hold_vector_index()) {
         DINGO_LOG(INFO) << "check vector_index failed, region_check.is_hold_vector_index()="
                         << region_check.is_hold_vector_index()
                         << " region.vector_index_status().is_hold_vector_index()="
                         << region.vector_index_status().is_hold_vector_index()
+                        << ", store_id=" << region_check.store_id() << ", region_id=" << region_check.region_id()
+                        << ", region=" << region.ShortDebugString();
+        check_passed = false;
+      }
+    }
+
+    if (region_check.check_vector_index_is_ready()) {
+      if (!region.has_vector_index_status()) {
+        DINGO_LOG(INFO) << "check vector_index faild, region.has_vector_index_status() is false, can't do check, wait "
+                           "for heartbeat. store_id="
+                        << region_check.store_id() << ", region_id=" << region_check.region_id();
+        check_passed = false;
+      } else if (region_check.is_ready() != region.vector_index_status().is_ready()) {
+        DINGO_LOG(INFO) << "check vector_index failed, region_check.is_ready()=" << region_check.is_ready()
+                        << " region.vector_index_status().is_ready()=" << region.vector_index_status().is_ready()
                         << ", store_id=" << region_check.store_id() << ", region_id=" << region_check.region_id()
                         << ", region=" << region.ShortDebugString();
         check_passed = false;

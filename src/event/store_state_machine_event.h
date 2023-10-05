@@ -65,7 +65,7 @@ class SmShutdownEventListener : public EventListener {
   ~SmShutdownEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmShutdown; }
-  int OnEvent(std::shared_ptr<Event> event) override { return 0; }
+  int OnEvent(std::shared_ptr<Event> /*event*/) override { return 0; }
 };
 
 // State Machine SnapshotSave
@@ -171,7 +171,7 @@ class SmErrorEventListener : public EventListener {
   ~SmErrorEventListener() override = default;
 
   EventType GetType() override { return EventType::kSmError; }
-  int OnEvent(std::shared_ptr<Event> event) override { return 0; }
+  int OnEvent(std::shared_ptr<Event> /*event*/) override { return 0; }
 };
 
 // State Machine ConfigurationCommitted

@@ -286,7 +286,13 @@ VectorIndexPtr VectorIndexWrapper::GetVectorIndex() {
 
 VectorIndexPtr VectorIndexWrapper::ShareVectorIndex() { return share_vector_index_; }
 
-void VectorIndexWrapper::SetShareVectorIndex(VectorIndexPtr vector_index) { share_vector_index_ = vector_index; }
+void VectorIndexWrapper::SetShareVectorIndex(VectorIndexPtr vector_index) {
+  share_vector_index_ = vector_index;
+
+  // During split, there may occur leader change, set ready_ to true can improve the availablidy of vector index
+  // Because follower is also do force rebuild too, so in this scenario follower is equivalent to leader
+  ready_.store(true);
+}
 
 bool VectorIndexWrapper::ExecuteTask(TaskRunnable* task) {
   if (worker_ == nullptr) {

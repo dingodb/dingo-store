@@ -118,7 +118,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       vector_index_status->set_apply_log_id(vector_index_wrapper->ApplyLogId());
       vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
       vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
-      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->GetOwnVectorIndex() != nullptr);
+      // vector_index_status->set_is_hold_vector_index(vector_index_wrapper->GetOwnVectorIndex() != nullptr);
+      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsHoldVectorIndex());
     }
 
     mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
