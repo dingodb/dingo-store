@@ -51,7 +51,7 @@ class RaftSnapshot {
   butil::Status GenSnapshotFileByCheckpoint(const std::string& checkpoint_path, store::RegionPtr region,
                                             std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
-  bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func);
+  bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func, uint64_t region_version);
 
   bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
 
@@ -62,7 +62,7 @@ class RaftSnapshot {
   std::shared_ptr<Snapshot> engine_snapshot_;
 };
 
-class RaftSaveSnapshotHanler : public BaseHandler {
+class RaftSaveSnapshotHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kSaveSnapshot; }
   int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,

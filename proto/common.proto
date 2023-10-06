@@ -666,6 +666,7 @@ message RegionMetrics {
 
   // bool is_hold_vector_index = 29;                // is hold vector index
   VectorIndexMetrics vector_index_metrics = 20;  // vector index  metrics
+  uint64 snapshot_epoch_version = 21;            // latest region raft snapshot epoch version
 
   // region's info
   RegionStatus region_status = 30;
