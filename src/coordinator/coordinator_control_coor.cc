@@ -2510,6 +2510,40 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
                          "ChangePeerRegion new_store_ids can only has one diff store");
   }
 
+  // for region with epoch > 1, check if all peer has eligible snapshot (snapshot's epoch version is equal to region
+  if (region.definition().epoch().version() > 1) {
+    for (const auto& store_id : old_store_ids) {
+      BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+      auto* ptr = store_metrics_map_.seek(store_id);
+      if (ptr == nullptr) {
+        DINGO_LOG(ERROR) << "ChangePeerRegion store_metrics_map seek failed, store_id = " << store_id;
+        return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "ChangePeerRegion store_metrics_map seek failed");
+      }
+
+      auto it = ptr->region_metrics_map().find(region_id);
+      if (it == ptr->region_metrics_map().end()) {
+        DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics_map seek failed, region_id = " << region_id;
+        return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region_metrics_map seek failed");
+      }
+
+      const auto& region_metrics = it->second;
+      DINGO_LOG(INFO) << "ChangePeerRegion region_metrics.epoch_version() = "
+                      << region_metrics.region_definition().epoch().version()
+                      << ", region.epoch_version() = " << region.definition().epoch().version()
+                      << " snapshot.epoch_version() = " << region_metrics.snapshot_epoch_version();
+
+      if (region_metrics.snapshot_epoch_version() < region.definition().epoch().version()) {
+        DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics.snapshot_epoch_version() < "
+                            "region.definition().epoch().version(), region_id = "
+                         << region_id << " snapshot_epoch_version = " << region_metrics.snapshot_epoch_version()
+                         << " region.epoch_version() = " << region.definition().epoch().version();
+        return butil::Status(pb::error::Errno::EREGION_SNAPSHOT_EPOCH_NOT_MATCH,
+                             "ChangePeerRegion region_metrics.snapshot_epoch_version() < "
+                             "region.definition().epoch().version()");
+      }
+    }
+  }
+
   // this is the new definition of region
   pb::common::RegionDefinition new_region_definition;
   new_region_definition = region.definition();
@@ -3048,11 +3082,13 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
 //         // region_map_epoch++;                 // raft_kv_put
 //       } else if (region.id() == 0) {
 //         DINGO_LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
-//                         << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
+//                         << " name=" << region.definition().name() << " leader_store_id=" <<
+//                         region.leader_store_id()
 //                         << " state=" << region.state();
 //       } else {
 //         DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id()
-//                         << " name=" << region.definition().name() << " leader_store_id=" << region.leader_store_id()
+//                         << " name=" << region.definition().name() << " leader_store_id=" <<
+//                         region.leader_store_id()
 //                         << " state=" << region.state();
 
 //         auto* region_increment = meta_increment.add_regions();
@@ -3494,9 +3530,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
   // for split/merge partial heartbeat, only 2 region is legal.
   if (store_metrics.is_partial_region_metrics() && store_metrics.is_update_epoch_version()) {
     if (store_metrics.region_metrics_map_size() != 2) {
-      DINGO_LOG(ERROR)
-          << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, but region_metrics_map_size != 2, size="
-          << store_metrics.region_metrics_map_size();
+      DINGO_LOG(ERROR) << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, but "
+                          "region_metrics_map_size != 2, size="
+                       << store_metrics.region_metrics_map_size();
       for (const auto& it : store_metrics.region_metrics_map()) {
         DINGO_LOG(ERROR) << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, but "
                             "region_metrics_map_size != 2, region_metrics="

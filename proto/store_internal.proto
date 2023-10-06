@@ -55,6 +55,7 @@ message Region {
   uint64 last_split_timestamp = 71;
   uint64 parent_id = 72;
   repeated RegionSplitRecord childs = 73;
+  uint64 snapshot_epoch_version = 74;  // latest region raft snapshot epoch version
 }
 
 message VectorIndexMeta {

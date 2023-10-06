@@ -94,6 +94,11 @@ void Region::SetEpochConfVersion(uint64_t version) {
   inner_region_.mutable_definition()->mutable_epoch()->set_conf_version(version);
 }
 
+void Region::SetSnapshotEpochVersion(uint64_t version) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_snapshot_epoch_version(version);
+}
+
 uint64_t Region::LeaderId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.leader_id();
@@ -550,6 +555,16 @@ void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, uint64_t versi
   }
 
   region->SetEpochVersion(version);
+  meta_writer_->Put(TransformToKv(region));
+}
+
+void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, uint64_t version) {
+  assert(region != nullptr);
+  if (version <= region->InnerRegion().snapshot_epoch_version()) {
+    return;
+  }
+
+  region->SetSnapshotEpochVersion(version);
   meta_writer_->Put(TransformToKv(region));
 }
 

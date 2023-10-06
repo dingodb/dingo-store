@@ -431,9 +431,6 @@ void SplitHandler::SplitClosure::Run() {
   }
 
   store_region_meta->UpdateNeedBootstrapDoSnapshot(region_, false);
-
-  // update StoreRegionState after do snapshot
-  store_region_meta->UpdateState(region_, pb::common::StoreRegionState::NORMAL);
 }
 
 // Pre create region split
@@ -551,9 +548,9 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     from_region->VectorIndexWrapper()->SetIsHoldVectorIndex(false);
   }
 
-  // update StoreRegionState to NORMAL is executed after save snapshot in SplitClosure::Run
-  // store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
-  // store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
+  // update StoreRegionState to NORMAL
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
+  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
 
   return true;
@@ -706,7 +703,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   store_region_meta->UpdateNeedBootstrapDoSnapshot(child_region, true);
 
   // update to NORMAL after save snapshot in SplitClosure::Run
-  // store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
+  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
   Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
 
   return true;

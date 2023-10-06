@@ -65,6 +65,7 @@ class Region {
   pb::common::RegionEpoch Epoch();
   void SetEpochVersion(uint64_t version);
   void SetEpochConfVersion(uint64_t version);
+  void SetSnapshotEpochVersion(uint64_t version);
 
   uint64_t LeaderId();
   void SetLeaderId(uint64_t leader_id);
@@ -123,7 +124,7 @@ class Region {
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
 
-  pb::raft::SplitStrategy split_strategy_;
+  pb::raft::SplitStrategy split_strategy_;  // NOLINT
 
   VectorIndexWrapperPtr vector_index_wapper_;
 };
@@ -199,6 +200,7 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateEpochVersion(uint64_t region_id, uint64_t version);
   void UpdateEpochConfVersion(store::RegionPtr region, uint64_t version);
   void UpdateEpochConfVersion(uint64_t region_id, uint64_t version);
+  void UpdateSnapshotEpochVersion(store::RegionPtr region, uint64_t version);
 
   void UpdateNeedBootstrapDoSnapshot(store::RegionPtr region, bool need_do_snapshot);
   void UpdateDisableChange(store::RegionPtr region, bool disable_change);

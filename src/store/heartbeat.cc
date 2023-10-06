@@ -96,6 +96,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     tmp_region_metrics.set_leader_store_id(region_meta->LeaderId());
     tmp_region_metrics.set_store_region_state(region_meta->State());
     *(tmp_region_metrics.mutable_region_definition()) = region_meta->InnerRegion().definition();
+    tmp_region_metrics.set_snapshot_epoch_version(region_meta->InnerRegion().snapshot_epoch_version());
 
     if ((region_meta->State() == pb::common::StoreRegionState::NORMAL ||
          region_meta->State() == pb::common::StoreRegionState::STANDBY ||
