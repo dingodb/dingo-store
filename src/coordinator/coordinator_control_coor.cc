@@ -3960,6 +3960,16 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_region_map_size());
   }
   {
+    memory_info.set_deleted_table_map_count(deleted_table_map_.Size());
+    memory_info.set_deleted_table_map_size(deleted_table_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_table_map_size());
+  }
+  {
+    memory_info.set_deleted_index_map_count(deleted_index_map_.Size());
+    memory_info.set_deleted_index_map_size(deleted_index_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_index_map_size());
+  }
+  {
     memory_info.set_region_metrics_map_count(region_metrics_map_.Size());
     memory_info.set_region_metrics_map_size(region_metrics_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.region_metrics_map_size());

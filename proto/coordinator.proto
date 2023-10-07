@@ -274,25 +274,31 @@ message CoordinatorMemoryInfo {
   uint64 task_list_map_count = 34;
   uint64 task_list_map_size = 35;
 
-  uint64 deleted_region_map_count = 36;
-  uint64 deleted_region_map_size = 37;
+  uint64 index_map_count = 36;
+  uint64 index_map_size = 37;
 
-  uint64 index_map_count = 38;
-  uint64 index_map_size = 39;
+  uint64 index_metrics_map_count = 38;
+  uint64 index_metrics_map_size = 39;
 
-  uint64 index_metrics_map_count = 40;
-  uint64 index_metrics_map_size = 41;
+  uint64 kv_index_map_count = 40;
+  uint64 kv_index_map_size = 41;
 
-  uint64 kv_index_map_count = 42;
-  uint64 kv_index_map_size = 43;
+  uint64 kv_rev_map_count = 42;
+  uint64 kv_rev_map_size = 43;
 
-  uint64 kv_rev_map_count = 44;
-  uint64 kv_rev_map_size = 45;
+  uint64 region_metrics_map_count = 44;
+  uint64 region_metrics_map_size = 45;
 
-  uint64 region_metrics_map_count = 46;
-  uint64 region_metrics_map_size = 47;
+  uint64 deleted_region_map_count = 46;
+  uint64 deleted_region_map_size = 47;
 
-  repeated dingodb.pb.common.KeyValue id_epoch_values = 50;
+  uint64 deleted_table_map_count = 48;
+  uint64 deleted_table_map_size = 49;
+
+  uint64 deleted_index_map_count = 50;
+  uint64 deleted_index_map_size = 51;
+
+  repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
 }
 
 message HelloRequest {

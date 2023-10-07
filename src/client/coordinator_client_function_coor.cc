@@ -580,7 +580,7 @@ void SendGetDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> co
                     << " deleted_time_hours=" << (butil::gettimeofday_ms() - region.deleted_timestamp()) / 1000 / 3600;
   }
 
-  DINGO_LOG(INFO) << "region_count=" << response.regionmap().regions_size();
+  DINGO_LOG(INFO) << "Deleted region_count=" << response.regionmap().regions_size();
 }
 
 void SendAddDeletedRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
