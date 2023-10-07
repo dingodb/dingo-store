@@ -245,6 +245,7 @@ class StoreRaftMeta : public TransformKvAble {
 
   void AddRaftMeta(RaftMetaPtr raft_meta);
   void UpdateRaftMeta(RaftMetaPtr raft_meta);
+  void SaveRaftMeta(uint64_t region_id);
   void DeleteRaftMeta(uint64_t region_id);
   RaftMetaPtr GetRaftMeta(uint64_t region_id);
   std::vector<RaftMetaPtr> GetAllRaftMeta();

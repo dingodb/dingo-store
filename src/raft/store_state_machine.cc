@@ -14,6 +14,7 @@
 
 #include "raft/store_state_machine.h"
 
+#include <atomic>
 #include <memory>
 #include <string>
 
@@ -127,11 +128,12 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     event->log_id = iter.index();
 
     DispatchEvent(EventType::kSmApply, event);
+
     applied_term_ = iter.term();
     applied_index_ = iter.index();
 
-    raft_meta_->set_term(applied_term_);
-    raft_meta_->set_applied_index(applied_index_);
+    raft_meta_->set_term(iter.term());
+    raft_meta_->set_applied_index(iter.index());
 
     // bvar metrics
     StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
@@ -159,6 +161,8 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
   event->writer = writer;
   event->done = done;
   event->region = region_;
+  event->term = applied_term_;
+  event->log_index = applied_index_;
 
   DispatchEvent(EventType::kSmSnapshotSave, event);
 
@@ -189,9 +193,24 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
 //      3>. applied_index = max_index
 int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   braft::SnapshotMeta meta;
-  reader->load_meta(&meta);
-  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load snapshot({}-{}) applied_index({})",
-                                 region_->Id(), meta.last_included_term(), meta.last_included_index(), applied_index_);
+  int ret = reader->load_meta(&meta);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][region({})] load meta failed, ret: {}", region_->Id(), ret);
+    return -1;
+  }
+
+  pb::store_internal::RaftSnapshotRegionMeta business_meta;
+  auto status = Helper::ParseRaftSnapshotRegionMeta(reader->get_path(), business_meta);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][region({})] parse business snapshot meta failed, error: {}",
+                                    region_->Id(), status.error_str());
+    return -1;
+  }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.sm][region({})] on_snapshot_load snapshot({}-{}) business meta({}-{}) applied_index({})", region_->Id(),
+      meta.last_included_term(), meta.last_included_index(), business_meta.term(), business_meta.log_index(),
+      applied_index_);
 
   if (region_->State() == pb::common::STANDBY) {
     DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is STANDBY state, ignore load snapshot.",
@@ -199,9 +218,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     return 0;
   }
 
-  // Todo: 1. When loading snapshot panic, need handle the corner case.
-  //       2. When restart server, maybe meta.last_included_index() > applied_index_.
-  if (meta.last_included_index() > applied_index_) {
+  if (business_meta.log_index() > applied_index_) {
     auto event = std::make_shared<SmSnapshotLoadEvent>();
     event->engine = engine_;
     event->reader = reader;
@@ -217,8 +234,8 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     applied_index_ = meta.last_included_index();
 
     if (raft_meta_ != nullptr) {
-      raft_meta_->set_term(applied_term_);
-      raft_meta_->set_applied_index(applied_index_);
+      raft_meta_->set_term(meta.last_included_term());
+      raft_meta_->set_applied_index(meta.last_included_index());
       Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
   }

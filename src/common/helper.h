@@ -27,6 +27,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
+#include "proto/store_internal.pb.h"
 
 namespace dingodb {
 
@@ -271,6 +272,9 @@ class Helper {
 
   // Validate raft status whether suitable or not region split.
   static butil::Status ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRaftStatus> raft_status);
+
+  static butil::Status ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
+                                                   pb::store_internal::RaftSnapshotRegionMeta& meta);
 };
 
 }  // namespace dingodb

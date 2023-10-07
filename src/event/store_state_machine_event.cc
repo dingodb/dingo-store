@@ -58,7 +58,8 @@ int SmSnapshotSaveEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmSnapshotSaveEvent>(event);
 
   if (handler_) {
-    handler_->Handle(the_event->region, the_event->engine, the_event->writer, the_event->done);
+    handler_->Handle(the_event->region, the_event->engine, the_event->term, the_event->log_index, the_event->writer,
+                     the_event->done);
   }
 
   return 0;

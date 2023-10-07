@@ -77,6 +77,8 @@ struct SmSnapshotSaveEvent : public Event {
   braft::SnapshotWriter* writer;
   braft::Closure* done;
   store::RegionPtr region;
+  int64_t term;
+  int64_t log_index;
 };
 
 class SmSnapshotSaveEventListener : public EventListener {

@@ -1360,4 +1360,22 @@ std::string Helper::GenMinStartKey() {
   return buf.GetString();
 }
 
+// Parse region meta
+butil::Status Helper::ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
+                                                  pb::store_internal::RaftSnapshotRegionMeta& meta) {
+  std::string filepath = snapshot_path + "/" + Constant::kRaftSnapshotRegionMetaFileName;
+  if (!Helper::IsExistPath(filepath)) {
+    return butil::Status(pb::error::EINTERNAL, "region meta file not exist, filepath: %s", filepath.c_str());
+  }
+  std::ifstream file(filepath);
+  if (!file.is_open()) {
+    return butil::Status(pb::error::EINTERNAL, "open file failed, filepath: %s", filepath.c_str());
+  }
+  if (!meta.ParseFromIstream(&file)) {
+    return butil::Status(pb::error::EINTERNAL, "parse region meta file failed, filepath: %s", filepath.c_str());
+  }
+
+  return butil::Status();
+}
+
 }  // namespace dingodb

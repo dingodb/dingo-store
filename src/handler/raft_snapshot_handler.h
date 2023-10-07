@@ -15,6 +15,8 @@
 #ifndef DINGODB_RAFT_SNAPSHOT_H_
 #define DINGODB_RAFT_SNAPSHOT_H_
 
+#include <cstdint>
+
 #include "braft/snapshot.h"
 #include "butil/status.h"
 #include "engine/raw_engine.h"
@@ -51,7 +53,8 @@ class RaftSnapshot {
   butil::Status GenSnapshotFileByCheckpoint(const std::string& checkpoint_path, store::RegionPtr region,
                                             std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
-  bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func, uint64_t region_version);
+  bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func,
+                    uint64_t region_version, int64_t term, int64_t log_index);
 
   bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
 
@@ -65,8 +68,8 @@ class RaftSnapshot {
 class RaftSaveSnapshotHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kSaveSnapshot; }
-  int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter* writer,
-             braft::Closure* done) override;
+  int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, int64_t term, int64_t log_index,
+             braft::SnapshotWriter* writer, braft::Closure* done) override;
 };
 
 class RaftLoadSnapshotHanler : public BaseHandler {
