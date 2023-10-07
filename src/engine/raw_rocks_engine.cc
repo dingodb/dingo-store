@@ -971,7 +971,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
         key_states.clear();
         key_states.resize(kvs.size(), false);
         DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Get failed or found: {}", s.ToString());
-        return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
+        return butil::Status(pb::error::EINTERNAL, "Internal get error");
       }
     } else {
       if (!s.IsNotFound()) {
