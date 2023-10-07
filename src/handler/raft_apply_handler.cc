@@ -728,6 +728,11 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
     }
   }
 
+  auto store_raft_meata = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  if (store_raft_meata != nullptr) {
+    store_raft_meata->SaveRaftMeta(from_region->Id());
+  }
+
   // Update region metrics min/max key policy
   if (region_metrics != nullptr) {
     region_metrics->UpdateMaxAndMinKeyPolicy();

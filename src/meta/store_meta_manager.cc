@@ -731,6 +731,13 @@ void StoreRaftMeta::UpdateRaftMeta(RaftMetaPtr raft_meta) {
   meta_writer_->Put(TransformToKv(raft_meta));
 }
 
+void StoreRaftMeta::SaveRaftMeta(uint64_t region_id) {
+  auto raft_meta = GetRaftMeta(region_id);
+  if (raft_meta != nullptr) {
+    meta_writer_->Put(TransformToKv(raft_meta));
+  }
+}
+
 void StoreRaftMeta::DeleteRaftMeta(uint64_t region_id) {
   {
     BAIDU_SCOPED_LOCK(mutex_);

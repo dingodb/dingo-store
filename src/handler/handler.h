@@ -69,8 +69,8 @@ class Handler {
                      const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
                      uint64_t log_id) = 0;
 
-  virtual int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotWriter *writer,
-                     braft::Closure *done) = 0;
+  virtual int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, int64_t term, int64_t log_index,
+                     braft::SnapshotWriter *writer, braft::Closure *done) = 0;
   virtual int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader *reader) = 0;
 
   virtual int Handle(store::RegionPtr region, uint64_t term_id) = 0;
@@ -94,7 +94,8 @@ class BaseHandler : public Handler {
     return 0;
   }
 
-  int Handle(store::RegionPtr, std::shared_ptr<RawEngine>, braft::SnapshotWriter *, braft::Closure *) override {
+  int Handle(store::RegionPtr, std::shared_ptr<RawEngine>, int64_t, int64_t, braft::SnapshotWriter *,
+             braft::Closure *) override {
     DINGO_LOG(ERROR) << "Not support handle...";
     return 0;
   }
