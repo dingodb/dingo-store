@@ -393,7 +393,9 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
     err->set_errmsg(epoch_ret.error_str());
     ServiceHelper::GetStoreRegionInfo(request->context().region_id(), *(err->mutable_store_region_info()));
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} {} {} {}",
+                                      request->context().ShortDebugString(), request->vectors().size(),
+                                      request->replace_deleted(), request->is_update());
     return;
   }
 
@@ -420,7 +422,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}",
-                                    request->context().region_id(), request->vectors().size(),
+                                    request->context().ShortDebugString(), request->vectors().size(),
                                     request->replace_deleted(), request->is_update(), response->ShortDebugString());
     return;
   }
@@ -445,7 +447,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     }
     brpc::ClosureGuard done_guard(done);
     DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}",
-                                    request->context().region_id(), request->vectors().size(),
+                                    request->context().ShortDebugString(), request->vectors().size(),
                                     request->replace_deleted(), request->is_update(), response->ShortDebugString());
   }
 }
