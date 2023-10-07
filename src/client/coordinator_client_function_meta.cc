@@ -1101,7 +1101,13 @@ void SendGetDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetDeletedTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+
+  for (const auto& table : response.table_definition_with_ids()) {
+    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]"
+                    << "table_name=[" << table.table_definition().name() << "]"
+                    << " detail: " << table.ShortDebugString();
+  }
+  DINGO_LOG(INFO) << "Deleted table count=" << response.table_definition_with_ids_size();
 }
 
 void SendGetDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1117,7 +1123,13 @@ void SendGetDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetDeletedIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+
+  for (const auto& index : response.table_definition_with_ids()) {
+    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]"
+                    << "index_name=[" << index.table_definition().name() << "]"
+                    << " detail: " << index.ShortDebugString();
+  }
+  DINGO_LOG(INFO) << "Deleted index count=" << response.table_definition_with_ids_size();
 }
 
 void SendCleanDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
