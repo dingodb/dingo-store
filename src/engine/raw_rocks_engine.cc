@@ -758,7 +758,7 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
   rocksdb::Status s = db_->Get(read_option, column_family_->GetHandle(), rocksdb::Slice(key), &value);
   if (!s.ok()) {
     if (s.IsNotFound()) {
-      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
+      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal get error");
@@ -971,7 +971,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
         key_states.clear();
         key_states.resize(kvs.size(), false);
         DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Get failed or found: {}", s.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal get error");
+        return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
       }
     } else {
       if (!s.IsNotFound()) {
@@ -1072,7 +1072,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
           key_states.clear();
           key_states.resize(kvs.size(), false);
           DINGO_LOG(ERROR) << fmt::format("NotFound : expect_values[{}] not empty", key_index);
-          return butil::Status(pb::error::EINTERNAL, "Internal not found error");
+          return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
         }
       } else {
         key_states.clear();
@@ -1209,7 +1209,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
   if (!s.ok()) {
     if (s.IsNotFound()) {
       DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate not found key");
-      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
+      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate failed : {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal get error");
@@ -1252,7 +1252,7 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
   } else if (s.IsNotFound()) {
     if (is_key_exist || (!is_key_exist && !kv.value().empty())) {
       DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get not found key");
-      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found");
+      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
   } else {  // error
     DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
