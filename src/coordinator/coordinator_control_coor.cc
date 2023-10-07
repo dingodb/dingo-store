@@ -43,6 +43,7 @@
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -1163,13 +1164,21 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
 
   split_from_region.mutable_definition()->set_name(split_from_region.definition().name() + "_split");
 
+  std::string max_start_key = Helper::GenMaxStartKey();
+
   auto new_range = split_from_region.definition().range();
-  new_range.set_start_key(split_from_region.definition().range().end_key());
+  new_range.set_start_key(max_start_key);
   new_range.set_end_key(split_from_region.definition().range().start_key());
 
   auto new_raw_range = split_from_region.definition().range();
-  new_raw_range.set_start_key(split_from_region.definition().raw_range().end_key());
+  new_raw_range.set_start_key(max_start_key);
   new_raw_range.set_end_key(split_from_region.definition().raw_range().start_key());
+
+  DINGO_LOG(INFO) << "CreateRegionForSplitInternal split_from_region_id=" << split_from_region_id
+                  << ", new_region_id=" << new_region_id
+                  << ", new_range start_key=" << Helper::StringToHex(new_range.start_key())
+                  << ", end_key=" << Helper::StringToHex(new_range.end_key())
+                  << ", is_shadow_create=" << is_shadow_create;
 
   // create region with split_from_region_id & store_ids
   if (is_shadow_create) {
