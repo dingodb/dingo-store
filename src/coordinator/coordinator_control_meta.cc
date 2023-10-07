@@ -2083,6 +2083,7 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
       DINGO_LOG(INFO) << fmt::format("region range illegal, index_id={} region_id={} range={}", index_id, region_id,
                                      part_region.definition().range().ShortDebugString())
                       << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      continue;
     }
 
     auto* range_distribution = index_range.add_range_distribution();

@@ -136,6 +136,11 @@ class Helper {
   static std::string PrefixNext(const std::string& input);
   static std::string PrefixNext(const std::string_view& input);
 
+  // generate min and max start key of dingo-store
+  // partition_id cannot be 0 and UINT64_MAX
+  static std::string GenMaxStartKey();
+  static std::string GenMinStartKey();
+
   // Transform RangeWithOptions to Range for scan/deleteRange
   static pb::common::Range TransformRangeWithOptions(const pb::common::RangeWithOptions& range_with_options);
 

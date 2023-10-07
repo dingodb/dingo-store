@@ -53,7 +53,6 @@
 #include "common/logging.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
-#include "gflags/gflags_declare.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -1347,6 +1346,18 @@ uint32_t Helper::CalcHnswCountFromMemory(uint64_t memory_size_limit, uint64_t di
   }
 
   return static_cast<uint32_t>(count);
+}
+
+std::string Helper::GenMaxStartKey() {
+  Buf buf(8);
+  buf.WriteLong(UINT64_MAX);
+  return buf.GetString();
+}
+
+std::string Helper::GenMinStartKey() {
+  Buf buf(8);
+  buf.WriteLong(0);
+  return buf.GetString();
 }
 
 }  // namespace dingodb
