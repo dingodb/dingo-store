@@ -440,26 +440,27 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
     }
   };
 
+  // Read data from db
+  auto db = std::make_shared<RocksDBOperator>(ctx->db_path);
+  if (!db->Init()) {
+    return;
+  }
+
   for (const auto& partition : table_definition.table_partition().partitions()) {
     uint64_t partition_id = partition.id().entity_id();
-
-    // Read data from db
-    auto db = std::make_shared<RocksDBOperator>(ctx->db_path);
-    if (!db->Init()) {
-      return;
-    }
+    DINGO_LOG(INFO) << fmt::format("partition id {}", partition_id);
 
     {
       std::string begin_key, end_key;
       dingodb::VectorCodec::EncodeVectorData(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorData(partition_id, UINT64_MAX, end_key);
+      dingodb::VectorCodec::EncodeVectorData(partition_id, INT64_MAX, end_key);
       db->Scan(begin_key, end_key, ctx->offset, ctx->limit, vector_data_handler);
     }
 
     {
       std::string begin_key, end_key;
       dingodb::VectorCodec::EncodeVectorScalar(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorScalar(partition_id, UINT64_MAX, end_key);
+      dingodb::VectorCodec::EncodeVectorScalar(partition_id, INT64_MAX, end_key);
 
       db->Scan(begin_key, end_key, ctx->offset, ctx->limit, scalar_data_handler);
     }
@@ -467,7 +468,7 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
     {
       std::string begin_key, end_key;
       dingodb::VectorCodec::EncodeVectorTable(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorTable(partition_id, UINT64_MAX, end_key);
+      dingodb::VectorCodec::EncodeVectorTable(partition_id, INT64_MAX, end_key);
 
       db->Scan(begin_key, end_key, ctx->offset, ctx->limit, table_data_handler);
     }
