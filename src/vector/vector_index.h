@@ -356,7 +356,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   VectorIndexPtr ShareVectorIndex();
   void SetShareVectorIndex(VectorIndexPtr vector_index);
 
-  bool ExecuteTask(TaskRunnable* task);
+  bool ExecuteTask(TaskRunnablePtr task);
 
   int PendingTaskNum();
   void IncPendingTaskNum();

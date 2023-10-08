@@ -331,7 +331,7 @@ void CoordinatorTaskListProcessTask::CoordinatorTaskListProcess(
   coordinator_control->ProcessTaskList();
 }
 
-bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::error::Errno errcode) {
+bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::error::Errno errcode) {  // NOLINT
   using pb::coordinator::RegionCmdType;
   using pb::error::Errno;
 
@@ -726,118 +726,65 @@ void VectorIndexScrubTask::ScrubVectorIndex() {
   }
 }
 
-bool Heartbeat::Init() {
-  bthread::ExecutionQueueOptions options;
-  options.bthread_attr = BTHREAD_ATTR_NORMAL;
+bool Heartbeat::Init() { return worker_->Init(); }
 
-  if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Start heartbeat execution queue failed";
-    return false;
-  }
+void Heartbeat::Destroy() { worker_->Destroy(); }
 
-  is_available_.store(true, std::memory_order_relaxed);
-
-  return true;
-}
-
-void Heartbeat::Destroy() {
-  is_available_.store(false, std::memory_order_relaxed);
-
-  if (bthread::execution_queue_stop(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "heartbeat execution queue stop failed";
-    return;
-  }
-
-  if (bthread::execution_queue_join(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "heartbeat execution queue join failed";
-  }
-}
-
-bool Heartbeat::Execute(TaskRunnable* task) {
-  if (!is_available_.load(std::memory_order_relaxed)) {
-    DINGO_LOG(ERROR) << "Heartbeat execute queue is not available.";
-    return false;
-  }
-
-  if (bthread::execution_queue_execute(queue_id_, task) != 0) {
-    DINGO_LOG(ERROR) << "heartbeat execution queue execute failed";
-    return false;
-  }
-
-  return true;
-}
+bool Heartbeat::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
 
 void Heartbeat::TriggerStoreHeartbeat(std::vector<uint64_t> region_ids, bool is_update_epoch_version) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task =
-      new HeartbeatTask(Server::GetInstance()->GetCoordinatorInteraction(), region_ids, is_update_epoch_version);
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<HeartbeatTask>(Server::GetInstance()->GetCoordinatorInteraction(), region_ids,
+                                              is_update_epoch_version);
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorPushToStore(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new CoordinatorPushTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<CoordinatorPushTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorUpdateState(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new CoordinatorUpdateStateTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<CoordinatorUpdateStateTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorTaskListProcess(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new CoordinatorTaskListProcessTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<CoordinatorTaskListProcessTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new CoordinatorRecycleOrphanTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<CoordinatorRecycleOrphanTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCalculateTableMetrics(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new CalculateTableMetricsTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<CalculateTableMetricsTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerLeaseTask(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new LeaseTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<LeaseTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCompactionTask(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new CompactionTask(Server::GetInstance()->GetCoordinatorControl());
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<CompactionTask>(Server::GetInstance()->GetCoordinatorControl());
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerScrubVectorIndex(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new VectorIndexScrubTask();
-  if (!Server::GetInstance()->GetHeartbeat()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<VectorIndexScrubTask>();
+  Server::GetInstance()->GetHeartbeat()->Execute(task);
 }
 
 butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& location,

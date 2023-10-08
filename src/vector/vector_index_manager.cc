@@ -230,6 +230,7 @@ bool VectorIndexManager::NeedHoldVectorIndex(uint64_t region_id) {
       auto node = raft_store_engine->GetNode(region_id);
       if (node == nullptr) {
         LOG(ERROR) << fmt::format("No found raft node {}.", region_id);
+        return false;
       }
 
       if (!node->IsLeader()) {
@@ -302,7 +303,7 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
       "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
-  TaskRunnable* task = new LoadOrBuildVectorIndexTask(vector_index_wrapper);
+  auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper);
   if (!vector_index_wrapper->ExecuteTask(task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch loadorbuild vector index failed",
                                     vector_index_wrapper->Id());
@@ -585,7 +586,7 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
       "[vector_index.launch][index_id({})] Launch rebuild vector index, pending tasks({}) total running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
-  TaskRunnable* task = new RebuildVectorIndexTask(vector_index_wrapper, force);
+  auto task = std::make_shared<RebuildVectorIndexTask>(vector_index_wrapper, force);
   if (!vector_index_wrapper->ExecuteTask(task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch rebuild vector index failed",
                                     vector_index_wrapper->Id());
@@ -730,7 +731,7 @@ void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_inde
       "[vector_index.launch][index_id({})] Launch save vector index, pending tasks({}) total running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
-  TaskRunnable* task = new SaveVectorIndexTask(vector_index_wrapper);
+  auto task = std::make_shared<SaveVectorIndexTask>(vector_index_wrapper);
   if (!vector_index_wrapper->ExecuteTask(task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch save vector index failed",
                                     vector_index_wrapper->Id());

@@ -294,7 +294,7 @@ void VectorIndexWrapper::SetShareVectorIndex(VectorIndexPtr vector_index) {
   ready_.store(true);
 }
 
-bool VectorIndexWrapper::ExecuteTask(TaskRunnable* task) {
+bool VectorIndexWrapper::ExecuteTask(TaskRunnablePtr task) {
   if (worker_ == nullptr) {
     return false;
   }

@@ -43,6 +43,8 @@ class CreateRegionTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~CreateRegionTask() override = default;
 
+  std::string Type() override { return "CREATE_REGION"; }
+
   void Run() override;
 
   static butil::Status PreValidateCreateRegion(const pb::coordinator::RegionCmd& command);
@@ -60,6 +62,8 @@ class DeleteRegionTask : public TaskRunnable {
   DeleteRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~DeleteRegionTask() override = default;
+
+  std::string Type() override { return "DELETE_REGION"; }
 
   void Run() override;
 
@@ -80,6 +84,8 @@ class SplitRegionTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~SplitRegionTask() override = default;
 
+  std::string Type() override { return "SPLIT_REGION"; }
+
   void Run() override;
 
   static butil::Status PreValidateSplitRegion(const pb::coordinator::RegionCmd& command);
@@ -98,6 +104,8 @@ class ChangeRegionTask : public TaskRunnable {
   ChangeRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~ChangeRegionTask() override = default;
+
+  std::string Type() override { return "CHANGE_REGION"; }
 
   void Run() override;
 
@@ -120,6 +128,8 @@ class TransferLeaderTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~TransferLeaderTask() override = default;
 
+  std::string Type() override { return "TRANSFER_LEADER"; }
+
   void Run() override;
 
   static butil::Status PreValidateTransferLeader(const pb::coordinator::RegionCmd& command);
@@ -139,6 +149,8 @@ class SnapshotRegionTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~SnapshotRegionTask() override = default;
 
+  std::string Type() override { return "SNAPSHOT_REGION"; }
+
   void Run() override;
 
  private:
@@ -154,6 +166,8 @@ class PurgeRegionTask : public TaskRunnable {
   PurgeRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~PurgeRegionTask() override = default;
+
+  std::string Type() override { return "PURGE_REGION"; }
 
   void Run() override;
 
@@ -174,6 +188,8 @@ class StopRegionTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~StopRegionTask() override = default;
 
+  std::string Type() override { return "STOP_REGION"; }
+
   void Run() override;
 
   static butil::Status PreValidateStopRegion(const pb::coordinator::RegionCmd& command);
@@ -193,6 +209,8 @@ class DestroyRegionExecutorTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~DestroyRegionExecutorTask() override = default;
 
+  std::string Type() override { return "DESTROY_REGION_EXECUTOR"; }
+
   void Run() override;
 
  private:
@@ -208,6 +226,8 @@ class SnapshotVectorIndexTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~SnapshotVectorIndexTask() override = default;
 
+  std::string Type() override { return "SNAPSHOT_VECTOR_INDEX"; }
+
   void Run() override;
 
  private:
@@ -222,6 +242,8 @@ class UpdateDefinitionTask : public TaskRunnable {
   UpdateDefinitionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~UpdateDefinitionTask() override = default;
+
+  std::string Type() override { return "UPDATE_DEFINITION"; }
 
   void Run() override;
 
@@ -243,6 +265,8 @@ class SwitchSplitTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~SwitchSplitTask() override = default;
 
+  std::string Type() override { return "SWITCH_SPLIT"; }
+
   void Run() override;
 
   static butil::Status PreValidateSwitchSplit(const pb::coordinator::RegionCmd& command);
@@ -260,6 +284,8 @@ class HoldVectorIndexTask : public TaskRunnable {
       : ctx_(ctx), region_cmd_(region_cmd) {}
   ~HoldVectorIndexTask() override = default;
 
+  std::string Type() override { return "HOLD_VECTOR_INDEX"; }
+
   void Run() override;
 
   static butil::Status PreValidateHoldVectorIndex(const pb::coordinator::RegionCmd& command);
@@ -274,19 +300,17 @@ class HoldVectorIndexTask : public TaskRunnable {
 
 class ControlExecutor {
  public:
-  explicit ControlExecutor() : is_available_(false), queue_id_({UINT64_MAX}) {}
+  explicit ControlExecutor() { worker_ = Worker::New(); }
   virtual ~ControlExecutor() = default;
 
   bool Init();
 
-  bool Execute(TaskRunnable* task);
+  bool Execute(TaskRunnablePtr task);
 
   void Stop();
 
  private:
-  // Execution queue is available.
-  std::atomic<bool> is_available_;
-  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;  // NOLINT
+  WorkerPtr worker_;
 };
 
 class RegionControlExecutor : public ControlExecutor {
@@ -383,7 +407,7 @@ class RegionController {
 
   // task builder
   using TaskBuildFunc =
-      std::function<TaskRunnable*(std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>)>;
+      std::function<TaskRunnablePtr(std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>)>;
   using TaskBuilderMap = std::map<pb::coordinator::RegionCmdType, TaskBuildFunc>;
   static TaskBuilderMap task_builders;
 };

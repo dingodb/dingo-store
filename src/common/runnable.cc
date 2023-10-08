@@ -14,20 +14,33 @@
 
 #include "common/runnable.h"
 
+#include <cstdint>
+#include <memory>
+
+#include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 
 namespace dingodb {
 
-int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter) {
-  if (iter.is_queue_stopped()) {
-    return 0;
-  }
+TaskRunnable::TaskRunnable() { DINGO_LOG(INFO) << "new exec task..."; }
+TaskRunnable::~TaskRunnable() { DINGO_LOG(INFO) << "delete exec task..."; }
 
-  {
-    std::unique_ptr<TaskRunnable> self_guard(*iter);
-    for (; iter; ++iter) {
-      (*iter)->Run();
+int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NOLINT
+  for (; iter; ++iter) {
+    if (iter.is_queue_stopped()) {
+      DINGO_LOG(INFO) << fmt::format("[execqueue][type({})] task is stopped.", (*iter)->Type());
+      continue;
     }
+    if (*iter == nullptr) {
+      DINGO_LOG(WARNING) << fmt::format("[execqueue][type({})] task is nullptr.", (*iter)->Type());
+      continue;
+    }
+
+    uint64_t start_time = Helper::TimestampMs();
+    (*iter)->Run();
+    DINGO_LOG(INFO) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
+                                   Helper::TimestampMs() - start_time);
   }
 
   return 0;
@@ -38,7 +51,7 @@ bool Worker::Init() {
   options.bthread_attr = BTHREAD_ATTR_NORMAL;
 
   if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Start worker execution queue failed";
+    DINGO_LOG(ERROR) << "[execqueue] start worker execution queue failed";
     return false;
   }
 
@@ -51,23 +64,28 @@ void Worker::Destroy() {
   is_available_.store(false, std::memory_order_relaxed);
 
   if (bthread::execution_queue_stop(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "Worker execution queue stop failed";
+    DINGO_LOG(ERROR) << "[execqueue] worker execution queue stop failed";
     return;
   }
 
   if (bthread::execution_queue_join(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "Worker execution queue join failed";
+    DINGO_LOG(ERROR) << "[execqueue] worker execution queue join failed";
   }
 }
 
-bool Worker::Execute(TaskRunnable* task) {
+bool Worker::Execute(TaskRunnablePtr task) {
+  if (task == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[execqueue][type({})] task is nullptr.", task->Type());
+    return false;
+  }
+
   if (!is_available_.load(std::memory_order_relaxed)) {
-    DINGO_LOG(ERROR) << "Worker execute queue is not available.";
+    DINGO_LOG(ERROR) << fmt::format("[execqueue][type({})] worker execute queue is not available.", task->Type());
     return false;
   }
 
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
-    DINGO_LOG(ERROR) << "Worker execution queue execute failed";
+    DINGO_LOG(ERROR) << fmt::format("[execqueue][type({})] worker execution queue execute failed", task->Type());
     return false;
   }
 

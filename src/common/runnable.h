@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_RUNNABLE_H_
 
 #include <memory>
+#include <string>
 
 #include "bthread/execution_queue.h"
 
@@ -23,13 +24,17 @@ namespace dingodb {
 
 class TaskRunnable {
  public:
-  TaskRunnable() = default;
-  virtual ~TaskRunnable() = default;
+  TaskRunnable();
+  virtual ~TaskRunnable();
+
+  virtual std::string Type() = 0;
 
   virtual void Run() = 0;
 };
 
-int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnable*>& iter);
+using TaskRunnablePtr = std::shared_ptr<TaskRunnable>;
+
+int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter);
 
 // Run task worker
 class Worker {
@@ -42,12 +47,12 @@ class Worker {
   bool Init();
   void Destroy();
 
-  bool Execute(TaskRunnable* task);
+  bool Execute(TaskRunnablePtr task);
 
  private:
   // Execution queue is available.
   std::atomic<bool> is_available_;
-  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;  // NOLINT
+  bthread::ExecutionQueueId<TaskRunnablePtr> queue_id_;  // NOLINT
 };
 
 using WorkerPtr = std::shared_ptr<Worker>;
