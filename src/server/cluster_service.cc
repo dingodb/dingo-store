@@ -25,10 +25,13 @@
 #include "brpc/http_status_code.h"
 #include "brpc/server.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -175,10 +178,12 @@ void ClusterStatImpl::PrintSchema(std::ostream& os, const std::string& schema_na
 
 void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region& region) {
   DINGO_LOG(INFO) << "Region:" << region.ShortDebugString();
+  std::string epoch_info = fmt::format("<li>epoch: {}-{}</li>", region.definition().epoch().conf_version(),
+                                       region.definition().epoch().version());
+  std::string create_time_info =
+      fmt::format("<li>create_time: {}", Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));
   std::string leader_info = "<li>Leader:";
   std::string follower_info = "<li>Follower:";
-  std::string range_info = "<li>Range:[";
-  std::string raw_range_info = "<li>RawRange:[";
   int64_t const leader_store_id = region.leader_store_id();
   for (const auto& peer : region.definition().peers()) {
     std::string ip_port;
@@ -205,15 +210,40 @@ void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region
   leader_info += "</li>";
   follower_info += "</li>";
 
-  range_info += region.definition().range().ShortDebugString();
-  range_info += "] </li>";
+  std::string range_info;
+  if (region.definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
+    range_info = fmt::format("<li>Range:[{}, {}); [{}/{}, {}/{})</li>",
+                             Helper::StringToHex(region.definition().range().start_key()),
+                             Helper::StringToHex(region.definition().range().end_key()),
+                             VectorCodec::DecodePartitionId(region.definition().range().start_key()),
+                             VectorCodec::DecodeVectorId(region.definition().range().start_key()),
+                             VectorCodec::DecodePartitionId(region.definition().range().end_key()),
+                             VectorCodec::DecodeVectorId(region.definition().range().end_key()));
+  } else {
+    range_info = fmt::format("<li>Range:[{}, {})</li>", Helper::StringToHex(region.definition().range().start_key()),
+                             Helper::StringToHex(region.definition().range().end_key()));
+  }
 
-  raw_range_info += region.definition().raw_range().ShortDebugString();
-  raw_range_info += "] </li>";
+  std::string raw_range_info;
+  if (region.definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
+    raw_range_info = fmt::format("<li>RawRange:[{}, {}); [{}/{}, {}/{})</li>",
+                                 Helper::StringToHex(region.definition().raw_range().start_key()),
+                                 Helper::StringToHex(region.definition().raw_range().end_key()),
+                                 VectorCodec::DecodePartitionId(region.definition().raw_range().start_key()),
+                                 VectorCodec::DecodeVectorId(region.definition().raw_range().start_key()),
+                                 VectorCodec::DecodePartitionId(region.definition().raw_range().end_key()),
+                                 VectorCodec::DecodeVectorId(region.definition().raw_range().end_key()));
+  } else {
+    raw_range_info =
+        fmt::format("<li>RawRange:[{}, {})</li>", Helper::StringToHex(region.definition().raw_range().start_key()),
+                    Helper::StringToHex(region.definition().raw_range().end_key()));
+  }
 
   os << "<li>RegionID:";
   os << std::to_string(region.id());
   os << "<ul>";
+  os << epoch_info;
+  os << create_time_info;
   os << leader_info;
   os << follower_info;
   os << range_info;
