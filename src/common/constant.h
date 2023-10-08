@@ -63,6 +63,13 @@ class Constant {
   // flat map init capacity
   static const uint64_t kStoreRegionMetaInitCapacity = 1024;
 
+  // internal schema name
+  inline static const std::string kRootSchemaName = "ROOT";
+  inline static const std::string kMetaSchemaName = "META";
+  inline static const std::string kDingoSchemaName = "DINGO";
+  inline static const std::string kMySQLSchemaName = "MYSQL";
+  inline static const std::string kInformationSchemaName = "INFORMATION_SCHEMA";
+
   // rocksdb config
   inline static const std::string kStorePathConfigName = "store.path";
   inline static const std::string kColumnFamilies = "store.column_families";
