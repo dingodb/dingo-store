@@ -24,6 +24,7 @@
 #include "brpc/controller.h"
 #include "brpc/http_status_code.h"
 #include "brpc/server.h"
+#include "common/constant.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "proto/common.pb.h"
@@ -91,7 +92,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   for (const auto& schema : schemas) {
     uint64_t const schema_id = schema.id().entity_id();
-    if (schema_id == 0 || schema.name() != "dingo") {
+    if (schema_id == 0 || schema.name() != Constant::kDingoSchemaName) {
       continue;
     }
 

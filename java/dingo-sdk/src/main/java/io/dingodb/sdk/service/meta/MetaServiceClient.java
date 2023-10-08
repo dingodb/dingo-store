@@ -87,7 +87,7 @@ public class MetaServiceClient {
 
     private static Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
     private static Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
-    private static final String ROOT_NAME = "root";
+    private static final String ROOT_NAME = "ROOT";
 
     private final Map<String, Meta.DingoCommonId> metaServiceIdCache = new ConcurrentSkipListMap<>();
     private final Map<DingoCommonId, Table> tableDefinitionCache = new ConcurrentHashMap<>();

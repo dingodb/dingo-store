@@ -77,27 +77,27 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
   // root schema
   // pb::meta::Schema root_schema;
   root_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  root_schema_internal.set_name("root");
+  root_schema_internal.set_name(Constant::kRootSchemaName);
 
   // meta schema
   // pb::meta::Schema meta_schema;
   meta_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::META_SCHEMA);
-  meta_schema_internal.set_name("meta");
+  meta_schema_internal.set_name(Constant::kMetaSchemaName);
 
   // dingo schema
   // pb::meta::Schema dingo_schema;
   dingo_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-  dingo_schema_internal.set_name("dingo");
+  dingo_schema_internal.set_name(Constant::kDingoSchemaName);
 
   // mysql schema
   // pb::mysql::Schema mysql_schema;
   mysql_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::MYSQL_SCHEMA);
-  mysql_schema_internal.set_name("mysql");
+  mysql_schema_internal.set_name(Constant::kMySQLSchemaName);
 
   // information schema
   // pb::information::Schema information_schema;
   information_schema_internal.set_id(::dingodb::pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA);
-  information_schema_internal.set_name("information_schema");
+  information_schema_internal.set_name(Constant::kInformationSchemaName);
 
   DINGO_LOG(INFO) << "GenerateRootSchemas 0[" << root_schema_internal.ShortDebugString();
   DINGO_LOG(INFO) << "GenerateRootSchemas 1[" << meta_schema_internal.ShortDebugString();
