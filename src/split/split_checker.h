@@ -131,7 +131,7 @@ class SplitCheckWorkers {
   bool Init(uint32_t num);
   void Destroy();
 
-  bool Execute(TaskRunnable* task);
+  bool Execute(TaskRunnablePtr task);
 
   bool IsExistRegionChecking(uint64_t region_id);
   void AddRegionChecking(uint64_t region_id);
@@ -145,7 +145,7 @@ class SplitCheckWorkers {
 
   // Indicate workers offset for round-robin.
   uint32_t offset_;
-  std::vector<std::shared_ptr<Worker>> workers_;
+  std::vector<WorkerPtr> workers_;
 };
 
 // Check region whether need to split.
@@ -158,6 +158,8 @@ class SplitCheckTask : public TaskRunnable {
         region_metrics_(region_metrics),
         split_checker_(split_checker) {}
   ~SplitCheckTask() override = default;
+
+  std::string Type() override { return "SPLIT_CHECK"; }
 
   void Run() override {
     SplitCheck();
@@ -182,6 +184,8 @@ class PreSplitCheckTask : public TaskRunnable {
       : split_check_workers_(split_check_workers) {}
   ~PreSplitCheckTask() override = default;
 
+  std::string Type() override { return "PRE_SPLIT_CHECK"; }
+
   void Run() override { PreSplitCheck(); }
 
  private:
@@ -193,7 +197,7 @@ class PreSplitCheckTask : public TaskRunnable {
 class PreSplitChecker {
  public:
   PreSplitChecker() {
-    worker_ = std::make_shared<Worker>();
+    worker_ = Worker::New();
     split_check_workers_ = std::make_shared<SplitCheckWorkers>();
   }
   ~PreSplitChecker() = default;
@@ -207,10 +211,10 @@ class PreSplitChecker {
   std::shared_ptr<SplitCheckWorkers> GetSplitCheckWorkers() { return split_check_workers_; }
 
  private:
-  bool Execute(TaskRunnable* task);
+  bool Execute(TaskRunnablePtr task);
 
   // For pre split check.
-  std::shared_ptr<Worker> worker_;
+  WorkerPtr worker_;
   // For split check.
   std::shared_ptr<SplitCheckWorkers> split_check_workers_;
 };

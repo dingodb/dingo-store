@@ -43,6 +43,8 @@ class HeartbeatTask : public TaskRunnable {
         coordinator_interaction_(coordinator_interaction) {}
   ~HeartbeatTask() override = default;
 
+  std::string Type() override { return "HEARTBEAT"; }
+
   void Run() override { SendStoreHeartbeat(coordinator_interaction_, region_ids_, is_update_epoch_version_); }
 
   static void SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
@@ -62,6 +64,8 @@ class CoordinatorPushTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorPushTask() override = default;
 
+  std::string Type() override { return "COORDINATOR_PUSH"; }
+
   void Run() override {
     DINGO_LOG(DEBUG) << "start process SendCoordinatorPushToStore";
     SendCoordinatorPushToStore(coordinator_control_);
@@ -77,6 +81,8 @@ class CoordinatorUpdateStateTask : public TaskRunnable {
   CoordinatorUpdateStateTask(std::shared_ptr<CoordinatorControl> coordinator_control)
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorUpdateStateTask() override = default;
+
+  std::string Type() override { return "COORDINATOR_UPDATE_STATE"; }
 
   void Run() override {
     DINGO_LOG(DEBUG) << "start process CoordinatorUpdateState";
@@ -94,6 +100,8 @@ class CoordinatorTaskListProcessTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorTaskListProcessTask() override = default;
 
+  std::string Type() override { return "COORDINATOR_TASK_LIST_PROCESS"; }
+
   void Run() override {
     // DINGO_LOG(DEBUG) << "start process CoordinatorTaskListProcess";
     CoordinatorTaskListProcess(coordinator_control_);
@@ -109,6 +117,8 @@ class CoordinatorRecycleOrphanTask : public TaskRunnable {
   CoordinatorRecycleOrphanTask(std::shared_ptr<CoordinatorControl> coordinator_control)
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorRecycleOrphanTask() override = default;
+
+  std::string Type() override { return "COORDINATOR_RECYCLE_ORPHAN"; }
 
   void Run() override {
     DINGO_LOG(DEBUG) << "start process CoordinatorRecycleOrphan";
@@ -126,6 +136,8 @@ class CalculateTableMetricsTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CalculateTableMetricsTask() override = default;
 
+  std::string Type() override { return "CALCULATE_TABLE_METRICS"; }
+
   void Run() override {
     DINGO_LOG(DEBUG) << "start process CoordinatorTaskListProcess";
     CalculateTableMetrics(coordinator_control_);
@@ -140,6 +152,8 @@ class LeaseTask : public TaskRunnable {
  public:
   LeaseTask(std::shared_ptr<CoordinatorControl> coordinator_control) : coordinator_control_(coordinator_control) {}
   ~LeaseTask() override = default;
+
+  std::string Type() override { return "LEASE"; }
 
   void Run() override {
     DINGO_LOG(DEBUG) << "start process LeaseTask";
@@ -156,6 +170,8 @@ class CompactionTask : public TaskRunnable {
   CompactionTask(std::shared_ptr<CoordinatorControl> coordinator_control) : coordinator_control_(coordinator_control) {}
   ~CompactionTask() override = default;
 
+  std::string Type() override { return "COMPACTION"; }
+
   void Run() override {
     DINGO_LOG(DEBUG) << "start process CompactionTask";
     ExecCompactionTask(coordinator_control_);
@@ -171,6 +187,8 @@ class VectorIndexScrubTask : public TaskRunnable {
   VectorIndexScrubTask() = default;
   ~VectorIndexScrubTask() override = default;
 
+  std::string Type() override { return "VECTOR_INDEX_SCRUB"; }
+
   void Run() override { ScrubVectorIndex(); }
 
   static void ScrubVectorIndex();
@@ -178,7 +196,7 @@ class VectorIndexScrubTask : public TaskRunnable {
 
 class Heartbeat {
  public:
-  Heartbeat() : is_available_(false), queue_id_({UINT64_MAX}) {}
+  Heartbeat() { worker_ = Worker::New(); }
   ~Heartbeat() = default;
 
   Heartbeat(const Heartbeat&) = delete;
@@ -202,11 +220,9 @@ class Heartbeat {
                                                  pb::push::PushStoreOperationResponse& response);
 
  private:
-  bool Execute(TaskRunnable* task);
+  bool Execute(TaskRunnablePtr task);
 
-  // Execution queue is available.
-  std::atomic<bool> is_available_;
-  bthread::ExecutionQueueId<TaskRunnable*> queue_id_;  // NOLINT
+  WorkerPtr worker_;
 };
 
 }  // namespace dingodb

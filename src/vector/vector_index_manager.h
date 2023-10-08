@@ -38,6 +38,8 @@ class RebuildVectorIndexTask : public TaskRunnable {
       : vector_index_wrapper_(vector_index_wrapper), force_(force) {}
   ~RebuildVectorIndexTask() override = default;
 
+  std::string Type() override { return "REBUILD_VECTOR_INDEX"; }
+
   void Run() override;
 
  private:
@@ -51,6 +53,8 @@ class SaveVectorIndexTask : public TaskRunnable {
   SaveVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper) : vector_index_wrapper_(vector_index_wrapper) {}
   ~SaveVectorIndexTask() override = default;
 
+  std::string Type() override { return "SAVE_VECTOR_INDEX"; }
+
   void Run() override;
 
  private:
@@ -63,6 +67,8 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
   LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper)
       : vector_index_wrapper_(vector_index_wrapper) {}
   ~LoadOrBuildVectorIndexTask() override = default;
+
+  std::string Type() override { return "LOADORBUILD_VECTOR_INDEX"; }
 
   void Run() override;
 

@@ -948,45 +948,11 @@ void HoldVectorIndexTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
-bool ControlExecutor::Init() {
-  bthread::ExecutionQueueOptions options;
-  options.bthread_attr = BTHREAD_ATTR_NORMAL;
+bool ControlExecutor::Init() { return worker_->Init(); }
 
-  if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "[control.region] start execution queue failed.";
-    return false;
-  }
+bool ControlExecutor::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
 
-  is_available_.store(true, std::memory_order_relaxed);
-
-  return true;
-}
-
-bool ControlExecutor::Execute(TaskRunnable* task) {
-  if (!is_available_.load(std::memory_order_relaxed)) {
-    DINGO_LOG(ERROR) << "[control.region] control execute queue is not available.";
-    return false;
-  }
-
-  if (bthread::execution_queue_execute(queue_id_, task) != 0) {
-    DINGO_LOG(ERROR) << "[control.region] region execution queue execute failed.";
-    return false;
-  }
-  return true;
-}
-
-void ControlExecutor::Stop() {
-  is_available_.store(false, std::memory_order_relaxed);
-
-  if (bthread::execution_queue_stop(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "[control.region] region execution queue stop failed.";
-    return;
-  }
-
-  if (bthread::execution_queue_join(queue_id_) != 0) {
-    DINGO_LOG(ERROR) << "[control.region] region execution queue join failed.";
-  }
-}
+void ControlExecutor::Stop() { worker_->Destroy(); }
 
 bool RegionCommandManager::Init() {
   std::vector<pb::common::KeyValue> kvs;
@@ -1252,7 +1218,7 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
   }
 
   // Free at ExecuteRoutine()
-  TaskRunnable* task = it->second(ctx, command);
+  auto task = it->second(ctx, command);
   if (task == nullptr) {
     DINGO_LOG(ERROR) << "[control.region] not support region control command.";
     return butil::Status(pb::error::EINTERNAL, "Not support region control command");
@@ -1290,58 +1256,58 @@ RegionController::ValidateFunc RegionController::GetValidater(pb::coordinator::R
 
 RegionController::TaskBuilderMap RegionController::task_builders = {
     {pb::coordinator::CMD_CREATE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new CreateRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<CreateRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_DELETE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new DeleteRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<DeleteRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SPLIT,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new SplitRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<SplitRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_MERGE,
-     [](std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>) -> TaskRunnable* { return nullptr; }},
+     [](std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>) -> TaskRunnablePtr { return nullptr; }},
     {pb::coordinator::CMD_CHANGE_PEER,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new ChangeRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<ChangeRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_TRANSFER_LEADER,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new TransferLeaderTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<TransferLeaderTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SNAPSHOT,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new SnapshotRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<SnapshotRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_PURGE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new PurgeRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<PurgeRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_STOP,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new StopRegionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<StopRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_DESTROY_EXECUTOR,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new DestroyRegionExecutorTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<DestroyRegionExecutorTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SNAPSHOT_VECTOR_INDEX,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new SnapshotVectorIndexTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<SnapshotVectorIndexTask>(ctx, command);
      }},
     {pb::coordinator::CMD_UPDATE_DEFINITION,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new UpdateDefinitionTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<UpdateDefinitionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SWITCH_SPLIT,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new SwitchSplitTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<SwitchSplitTask>(ctx, command);
      }},
     {pb::coordinator::CMD_HOLD_VECTOR_INDEX,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnable* {
-       return new HoldVectorIndexTask(ctx, command);
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<HoldVectorIndexTask>(ctx, command);
      }},
 };
 

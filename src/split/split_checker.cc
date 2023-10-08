@@ -266,7 +266,7 @@ void SplitCheckWorkers::Destroy() {
   }
 }
 
-bool SplitCheckWorkers::Execute(TaskRunnable* task) {
+bool SplitCheckWorkers::Execute(TaskRunnablePtr task) {
   if (!workers_[offset_]->Execute(task)) {
     return false;
   }
@@ -395,7 +395,8 @@ void PreSplitCheckTask::PreSplitCheck() {
       continue;
     }
 
-    if (split_check_workers_->Execute(new SplitCheckTask(split_check_workers_, region, region_metric, split_checker))) {
+    auto task = std::make_shared<SplitCheckTask>(split_check_workers_, region, region_metric, split_checker);
+    if (split_check_workers_->Execute(task)) {
       split_check_workers_->AddRegionChecking(region->Id());
     }
   }
@@ -418,14 +419,12 @@ void PreSplitChecker::Destroy() {
   split_check_workers_->Destroy();
 }
 
-bool PreSplitChecker::Execute(TaskRunnable* task) { return worker_->Execute(task); }
+bool PreSplitChecker::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
 
 void PreSplitChecker::TriggerPreSplitCheck(void*) {
   // Free at ExecuteRoutine()
-  TaskRunnable* task = new PreSplitCheckTask(Server::GetInstance()->GetPreSplitChecker()->GetSplitCheckWorkers());
-  if (!Server::GetInstance()->GetPreSplitChecker()->Execute(task)) {
-    delete task;
-  }
+  auto task = std::make_shared<PreSplitCheckTask>(Server::GetInstance()->GetPreSplitChecker()->GetSplitCheckWorkers());
+  Server::GetInstance()->GetPreSplitChecker()->Execute(task);
 }
 
 }  // namespace dingodb
