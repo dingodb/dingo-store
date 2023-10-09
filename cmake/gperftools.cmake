@@ -32,7 +32,7 @@ ExternalProject_Add(
         # BINARY_DIR ${GPERFTOOLS_BINARY_DIR}
         PREFIX ${GPERFTOOLS_INSTALL_DIR}
         BUILD_IN_SOURCE 1
-        CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --disable-debugalloc --enable-frame-pointers
+        CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-libunwind CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g
         BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND $(MAKE) install
 )
