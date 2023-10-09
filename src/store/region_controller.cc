@@ -185,14 +185,6 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region update region state DELETING", region_id);
   store_region_meta->UpdateState(region, pb::common::StoreRegionState::DELETING);
 
-  // Shutdown raft node
-  auto engine = Server::GetInstance()->GetEngine();
-
-  // Delete data
-  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
-  writer->KvBatchDeleteRange(region->PhysicsRange());
-
   // Raft kv engine
   auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
@@ -213,6 +205,15 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete raft meta
   store_meta_manager->GetStoreRaftMeta()->DeleteRaftMeta(region_id);
+
+  // Delete data
+  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
+  auto engine = Server::GetInstance()->GetEngine();
+  auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
+  status = writer->KvBatchDeleteRange(region->PhysicsRange());
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled.", region_id);
+  }
 
   // Index region
   if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
