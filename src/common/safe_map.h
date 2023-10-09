@@ -43,8 +43,8 @@ class DingoSafeMap {
   DingoSafeMap(const DingoSafeMap &) = delete;
   ~DingoSafeMap() { safe_map.Modify(InnerClear); }
 
-  void Init(uint64_t capacity) { safe_map.Modify(InnerInit, capacity); }
-  void Resize(uint64_t capacity) { safe_map.Modify(InnerResize, capacity); }
+  void Init(int64_t capacity) { safe_map.Modify(InnerInit, capacity); }
+  void Resize(int64_t capacity) { safe_map.Modify(InnerResize, capacity); }
 
   // Get
   // get value by key
@@ -205,7 +205,7 @@ class DingoSafeMap {
 
   // Size
   // return the record count of map
-  uint64_t Size() {
+  int64_t Size() {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return 0;
@@ -216,9 +216,9 @@ class DingoSafeMap {
 
   // MemorySize
   // return the memory size of map
-  uint64_t MemorySize() {
+  int64_t MemorySize() {
     TypeScopedPtr ptr;
-    uint64_t size = 0;
+    int64_t size = 0;
     if (safe_map.Read(&ptr) != 0) {
       return 0;
     }
@@ -424,12 +424,12 @@ class DingoSafeMap {
     return 1;
   }
 
-  static size_t InnerInit(TypeRawMap &m, const uint64_t &capacity) {
+  static size_t InnerInit(TypeRawMap &m, const int64_t &capacity) {
     CHECK_EQ(0, m.init(capacity));
     return 1;
   }
 
-  static size_t InnerResize(TypeRawMap &m, const uint64_t &capacity) {
+  static size_t InnerResize(TypeRawMap &m, const int64_t &capacity) {
     CHECK_EQ(0, m.resize(capacity));
     return 1;
   }
@@ -455,8 +455,8 @@ class DingoSafeStdMap {
   DingoSafeStdMap(const DingoSafeStdMap &) = delete;
   ~DingoSafeStdMap() { safe_map.Modify(InnerClear); }
 
-  // void Init(uint64_t capacity) { safe_map.Modify(InnerInit, capacity); }
-  // void Resize(uint64_t capacity) { safe_map.Modify(InnerResize, capacity); }
+  // void Init(int64_t capacity) { safe_map.Modify(InnerInit, capacity); }
+  // void Resize(int64_t capacity) { safe_map.Modify(InnerResize, capacity); }
 
   // Get
   // get value by key
@@ -684,7 +684,7 @@ class DingoSafeStdMap {
 
   // Size
   // return the record count of map
-  uint64_t Size() {
+  int64_t Size() {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return 0;
@@ -695,9 +695,9 @@ class DingoSafeStdMap {
 
   // MemorySize
   // return the memory size of map
-  uint64_t MemorySize() {
+  int64_t MemorySize() {
     TypeScopedPtr ptr;
-    uint64_t size = 0;
+    int64_t size = 0;
     if (safe_map.Read(&ptr) != 0) {
       return 0;
     }
@@ -903,12 +903,12 @@ class DingoSafeStdMap {
     return 1;
   }
 
-  // static size_t InnerInit(TypeRawMap &m, const uint64_t &capacity) {
+  // static size_t InnerInit(TypeRawMap &m, const int64_t &capacity) {
   //   CHECK_EQ(0, m.init(capacity));
   //   return 1;
   // }
 
-  // static size_t InnerResize(TypeRawMap &m, const uint64_t &capacity) {
+  // static size_t InnerResize(TypeRawMap &m, const int64_t &capacity) {
   //   CHECK_EQ(0, m.resize(capacity));
   //   return 1;
   // }

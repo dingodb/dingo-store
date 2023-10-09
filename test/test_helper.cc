@@ -32,7 +32,7 @@ class HelperTest : public testing::Test {
 
 // TEST_F(HelperTest, GetDiskCapacity) {
 //   std::string path = "/";
-//   std::map<std::string, uint64_t> output;
+//   std::map<std::string, int64_t> output;
 
 //   EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
 //   std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << '\n';
@@ -383,7 +383,7 @@ TEST_F(HelperTest, TraverseDirectory) {
 }
 
 TEST_F(HelperTest, GetSystemMemoryInfo) {
-  std::map<std::string, uint64_t> output;
+  std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetSystemMemoryInfo(output);
   EXPECT_EQ(true, ret);
 
@@ -393,7 +393,7 @@ TEST_F(HelperTest, GetSystemMemoryInfo) {
 }
 
 TEST_F(HelperTest, GetSystemCpuUsage) {
-  std::map<std::string, uint64_t> output;
+  std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetSystemCpuUsage(output);
   EXPECT_EQ(true, ret);
 
@@ -403,7 +403,7 @@ TEST_F(HelperTest, GetSystemCpuUsage) {
 }
 
 TEST_F(HelperTest, GetSystemDiskIoUtil) {
-  std::map<std::string, uint64_t> output;
+  std::map<std::string, int64_t> output;
   std::string device_name = "sda";
   auto ret = dingodb::Helper::GetSystemDiskIoUtil(device_name, output);
   EXPECT_EQ(true, ret);
@@ -414,7 +414,7 @@ TEST_F(HelperTest, GetSystemDiskIoUtil) {
 }
 
 TEST_F(HelperTest, GetProcessMemoryInfo) {
-  std::map<std::string, uint64_t> output;
+  std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetProcessMemoryInfo(output);
   EXPECT_EQ(true, ret);
 

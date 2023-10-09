@@ -34,7 +34,7 @@
 
 namespace dingodb {
 
-RaftNode::RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
+RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
                    std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage)
     : node_id_(node_id),
       str_node_id_(std::to_string(node_id)),

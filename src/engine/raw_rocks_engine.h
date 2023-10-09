@@ -196,8 +196,8 @@ class RawRocksEngine : public RawEngine {
       }
     }
 
-    uint64_t KeyValueSize() override {
-      uint64_t size = 0;
+    int64_t KeyValueSize() override {
+      int64_t size = 0;
       for (auto& iter : iters_) {
         size += iter->Key().size() + iter->Value().size();
       }
@@ -236,9 +236,9 @@ class RawRocksEngine : public RawEngine {
     butil::Status KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                          const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) override;
 
-    butil::Status KvCount(const std::string& start_key, const std::string& end_key, uint64_t& count) override;
+    butil::Status KvCount(const std::string& start_key, const std::string& end_key, int64_t& count) override;
     butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                          const std::string& end_key, uint64_t& count) override;
+                          const std::string& end_key, int64_t& count) override;
 
     std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) override;
 
@@ -310,7 +310,7 @@ class RawRocksEngine : public RawEngine {
     butil::Status SaveFile(const std::vector<pb::common::KeyValue>& kvs, const std::string& filename);
     butil::Status SaveFile(std::shared_ptr<dingodb::Iterator> iter, const std::string& filename);
 
-    uint64_t GetSize() { return sst_writer_->FileSize(); }
+    int64_t GetSize() { return sst_writer_->FileSize(); }
 
    private:
     rocksdb::Options options_;
@@ -366,7 +366,7 @@ class RawRocksEngine : public RawEngine {
 
   std::shared_ptr<ColumnFamily> GetColumnFamily(const std::string& cf_name);
 
-  std::vector<uint64_t> GetApproximateSizes(const std::string& cf_name,
+  std::vector<int64_t> GetApproximateSizes(const std::string& cf_name,
                                             std::vector<pb::common::Range>& ranges) override;
 
  private:

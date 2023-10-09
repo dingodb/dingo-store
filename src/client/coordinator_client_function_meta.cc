@@ -242,7 +242,7 @@ void SendCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   DINGO_LOG_INFO << response.DebugString();
 }
 
-int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, uint64_t& table_id) {
+int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t& table_id) {
   dingodb::pb::meta::CreateTableIdRequest request;
   dingodb::pb::meta::CreateTableIdResponse response;
 
@@ -281,7 +281,7 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
-  uint64_t new_table_id = 0;
+  int64_t new_table_id = 0;
   int ret = GetCreateTableId(coordinator_interaction, new_table_id);
   if (ret != 0) {
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -294,9 +294,9 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
   uint32_t part_count = FLAGS_part_count;
 
-  std::vector<uint64_t> part_ids;
+  std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    uint64_t new_part_id = 0;
+    int64_t new_part_id = 0;
     int ret = GetCreateTableId(coordinator_interaction, new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -654,7 +654,7 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
-  uint64_t new_index_id = 0;
+  int64_t new_index_id = 0;
   int ret = GetCreateTableId(coordinator_interaction, new_index_id);
   if (ret != 0) {
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -667,9 +667,9 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
   uint32_t part_count = FLAGS_part_count;
 
-  std::vector<uint64_t> part_ids;
+  std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    uint64_t new_part_id = 0;
+    int64_t new_part_id = 0;
     int ret = GetCreateTableId(coordinator_interaction, new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -923,7 +923,7 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
-  uint64_t new_table_id = 0;
+  int64_t new_table_id = 0;
   int ret = GetCreateTableId(coordinator_interaction, new_table_id);
   if (ret != 0) {
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -935,9 +935,9 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   }
   uint32_t part_count = FLAGS_part_count;
 
-  std::vector<uint64_t> part_ids;
+  std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    uint64_t new_part_id = 0;
+    int64_t new_part_id = 0;
     int ret = GetCreateTableId(coordinator_interaction, new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";

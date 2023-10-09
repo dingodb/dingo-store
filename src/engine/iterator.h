@@ -74,7 +74,7 @@ class MultipleRangeIterator {
   virtual bool IsValid() = 0;
   virtual void Next() = 0;
 
-  virtual uint64_t KeyValueSize() = 0;
+  virtual int64_t KeyValueSize() = 0;
 
   virtual std::string FirstRangeKey() = 0;
   virtual std::vector<std::string> AllRangeKeys() = 0;

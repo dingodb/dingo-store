@@ -133,18 +133,18 @@ class SplitCheckWorkers {
 
   bool Execute(TaskRunnablePtr task);
 
-  bool IsExistRegionChecking(uint64_t region_id);
-  void AddRegionChecking(uint64_t region_id);
-  void DeleteRegionChecking(uint64_t region_id);
+  bool IsExistRegionChecking(int64_t region_id);
+  void AddRegionChecking(int64_t region_id);
+  void DeleteRegionChecking(int64_t region_id);
 
  private:
   // Protect checking_regions_.
   bthread_mutex_t mutex_;
   // Region of doing check.
-  std::set<uint64_t> checking_regions_;
+  std::set<int64_t> checking_regions_;
 
   // Indicate workers offset for round-robin.
-  uint32_t offset_;
+  uint32_t offset_;  // NOLINT
   std::vector<WorkerPtr> workers_;
 };
 

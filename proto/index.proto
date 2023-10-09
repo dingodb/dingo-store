@@ -40,7 +40,7 @@ message VectorAddResponse {
 
 message VectorBatchQueryRequest {
   dingodb.pb.store.Context context = 1;
-  repeated uint64 vector_ids = 2;
+  repeated int64 vector_ids = 2;
   bool without_vector_data = 3;       // Default false, if true, response without vector data.
   bool without_scalar_data = 4;       // Default false, if true, response without scalar data.
   repeated string selected_keys = 5;  // If without_scalar_data is false, selected_keys is used to select scalar data,
@@ -55,14 +55,14 @@ message VectorBatchQueryResponse {
 
 message VectorScanQueryRequest {
   dingodb.pb.store.Context context = 1;
-  uint64 vector_id_start = 2;
+  int64 vector_id_start = 2;
   bool is_reverse_scan = 3;
-  uint64 max_scan_count = 4;  // the max count user want to scan
-  uint64 vector_id_end = 5;   // the end id of scan, if is_reverse_scan is true, vector_id_end must be less than
-                              // vector_id_start, if is_reverse_scan is false, vector_id_end must be greater than
-                              // vector_id_start
-                              // the real range is [start, end], include start and end
-                              // if vector_id_end == 0, scan to the end of the region
+  int64 max_scan_count = 4;  // the max count user want to scan
+  int64 vector_id_end = 5;   // the end id of scan, if is_reverse_scan is true, vector_id_end must be less than
+                             // vector_id_start, if is_reverse_scan is false, vector_id_end must be greater than
+                             // vector_id_start
+                             // the real range is [start, end], include start and end
+                             // if vector_id_end == 0, scan to the end of the region
 
   bool without_vector_data = 11;       // Default false, if true, response without vector data.
   bool without_scalar_data = 12;       // Default false, if true, response without scalar data.
@@ -106,7 +106,7 @@ message VectorSearchResponse {
 
 message VectorDeleteRequest {
   dingodb.pb.store.Context context = 1;
-  repeated uint64 ids = 2;
+  repeated int64 ids = 2;
 }
 
 message VectorDeleteResponse {
@@ -124,7 +124,7 @@ message VectorGetBorderIdRequest {
 
 message VectorGetBorderIdResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 id = 2;
+  int64 id = 2;
 }
 
 enum AlgorithmType {
@@ -195,13 +195,13 @@ message VectorSearchDebugResponse {
 message VectorCountRequest {
   dingodb.pb.store.Context context = 1;
   // [vector_id_start, vector_id_end)
-  uint64 vector_id_start = 2;  // default region range start_key
-  uint64 vector_id_end = 3;    // default region range end_key, not include
+  int64 vector_id_start = 2;  // default region range start_key
+  int64 vector_id_end = 3;    // default region range end_key, not include
 }
 
 message VectorCountResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 count = 2;
+  int64 count = 2;
 }
 
 service IndexService {

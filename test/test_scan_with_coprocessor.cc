@@ -674,10 +674,10 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   EXPECT_NE(scan.get(), nullptr);
 
-  uint64_t region_id = 1;
+  int64_t region_id = 1;
   pb::common::Range range;
 
-  uint64_t max_fetch_cnt = 0;
+  int64_t max_fetch_cnt = 0;
   bool key_only = false;
   bool disable_auto_release = false;
   std::vector<pb::common::KeyValue> kvs;

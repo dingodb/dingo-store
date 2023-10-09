@@ -86,7 +86,7 @@ std::string GetRaftInitConf(const std::vector<std::string>& raft_addrs) {
   return s;
 }
 
-dingodb::store::RegionPtr BuildRegion(uint64_t region_id, const std::string& raft_group_name,
+dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
                                       std::vector<std::string>& raft_addrs) {
   dingodb::pb::common::RegionDefinition region_definition;
   region_definition.set_id(region_id);
@@ -129,7 +129,7 @@ std::string FormatPeers(const std::vector<dingodb::pb::common::Peer> peers) {
 }
 
 std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Config> config,
-                                                  dingodb::store::RegionPtr region, uint64_t node_id,
+                                                  dingodb::store::RegionPtr region, int64_t node_id,
                                                   const dingodb::pb::common::Peer& peer, std::string init_conf) {
   // build state machine
   auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());

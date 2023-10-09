@@ -172,7 +172,7 @@ void MetaServiceImpl::GetTablesCount(google::protobuf::RpcController * /*control
     return;
   }
 
-  uint64_t tables_count = 0;
+  int64_t tables_count = 0;
   auto ret = this->coordinator_control_->GetTablesCount(request->schema_id().entity_id(), tables_count);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -343,7 +343,7 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_table_id;
+  int64_t new_table_id;
   auto ret = this->coordinator_control_->CreateTableId(request->schema_id().entity_id(), new_table_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateTableId failed in meta_service";
@@ -385,7 +385,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
   DINGO_LOG(INFO) << "CreateTable request:  schema_id = [" << request->schema_id().entity_id() << "]";
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t start_ms = butil::gettimeofday_ms();
+  int64_t start_ms = butil::gettimeofday_ms();
 
   if (!request->has_schema_id() || !request->has_table_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -394,7 +394,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_table_id = 0;
+  int64_t new_table_id = 0;
   if (request->has_table_id()) {
     if (request->table_id().entity_id() > 0) {
       new_table_id = request->table_id().entity_id();
@@ -403,7 +403,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
     }
   }
 
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   auto ret = this->coordinator_control_->CreateTable(request->schema_id().entity_id(), request->table_definition(),
                                                      new_table_id, region_ids, meta_increment);
   if (!ret.ok()) {
@@ -434,7 +434,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
     }
 
     if ((!region_ids.empty()) && (!FLAGS_async_create_table)) {
-      std::map<uint64_t, bool> region_status;
+      std::map<int64_t, bool> region_status;
       for (const auto &id : region_ids) {
         region_status[id] = false;
       }
@@ -445,7 +445,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
       uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
 
       while (!region_status.empty()) {
-        std::vector<uint64_t> id_to_erase;
+        std::vector<int64_t> id_to_erase;
         for (const auto &it : region_status) {
           DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second;
           pb::common::Region region;
@@ -523,8 +523,8 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t schema_id = request->schema_id().entity_id();
-  uint64_t parent_schema_id = request->schema_id().parent_entity_id();
+  int64_t schema_id = request->schema_id().entity_id();
+  int64_t parent_schema_id = request->schema_id().parent_entity_id();
   auto ret = this->coordinator_control_->DropSchema(parent_schema_id, schema_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DropSchema failed, schema_id=" << schema_id << " ret = " << ret;
@@ -565,7 +565,7 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_schema_id;
+  int64_t new_schema_id;
   auto ret = this->coordinator_control_->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
                                                       new_schema_id, meta_increment);
   if (!ret.ok()) {
@@ -648,7 +648,7 @@ void MetaServiceImpl::GetAutoIncrements(google::protobuf::RpcController * /*cont
 
   DINGO_LOG(DEBUG) << request->ShortDebugString();
 
-  butil::FlatMap<uint64_t, uint64_t> auto_increments;
+  butil::FlatMap<int64_t, int64_t> auto_increments;
   auto_increments.init(1024);
   auto ret = auto_increment_control_->GetAutoIncrements(auto_increments);
   if (!ret.ok()) {
@@ -676,8 +676,8 @@ void MetaServiceImpl::GetAutoIncrement(google::protobuf::RpcController * /*contr
 
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t table_id = request->table_id().entity_id();
-  uint64_t start_id = 0;
+  int64_t table_id = request->table_id().entity_id();
+  int64_t start_id = 0;
   auto ret = auto_increment_control_->GetAutoIncrement(table_id, start_id);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "get auto increment failed, " << table_id;
@@ -700,7 +700,7 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
   }
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t table_id = request->table_id().entity_id();
+  int64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto ret = auto_increment_control_->CreateAutoIncrement(table_id, request->start_id(), meta_increment);
   if (!ret.ok()) {
@@ -741,7 +741,7 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *contr
 
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t table_id = request->table_id().entity_id();
+  int64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto ret =
       auto_increment_control_->UpdateAutoIncrement(table_id, request->start_id(), request->force(), meta_increment);
@@ -784,7 +784,7 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
 
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t table_id = request->table_id().entity_id();
+  int64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto ret =
       auto_increment_control_->GenerateAutoIncrement(table_id, request->count(), request->auto_increment_increment(),
@@ -829,7 +829,7 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *contr
 
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t table_id = request->table_id().entity_id();
+  int64_t table_id = request->table_id().entity_id();
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto ret = auto_increment_control_->DeleteAutoIncrement(table_id, meta_increment);
   if (!ret.ok()) {
@@ -873,7 +873,7 @@ void MetaServiceImpl::GetIndexesCount(google::protobuf::RpcController * /*contro
     return;
   }
 
-  uint64_t indexes_count = 0;
+  int64_t indexes_count = 0;
   auto ret = this->coordinator_control_->GetIndexesCount(request->schema_id().entity_id(), indexes_count);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1053,7 +1053,7 @@ void MetaServiceImpl::CreateIndexId(google::protobuf::RpcController *controller,
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_index_id;
+  int64_t new_index_id;
   auto ret = this->coordinator_control_->CreateIndexId(request->schema_id().entity_id(), new_index_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "CreateIndexId failed in meta_service";
@@ -1095,7 +1095,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
   DINGO_LOG(INFO) << "CreateIndex request:  schema_id = [" << request->schema_id().entity_id() << "]";
   DINGO_LOG(INFO) << request->ShortDebugString();
 
-  uint64_t start_ms = butil::gettimeofday_ms();
+  int64_t start_ms = butil::gettimeofday_ms();
 
   if (!request->has_schema_id() || !request->has_index_definition()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
@@ -1104,7 +1104,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_index_id = 0;
+  int64_t new_index_id = 0;
   if (request->has_index_id()) {
     if (request->index_id().entity_id() > 0) {
       new_index_id = request->index_id().entity_id();
@@ -1145,7 +1145,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
     }
   }
 
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   auto ret = this->coordinator_control_->CreateIndex(request->schema_id().entity_id(), table_definition, 0,
                                                      new_index_id, region_ids, meta_increment);
   if (!ret.ok()) {
@@ -1176,7 +1176,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
     }
 
     if ((!region_ids.empty()) && (!FLAGS_async_create_table)) {
-      std::map<uint64_t, bool> region_status;
+      std::map<int64_t, bool> region_status;
       for (const auto &id : region_ids) {
         region_status[id] = false;
       }
@@ -1187,7 +1187,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
       uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
 
       while (!region_status.empty()) {
-        std::vector<uint64_t> id_to_erase;
+        std::vector<int64_t> id_to_erase;
         for (const auto &it : region_status) {
           DINGO_LOG(INFO) << "CreateIndex region_id=" << it.first << " status=" << it.second;
           pb::common::Region region;
@@ -1415,7 +1415,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
     return RedirectResponse(response);
   }
 
-  uint64_t start_ms = butil::gettimeofday_ms();
+  int64_t start_ms = butil::gettimeofday_ms();
 
   DINGO_LOG(INFO) << request->ShortDebugString();
 
@@ -1429,9 +1429,9 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   bool find_table_type = false;
-  uint64_t new_table_id = 0;
+  int64_t new_table_id = 0;
   butil::Status ret;
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   std::vector<std::string> table_name_to_rollback;
   std::vector<std::string> index_name_to_rollback;
 
@@ -1491,7 +1491,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
     }
 
     const auto &definition = temp_with_id.table_definition();
-    uint64_t new_index_id = table_id.entity_id();
+    int64_t new_index_id = table_id.entity_id();
 
     if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
       if (definition.columns_size() == 0) {
@@ -1558,7 +1558,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
     }
 
     if ((!region_ids.empty()) && (!FLAGS_async_create_table)) {
-      std::map<uint64_t, bool> region_status;
+      std::map<int64_t, bool> region_status;
       for (const auto &id : region_ids) {
         region_status[id] = false;
       }
@@ -1569,7 +1569,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
       uint32_t max_check_region_state_count = FLAGS_max_check_region_state_count;
 
       while (!region_status.empty()) {
-        std::vector<uint64_t> id_to_erase;
+        std::vector<int64_t> id_to_erase;
         for (const auto &it : region_status) {
           DINGO_LOG(INFO) << "CreateTable region_id=" << it.first << " status=" << it.second;
           pb::common::Region region;

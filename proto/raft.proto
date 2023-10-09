@@ -47,8 +47,7 @@ message PutRequest {
   repeated dingodb.pb.common.KeyValue kvs = 2;
 }
 
-message PutResponse {
-}
+message PutResponse {}
 
 message PutIfAbsentRequest {
   string cf_name = 1;
@@ -77,7 +76,7 @@ message DeleteRangeRequest {
 }
 
 message DeleteRangeResponse {
-  repeated uint64 delete_counts = 1;
+  repeated int64 delete_counts = 1;
 }
 
 message DeleteBatchRequest {
@@ -85,8 +84,7 @@ message DeleteBatchRequest {
   repeated bytes keys = 2;
 }
 
-message DeleteBatchResponse {
-}
+message DeleteBatchResponse {}
 
 enum SplitStrategy {
   PRE_CREATE_REGION = 0;
@@ -94,32 +92,26 @@ enum SplitStrategy {
 }
 
 message SplitRequest {
-  uint64 from_region_id = 1;                // split from region id
-  uint64 to_region_id = 2;                  // split to region id
+  int64 from_region_id = 1;                 // split from region id
+  int64 to_region_id = 2;                   // split to region id
   bytes split_key = 3;                      // split watershed key
   dingodb.pb.common.RegionEpoch epoch = 4;  // current region epoch
   SplitStrategy split_strategy = 5;
 }
 
-message SplitResponse {
-}
+message SplitResponse {}
 
 message SaveSnapshotRequest {
-  uint64 region_id = 1;
+  int64 region_id = 1;
 }
 
-message SaveSnapshotResponse {
-}
+message SaveSnapshotResponse {}
 
-message RaftCreateSchemaRequest {
-}
-message RaftCreateSchemaResponse {
-}
+message RaftCreateSchemaRequest {}
+message RaftCreateSchemaResponse {}
 
-message RaftCreateTableRequest {
-}
-message RaftCreateTableResponse {
-}
+message RaftCreateTableRequest {}
+message RaftCreateTableResponse {}
 
 message RaftMetaRequest {
   dingodb.pb.coordinator_internal.MetaIncrement meta_increment = 1;
@@ -130,22 +122,18 @@ message VectorAddRequest {
   repeated dingodb.pb.common.VectorWithId vectors = 2;
 }
 
-message VectorAddResponse {
-}
+message VectorAddResponse {}
 
 message VectorDeleteRequest {
   string cf_name = 1;
-  repeated uint64 ids = 2;
+  repeated int64 ids = 2;
 }
 
-message VectorDeleteResponse {
-}
+message VectorDeleteResponse {}
 
-message RebuildVectorIndexRequest {
-}
+message RebuildVectorIndexRequest {}
 
-message RebuildVectorIndexResponse {
-}
+message RebuildVectorIndexResponse {}
 
 message Request {
   CmdType cmd_type = 1;
@@ -195,7 +183,7 @@ message Response {
 }
 
 message RequestHeader {
-  uint64 region_id = 1;
+  int64 region_id = 1;
 }
 
 message RaftCmdRequest {
@@ -203,8 +191,7 @@ message RaftCmdRequest {
   repeated Request requests = 2;
 }
 
-message ResponseHeader {
-}
+message ResponseHeader {}
 
 message RaftCmdResponse {
   ResponseHeader header = 1;

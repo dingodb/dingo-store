@@ -29,7 +29,7 @@ class StoreRegionMetaTest : public testing::Test {
 TEST_F(StoreRegionMetaTest, ParseRegionId) {
   dingodb::StoreRegionMeta store_region_meta(nullptr, nullptr);
 
-  uint64_t region_id = store_region_meta.ParseRegionId("META_REGION_11111");
+  int64_t region_id = store_region_meta.ParseRegionId("META_REGION_11111");
 
   EXPECT_EQ(11111, region_id);
 }

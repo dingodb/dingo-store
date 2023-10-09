@@ -75,7 +75,7 @@ void RebuildVectorIndexTask::Run() {
   }
 
   if (!force_) {
-    if (!vector_index_wrapper_->IsReady()) {
+    if (!vector_index_wrapper_->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format(
           "[vector_index.rebuild][index_id({})] vector index is not ready, gave up rebuild vector index.",
           vector_index_wrapper_->Id());
@@ -140,7 +140,7 @@ void SaveVectorIndexTask::Run() {
                                    vector_index_wrapper_->Id());
     return;
   }
-  if (!vector_index_wrapper_->IsReady()) {
+  if (!vector_index_wrapper_->IsOwnReady()) {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.save][index_id({})] vector index is not ready, gave up save vector index.",
         vector_index_wrapper_->Id());
@@ -177,7 +177,7 @@ void LoadOrBuildVectorIndexTask::Run() {
     return;
   }
 
-  if (vector_index_wrapper_->IsReady()) {
+  if (vector_index_wrapper_->IsOwnReady()) {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.loadorbuild][index_id({})] vector index is ready, gave up loadorbuild vector index.",
         vector_index_wrapper_->Id());
@@ -217,7 +217,7 @@ std::atomic<int> VectorIndexManager::vector_index_save_task_running_num = 0;
 bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) { return true; }  // NOLINT
 
 // Check whether need hold vector index
-bool VectorIndexManager::NeedHoldVectorIndex(uint64_t region_id) {
+bool VectorIndexManager::NeedHoldVectorIndex(int64_t region_id) {
   auto config = Server::GetInstance()->GetConfig();
   if (config == nullptr) {
     return true;
@@ -246,8 +246,24 @@ bool VectorIndexManager::NeedHoldVectorIndex(uint64_t region_id) {
 butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
 
-  uint64_t start_time = Helper::TimestampMs();
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  if (vector_index_wrapper->IsRebuilding()) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load][index_id({})] vector index is rebuilding, maybe need to give up, this is just a warning, "
+        "build will proceed.",
+        vector_index_wrapper->Id());
+  }
+  if (vector_index_wrapper->IsLoadorbuilding()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.load][index_id({})] vector index is loadorbuilding, give up.",
+                                      vector_index_wrapper->Id());
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_BUILD_CONFLICT, "Vector index is loadorbuilding, give up.");
+  }
+
+  ON_SCOPE_EXIT([&]() { vector_index_wrapper->SetLoadoruilding(false); });
+
+  vector_index_wrapper->SetLoadoruilding(true);
+
+  int64_t start_time = Helper::TimestampMs();
+  int64_t vector_index_id = vector_index_wrapper->Id();
 
   // try to load vector index from snapshot
   auto new_vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper);
@@ -255,7 +271,7 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
     // replay wal
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.load][index_id({})] Load vector index from snapshot success, will ReplayWal", vector_index_id);
-    auto status = ReplayWalToVectorIndex(new_vector_index, new_vector_index->ApplyLogId() + 1, UINT64_MAX);
+    auto status = ReplayWalToVectorIndex(new_vector_index, new_vector_index->ApplyLogId() + 1, INT64_MAX);
     if (status.ok()) {
       DINGO_LOG(INFO) << fmt::format(
           "[vector_index.load][index_id({})] ReplayWal success, log_id {} elapsed time({}ms)", vector_index_id,
@@ -339,7 +355,7 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
       auto region = param->regions[offset];
       auto vector_index_wrapper = region->VectorIndexWrapper();
 
-      uint64_t vector_index_id = vector_index_wrapper->Id();
+      int64_t vector_index_id = vector_index_wrapper->Id();
       LOG(INFO) << fmt::format("Init load region {} vector index", vector_index_id);
 
       auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
@@ -367,13 +383,13 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
 }
 
 // Replay vector index from WAL
-butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_index, uint64_t start_log_id,
-                                                         uint64_t end_log_id) {
+butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_index, int64_t start_log_id,
+                                                         int64_t end_log_id) {
   assert(vector_index != nullptr);
   DINGO_LOG(INFO) << fmt::format("[vector_index.replaywal][index_id({})] replay wal log({}-{})", vector_index->Id(),
                                  start_log_id, end_log_id);
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
     return butil::Status(pb::error::Errno::EINTERNAL, "Engine is not raft store.");
@@ -389,14 +405,14 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
 
-  uint64_t min_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().start_key());
-  uint64_t max_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().end_key());
-  max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
+  int64_t min_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().start_key());
+  int64_t max_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().end_key());
+  max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
-  std::vector<uint64_t> ids;
+  std::vector<int64_t> ids;
   ids.reserve(Constant::kBuildVectorIndexBatchSize);
-  uint64_t last_log_id = vector_index->ApplyLogId();
+  int64_t last_log_id = vector_index->ApplyLogId();
   auto log_entrys = log_stroage->GetEntrys(start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
@@ -468,7 +484,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
 // Build vector index with original all data.
 VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t vector_index_id = vector_index_wrapper->Id();
 
   auto region = Server::GetInstance()->GetRegion(vector_index_id);
   if (region == nullptr) {
@@ -506,7 +522,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
                                  VectorCodec::DecodeVectorId(start_key), Helper::StringToHex(end_key),
                                  VectorCodec::DecodeVectorId(end_key));
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
   IteratorOptions options;
   options.upper_bound = end_key;
@@ -531,7 +547,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
-  uint64_t count = 0;
+  int64_t count = 0;
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
@@ -574,7 +590,9 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force) {
   assert(vector_index_wrapper != nullptr);
 
-  if (GetVectorIndexRebuildTaskRunningNum() > Constant::kVectorIndexRebuildTaskRunningNumMaxValue) {
+  // split will check if GetVectorIndexTaskRunningNum is exceeed limit, so for rebuild task for split, we do not check
+  // rebuild running num.
+  if (!force && GetVectorIndexRebuildTaskRunningNum() > Constant::kVectorIndexRebuildTaskRunningNumMaxValue) {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.launch][index_id({})] running rebuild task execeed limit({}/{}), give up.",
         vector_index_wrapper->Id(), GetVectorIndexRebuildTaskRunningNum(),
@@ -596,12 +614,30 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
 // Rebuild vector index
 butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+
+  if (vector_index_wrapper->IsLoadorbuilding()) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.rebuild][index_id({})] vector index is loadorbuilding, maybe need to give up, this is just a "
+        "warning, rebuid will proceed.",
+        vector_index_wrapper->Id());
+  }
+
+  if (vector_index_wrapper->IsRebuilding()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({}_v{})] vector index is rebuilding, give up.",
+                                      vector_index_wrapper->Id(), vector_index_wrapper->Version());
+    return butil::Status(pb::error::Errno::EVECTOR_INDEX_REBUILD_CONFLICT, "Vector index is rebuilding, give up.");
+  }
+
+  ON_SCOPE_EXIT([&]() { vector_index_wrapper->SetIsRebuilding(false); });
+
+  vector_index_wrapper->SetIsRebuilding(true);
+
+  int64_t vector_index_id = vector_index_wrapper->Id();
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})] Start rebuild vector index.",
                                  vector_index_id, vector_index_wrapper->Version());
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   // Build vector index with original data.
   auto vector_index = BuildVectorIndex(vector_index_wrapper);
   if (vector_index == nullptr) {
@@ -627,7 +663,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
   start_time = Helper::TimestampMs();
   // first ground replay wal
-  auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, UINT64_MAX);
+  auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, INT64_MAX);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] ReplayWal failed first-round, log_id {}",
                                     vector_index_id, vector_index->ApplyLogId());
@@ -653,7 +689,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
     start_time = Helper::TimestampMs();
     // second ground replay wal
-    status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, UINT64_MAX);
+    status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, INT64_MAX);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] ReplayWal failed catch-up round, log_id {}",
                                       vector_index_id, vector_index->ApplyLogId());
@@ -678,7 +714,7 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
 butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
 
   // Check vector index is stop
   if (vector_index_wrapper->IsStop()) {
@@ -690,7 +726,7 @@ butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_i
   DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({}_v{})] Save vector index.", vector_index_wrapper->Id(),
                                  vector_index_wrapper->Version());
 
-  uint64_t snapshot_log_id = 0;
+  int64_t snapshot_log_id = 0;
   auto status = VectorIndexSnapshotManager::SaveVectorIndexSnapshot(vector_index_wrapper, snapshot_log_id);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -754,7 +790,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
                   << regions.size();
 
   for (const auto& region : regions) {
-    uint64_t vector_index_id = region->Id();
+    int64_t vector_index_id = region->Id();
     if (region->State() != pb::common::NORMAL) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] region state is not normal, dont't scrub.",
                                      vector_index_id);
@@ -793,7 +829,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex(store::RegionPtr region, bool
   assert(region != nullptr);
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t vector_index_id = vector_index_wrapper->Id();
 
   if (need_rebuild) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need rebuild, do rebuild vector index.",
@@ -811,7 +847,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex(store::RegionPtr region, bool
 butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index,
                                                 std::shared_ptr<Iterator> iter, const std::string& start_key,
                                                 [[maybe_unused]] const std::string& end_key) {
-  uint64_t count = 0;
+  int64_t count = 0;
   std::vector<float> train_vectors;
   train_vectors.reserve(100000 * vector_index->GetDimension());  // todo opt
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {

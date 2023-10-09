@@ -51,7 +51,7 @@ butil::Status CreateRegionTask::PreValidateCreateRegion(const pb::coordinator::R
 }
 
 butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                                     uint64_t region_id) {
+                                                     int64_t region_id) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
   if (region != nullptr && region->State() != pb::common::StoreRegionState::NEW) {
     return butil::Status(pb::error::EREGION_EXIST, fmt::format("Region {} already exist", region_id));
@@ -60,8 +60,7 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
   return butil::Status();
 }
 
-butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition& definition,
-                                             uint64_t parent_region_id) {
+butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition& definition, int64_t parent_region_id) {
   auto region = store::Region::New(definition);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, region: {}", region->Id(),
@@ -170,7 +169,7 @@ butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaMa
   return butil::Status();
 }
 
-butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64_t region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
@@ -416,7 +415,7 @@ butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::R
 }
 
 // Check region leader
-static butil::Status CheckLeader(uint64_t region_id) {
+static butil::Status CheckLeader(int64_t region_id) {
   auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
@@ -510,7 +509,7 @@ butil::Status TransferLeaderTask::PreValidateTransferLeader(const pb::coordinato
 }
 
 butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                                         uint64_t region_id, const pb::common::Peer& peer) {
+                                                         int64_t region_id, const pb::common::Peer& peer) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, can't transfer leader.");
@@ -531,7 +530,7 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
   return butil::Status();
 }
 
-butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, uint64_t region_id,
+butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, int64_t region_id,
                                                  const pb::common::Peer& peer) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] transfer leader, peer: {}", region_id,
@@ -567,7 +566,7 @@ void TransferLeaderTask::Run() {
   }
 }
 
-butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
   auto engine = Server::GetInstance()->GetEngine();
   return engine->DoSnapshot(ctx, region_id);
 }
@@ -601,7 +600,7 @@ butil::Status PurgeRegionTask::ValidatePurgeRegion(store::RegionPtr region) {
   return butil::Status();
 }
 
-butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, uint64_t region_id) {
+butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, int64_t region_id) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] purge region.", region_id);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
@@ -644,7 +643,7 @@ butil::Status StopRegionTask::ValidateStopRegion(store::RegionPtr region) {
   return butil::Status();
 }
 
-butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, int64_t region_id) {
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
@@ -679,7 +678,7 @@ void StopRegionTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
-butil::Status DestroyRegionExecutorTask::DestroyRegionExecutor(std::shared_ptr<Context>, uint64_t region_id) {
+butil::Status DestroyRegionExecutorTask::DestroyRegionExecutor(std::shared_ptr<Context>, int64_t region_id) {
   auto regoin_controller = Server::GetInstance()->GetRegionController();
   if (regoin_controller == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] region controller is nullptr.", region_id);
@@ -703,7 +702,7 @@ void DestroyRegionExecutorTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
-butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*ctx*/, uint64_t vector_index_id) {
+butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*ctx*/, int64_t vector_index_id) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] save snapshot.", vector_index_id);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
@@ -769,7 +768,7 @@ void UpdateDefinitionTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
-butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
+butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*ctx*/, int64_t region_id,
                                                      const pb::common::RegionDefinition& new_definition) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] update definition.", region_id);
   auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
@@ -797,7 +796,7 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
     }
 
     auto new_max_elements = new_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements();
-    uint64_t old_max_elements = 0;
+    int64_t old_max_elements = 0;
     auto ret = hnsw_index->GetMaxElements(old_max_elements);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] get hnsw index max elements failed.", region_id);
@@ -863,7 +862,7 @@ void SwitchSplitTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
-butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, uint64_t region_id, bool disable_split) {
+butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, int64_t region_id, bool disable_split) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] switch split.", region_id);
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
@@ -881,7 +880,7 @@ butil::Status HoldVectorIndexTask::PreValidateHoldVectorIndex(const pb::coordina
   return ValidateHoldVectorIndex(command.hold_vector_index_request().region_id());
 }
 
-butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
+butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
@@ -900,7 +899,7 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(uint64_t region_id) {
   return butil::Status();
 }
 
-butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/, uint64_t region_id, bool is_hold) {
+butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/, int64_t region_id, bool is_hold) {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
@@ -920,13 +919,13 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   if (is_hold) {
     vector_index_wrapper->SetIsHoldVectorIndex(true);
     // Load vector index.
-    if (!vector_index_wrapper->IsReady()) {
+    if (!vector_index_wrapper->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
       VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
     }
   } else {
     // Delete vector index.
-    if (vector_index_wrapper->IsReady()) {
+    if (vector_index_wrapper->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.hold][region({})] delete vector index.", region_id);
       vector_index_wrapper->ClearVectorIndex();
     }
@@ -967,7 +966,7 @@ bool RegionCommandManager::Init() {
   return true;
 }
 
-bool RegionCommandManager::IsExist(uint64_t command_id) {
+bool RegionCommandManager::IsExist(int64_t command_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   return region_commands_.find(command_id) != region_commands_.end();
 }
@@ -993,14 +992,14 @@ void RegionCommandManager::UpdateCommandStatus(std::shared_ptr<pb::coordinator::
   meta_writer_->Put(TransformToKv(region_cmd));
 }
 
-void RegionCommandManager::UpdateCommandStatus(uint64_t command_id, pb::coordinator::RegionCmdStatus status) {
+void RegionCommandManager::UpdateCommandStatus(int64_t command_id, pb::coordinator::RegionCmdStatus status) {
   auto region_cmd = GetCommand(command_id);
   if (region_cmd != nullptr) {
     UpdateCommandStatus(region_cmd, status);
   }
 }
 
-std::shared_ptr<pb::coordinator::RegionCmd> RegionCommandManager::GetCommand(uint64_t command_id) {
+std::shared_ptr<pb::coordinator::RegionCmd> RegionCommandManager::GetCommand(int64_t command_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = region_commands_.find(command_id);
   if (it == region_commands_.end()) {
@@ -1027,7 +1026,7 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
   return commands;
 }
 
-std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetCommands(uint64_t region_id) {
+std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetCommands(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
   for (auto& [_, command] : region_commands_) {
@@ -1070,15 +1069,15 @@ std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(std::a
 void RegionCommandManager::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
-    uint64_t command_id = ParseRegionId(kv.key());
+    int64_t command_id = ParseRegionId(kv.key());
     auto region_cmd = std::make_shared<pb::coordinator::RegionCmd>();
     region_cmd->ParsePartialFromArray(kv.value().data(), kv.value().size());
     region_commands_.insert_or_assign(command_id, region_cmd);
   }
 }
 
-// bool RegionController::InitVectorAppliedLogId(uint64_t region_id) {
-//   uint64_t max_log_id = 0;
+// bool RegionController::InitVectorAppliedLogId(int64_t region_id) {
+//   int64_t max_log_id = 0;
 
 //   auto engine = Server::GetInstance()->GetEngine();
 //   DINGO_LOG(INFO) << fmt::format("Build vector index for region {} ", region_id);
@@ -1139,9 +1138,9 @@ void RegionController::Destroy() {
   share_executor_->Stop();
 }
 
-std::vector<uint64_t> RegionController::GetAllRegion() {
+std::vector<int64_t> RegionController::GetAllRegion() {
   BAIDU_SCOPED_LOCK(mutex_);
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   region_ids.reserve(executors_.size());
   for (auto [region_id, _] : executors_) {
     region_ids.push_back(region_id);
@@ -1149,7 +1148,7 @@ std::vector<uint64_t> RegionController::GetAllRegion() {
   return region_ids;
 }
 
-bool RegionController::RegisterExecutor(uint64_t region_id) {
+bool RegionController::RegisterExecutor(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (executors_.find(region_id) == executors_.end()) {
@@ -1164,7 +1163,7 @@ bool RegionController::RegisterExecutor(uint64_t region_id) {
   return true;
 }
 
-void RegionController::UnRegisterExecutor(uint64_t region_id) {
+void RegionController::UnRegisterExecutor(int64_t region_id) {
   std::shared_ptr<RegionControlExecutor> executor;
   {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -1179,7 +1178,7 @@ void RegionController::UnRegisterExecutor(uint64_t region_id) {
   }
 }
 
-std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecutor(uint64_t region_id) {
+std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecutor(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   auto it = executors_.find(region_id);

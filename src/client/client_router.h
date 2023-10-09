@@ -38,9 +38,9 @@ class RegionEntry {
   bool IsDirty();
   void SetDirty(bool dirty);
 
-  uint64_t RegionId();
-  uint64_t PartitionId();
-  uint64_t TableId();
+  int64_t RegionId();
+  int64_t PartitionId();
+  int64_t TableId();
 
   dingodb::pb::common::Region& Region();
   void SetRegion(const dingodb::pb::common::Region& region);
@@ -72,16 +72,16 @@ class RegionRouter {
 
   void AddRegionEntry(const dingodb::pb::common::Region& region);
   void AddRegionEntry(RegionEntryPtr region);
-  RegionEntryPtr AddRegionEntry(uint64_t region_id);
+  RegionEntryPtr AddRegionEntry(int64_t region_id);
 
   void UpdateRegionEntry(const dingodb::pb::error::StoreRegionInfo& region_info);
 
   RegionEntryPtr QueryRegionEntry(const std::string& key);
-  RegionEntryPtr QueryRegionEntry(uint64_t region_id);
-  std::vector<RegionEntryPtr> QueryRegionEntryByTable(uint64_t table_id);
-  std::vector<RegionEntryPtr> QueryRegionEntryByPartition(uint64_t partition_id);
+  RegionEntryPtr QueryRegionEntry(int64_t region_id);
+  std::vector<RegionEntryPtr> QueryRegionEntryByTable(int64_t table_id);
+  std::vector<RegionEntryPtr> QueryRegionEntryByPartition(int64_t partition_id);
 
-  dingodb::pb::store::Context GenConext(uint64_t region_id);
+  dingodb::pb::store::Context GenConext(int64_t region_id);
 
  private:
   bool UpdateRegion(RegionEntryPtr region_entry);

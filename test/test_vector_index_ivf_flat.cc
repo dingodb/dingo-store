@@ -51,7 +51,7 @@ class VectorIndexIvfFlatTest : public testing::Test {
     static const pb::common::Range kRange;
     // valid param IP
     {
-      uint64_t id = 1;
+      int64_t id = 1;
       pb::common::VectorIndexParameter index_parameter;
       index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
       index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -63,7 +63,7 @@ class VectorIndexIvfFlatTest : public testing::Test {
 
     // valid param L2
     {
-      uint64_t id = 1;
+      int64_t id = 1;
       pb::common::VectorIndexParameter index_parameter;
       index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
       index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -74,7 +74,7 @@ class VectorIndexIvfFlatTest : public testing::Test {
 
     // valid param cosine
     {
-      uint64_t id = 1;
+      int64_t id = 1;
       pb::common::VectorIndexParameter index_parameter;
       index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
       index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -106,7 +106,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
   static const pb::common::Range kRange;
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
@@ -114,7 +114,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
     vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
@@ -123,7 +123,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
@@ -132,7 +132,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
@@ -142,7 +142,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
@@ -153,7 +153,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // invalid param IP
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -165,7 +165,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // valid param L2  ncentroids = 0
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -176,7 +176,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // valid param IP
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -189,7 +189,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // valid param L2
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -201,7 +201,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
 
   // valid param cosine
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
@@ -218,8 +218,8 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
 
   // id not found
   {
-    uint64_t id = 10000000;
-    std::vector<uint64_t> ids;
+    int64_t id = 10000000;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_ivf_flat_l2->Delete(ids);
     vector_index_ivf_flat_ip->Delete(ids);
@@ -228,8 +228,8 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
 
   // id exist
   {
-    uint64_t id = 0;
-    std::vector<uint64_t> ids;
+    int64_t id = 0;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_ivf_flat_l2->Delete(ids);
     vector_index_ivf_flat_ip->Delete(ids);
@@ -238,7 +238,7 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -249,7 +249,7 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
 
   // id exist batch again
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -538,8 +538,8 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
 
   // id not found
   {
-    uint64_t id = 10000000;
-    std::vector<uint64_t> ids;
+    int64_t id = 10000000;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_ivf_flat_l2->Delete(ids);
     vector_index_ivf_flat_ip->Delete(ids);
@@ -548,8 +548,8 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
 
   // id exist
   {
-    uint64_t id = start_id;
-    std::vector<uint64_t> ids;
+    int64_t id = start_id;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_ivf_flat_l2->Delete(ids);
     vector_index_ivf_flat_ip->Delete(ids);
@@ -558,7 +558,7 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(start_id + i);
     }
@@ -569,7 +569,7 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
 
   // id exist batch again
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(start_id + i);
     }
@@ -737,8 +737,8 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    std::vector<uint64_t> vector_ids;
-    for (uint64_t i = 0; i < data_base_size; i++) {
+    std::vector<int64_t> vector_ids;
+    for (int64_t i = 0; i < data_base_size; i++) {
       vector_ids.emplace_back(i + start_id);
     }
 
@@ -746,8 +746,8 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     std::mt19937 g(rd());
     std::shuffle(vector_ids.begin(), vector_ids.end(), g);
 
-    std::vector<uint64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
-    std::vector<uint64_t> vector_select_ids_clone = vector_select_ids;
+    std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
+    std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
     std::shared_ptr<VectorIndex::IvfFlatListFilterFunctor> filter =
         std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_select_ids));
@@ -826,7 +826,7 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
 
   // // id exist batch
   // {
-  //   std::vector<uint64_t> ids;
+  //   std::vector<int64_t> ids;
   //   for (size_t i = 0; i < data_base_size; i++) {
   //     ids.push_back(i + start_id);
   //   }
@@ -989,8 +989,8 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    std::vector<uint64_t> vector_ids;
-    for (uint64_t i = 0; i < data_base_size; i++) {
+    std::vector<int64_t> vector_ids;
+    for (int64_t i = 0; i < data_base_size; i++) {
       vector_ids.emplace_back(i + start_id);
     }
 
@@ -998,8 +998,8 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     std::mt19937 g(rd());
     std::shuffle(vector_ids.begin(), vector_ids.end(), g);
 
-    std::vector<uint64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
-    std::vector<uint64_t> vector_select_ids_clone = vector_select_ids;
+    std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
+    std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
     std::shared_ptr<VectorIndex::IvfFlatListFilterFunctor> filter =
         std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_select_ids));

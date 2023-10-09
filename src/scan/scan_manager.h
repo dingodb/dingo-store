@@ -40,11 +40,11 @@ class ScanManager {
   void DeleteScan(const std::string& scan_id);
   void TryDeleteScan(const std::string& scan_id);
 
-  uint64_t GetTimeoutMs() const { return timeout_ms_; }
+  int64_t GetTimeoutMs() const { return timeout_ms_; }
 
-  uint64_t GetMaxBytesRpc() const { return max_bytes_rpc_; }
-  uint64_t GetMaxFetchCntByServer() const { return max_fetch_cnt_by_server_; }
-  uint64_t GetScanIntervalMs() const { return scan_interval_ms_; }
+  int64_t GetMaxBytesRpc() const { return max_bytes_rpc_; }
+  int64_t GetMaxFetchCntByServer() const { return max_fetch_cnt_by_server_; }
+  int64_t GetScanIntervalMs() const { return scan_interval_ms_; }
 
   static void RegularCleaningHandler(void* arg);
 
@@ -55,10 +55,10 @@ class ScanManager {
 
   std::map<std::string, std::shared_ptr<ScanContext>> alive_scans_;
   std::map<std::string, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;
-  uint64_t timeout_ms_;
-  uint64_t max_bytes_rpc_;
-  uint64_t max_fetch_cnt_by_server_;
-  uint64_t scan_interval_ms_;
+  int64_t timeout_ms_;
+  int64_t max_bytes_rpc_;
+  int64_t max_fetch_cnt_by_server_;
+  int64_t scan_interval_ms_;
   bthread_mutex_t mutex_;
 };
 

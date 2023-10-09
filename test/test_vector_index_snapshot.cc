@@ -53,7 +53,7 @@ static butil::EndPoint ParseHost(const std::string& uri) {
   return endpoint;
 }
 
-static uint64_t ParseReaderId(const std::string& uri) {
+static int64_t ParseReaderId(const std::string& uri) {
   std::vector<std::string> strs;
   butil::SplitString(uri, '/', &strs);
 
@@ -64,7 +64,7 @@ static uint64_t ParseReaderId(const std::string& uri) {
   std::string& reader_id_str = strs[3];
 
   char* end = nullptr;
-  uint64_t result = std::strtoull(reader_id_str.c_str(), &end, 10);
+  int64_t result = std::strtoull(reader_id_str.c_str(), &end, 10);
   if ((end - reader_id_str.c_str()) + 1 <= reader_id_str.size()) {
     return 0;
   }
@@ -110,8 +110,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   EXPECT_EQ(nullptr, snapshot_set->GetLastSnapshot());
 
   {
-    uint64_t vector_index_id = 100;
-    uint64_t snapshot_log_id = 5;
+    int64_t vector_index_id = 100;
+    int64_t snapshot_log_id = 5;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
@@ -120,8 +120,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   }
 
   {
-    uint64_t vector_index_id = 100;
-    uint64_t snapshot_log_id = 11;
+    int64_t vector_index_id = 100;
+    int64_t snapshot_log_id = 11;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
@@ -131,8 +131,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   }
 
   {
-    uint64_t vector_index_id = 101;
-    uint64_t snapshot_log_id = 6;
+    int64_t vector_index_id = 101;
+    int64_t snapshot_log_id = 6;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
@@ -141,8 +141,8 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   }
 
   {
-    uint64_t vector_index_id = 101;
-    uint64_t snapshot_log_id = 16;
+    int64_t vector_index_id = 101;
+    int64_t snapshot_log_id = 16;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 

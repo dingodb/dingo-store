@@ -42,7 +42,7 @@
 
 namespace dingodb {
 
-VectorIndexFlat::VectorIndexFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, range) {
   bthread_mutex_init(&mutex_, nullptr);
@@ -152,7 +152,7 @@ butil::Status VectorIndexFlat::Add(const std::vector<pb::common::VectorWithId>& 
   return AddOrUpsert(vector_with_ids, false);
 }
 
-butil::Status VectorIndexFlat::Delete(const std::vector<uint64_t>& delete_ids) {
+butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
     DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
@@ -314,17 +314,17 @@ butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
 
 int32_t VectorIndexFlat::GetDimension() { return this->dimension_; }
 
-butil::Status VectorIndexFlat::GetCount(uint64_t& count) {
+butil::Status VectorIndexFlat::GetCount(int64_t& count) {
   count = index_id_map2_->id_map.size();
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::GetDeletedCount(uint64_t& deleted_count) {
+butil::Status VectorIndexFlat::GetDeletedCount(int64_t& deleted_count) {
   deleted_count = 0;
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::GetMemorySize(uint64_t& memory_size) {
+butil::Status VectorIndexFlat::GetMemorySize(int64_t& memory_size) {
   auto count = index_id_map2_->ntotal;
   if (count == 0) {
     memory_size = 0;

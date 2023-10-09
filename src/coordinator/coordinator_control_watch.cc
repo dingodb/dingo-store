@@ -41,7 +41,7 @@ void WatchCancelCallback(CoordinatorControl* coordinator_control, google::protob
   coordinator_control->CancelOneTimeWatchClosure(done);
 }
 
-butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uint64_t start_revision, bool no_put_event,
+butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, int64_t start_revision, bool no_put_event,
                                                bool no_delete_event, bool need_prev_kv, bool wait_on_not_exist_key,
                                                google::protobuf::Closure* done, pb::version::WatchResponse* response,
                                                [[maybe_unused]] brpc::Controller* cntl) {
@@ -62,7 +62,7 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uin
 
   // check if need to send back immediately
   std::vector<pb::version::Kv> kvs_temp;
-  uint64_t total_count_in_range = 0;
+  int64_t total_count_in_range = 0;
   this->KvRange(watch_key, std::string(), 1, false, false, kvs_temp, total_count_in_range);
 
   // if key is not exists, and no wait, send response
@@ -94,7 +94,7 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, uin
 }
 
 // caller must hold one_time_watch_map_mutex_
-butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, uint64_t start_revision,
+butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, int64_t start_revision,
                                                   bool no_put_event, bool no_delete_event, bool need_prev_kv,
                                                   google::protobuf::Closure* done,
                                                   pb::version::WatchResponse* response) {

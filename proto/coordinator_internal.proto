@@ -23,12 +23,12 @@ package dingodb.pb.coordinator_internal;
 
 // StoreOperationInternal
 message StoreOperationInternal {
-  uint64 id = 1;  // this is store id
-  repeated uint64 region_cmd_ids = 2;
+  int64 id = 1;  // this is store id
+  repeated int64 region_cmd_ids = 2;
 }
 
 message RegionCmdInternal {
-  uint64 id = 1;  // this is region_cmd_id
+  int64 id = 1;  // this is region_cmd_id
   dingodb.pb.coordinator.RegionCmd region_cmd = 2;
   dingodb.pb.error.Error error = 3;  // if region_cmd is not success, this field will be set from store response
 }
@@ -36,62 +36,62 @@ message RegionCmdInternal {
 // TableRegionInternal is storage structure for coordinator
 // TableRegionInternal is not table partition in SQL, its only use for storage.
 message TableRegionInternal {
-  uint64 region_id = 1;  // the region id of this part
-  uint64 part_id = 2;    // the part id of this part
+  int64 region_id = 1;  // the region id of this part
+  int64 part_id = 2;    // the part id of this part
 }
 
 // @Deprecated
 message IndexRegionInternal {
-  uint64 region_id = 1;  // the region id of this part
+  int64 region_id = 1;  // the region id of this part
 }
 
 // TableInternal is storage structure for coordinator
 message TableInternal {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.meta.TableDefinition definition = 2;
   repeated TableRegionInternal partitions = 3;
-  uint64 schema_id = 4;
-  uint64 table_id = 5;
+  int64 schema_id = 4;
+  int64 table_id = 5;
 }
 
 // TableMetricsInternal is storage structure for table_metrics
 message TableMetricsInternal {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.meta.TableMetrics table_metrics = 2;
 }
 
 // @Deprecated
 // IndexInternal is storage structure for coordinator
 message IndexInternal {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.meta.IndexDefinition definition = 2;
   repeated IndexRegionInternal partitions = 3;
-  uint64 schema_id = 4;
+  int64 schema_id = 4;
 }
 
 // TableIndexInternal is storage structure for table
 message TableIndexInternal {
-  uint64 id = 1;
+  int64 id = 1;
   repeated dingodb.pb.meta.DingoCommonId table_ids = 2;
 }
 
 // IndexMetricsInternal is storage structure for index_metrics
 message IndexMetricsInternal {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.meta.IndexMetrics index_metrics = 2;
 }
 
 // SchemaInternal is storage structure for schema
 message SchemaInternal {
-  uint64 id = 1;
+  int64 id = 1;
   string name = 2;
-  repeated uint64 table_ids = 3;
-  repeated uint64 index_ids = 4;
+  repeated int64 table_ids = 3;
+  repeated int64 index_ids = 4;
 }
 
 // CoordinatorInteral stores coordinator info for SDK & stores.
 message CoordinatorInternal {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.common.Location server_location = 2;
   dingodb.pb.common.Location raft_location = 3;
 }
@@ -99,9 +99,9 @@ message CoordinatorInternal {
 // RegionInternal
 message RegionInternal {
   // store info
-  uint64 id = 1;
+  int64 id = 1;
   // region conf version & version
-  uint64 epoch = 2;
+  int64 epoch = 2;
   // region type
   dingodb.pb.common.RegionType region_type = 3;
   // region definition
@@ -110,8 +110,8 @@ message RegionInternal {
   dingodb.pb.common.RegionState state = 10;
 
   // timestamp
-  uint64 create_timestamp = 20;
-  uint64 deleted_timestamp = 21;
+  int64 create_timestamp = 20;
+  int64 deleted_timestamp = 21;
 }
 
 // ExecutorInternal
@@ -150,13 +150,13 @@ enum IdEpochType {
 }
 
 message IdEpochInternal {
-  uint64 id = 1;
-  uint64 value = 2;
+  int64 id = 1;
+  int64 value = 2;
 }
 
 message AutoIncrementStorageElement {
-  uint64 table_id = 1;
-  uint64 start_id = 2;
+  int64 table_id = 1;
+  int64 start_id = 2;
 }
 
 message AutoIncrementStorage {
@@ -169,8 +169,8 @@ enum AutoIncrementUpdateType {
 }
 
 message IncrementInternal {
-  uint64 start_id = 1;
-  uint64 source_start_id = 2;
+  int64 start_id = 1;
+  int64 source_start_id = 2;
   AutoIncrementUpdateType update_type = 3;
   uint32 generate_count = 4;
   uint32 increment = 5;
@@ -188,32 +188,32 @@ enum MetaIncrementOpType {
 }
 
 message MetaIncrementCoordinator {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.coordinator_internal.CoordinatorInternal coordinator = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementStore {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.common.Store store = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementStoreMetrics {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.common.StoreMetrics store_metrics = 2;
   MetaIncrementOpType op_type = 3;
   bool is_partial_region_metrics = 4;
 }
 
 message MetaIncrementTableMetrics {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.coordinator_internal.TableMetricsInternal table_metrics = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementIndexMetrics {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.coordinator_internal.IndexMetricsInternal index_metrics = 2;
   MetaIncrementOpType op_type = 3;
 }
@@ -225,53 +225,53 @@ message MetaIncrementExecutor {
 }
 
 message MetaIncrementRegion {
-  uint64 id = 1;
+  int64 id = 1;
   // dingodb.pb.common.Region region = 2;
   RegionInternal region = 2;
   MetaIncrementOpType op_type = 3;
-  uint64 table_id = 4;
+  int64 table_id = 4;
 }
 
 message MetaIncrementSchema {
-  uint64 id = 1;
+  int64 id = 1;
   SchemaInternal schema_internal = 2;
   MetaIncrementOpType op_type = 3;
-  uint64 schema_id = 4;  // parent schema
+  int64 schema_id = 4;  // parent schema
 }
 
 message MetaIncrementTable {
-  uint64 id = 1;
+  int64 id = 1;
   TableInternal table = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 // @Deprecated
 // message MetaIncrementIndex {
-//   uint64 id = 1;
+//   int64 id = 1;
 //   IndexInternal index = 2;
 //   MetaIncrementOpType op_type = 3;
 // }
 
 message MetaIncrementTableIndex {
-  uint64 id = 1;
+  int64 id = 1;
   TableIndexInternal table_indexes = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementIdEpoch {
-  uint64 id = 1;
+  int64 id = 1;
   IdEpochInternal idepoch = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementStoreOperation {
-  uint64 id = 1;  // this is store id
+  int64 id = 1;  // this is store id
   StoreOperationInternal store_operation = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementRegionCmd {
-  uint64 id = 1;  // this is region_cmd id
+  int64 id = 1;  // this is region_cmd id
   RegionCmdInternal region_cmd = 2;
   MetaIncrementOpType op_type = 3;
 }
@@ -283,27 +283,27 @@ message MetaIncrementExecutorUser {
 }
 
 message MetaIncrementAutoIncrement {
-  uint64 id = 1;
+  int64 id = 1;
   IncrementInternal increment = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 message MetaIncrementTaskList {
-  uint64 id = 1;  // this is task list id
+  int64 id = 1;  // this is task list id
   dingodb.pb.coordinator.TaskList task_list = 2;
   MetaIncrementOpType op_type = 3;
 }
 
 // lease
 message LeaseInternal {
-  uint64 id = 1;
-  uint64 ttl_seconds = 2;
-  uint64 create_ts_seconds = 3;
-  uint64 last_renew_ts_seconds = 4;
+  int64 id = 1;
+  int64 ttl_seconds = 2;
+  int64 create_ts_seconds = 3;
+  int64 last_renew_ts_seconds = 4;
 }
 
 message MetaIncrementLease {
-  uint64 id = 1;
+  int64 id = 1;
   LeaseInternal lease = 2;
   MetaIncrementOpType op_type = 3;
 }
@@ -312,12 +312,12 @@ message MetaIncrementLease {
 // The set of changes that share same main revision changes the key-value space atomically.
 message RevisionInternal {
   // main is the main revision of a set of changes that happen atomically.
-  uint64 main = 1;
+  int64 main = 1;
 
   // sub is the sub revision of a change in a set of changes that happen
   // atomically. Each change has different increasing sub revision in that
   // set.
-  uint64 sub = 2;
+  int64 sub = 2;
 }
 
 // keyIndex stores the revisions of a key in the backend.
@@ -328,7 +328,7 @@ message RevisionInternal {
 // Each version of a key has an index pointing to the backend.
 message KvIndexInternal {
   message Generation {
-    uint64 verison = 1;                       // if verison == 0, means this is a empty generation
+    int64 verison = 1;                        // if verison == 0, means this is a empty generation
     RevisionInternal create_revision = 2;     // the create revision of this generation
     repeated RevisionInternal revisions = 3;  // the revisions of this generation
   }
@@ -343,8 +343,8 @@ message KvInternal {
   bytes value = 2;
   RevisionInternal create_revision = 3;
   RevisionInternal mod_revision = 4;
-  uint64 version = 5;
-  uint64 lease = 6;
+  int64 version = 5;
+  int64 lease = 6;
   bool is_deleted = 7;  // for delete operation, we set is_deleted to true, and set value to empty
 }
 
@@ -366,7 +366,7 @@ message MetaIncrementKvIndex {
   KvIndexEventType event_type = 3;   // put / delete / compact
   RevisionInternal op_revision = 4;  // this is the op_version of put/delete, or compaction_revision of compact
   bool ignore_lease = 5;
-  uint64 lease_id = 6;
+  int64 lease_id = 6;
   bool ignore_value = 7;
   bytes value = 8;
 }

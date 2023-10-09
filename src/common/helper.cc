@@ -669,21 +669,21 @@ pb::common::Peer Helper::GetPeerInfo(const butil::EndPoint& endpoint) {
   return peer;
 }
 
-uint64_t Helper::GenerateRealRandomInteger(uint64_t min_value, uint64_t max_value) {
+int64_t Helper::GenerateRealRandomInteger(int64_t min_value, int64_t max_value) {
   // Create a random number generator engine
   std::random_device rd;      // Obtain a random seed from the hardware
   std::mt19937_64 gen(rd());  // Standard 64-bit mersenne_twister_engine seeded with rd()
 
   // Create a distribution for the desired range
-  std::uniform_int_distribution<uint64_t> dis(min_value, max_value);
+  std::uniform_int_distribution<int64_t> dis(min_value, max_value);
 
   // Generate and print a random int64 number
-  uint64_t random_number = dis(gen);
+  int64_t random_number = dis(gen);
 
   return random_number;
 }
 
-uint64_t Helper::GenerateRandomInteger(uint64_t min_value, uint64_t max_value) {
+int64_t Helper::GenerateRandomInteger(int64_t min_value, int64_t max_value) {
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(min_value, max_value);
 
@@ -711,12 +711,12 @@ std::string Helper::GenerateRandomString(int length) {
   return rand_string;
 }
 
-uint64_t Helper::GenId() {
-  static uint64_t id = 0;
+int64_t Helper::GenId() {
+  static int64_t id = 0;
   return ++id;
 }
 
-std::string Helper::GenNewTableCheckName(uint64_t schema_id, const std::string& table_name) {
+std::string Helper::GenNewTableCheckName(int64_t schema_id, const std::string& table_name) {
   Buf buf(8);
   buf.WriteLong(schema_id);
   return buf.GetString() + table_name;
@@ -732,23 +732,23 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   return ret == 0;
 }
 
-uint64_t Helper::TimestampNs() {
+int64_t Helper::TimestampNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();
 }
 
-uint64_t Helper::TimestampMs() {
+int64_t Helper::TimestampMs() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();
 }
 
-uint64_t Helper::Timestamp() {
+int64_t Helper::Timestamp() {
   return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
 std::string Helper::NowTime() { return FormatMsTime(TimestampMs(), "%Y-%m-%d %H:%M:%S"); }
 
-std::string Helper::FormatMsTime(uint64_t timestamp, const std::string& format) {
+std::string Helper::FormatMsTime(int64_t timestamp, const std::string& format) {
   std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
       (std::chrono::milliseconds(timestamp)));
 
@@ -758,7 +758,7 @@ std::string Helper::FormatMsTime(uint64_t timestamp, const std::string& format) 
   return ss.str();
 }
 
-std::string Helper::FormatTime(uint64_t timestamp, const std::string& format) {
+std::string Helper::FormatTime(int64_t timestamp, const std::string& format) {
   std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> tp((std::chrono::seconds(timestamp)));
 
   auto in_time_t = std::chrono::system_clock::to_time_t(tp);
@@ -768,7 +768,7 @@ std::string Helper::FormatTime(uint64_t timestamp, const std::string& format) {
 }
 
 std::string Helper::GetNowFormatMsTime() {
-  uint64_t timestamp = TimestampMs();
+  int64_t timestamp = TimestampMs();
   std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
       (std::chrono::milliseconds(timestamp)));
 
@@ -788,7 +788,7 @@ bool Helper::KeyIsEndOfAllTable(const std::string& key) {
   return true;
 }
 
-bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output) {
+bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string, int64_t>& output) {
   // system capacity
   struct statvfs stat;
   if (statvfs(path.c_str(), &stat) != 0) {
@@ -796,8 +796,8 @@ bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string
     return false;
   }
 
-  uint64_t total_space = stat.f_frsize * stat.f_blocks;
-  uint64_t free_space = stat.f_frsize * stat.f_bfree;
+  int64_t total_space = stat.f_frsize * stat.f_blocks;
+  int64_t free_space = stat.f_frsize * stat.f_bfree;
 
   output["system_total_capacity"] = total_space;
   output["system_free_capacity"] = free_space;
@@ -807,7 +807,7 @@ bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string
   return true;
 }
 
-bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
+bool Helper::GetSystemMemoryInfo(std::map<std::string, int64_t>& output) {
   // system memory info
   struct sysinfo mem_info;
   if (sysinfo(&mem_info) != -1) {
@@ -829,15 +829,15 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
 
   // get cache/available memory
   try {
-    output["system_available_memory"] = UINT64_MAX;
-    output["system_cached_memory"] = UINT64_MAX;
+    output["system_available_memory"] = INT64_MAX;
+    output["system_cached_memory"] = INT64_MAX;
     std::ifstream file("/proc/meminfo");
     if (!file.is_open()) {
       DINGO_LOG(ERROR) << "Open file /proc/meminfo failed.";
       return false;
     }
 
-    auto parse_value = [](std::string& str) -> uint64_t {
+    auto parse_value = [](std::string& str) -> int64_t {
       std::vector<std::string> strs;
       butil::SplitString(str, ' ', &strs);
       for (auto s : strs) {
@@ -881,7 +881,7 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, uint64_t>& output) {
   return true;
 }
 
-bool Helper::GetProcessMemoryInfo(std::map<std::string, uint64_t>& output) {
+bool Helper::GetProcessMemoryInfo(std::map<std::string, int64_t>& output) {
   struct rusage usage;
   if (getrusage(RUSAGE_SELF, &usage) != -1) {
     output["process_used_memory"] = usage.ru_maxrss;
@@ -894,7 +894,7 @@ bool Helper::GetProcessMemoryInfo(std::map<std::string, uint64_t>& output) {
   }
 }
 
-bool Helper::GetSystemCpuUsage(std::map<std::string, uint64_t>& output) {
+bool Helper::GetSystemCpuUsage(std::map<std::string, int64_t>& output) {
   try {
     std::ifstream file("/proc/stat");
     if (!file.is_open()) {
@@ -912,18 +912,18 @@ bool Helper::GetSystemCpuUsage(std::map<std::string, uint64_t>& output) {
     // Calculate total CPU time
     unsigned long long total_cpu_time = 0;
     for (size_t i = 1; i < tokens.size(); i++) {
-      total_cpu_time += std::stoull(tokens[i]);
+      total_cpu_time += std::stoll(tokens[i]);
     }
 
     // Calculate idle CPU time
-    unsigned long long idle_cpu_time = std::stoull(tokens[4]);
+    unsigned long long idle_cpu_time = std::stoll(tokens[4]);
 
     // Calculate CPU usage percentage
     double cpu_usage = 100.0 * (total_cpu_time - idle_cpu_time) / total_cpu_time;
 
     DINGO_LOG(INFO) << fmt::format("CPU usage: {}%", cpu_usage);
 
-    output["system_cpu_usage"] = static_cast<uint64_t>(cpu_usage * 100);
+    output["system_cpu_usage"] = static_cast<int64_t>(cpu_usage * 100);
 
     return true;
   } catch (const std::exception& e) {
@@ -1038,10 +1038,10 @@ double GetSystemIoUtilization(std::string device) {
   return io_utilization;
 }
 
-bool Helper::GetSystemDiskIoUtil(const std::string& device_name, std::map<std::string, uint64_t>& output) {
+bool Helper::GetSystemDiskIoUtil(const std::string& device_name, std::map<std::string, int64_t>& output) {
   try {
     double io_utilization = GetSystemIoUtilization(device_name);
-    output["system_total_capacity"] = static_cast<uint64_t>(io_utilization);
+    output["system_total_capacity"] = static_cast<int64_t>(io_utilization);
     DINGO_LOG(INFO) << fmt::format("System disk io utilization: {}", io_utilization);
 
     return true;
@@ -1233,7 +1233,7 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
   return false;
 }
 
-// std::string Helper::EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id) {
+// std::string Helper::EncodeIndexRegionHeader(int64_t partition_id, int64_t vector_id) {
 //   Buf buf(16);
 //   buf.WriteLong(partition_id);
 //   buf.WriteLong(vector_id);
@@ -1272,7 +1272,7 @@ std::string Helper::Trim(const std::string& s, const std::string& delete_str) {
 std::string Helper::CleanFirstSlash(const std::string& str) { return (str.front() == '/') ? str.substr(1) : str; }
 
 bool Helper::ParallelRunTask(TaskFunctor task, void* arg, int concurrency) {
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
 
   bool all_success = true;
   std::vector<bthread_t> tids;
@@ -1329,17 +1329,17 @@ butil::Status Helper::ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRa
 }
 
 // calc hnsw count from memory
-uint32_t Helper::CalcHnswCountFromMemory(uint64_t memory_size_limit, uint64_t dimension, uint64_t nlinks) {
+uint32_t Helper::CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dimension, int64_t nlinks) {
   // size_links_level0_ = maxM0_ * sizeof(tableint) + sizeof(linklistsizeint);
-  uint64_t size_links_level0 = nlinks * 2 + sizeof(uint64_t) + sizeof(uint64_t);
+  int64_t size_links_level0 = nlinks * 2 + sizeof(int64_t) + sizeof(int64_t);
 
-  // uint64_t size_data_per_element_ = size_links_level0_ + data_size_ + sizeof(labeltype);
-  uint64_t size_data_per_element = size_links_level0 + sizeof(float_t) * dimension + sizeof(uint64_t);
+  // int64_t size_data_per_element_ = size_links_level0_ + data_size_ + sizeof(labeltype);
+  int64_t size_data_per_element = size_links_level0 + sizeof(float_t) * dimension + sizeof(int64_t);
 
-  // uint64_t size_link_list_per_element =  sizeof(void*);
-  uint64_t size_link_list_per_element = sizeof(uint64_t);
+  // int64_t size_link_list_per_element =  sizeof(void*);
+  int64_t size_link_list_per_element = sizeof(int64_t);
 
-  uint64_t count = memory_size_limit / (size_data_per_element + size_link_list_per_element);
+  int64_t count = memory_size_limit / (size_data_per_element + size_link_list_per_element);
 
   if (count > UINT32_MAX) {
     count = UINT32_MAX;
@@ -1350,7 +1350,7 @@ uint32_t Helper::CalcHnswCountFromMemory(uint64_t memory_size_limit, uint64_t di
 
 std::string Helper::GenMaxStartKey() {
   Buf buf(8);
-  buf.WriteLong(UINT64_MAX);
+  buf.WriteLong(INT64_MAX);
   return buf.GetString();
 }
 

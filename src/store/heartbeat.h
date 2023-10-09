@@ -36,7 +36,7 @@ class HeartbeatTask : public TaskRunnable {
  public:
   HeartbeatTask(std::shared_ptr<CoordinatorInteraction> coordinator_interaction)
       : coordinator_interaction_(coordinator_interaction) {}
-  HeartbeatTask(std::shared_ptr<CoordinatorInteraction> coordinator_interaction, std::vector<uint64_t> region_ids,
+  HeartbeatTask(std::shared_ptr<CoordinatorInteraction> coordinator_interaction, std::vector<int64_t> region_ids,
                 bool is_update_epoch_version)
       : is_update_epoch_version_(is_update_epoch_version),
         region_ids_(region_ids),
@@ -48,13 +48,13 @@ class HeartbeatTask : public TaskRunnable {
   void Run() override { SendStoreHeartbeat(coordinator_interaction_, region_ids_, is_update_epoch_version_); }
 
   static void SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
-                                 std::vector<uint64_t> region_ids, bool is_update_epoch_version);
+                                 std::vector<int64_t> region_ids, bool is_update_epoch_version);
   static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
                                            const pb::coordinator::StoreHeartbeatResponse& response);
 
  private:
   bool is_update_epoch_version_;
-  std::vector<uint64_t> region_ids_;
+  std::vector<int64_t> region_ids_;
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
 };
 
@@ -205,7 +205,7 @@ class Heartbeat {
   bool Init();
   void Destroy();
 
-  static void TriggerStoreHeartbeat(std::vector<uint64_t> region_ids, bool is_update_epoch_version = false);
+  static void TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_update_epoch_version = false);
   static void TriggerCoordinatorPushToStore(void*);
   static void TriggerCoordinatorUpdateState(void*);
   static void TriggerCoordinatorTaskListProcess(void*);

@@ -23,7 +23,7 @@ option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
 message Context {
-  uint64 region_id = 1;
+  int64 region_id = 1;
   dingodb.pb.common.RegionEpoch region_epoch = 2;
 }
 
@@ -111,7 +111,7 @@ message KvDeleteRangeRequest {
 
 message KvDeleteRangeResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 delete_count = 2;
+  int64 delete_count = 2;
 }
 
 message KvCompareAndSetRequest {
@@ -239,7 +239,7 @@ message KvScanBeginRequest {
   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
-  uint64 max_fetch_cnt = 3;
+  int64 max_fetch_cnt = 3;
 
   // is it just to get the key
   bool key_only = 4;
@@ -279,7 +279,7 @@ message KvScanContinueRequest {
   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
-  uint64 max_fetch_cnt = 3;
+  int64 max_fetch_cnt = 3;
 }
 
 message KvScanContinueResponse {

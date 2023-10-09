@@ -84,7 +84,7 @@ void SendOneTimeWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 }
 
 butil::Status CoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
-                        const std::string& key, const ::std::string& value, uint64_t lease, uint64_t& revision) {
+                        const std::string& key, const ::std::string& value, int64_t lease, int64_t& revision) {
   dingodb::pb::version::PutRequest request;
   dingodb::pb::version::PutResponse response;
 
@@ -108,7 +108,7 @@ butil::Status CoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 }
 
 butil::Status CoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
-                          const std::string& key, const std::string& range_end, uint64_t limit,
+                          const std::string& key, const std::string& range_end, int64_t limit,
                           std::vector<dingodb::pb::version::Kv>& kvs) {
   dingodb::pb::version::RangeRequest request;
   dingodb::pb::version::RangeResponse response;
@@ -135,7 +135,7 @@ butil::Status CoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 }
 
 butil::Status CoorWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
-                        const std::string& key, uint64_t start_revision, bool need_prev_kv, bool no_put, bool no_delete,
+                        const std::string& key, int64_t start_revision, bool need_prev_kv, bool no_put, bool no_delete,
                         bool wait_on_not_exist_key, std::vector<dingodb::pb::version::Event>& events) {
   dingodb::pb::version::WatchRequest request;
   dingodb::pb::version::WatchResponse response;
@@ -177,7 +177,7 @@ butil::Status CoorWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 }
 
 butil::Status CoorLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
-                             uint64_t& lease_id, uint64_t& ttl) {
+                             int64_t& lease_id, int64_t& ttl) {
   dingodb::pb::version::LeaseGrantRequest request;
   dingodb::pb::version::LeaseGrantResponse response;
 
@@ -198,7 +198,7 @@ butil::Status CoorLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> co
 }
 
 butil::Status CoorLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
-                             uint64_t lease_id) {
+                             int64_t lease_id) {
   dingodb::pb::version::LeaseRenewRequest request;
   dingodb::pb::version::LeaseRenewResponse response;
 
@@ -215,7 +215,7 @@ butil::Status CoorLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> co
   }
 }
 
-void PeriodRenwLease(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, uint64_t lease_id) {
+void PeriodRenwLease(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t lease_id) {
   for (;;) {
     auto ret = CoorLeaseRenew(coordinator_interaction, lease_id);
     bthread_usleep(3 * 900L * 1000L);
@@ -239,8 +239,8 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
   DINGO_LOG(INFO) << "lock_key=" << lock_key;
 
   // create lease
-  uint64_t lease_id = 0;
-  uint64_t ttl = 3;
+  int64_t lease_id = 0;
+  int64_t ttl = 3;
   auto ret = CoorLeaseGrant(coordinator_interaction, lease_id, ttl);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "CoorLeaseGrant failed, ret=" << ret;
@@ -251,7 +251,7 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
   Bthread bt(nullptr, PeriodRenwLease, coordinator_interaction, lease_id);
 
   // write lock key
-  uint64_t revision = 0;
+  int64_t revision = 0;
   ret = CoorKvPut(coordinator_interaction, lock_key, "1", lease_id, revision);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "CoorKvPut failed, ret=" << ret;
@@ -273,7 +273,7 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
 
   struct KeyWithCreateRevision {
     std::string key;
-    uint64_t mod_revision;
+    int64_t mod_revision;
   };
 
   std::vector<KeyWithCreateRevision> key_with_create_revisions;
@@ -305,8 +305,8 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
     watch_index = self_index - 1;
   }
 
-  uint64_t min_revision = key_with_create_revisions[0].mod_revision;
-  uint64_t watch_revision = key_with_create_revisions[watch_index].mod_revision;
+  int64_t min_revision = key_with_create_revisions[0].mod_revision;
+  int64_t watch_revision = key_with_create_revisions[watch_index].mod_revision;
 
   if (key_with_create_revisions[0].key == lock_key) {
     DINGO_LOG(INFO) << "min_revision=" << min_revision << ", lock_key=" << lock_key << ", lock_value=1";

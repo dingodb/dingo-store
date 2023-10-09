@@ -43,16 +43,16 @@ class VectorReader {
   butil::Status VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                  std::vector<pb::common::VectorWithId>& vector_with_ids);
 
-  butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min, uint64_t& vector_id);
+  butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id);
 
   butil::Status VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
 
-  butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+  butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
                                        VectorIndexWrapperPtr vector_index,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
-  butil::Status VectorCount(const pb::common::Range& range, uint64_t& count);
+  butil::Status VectorCount(const pb::common::Range& range, int64_t& count);
 
   // This function is for testing only
   butil::Status VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,
@@ -61,30 +61,30 @@ class VectorReader {
                                        int64_t& search_time_us);
 
  private:
-  butil::Status QueryVectorWithId(uint64_t partition_id, uint64_t vector_id, bool with_vector_data,
+  butil::Status QueryVectorWithId(int64_t partition_id, int64_t vector_id, bool with_vector_data,
                                   pb::common::VectorWithId& vector_with_id);
-  butil::Status SearchVector(uint64_t partition_id, VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
+  butil::Status SearchVector(int64_t partition_id, VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
                              const std::vector<pb::common::VectorWithId>& vector_with_ids,
                              const pb::common::VectorSearchParameter& parameter,
                              std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
-  butil::Status QueryVectorScalarData(uint64_t partition_id, std::vector<std::string> selected_scalar_keys,
+  butil::Status QueryVectorScalarData(int64_t partition_id, std::vector<std::string> selected_scalar_keys,
                                       pb::common::VectorWithId& vector_with_id);
-  butil::Status QueryVectorScalarData(uint64_t partition_id, std::vector<std::string> selected_scalar_keys,
+  butil::Status QueryVectorScalarData(int64_t partition_id, std::vector<std::string> selected_scalar_keys,
                                       std::vector<pb::common::VectorWithDistance>& vector_with_distances);
-  butil::Status QueryVectorScalarData(uint64_t partition_id, std::vector<std::string> selected_scalar_keys,
+  butil::Status QueryVectorScalarData(int64_t partition_id, std::vector<std::string> selected_scalar_keys,
                                       std::vector<pb::index::VectorWithDistanceResult>& results);
 
-  butil::Status CompareVectorScalarData(uint64_t partition_id, uint64_t vector_id,
+  butil::Status CompareVectorScalarData(int64_t partition_id, int64_t vector_id,
                                         const pb::common::VectorScalardata& source_scalar_data, bool& compare_result);
 
-  butil::Status QueryVectorTableData(uint64_t partition_id, pb::common::VectorWithId& vector_with_id);
-  butil::Status QueryVectorTableData(uint64_t partition_id,
+  butil::Status QueryVectorTableData(int64_t partition_id, pb::common::VectorWithId& vector_with_id);
+  butil::Status QueryVectorTableData(int64_t partition_id,
                                      std::vector<pb::common::VectorWithDistance>& vector_with_distances);
-  butil::Status QueryVectorTableData(uint64_t partition_id, std::vector<pb::index::VectorWithDistanceResult>& results);
+  butil::Status QueryVectorTableData(int64_t partition_id, std::vector<pb::index::VectorWithDistanceResult>& results);
 
-  butil::Status GetBorderId(const pb::common::Range& region_range, bool get_min, uint64_t& vector_id);
-  butil::Status ScanVectorId(std::shared_ptr<Engine::VectorReader::Context> ctx, std::vector<uint64_t>& vector_ids);
+  butil::Status GetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id);
+  butil::Status ScanVectorId(std::shared_ptr<Engine::VectorReader::Context> ctx, std::vector<int64_t>& vector_ids);
 
   butil::Status DoVectorSearchForVectorIdPreFilter(
       VectorIndexWrapperPtr vector_index, const std::vector<pb::common::VectorWithId>& vector_with_ids,
@@ -97,13 +97,13 @@ class VectorReader {
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status DoVectorSearchForTableCoprocessor(
-      [[maybe_unused]] VectorIndexWrapperPtr vector_index, [[maybe_unused]] uint64_t partition_id,
+      [[maybe_unused]] VectorIndexWrapperPtr vector_index, [[maybe_unused]] int64_t partition_id,
       [[maybe_unused]] const std::vector<pb::common::VectorWithId>& vector_with_ids,
       [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   // This function is for testing only
-  butil::Status SearchVectorDebug(uint64_t partition_id, VectorIndexWrapperPtr vector_index,
+  butil::Status SearchVectorDebug(int64_t partition_id, VectorIndexWrapperPtr vector_index,
                                   pb::common::Range region_range,
                                   const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                   const pb::common::VectorSearchParameter& parameter,

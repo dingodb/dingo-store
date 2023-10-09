@@ -45,12 +45,12 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
   iter->Init();
 
-  uint64_t size = 0;
-  uint64_t chunk_size = 0;
+  int64_t size = 0;
+  int64_t chunk_size = 0;
   std::vector<std::string> keys;
   bool is_split = false;
   for (; iter->IsValid(); iter->Next()) {
-    uint64_t key_value_size = iter->KeyValueSize();
+    int64_t key_value_size = iter->KeyValueSize();
     size += key_value_size;
     chunk_size += key_value_size;
     if (chunk_size >= split_chunk_size_) {
@@ -76,7 +76,7 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
   iter->Init();
 
-  uint64_t size = 0;
+  int64_t size = 0;
   std::string split_key;
   bool is_split = false;
   uint32_t split_pos = split_size_ * split_ratio_;
@@ -102,8 +102,8 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
   iter->Init();
 
-  uint64_t size = 0;
-  uint64_t split_key_count = 0;
+  int64_t size = 0;
+  int64_t split_key_count = 0;
   std::string split_key;
   bool is_split = false;
   uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
@@ -127,7 +127,7 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   return is_split ? split_key : "";
 }
 
-static bool CheckLeaderAndFollowerStatus(uint64_t region_id) {
+static bool CheckLeaderAndFollowerStatus(int64_t region_id) {
   auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get engine failed.", region_id);
@@ -161,7 +161,7 @@ void SplitCheckTask::SplitCheck() {
     return;
   }
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   auto epoch = region_->Epoch();
 
   // Get split key.
@@ -275,19 +275,19 @@ bool SplitCheckWorkers::Execute(TaskRunnablePtr task) {
   return true;
 }
 
-bool SplitCheckWorkers::IsExistRegionChecking(uint64_t region_id) {
+bool SplitCheckWorkers::IsExistRegionChecking(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   return checking_regions_.find(region_id) != checking_regions_.end();
 }
 
-void SplitCheckWorkers::AddRegionChecking(uint64_t region_id) {
+void SplitCheckWorkers::AddRegionChecking(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (checking_regions_.find(region_id) == checking_regions_.end()) {
     checking_regions_.insert(region_id);
   }
 }
 
-void SplitCheckWorkers::DeleteRegionChecking(uint64_t region_id) {
+void SplitCheckWorkers::DeleteRegionChecking(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   checking_regions_.erase(region_id);
 }

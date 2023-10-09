@@ -1249,7 +1249,7 @@ TEST_F(CoprocessorTest, Execute) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -1466,7 +1466,7 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -1671,7 +1671,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -1847,7 +1847,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -2007,7 +2007,7 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -2146,7 +2146,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -2276,7 +2276,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -2406,7 +2406,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -2561,7 +2561,7 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
       engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
   bool key_only = false;
   size_t max_fetch_cnt = 2;
-  uint64_t max_bytes_rpc = 1000000000000000;
+  int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
   iter->Start();
@@ -3275,7 +3275,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
         engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
     bool key_only = false;
     size_t max_fetch_cnt = 2;
-    uint64_t max_bytes_rpc = 1000000000000000;
+    int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
     iter->Start();
@@ -3399,7 +3399,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
         engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
     bool key_only = false;
     size_t max_fetch_cnt = 2;
-    uint64_t max_bytes_rpc = 1000000000000000;
+    int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
     iter->Start();
@@ -3589,7 +3589,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
         engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
     bool key_only = false;
     size_t max_fetch_cnt = 2;
-    uint64_t max_bytes_rpc = 1000000000000000;
+    int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
     iter->Start();
@@ -3802,7 +3802,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
         engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
     bool key_only = false;
     size_t max_fetch_cnt = 2;
-    uint64_t max_bytes_rpc = 1000000000000000;
+    int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
     iter->Start();

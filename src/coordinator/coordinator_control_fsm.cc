@@ -49,7 +49,7 @@ void CoordinatorControl::SetLeaderTerm(int64_t term) {
 void CoordinatorControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ = raft_node; }
 std::shared_ptr<RaftNode> CoordinatorControl::GetRaftNode() { return raft_node_; }
 
-int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
+int CoordinatorControl::GetAppliedTermAndIndex(int64_t& term, int64_t& index) {
   id_epoch_map_safe_temp_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
   id_epoch_map_safe_temp_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
 
@@ -61,7 +61,7 @@ int CoordinatorControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) 
 void CoordinatorControl::BuildTempMaps() {
   // copy id_epoch_map_ to id_epoch_map_temp_
   {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::IdEpochInternal> temp_copy;
     temp_copy.init(100);
     id_epoch_map_.GetRawMapCopy(temp_copy);
     id_epoch_map_safe_temp_.CopyFromRawMap(temp_copy);
@@ -71,7 +71,7 @@ void CoordinatorControl::BuildTempMaps() {
   // copy schema_map_ to schema_name_map_safe_temp_
   {
     schema_name_map_safe_temp_.Clear();
-    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
     schema_map_.GetRawMapCopy(schema_map_copy);
     for (const auto& it : schema_map_copy) {
@@ -83,7 +83,7 @@ void CoordinatorControl::BuildTempMaps() {
   // copy table_map_ to table_name_map_safe_temp_
   {
     table_name_map_safe_temp_.Clear();
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> table_map_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> table_map_copy;
     table_map_copy.init(10000);
     table_map_.GetRawMapCopy(table_map_copy);
     for (const auto& it : table_map_copy) {
@@ -98,7 +98,7 @@ void CoordinatorControl::BuildTempMaps() {
   // copy index_map_ to index_name_map_safe_temp_
   {
     index_name_map_safe_temp_.Clear();
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> index_map_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> index_map_copy;
     index_map_copy.init(10000);
     index_map_.GetRawMapCopy(index_map_copy);
     for (const auto& it : index_map_copy) {
@@ -1133,7 +1133,7 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
 
 // ApplyMetaIncrement is on_apply callback
 void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool /*is_leader*/,
-                                            uint64_t term, uint64_t index, google::protobuf::Message* /*response*/) {
+                                            int64_t term, int64_t index, google::protobuf::Message* /*response*/) {
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
@@ -1141,8 +1141,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
     // if index < local apply index, just return
-    uint64_t applied_index = 0;
-    uint64_t applied_term = 0;
+    int64_t applied_index = 0;
+    int64_t applied_term = 0;
 
     id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_term);
     id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, applied_index);
@@ -1413,7 +1413,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
 
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    std::vector<uint64_t> region_id_to_write;
+    std::vector<int64_t> region_id_to_write;
     std::vector<pb::coordinator_internal::RegionInternal> region_internal_to_write;
     for (int i = 0; i < meta_increment.regions_size(); i++) {
       const auto& region = meta_increment.regions(i);
@@ -1437,7 +1437,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         {
           BAIDU_SCOPED_LOCK(store_need_push_mutex_);
           for (int j = 0; j < region.region().definition().peers_size(); j++) {
-            uint64_t store_id = region.region().definition().peers(j).store_id();
+            int64_t store_id = region.region().definition().peers(j).store_id();
             DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().definition().peers_size()
                             << " store_id =" << store_id;
 
@@ -1463,7 +1463,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         if (new_region.region_type() == pb::common::RegionType::STORE_REGION) {
           pb::coordinator_internal::TableInternal table_internal;
 
-          uint64_t table_id = new_region.definition().table_id();
+          int64_t table_id = new_region.definition().table_id();
 
           auto ret = table_map_.Get(table_id, table_internal);
           if (ret < 0) {
@@ -1501,7 +1501,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         } else if (new_region.region_type() == pb::common::RegionType::INDEX_REGION) {
           pb::coordinator_internal::TableInternal index_internal;
 
-          uint64_t index_id = new_region.definition().index_id();
+          int64_t index_id = new_region.definition().index_id();
 
           auto ret = index_map_.Get(index_id, index_internal);
           if (ret < 0) {
@@ -1575,7 +1575,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         if (new_region.region_type() == pb::common::RegionType::STORE_REGION) {
           pb::coordinator_internal::TableInternal table_internal;
 
-          uint64_t table_id = new_region.definition().table_id();
+          int64_t table_id = new_region.definition().table_id();
 
           ret = table_map_.Get(table_id, table_internal);
           if (ret < 0) {
@@ -1612,7 +1612,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         } else if (new_region.region_type() == pb::common::RegionType::INDEX_REGION) {
           pb::coordinator_internal::TableInternal index_internal;
 
-          uint64_t index_id = new_region.definition().index_id();
+          int64_t index_id = new_region.definition().index_id();
 
           ret = index_map_.Get(index_id, index_internal);
           if (ret < 0) {

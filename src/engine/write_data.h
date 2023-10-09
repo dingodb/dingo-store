@@ -133,7 +133,7 @@ struct VectorDeleteDatum : public DatumAble {
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
   std::string cf_name;
-  std::vector<uint64_t> ids;
+  std::vector<int64_t> ids;
 };
 
 struct PutIfAbsentDatum : public DatumAble {
@@ -265,8 +265,8 @@ struct SplitDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
-  uint64_t from_region_id;
-  uint64_t to_region_id;
+  int64_t from_region_id;
+  int64_t to_region_id;
   std::string split_key;
   pb::common::RegionEpoch epoch;
   pb::raft::SplitStrategy split_strategy;
@@ -301,7 +301,7 @@ struct SaveRaftSnapshotDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
-  uint64_t region_id;
+  int64_t region_id;
 };
 
 class WriteData {
@@ -343,7 +343,7 @@ class WriteDataBuilder {
   }
 
   // VectorDeleteDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<uint64_t>& ids) {
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<int64_t>& ids) {
     auto datum = std::make_shared<VectorDeleteDatum>();
     datum->cf_name = cf_name;
     datum->ids = ids;
@@ -451,7 +451,7 @@ class WriteDataBuilder {
   }
 
   // SaveRaftSnapshotDatum
-  static std::shared_ptr<WriteData> BuildWrite(uint64_t region_id) {
+  static std::shared_ptr<WriteData> BuildWrite(int64_t region_id) {
     auto datum = std::make_shared<SaveRaftSnapshotDatum>();
     datum->region_id = region_id;
 

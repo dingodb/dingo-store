@@ -37,7 +37,7 @@ namespace dingodb {
 
 class VectorIndexHnsw : public VectorIndex {
  public:
-  explicit VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+  explicit VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                            const pb::common::Range& range);
 
   ~VectorIndexHnsw() override;
@@ -50,7 +50,7 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
-  butil::Status Delete(const std::vector<uint64_t>& delete_ids) override;
+  butil::Status Delete(const std::vector<int64_t>& delete_ids) override;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
@@ -64,12 +64,12 @@ class VectorIndexHnsw : public VectorIndex {
                        [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
 
   int32_t GetDimension() override;
-  butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
-  butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) override;
-  butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size) override;
+  butil::Status GetCount([[maybe_unused]] int64_t& count) override;
+  butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
+  butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
 
-  butil::Status ResizeMaxElements(uint64_t new_max_elements);
-  butil::Status GetMaxElements(uint64_t& max_elements);
+  butil::Status ResizeMaxElements(int64_t new_max_elements);
+  butil::Status GetMaxElements(int64_t& max_elements);
 
   bool IsExceedsMaxElements() override;
 

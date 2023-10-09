@@ -64,7 +64,7 @@ TEST_F(VectorIndexHnswTest, Create) {
   static const pb::common::Range kRange;
   // valid param L2
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -82,7 +82,7 @@ TEST_F(VectorIndexHnswTest, Create) {
 #if 10  // NOLINT
   // IP
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -100,29 +100,28 @@ TEST_F(VectorIndexHnswTest, Create) {
 #endif
 }
 
-
 TEST_F(VectorIndexHnswTest, DeleteNoData) {
   butil::Status ok;
 
   // id not found
   {
-    uint64_t id = 10000000;
-    std::vector<uint64_t> ids;
+    int64_t id = 10000000;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_hnsw->Delete(ids);
   }
 
   // id exist
   {
-    uint64_t id = 0;
-    std::vector<uint64_t> ids;
+    int64_t id = 0;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_hnsw->Delete(ids);
   }
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -131,7 +130,7 @@ TEST_F(VectorIndexHnswTest, DeleteNoData) {
 
   // id exist batch again
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -236,7 +235,7 @@ TEST_F(VectorIndexHnswTest, Upsert) {
     ok = vector_index_hnsw->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    uint64_t count = 0;
+    int64_t count = 0;
     vector_index_hnsw->GetCount(count);
 
     std::cout << "count : " << count << '\n';
@@ -274,7 +273,7 @@ TEST_F(VectorIndexHnswTest, Search) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, UINT64_MAX);
+    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
     ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, results, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
@@ -301,7 +300,7 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
   static const pb::common::Range kRange;
   // valid param L2
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -319,7 +318,7 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
 #if 10  // NOLINT
   // IP
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -447,7 +446,7 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
     ok = vector_index_hnsw->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    uint64_t count = 0;
+    int64_t count = 0;
     vector_index_hnsw->GetCount(count);
 
     std::cout << "count : " << count << '\n';
@@ -484,7 +483,7 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, UINT64_MAX);
+    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
     ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, results, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 

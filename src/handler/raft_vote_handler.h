@@ -23,7 +23,7 @@ namespace dingodb {
 class VectorIndexLeaderStartHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kVectorIndexLeaderStart; }
-  int Handle(store::RegionPtr region, uint64_t term_id) override;
+  int Handle(store::RegionPtr region, int64_t term_id) override;
 };
 
 // VectorIndexLeaderStop

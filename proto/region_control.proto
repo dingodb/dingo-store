@@ -41,7 +41,7 @@ message ChangeRegionResponse {
 }
 
 message DestroyRegionRequest {
-  uint64 region_id = 1;
+  int64 region_id = 1;
 }
 
 message DestroyRegionResponse {
@@ -49,7 +49,7 @@ message DestroyRegionResponse {
 }
 
 message SnapshotRequest {
-  uint64 region_id = 1;
+  int64 region_id = 1;
 }
 
 message SnapshotResponse {
@@ -57,7 +57,7 @@ message SnapshotResponse {
 }
 
 message TransferLeaderRequest {
-  uint64 region_id = 1;
+  int64 region_id = 1;
   dingodb.pb.common.Peer peer = 2;
 }
 
@@ -66,7 +66,7 @@ message TransferLeaderResponse {
 }
 
 message SnapshotVectorIndexRequest {
-  uint64 vector_index_id = 1;
+  int64 vector_index_id = 1;
 }
 
 message SnapshotVectorIndexResponse {
@@ -74,7 +74,7 @@ message SnapshotVectorIndexResponse {
 }
 
 message TriggerVectorIndexSnapshotRequest {
-  uint64 vector_index_id = 1;
+  int64 vector_index_id = 1;
   string type = 2;  // install or pull
   dingodb.pb.common.Location location = 3;
 }
@@ -99,7 +99,7 @@ enum DebugType {
 
 message DebugRequest {
   DebugType type = 1;  // debug type
-  repeated uint64 region_ids = 2;
+  repeated int64 region_ids = 2;
 }
 
 message DebugResponse {
@@ -120,7 +120,7 @@ message DebugResponse {
   }
 
   message RegionExecutor {
-    repeated uint64 region_ids = 1;
+    repeated int64 region_ids = 1;
   }
 
   message RegionMetrics {
@@ -129,7 +129,7 @@ message DebugResponse {
 
   message FileReader {
     int32 count = 1;
-    repeated uint64 reader_ids = 2;
+    repeated int64 reader_ids = 2;
   }
 
   message RegionActualMetrics {
@@ -141,14 +141,14 @@ message DebugResponse {
   }
 
   message VectorIndexMetricsEntry {
-    uint64 id = 1;
-    uint64 version = 2;
+    int64 id = 1;
+    int64 version = 2;
     uint32 dimension = 10;
-    uint64 apply_log_index = 20;
-    uint64 snapshot_log_index = 30;
-    uint64 key_count = 40;
-    uint64 deleted_key_count = 50;
-    uint64 memory_size = 60;
+    int64 apply_log_index = 20;
+    int64 snapshot_log_index = 30;
+    int64 key_count = 40;
+    int64 deleted_key_count = 50;
+    int64 memory_size = 60;
   }
 
   message VectorIndexMetrics {

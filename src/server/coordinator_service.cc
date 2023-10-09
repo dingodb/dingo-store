@@ -330,7 +330,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // create store
-  uint64_t store_id = 0;
+  int64_t store_id = 0;
   std::string keyring;
   auto local_ctl = this->coordinator_control_;
   auto ret = local_ctl->CreateStore(request->cluster_id(), store_id, keyring, meta_increment);
@@ -383,7 +383,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // delete store
-  uint64_t const store_id = request->store_id();
+  int64_t const store_id = request->store_id();
   std::string const keyring = request->keyring();
   auto ret = coordinator_control_->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
   if (!ret.ok()) {
@@ -554,7 +554,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   // }
 
   // call UpdateRegionMap
-  // uint64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
+  // int64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
 
   // update store metrics
   if (request->has_store_metrics()) {
@@ -806,7 +806,7 @@ void CoordinatorServiceImpl::GetRegionCount(google::protobuf::RpcController * /*
     return;
   }
 
-  uint64_t region_count;
+  int64_t region_count;
   this->coordinator_control_->GetRegionCount(region_count);
 
   response->set_region_count(region_count);
@@ -819,7 +819,7 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   brpc::ClosureGuard const done_guard(done);
   DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << request->DebugString();
 
-  uint64_t epoch;
+  int64_t epoch;
   pb::common::Location leader_location;
   std::vector<pb::common::Location> locations;
   this->coordinator_control_->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations);
@@ -869,7 +869,7 @@ void CoordinatorServiceImpl::CreateRegionId(google::protobuf::RpcController *con
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   auto ret = this->coordinator_control_->CreateRegionId(request->count(), region_ids, meta_increment);
   if (ret.ok()) {
     // generate response
@@ -944,14 +944,14 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
 
   std::string region_name = request->region_name();
   std::string resource_tag = request->resource_tag();
-  uint64_t replica_num = request->replica_num();
+  int64_t replica_num = request->replica_num();
   pb::common::Range range = request->range();
-  uint64_t schema_id = request->schema_id();
-  uint64_t table_id = request->table_id();
-  uint64_t index_id = request->index_id();
-  uint64_t part_id = request->part_id();
-  uint64_t split_from_region_id = request->split_from_region_id();
-  uint64_t new_region_id = 0;
+  int64_t schema_id = request->schema_id();
+  int64_t table_id = request->table_id();
+  int64_t index_id = request->index_id();
+  int64_t part_id = request->part_id();
+  int64_t split_from_region_id = request->split_from_region_id();
+  int64_t new_region_id = 0;
   pb::common::RegionType region_type = request->region_type();
   pb::common::IndexParameter index_parameter = request->index_parameter();
 
@@ -961,7 +961,7 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
                                                      table_id, index_id, part_id, index_parameter, split_from_region_id,
                                                      new_region_id, meta_increment);
   } else if (request->store_ids_size() > 0) {
-    std::vector<uint64_t> store_ids;
+    std::vector<int64_t> store_ids;
     for (auto id : request->store_ids()) {
       store_ids.push_back(id);
     }
@@ -1221,7 +1221,7 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
     return;
   }
 
-  std::vector<uint64_t> new_store_ids;
+  std::vector<int64_t> new_store_ids;
   for (const auto &it : region_definition.peers()) {
     new_store_ids.push_back(it.store_id());
   }
@@ -1315,7 +1315,7 @@ void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController * /
     return RedirectResponse(response);
   }
 
-  std::map<uint64_t, pb::common::RegionMetrics> orphan_regions;
+  std::map<int64_t, pb::common::RegionMetrics> orphan_regions;
   auto ret = this->coordinator_control_->GetOrphanRegion(request->store_id(), orphan_regions);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1544,7 +1544,7 @@ void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController * /*con
     return RedirectResponse(response);
   }
 
-  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_lists;
+  butil::FlatMap<int64_t, pb::coordinator::TaskList> task_lists;
   task_lists.init(100);
   coordinator_control_->GetTaskList(task_lists);
 
@@ -1607,7 +1607,7 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
   DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->DebugString();
 
   brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
-  uint64_t log_id = 0;
+  int64_t log_id = 0;
   if (cntl->has_log_id()) {
     log_id = cntl->log_id();
   }

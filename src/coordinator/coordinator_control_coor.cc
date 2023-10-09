@@ -78,7 +78,7 @@ DEFINE_uint32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 DEFINE_uint32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
 
 // TODO: add epoch logic
-void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch, pb::common::Location& leader_location,
+void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,
                                            std::vector<pb::common::Location>& locations) {
   if (cluster_id < 0) {
     return;
@@ -123,12 +123,12 @@ void CoordinatorControl::GetCoordinatorMap(uint64_t cluster_id, uint64_t& epoch,
 }
 
 void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
-  uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
   store_map.set_epoch(store_map_epoch);
 
   {
     // BAIDU_SCOPED_LOCK(store_map_mutex_);
-    butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+    butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
     store_map_copy.init(100);
     store_map_.GetRawMapCopy(store_map_copy);
 
@@ -139,7 +139,7 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
-void CoordinatorControl::GetStoreMetrics(uint64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
+void CoordinatorControl::GetStoreMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
     for (auto& elemnt : store_metrics_map_) {
@@ -153,7 +153,7 @@ void CoordinatorControl::GetStoreMetrics(uint64_t store_id, std::vector<pb::comm
   }
 }
 
-void CoordinatorControl::GetStoreMetrics(uint64_t store_id, uint64_t region_id,
+void CoordinatorControl::GetStoreMetrics(int64_t store_id, int64_t region_id,
                                          std::vector<pb::common::StoreMetrics>& store_metrics) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
@@ -200,7 +200,7 @@ void CoordinatorControl::GetStoreMetrics(uint64_t store_id, uint64_t region_id,
   }
 }
 
-void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
+void CoordinatorControl::DeleteStoreMetrics(int64_t store_id) {
   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
   if (store_id == 0) {
     for (const auto& it : store_metrics_map_) {
@@ -213,10 +213,10 @@ void CoordinatorControl::DeleteStoreMetrics(uint64_t store_id) {
   }
 }
 
-void CoordinatorControl::GetRegionMetrics(uint64_t region_id,
+void CoordinatorControl::GetRegionMetrics(int64_t region_id,
                                           std::vector<pb::common::RegionMetrics>& region_metrics_array) {
   if (region_id == 0) {
-    butil::FlatMap<uint64_t, pb::common::RegionMetrics> region_metrics_map_copy;
+    butil::FlatMap<int64_t, pb::common::RegionMetrics> region_metrics_map_copy;
     auto ret = region_metrics_map_.GetRawMapCopy(region_metrics_map_copy);
     if (ret < 0) {
       DINGO_LOG(INFO) << "GetRegionMetrics region_metrics_map_.GetRawMapCopy failed";
@@ -238,7 +238,7 @@ void CoordinatorControl::GetRegionMetrics(uint64_t region_id,
   }
 }
 
-void CoordinatorControl::DeleteRegionMetrics(uint64_t region_id) {
+void CoordinatorControl::DeleteRegionMetrics(int64_t region_id) {
   if (region_id == 0) {
     return;
   }
@@ -246,8 +246,8 @@ void CoordinatorControl::DeleteRegionMetrics(uint64_t region_id) {
   region_metrics_map_.Erase(region_id);
 }
 
-butil::Status CoordinatorControl::GetOrphanRegion(uint64_t store_id,
-                                                  std::map<uint64_t, pb::common::RegionMetrics>& orphan_regions) {
+butil::Status CoordinatorControl::GetOrphanRegion(int64_t store_id,
+                                                  std::map<int64_t, pb::common::RegionMetrics>& orphan_regions) {
   BAIDU_SCOPED_LOCK(this->store_metrics_map_mutex_);
 
   for (const auto& it : this->store_metrics_map_) {
@@ -266,12 +266,12 @@ butil::Status CoordinatorControl::GetOrphanRegion(uint64_t store_id,
   return butil::Status::OK();
 }
 
-void CoordinatorControl::GetPushStoreMap(butil::FlatMap<uint64_t, pb::common::Store>& store_to_push) {
+void CoordinatorControl::GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store>& store_to_push) {
   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
   store_to_push.swap(store_need_push_);
 }
 
-int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyring) {
+int CoordinatorControl::ValidateStore(int64_t store_id, const std::string& keyring) {
   if (keyring == std::string("TO_BE_CONTINUED")) {
     DINGO_LOG(DEBUG) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
     return 0;
@@ -300,7 +300,7 @@ int CoordinatorControl::ValidateStore(uint64_t store_id, const std::string& keyr
   return -1;
 }
 
-butil::Status CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& store_id, std::string& keyring,
+butil::Status CoordinatorControl::CreateStore(int64_t cluster_id, int64_t& store_id, std::string& keyring,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id <= 0");
@@ -331,7 +331,7 @@ butil::Status CoordinatorControl::CreateStore(uint64_t cluster_id, uint64_t& sto
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+butil::Status CoordinatorControl::DeleteStore(int64_t cluster_id, int64_t store_id, std::string keyring,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0 || store_id <= 0 || keyring.length() <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -375,7 +375,7 @@ butil::Status CoordinatorControl::DeleteStore(uint64_t cluster_id, uint64_t stor
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::UpdateStore(uint64_t cluster_id, uint64_t store_id, std::string keyring,
+butil::Status CoordinatorControl::UpdateStore(int64_t cluster_id, int64_t store_id, std::string keyring,
                                               pb::common::StoreInState in_state,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0 || store_id <= 0 || keyring.length() <= 0) {
@@ -422,9 +422,9 @@ butil::Status CoordinatorControl::UpdateStore(uint64_t cluster_id, uint64_t stor
 }
 
 // UpdateStoreMap
-uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
-                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
-  uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
+                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
 
   bool need_update_epoch = false;
   {
@@ -500,7 +500,7 @@ uint64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   return store_map_epoch;
 }
 
-bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
+bool CoordinatorControl::TrySetRegionToDown(int64_t region_id) {
   pb::common::RegionMetrics region_to_update;
   int ret = region_metrics_map_.Get(region_id, region_to_update);
   if (ret > 0) {
@@ -515,7 +515,7 @@ bool CoordinatorControl::TrySetRegionToDown(uint64_t region_id) {
   return false;
 }
 
-bool CoordinatorControl::TrySetRegionToOnline(uint64_t region_id) {
+bool CoordinatorControl::TrySetRegionToOnline(int64_t region_id) {
   pb::common::RegionMetrics region_to_update;
   int ret = region_metrics_map_.Get(region_id, region_to_update);
   if (ret > 0) {
@@ -531,7 +531,7 @@ bool CoordinatorControl::TrySetRegionToOnline(uint64_t region_id) {
   return false;
 }
 
-bool CoordinatorControl::TrySetStoreToOffline(uint64_t store_id) {
+bool CoordinatorControl::TrySetStoreToOffline(int64_t store_id) {
   pb::common::Store store_to_update;
   int ret = store_map_.Get(store_id, store_to_update);
   if (ret > 0) {
@@ -647,7 +647,7 @@ void CoordinatorControl::UpdateRegionState() {
   // update region_state by last_update_timestamp
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_map_temp;
+  butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_map_temp;
   auto ret = region_map_.GetRawMapCopy(region_map_temp);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "UpdateRegionState... GetRawMapCopy failed";
@@ -729,7 +729,7 @@ void CoordinatorControl::UpdateRegionState() {
   }
 }
 
-uint64_t CoordinatorControl::GetRegionLeaderId(uint64_t region_id) {
+int64_t CoordinatorControl::GetRegionLeaderId(int64_t region_id) {
   pb::common::RegionMetrics region_metrics;
   auto ret = region_metrics_map_.Get(region_id, region_metrics);
   if (ret < 0) {
@@ -740,7 +740,7 @@ uint64_t CoordinatorControl::GetRegionLeaderId(uint64_t region_id) {
   return region_metrics.leader_store_id();
 }
 
-pb::common::RegionStatus CoordinatorControl::GetRegionStatus(uint64_t region_id) {
+pb::common::RegionStatus CoordinatorControl::GetRegionStatus(int64_t region_id) {
   pb::common::RegionStatus region_status;
   pb::common::RegionMetrics region_metrics;
 
@@ -753,8 +753,8 @@ pb::common::RegionStatus CoordinatorControl::GetRegionStatus(uint64_t region_id)
   return region_metrics.region_status();
 }
 
-void CoordinatorControl::GetRegionLeaderAndStatus(uint64_t region_id, pb::common::RegionStatus& region_status,
-                                                  uint64_t& leader_store_id) {
+void CoordinatorControl::GetRegionLeaderAndStatus(int64_t region_id, pb::common::RegionStatus& region_status,
+                                                  int64_t& leader_store_id) {
   pb::common::RegionMetrics region_metrics;
 
   auto ret = region_metrics_map_.Get(region_id, region_metrics);
@@ -771,10 +771,10 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
     region_internal_map_copy.init(30000);
     region_map_.GetRawMapCopy(region_internal_map_copy);
-    butil::FlatMap<uint64_t, pb::common::RegionMetrics> region_metrics_map_copy;
+    butil::FlatMap<int64_t, pb::common::RegionMetrics> region_metrics_map_copy;
     region_metrics_map_copy.init(30000);
     region_metrics_map_.GetRawMapCopy(region_metrics_map_copy);
 
@@ -789,7 +789,7 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
     region_internal_map_copy.init(30000);
     region_map_.GetRawMapCopy(region_internal_map_copy);
 
@@ -802,7 +802,7 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
 
 void CoordinatorControl::GetDeletedRegionMap(pb::common::RegionMap& region_map) {
   // BAIDU_SCOPED_LOCK(region_map_mutex_);
-  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+  butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
   region_internal_map_copy.init(30000);
   deleted_region_map_.GetRawMapCopy(region_internal_map_copy);
   for (auto& element : region_internal_map_copy) {
@@ -811,7 +811,7 @@ void CoordinatorControl::GetDeletedRegionMap(pb::common::RegionMap& region_map) 
   }
 }
 
-butil::Status CoordinatorControl::AddDeletedRegionMap(uint64_t region_id, bool force) {
+butil::Status CoordinatorControl::AddDeletedRegionMap(int64_t region_id, bool force) {
   auto ret = region_map_.Exists(region_id);
   if (ret) {
     DINGO_LOG(WARNING) << "cannnot add deleted_region region_id: " << region_id << " already exists in region_map_";
@@ -837,9 +837,9 @@ butil::Status CoordinatorControl::AddDeletedRegionMap(uint64_t region_id, bool f
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
+butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
   if (region_id == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> deleted_regions;
+    butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> deleted_regions;
     deleted_regions.init(30000);
     auto ret = deleted_region_map_.GetRawMapCopy(deleted_regions);
     if (ret < 0) {
@@ -885,15 +885,15 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(uint64_t region_id) {
   return butil::Status::OK();
 }
 
-void CoordinatorControl::GetRegionCount(uint64_t& region_count) { region_count = region_map_.Size(); }
+void CoordinatorControl::GetRegionCount(int64_t& region_count) { region_count = region_map_.Size(); }
 
-void CoordinatorControl::GetRegionIdsInMap(std::vector<uint64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
+void CoordinatorControl::GetRegionIdsInMap(std::vector<int64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
 
 void CoordinatorControl::RecycleDeletedTableAndIndex() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> delete_tables;
-  butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> delete_indexes;
+  butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_tables;
+  butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_indexes;
 
   delete_tables.init(3000);
   delete_indexes.init(3000);
@@ -941,7 +941,7 @@ void CoordinatorControl::RecycleDeletedTableAndIndex() {
 void CoordinatorControl::RecycleOrphanRegionOnStore() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> delete_regions;
+  butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> delete_regions;
   delete_regions.init(3000);
   deleted_region_map_.GetRawMapCopy(delete_regions);
 
@@ -950,7 +950,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
     return;
   }
 
-  std::map<uint64_t, std::vector<uint64_t>> region_id_on_store;
+  std::map<int64_t, std::vector<int64_t>> region_id_on_store;
 
   // load all region_id to region_id_on_store
   {
@@ -1043,7 +1043,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::RegionInternal> regions;
+  butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> regions;
   regions.init(3000);
   region_map_.GetRawMapCopy(regions);
 
@@ -1052,7 +1052,7 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
     return;
   }
 
-  std::vector<uint64_t> delete_region_ids;
+  std::vector<int64_t> delete_region_ids;
   for (const auto& it : regions) {
     const auto& region = it.second;
     if (region.definition().table_id() > 0) {
@@ -1101,12 +1101,12 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
   }
 }
 
-void CoordinatorControl::DeleteRegionBvar(uint64_t region_id) {
+void CoordinatorControl::DeleteRegionBvar(int64_t region_id) {
   coordinator_bvar_metrics_region_.DeleteRegionBvar(region_id);
 }
 
 // create region ids
-butil::Status CoordinatorControl::CreateRegionId(uint32_t count, std::vector<uint64_t>& region_ids,
+butil::Status CoordinatorControl::CreateRegionId(uint32_t count, std::vector<int64_t>& region_ids,
                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (count <= 0) {
     DINGO_LOG(ERROR) << "CreateRegionId count must be positive, count=" << count;
@@ -1116,14 +1116,14 @@ butil::Status CoordinatorControl::CreateRegionId(uint32_t count, std::vector<uin
   DINGO_LOG(INFO) << "CreateRegionId count=" << count;
 
   for (uint32_t i = 0; i < count; i++) {
-    uint64_t region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+    int64_t region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
     region_ids.push_back(region_id);
   }
 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Region& region) {
+butil::Status CoordinatorControl::QueryRegion(int64_t region_id, pb::common::Region& region) {
   if (region_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region_id must be positive");
   }
@@ -1141,7 +1141,7 @@ butil::Status CoordinatorControl::QueryRegion(uint64_t region_id, pb::common::Re
 }
 
 butil::Status CoordinatorControl::CreateRegionForSplitInternal(
-    uint64_t split_from_region_id, uint64_t& new_region_id, bool is_shadow_create,
+    int64_t split_from_region_id, int64_t& new_region_id, bool is_shadow_create,
     std::vector<pb::coordinator::StoreOperation>& store_operations,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (split_from_region_id <= 0) {
@@ -1149,7 +1149,7 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "split_from_region_id must be positive");
   }
 
-  std::vector<uint64_t> store_ids;
+  std::vector<int64_t> store_ids;
 
   pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
@@ -1199,14 +1199,14 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
 
 butil::Status CoordinatorControl::CreateRegionForSplit(
     const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
-    pb::common::Range region_range, pb::common::Range region_raw_range, uint64_t schema_id, uint64_t table_id,
-    uint64_t index_id, uint64_t part_id, const pb::common::IndexParameter& index_parameter,
-    uint64_t split_from_region_id, uint64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+    pb::common::Range region_range, pb::common::Range region_raw_range, int64_t schema_id, int64_t table_id,
+    int64_t index_id, int64_t part_id, const pb::common::IndexParameter& index_parameter, int64_t split_from_region_id,
+    int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (split_from_region_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "split_from_region_id must be positive");
   }
 
-  std::vector<uint64_t> store_ids;
+  std::vector<int64_t> store_ids;
 
   pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
@@ -1228,10 +1228,10 @@ butil::Status CoordinatorControl::CreateRegionForSplit(
 
 butil::Status CoordinatorControl::CreateRegionAutoSelectStore(
     const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
-    int32_t replica_num, pb::common::Range region_range, pb::common::Range region_raw_range, uint64_t schema_id,
-    uint64_t table_id, uint64_t index_id, uint64_t part_id, const pb::common::IndexParameter& index_parameter,
-    uint64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
-  std::vector<uint64_t> store_ids;
+    int32_t replica_num, pb::common::Range region_range, pb::common::Range region_raw_range, int64_t schema_id,
+    int64_t table_id, int64_t index_id, int64_t part_id, const pb::common::IndexParameter& index_parameter,
+    int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  std::vector<int64_t> store_ids;
   std::vector<pb::coordinator::StoreOperation> store_operations;
   return CreateRegionFinal(region_name, region_type, resource_tag, replica_num, region_range, region_raw_range,
                            schema_id, table_id, index_id, part_id, index_parameter, store_ids, 0, new_region_id,
@@ -1241,7 +1241,7 @@ butil::Status CoordinatorControl::CreateRegionAutoSelectStore(
 butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, int32_t replica_num,
                                               const std::string& resource_tag,
                                               const pb::common::IndexParameter& index_parameter,
-                                              std::vector<uint64_t>& store_ids,
+                                              std::vector<int64_t>& store_ids,
                                               std::vector<pb::common::Store>& selected_stores_for_regions) {
   DINGO_LOG(INFO) << "SelectStore replica_num=" << replica_num << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size();
@@ -1250,7 +1250,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
   // if store_ids is not null, select store with store_ids
   // or when resource_tag exists, select store with resource_tag
-  butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+  butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
   store_map_copy.init(100);
   store_map_.GetRawMapCopy(store_map_copy);
 
@@ -1372,7 +1372,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     }
 
     const auto& hnsw_parameter = index_parameter.vector_index_parameter().hnsw_parameter();
-    uint64_t new_hnsw_index_plan_memory = hnsw_parameter.dimension() * hnsw_parameter.max_elements() * 4;
+    int64_t new_hnsw_index_plan_memory = hnsw_parameter.dimension() * hnsw_parameter.max_elements() * 4;
     DINGO_LOG(INFO) << "Store metrics new_hnsw_index_plan_memory=" << new_hnsw_index_plan_memory
                     << ", store_id=" << store.id() << ", region_count=" << store_metrics.region_metrics_map_size();
     if (new_hnsw_index_plan_memory > store_own_metrics.system_available_memory() * 0.95) {
@@ -1385,8 +1385,8 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     }
 
     // for hnsw calc memory
-    uint64_t vector_index_used_memory = 0;
-    uint64_t hnsw_memory_plan_used = 0;
+    int64_t vector_index_used_memory = 0;
+    int64_t hnsw_memory_plan_used = 0;
     for (const auto& region_metrics : store_metrics.region_metrics_map()) {
       const auto& vector_index_parameter =
           region_metrics.second.region_definition().index_parameter().vector_index_parameter();
@@ -1434,18 +1434,18 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
   struct StoreMore {
     pb::common::Store store;
-    uint64_t weight;
-    uint64_t region_num;
-    uint64_t system_total_capacity;    // total capacity of this store
-    uint64_t system_free_capacity;     // free capacity of this store
-    uint64_t system_cpu_usage;         // cpu usage of this store process
-    uint64_t system_total_memory;      // total memory of the host this store process running on
-    uint64_t system_free_memory;       // total free memory of the host this store process running on
-    uint64_t system_available_memory;  // total available memory of the host this store process running on
-    uint64_t system_io_util;           // io utilization of the host this store process running on
-    uint64_t process_used_cpu;         // cpu usage of this store process
-    uint64_t process_used_memory;      // total used memory of this store process
-    uint64_t process_used_capacity;    // free capacity of this store
+    int64_t weight;
+    int64_t region_num;
+    int64_t system_total_capacity;    // total capacity of this store
+    int64_t system_free_capacity;     // free capacity of this store
+    int64_t system_cpu_usage;         // cpu usage of this store process
+    int64_t system_total_memory;      // total memory of the host this store process running on
+    int64_t system_free_memory;       // total free memory of the host this store process running on
+    int64_t system_available_memory;  // total available memory of the host this store process running on
+    int64_t system_io_util;           // io utilization of the host this store process running on
+    int64_t process_used_cpu;         // cpu usage of this store process
+    int64_t process_used_memory;      // total used memory of this store process
+    int64_t process_used_capacity;    // free capacity of this store
   };
 
   // check and sort store by capacity, regions_num
@@ -1537,12 +1537,14 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CreateShadowRegion(
-    const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
-    int32_t replica_num, pb::common::Range region_range, pb::common::Range region_raw_range, uint64_t schema_id,
-    uint64_t table_id, uint64_t index_id, uint64_t part_id, const pb::common::IndexParameter& index_parameter,
-    std::vector<uint64_t>& store_ids, uint64_t split_from_region_id, uint64_t& new_region_id,
-    pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_name, pb::common::RegionType region_type,
+                                                     const std::string& resource_tag, int32_t replica_num,
+                                                     pb::common::Range region_range, pb::common::Range region_raw_range,
+                                                     int64_t schema_id, int64_t table_id, int64_t index_id,
+                                                     int64_t part_id, const pb::common::IndexParameter& index_parameter,
+                                                     std::vector<int64_t>& store_ids, int64_t split_from_region_id,
+                                                     int64_t& new_region_id,
+                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateShadowRegion replica_num=" << replica_num << ", region_name=" << region_name
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
@@ -1602,7 +1604,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
   }
 
   // select store for region
-  butil::FlatMap<uint64_t, pb::common::Store> store_map_copy;
+  butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
   store_map_copy.init(100);
   store_map_.GetRawMapCopy(store_map_copy);
   selected_stores_for_regions.reserve(store_ids.size());
@@ -1622,7 +1624,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
     new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
   }
 
-  uint64_t const create_region_id = new_region_id;
+  int64_t const create_region_id = new_region_id;
 
   if (region_map_.Exists(create_region_id)) {
     DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
@@ -1688,10 +1690,10 @@ butil::Status CoordinatorControl::CreateShadowRegion(
 butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_name, pb::common::RegionType region_type,
                                                     const std::string& resource_tag, int32_t replica_num,
                                                     pb::common::Range region_range, pb::common::Range region_raw_range,
-                                                    uint64_t schema_id, uint64_t table_id, uint64_t index_id,
-                                                    uint64_t part_id, const pb::common::IndexParameter& index_parameter,
-                                                    std::vector<uint64_t>& store_ids, uint64_t split_from_region_id,
-                                                    uint64_t& new_region_id,
+                                                    int64_t schema_id, int64_t table_id, int64_t index_id,
+                                                    int64_t part_id, const pb::common::IndexParameter& index_parameter,
+                                                    std::vector<int64_t>& store_ids, int64_t split_from_region_id,
+                                                    int64_t& new_region_id,
                                                     std::vector<pb::coordinator::StoreOperation>& store_operations,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
@@ -1764,7 +1766,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
     new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
   }
 
-  uint64_t const create_region_id = new_region_id;
+  int64_t const create_region_id = new_region_id;
 
   if (region_map_.Exists(create_region_id)) {
     DINGO_LOG(ERROR) << "create_region_id =" << create_region_id << " is illegal, cannot create region!!";
@@ -1905,13 +1907,13 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DropRegion(uint64_t region_id,
+butil::Status CoordinatorControl::DropRegion(int64_t region_id,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<pb::coordinator::StoreOperation> store_operations;
   return this->DropRegionFinal(region_id, store_operations, meta_increment);
 }
 
-butil::Status CoordinatorControl::DropRegionFinal(uint64_t region_id,
+butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
                                                   std::vector<pb::coordinator::StoreOperation>& store_operations,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   // set region state to DELETE
@@ -2021,7 +2023,7 @@ butil::Status CoordinatorControl::DropRegionFinal(uint64_t region_id,
 
 // DropRegionPermanently
 // delete region from disk
-butil::Status CoordinatorControl::DropRegionPermanently(uint64_t region_id,
+butil::Status CoordinatorControl::DropRegionPermanently(int64_t region_id,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   // set region state to DELETE
   bool need_update_epoch = false;
@@ -2064,7 +2066,7 @@ butil::Status CoordinatorControl::DropRegionPermanently(uint64_t region_id,
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uint64_t split_to_region_id,
+butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int64_t split_to_region_id,
                                               std::string split_watershed_key,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate split_from_region_id
@@ -2118,8 +2120,8 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
                          "split_to_region has different peers size");
   }
 
-  std::vector<uint64_t> split_from_region_peers;
-  std::vector<uint64_t> split_to_region_peers;
+  std::vector<int64_t> split_from_region_peers;
+  std::vector<int64_t> split_to_region_peers;
   split_from_region_peers.reserve(split_from_region.definition().peers_size());
   for (int i = 0; i < split_from_region.definition().peers_size(); i++) {
     split_from_region_peers.push_back(split_to_region.definition().peers(i).store_id());
@@ -2176,7 +2178,7 @@ butil::Status CoordinatorControl::SplitRegion(uint64_t split_from_region_id, uin
   return AddRegionCmd(leader_store_id, region_cmd, meta_increment);
 }
 
-butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_region_id, uint64_t split_to_region_id,
+butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_region_id, int64_t split_to_region_id,
                                                           std::string split_watershed_key, bool store_create_region,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   auto validate_ret = ValidateTaskListConflict(split_from_region_id, split_to_region_id);
@@ -2239,7 +2241,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
 
   // call create_region to get store_operations
   pb::coordinator_internal::MetaIncrement meta_increment_tmp;
-  uint64_t new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+  int64_t new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
   std::vector<pb::coordinator::StoreOperation> store_operations;
   auto status_ret = CreateRegionForSplitInternal(split_from_region_id, new_region_id, store_create_region,
                                                  store_operations, meta_increment_tmp);
@@ -2303,7 +2305,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(uint64_t split_from_re
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_region_id, uint64_t merge_to_region_id,
+butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_region_id, int64_t merge_to_region_id,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   auto validate_ret = ValidateTaskListConflict(merge_from_region_id, merge_to_region_id);
   if (!validate_ret.ok()) {
@@ -2368,8 +2370,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
                          "merge_to_region has different peers size");
   }
 
-  std::vector<uint64_t> merge_from_region_peers;
-  std::vector<uint64_t> merge_to_region_peers;
+  std::vector<int64_t> merge_from_region_peers;
+  std::vector<int64_t> merge_to_region_peers;
   merge_from_region_peers.reserve(merge_from_region.definition().peers_size());
   for (int i = 0; i < merge_from_region.definition().peers_size(); i++) {
     merge_from_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
@@ -2453,7 +2455,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(uint64_t merge_from_re
 
 // ChangePeerRegionWithTaskList
 butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
-    uint64_t region_id, std::vector<uint64_t>& new_store_ids, pb::coordinator_internal::MetaIncrement& meta_increment) {
+    int64_t region_id, std::vector<int64_t>& new_store_ids, pb::coordinator_internal::MetaIncrement& meta_increment) {
   auto validate_ret = ValidateTaskListConflict(region_id, region_id);
   if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << "ChangePeerRegionWithTaskList validate task list "
@@ -2491,14 +2493,14 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
   }
 
   // validate new_store_ids only has one new store or only less one store
-  std::vector<uint64_t> old_store_ids;
+  std::vector<int64_t> old_store_ids;
   old_store_ids.reserve(region.definition().peers_size());
   for (int i = 0; i < region.definition().peers_size(); i++) {
     old_store_ids.push_back(region.definition().peers(i).store_id());
   }
 
-  std::vector<uint64_t> new_store_ids_diff_more;
-  std::vector<uint64_t> new_store_ids_diff_less;
+  std::vector<int64_t> new_store_ids_diff_more;
+  std::vector<int64_t> new_store_ids_diff_less;
 
   std::sort(new_store_ids.begin(), new_store_ids.end());
   std::sort(old_store_ids.begin(), old_store_ids.end());
@@ -2661,7 +2663,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
 }
 
 butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
-    uint64_t region_id, uint64_t new_leader_store_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+    int64_t region_id, int64_t new_leader_store_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   // check region_id exists
   pb::coordinator_internal::RegionInternal region;
   int ret = region_map_.Get(region_id, region);
@@ -2746,9 +2748,9 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, uint64_t second_region_id) {
+butil::Status CoordinatorControl::ValidateTaskListConflict(int64_t region_id, int64_t second_region_id) {
   // check task_list conflict
-  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map_temp;
+  butil::FlatMap<int64_t, pb::coordinator::TaskList> task_list_map_temp;
   task_list_map_temp.init(1000);
   int ret = task_list_map_.GetRawMapCopy(task_list_map_temp);
   if (ret < 0) {
@@ -2777,7 +2779,7 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
   }
 
   // check store operation conflict
-  butil::FlatMap<uint64_t, pb::coordinator_internal::StoreOperationInternal> store_operation_map_temp;
+  butil::FlatMap<int64_t, pb::coordinator_internal::StoreOperationInternal> store_operation_map_temp;
   store_operation_map_temp.init(1000);
   ret = store_operation_map_.GetRawMapCopy(store_operation_map_temp);
   if (ret < 0) {
@@ -2814,7 +2816,7 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(uint64_t region_id, u
 }
 
 // CleanStoreOperation
-butil::Status CoordinatorControl::CleanStoreOperation(uint64_t store_id,
+butil::Status CoordinatorControl::CleanStoreOperation(int64_t store_id,
                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
   pb::coordinator_internal::StoreOperationInternal store_operation;
   int ret = store_operation_map_.Get(store_id, store_operation);
@@ -2841,7 +2843,7 @@ butil::Status CoordinatorControl::CleanStoreOperation(uint64_t store_id,
 }
 
 // AddRegionCmd
-butil::Status CoordinatorControl::AddRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
+butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate store id
   int ret = store_map_.Exists(store_id);
@@ -2850,7 +2852,7 @@ butil::Status CoordinatorControl::AddRegionCmd(uint64_t store_id, const pb::coor
     return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "AddRegionCmd store not exists");
   }
 
-  uint64_t region_cmd_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment);
+  int64_t region_cmd_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment);
   if (region_cmd_id == 0) {
     DINGO_LOG(ERROR) << "AddRegionCmd GetNextId failed, store_id = " << store_id;
     return butil::Status(pb::error::Errno::EINTERNAL, "AddRegionCmd GetNextId failed");
@@ -2875,7 +2877,7 @@ butil::Status CoordinatorControl::AddRegionCmd(uint64_t store_id, const pb::coor
 }
 
 // UpdateRegionCmd
-butil::Status CoordinatorControl::UpdateRegionCmd(uint64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
+butil::Status CoordinatorControl::UpdateRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
                                                   const pb::error::Error& error,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate store id
@@ -2902,7 +2904,7 @@ butil::Status CoordinatorControl::UpdateRegionCmd(uint64_t store_id, const pb::c
 }
 
 // RemoveRegionCmd
-butil::Status CoordinatorControl::RemoveRegionCmd(uint64_t store_id, uint64_t region_cmd_id,
+butil::Status CoordinatorControl::RemoveRegionCmd(int64_t store_id, int64_t region_cmd_id,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate store id
   int ret = store_map_.Exists(store_id);
@@ -2933,8 +2935,7 @@ butil::Status CoordinatorControl::RemoveRegionCmd(uint64_t store_id, uint64_t re
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::GetRegionCmd(uint64_t store_id, uint64_t start_region_cmd_id,
-                                               uint64_t end_region_cmd_id,
+butil::Status CoordinatorControl::GetRegionCmd(int64_t store_id, int64_t start_region_cmd_id, int64_t end_region_cmd_id,
                                                std::vector<pb::coordinator::RegionCmd>& region_cmds,
                                                std::vector<pb::error::Error>& region_cmd_errors) {
   // validate store id
@@ -2953,7 +2954,7 @@ butil::Status CoordinatorControl::GetRegionCmd(uint64_t store_id, uint64_t start
                          "GetRegionCmd end_region_cmd_id < start_region_cmd_id");
   }
 
-  std::vector<uint64_t> region_cmd_ids;
+  std::vector<int64_t> region_cmd_ids;
   region_cmd_map_.GetAllKeys(region_cmd_ids);
 
   if (region_cmd_ids.empty()) {
@@ -2983,7 +2984,7 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
                                                     bool check_conflict,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate store id
-  uint64_t store_id = store_operation.id();
+  int64_t store_id = store_operation.id();
   int ret = store_map_.Exists(store_id);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "AddStoreOperation store not exists, store_id = " << store_id;
@@ -3037,9 +3038,9 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
 }
 
 // UpdateRegionMap
-// uint64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
+// int64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
 //                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
-//   uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+//   int64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
 
 //   bool need_to_get_next_epoch = false;
 //   {
@@ -3126,7 +3127,7 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
 // }
 
 void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
-  uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
+  int64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
   {
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
@@ -3140,13 +3141,13 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   }
 }
 
-butil::Status CoordinatorControl::GetExecutorUserMap(uint64_t cluster_id,
+butil::Status CoordinatorControl::GetExecutorUserMap(int64_t cluster_id,
                                                      pb::common::ExecutorUserMap& executor_user_map) {
   if (cluster_id < 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id < 0");
   }
 
-  // uint64_t executor_user_map_epoch =
+  // int64_t executor_user_map_epoch =
   // GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR_USER);
   // executor_user_map.set_epoch(executor_user_map_epoch);
   {
@@ -3193,7 +3194,7 @@ bool CoordinatorControl::ValidateExecutorUser(const pb::common::ExecutorUser& ex
   return -1;
 }
 
-butil::Status CoordinatorControl::CreateExecutor(uint64_t cluster_id, pb::common::Executor& executor,
+butil::Status CoordinatorControl::CreateExecutor(int64_t cluster_id, pb::common::Executor& executor,
                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id <= 0");
@@ -3231,7 +3232,7 @@ butil::Status CoordinatorControl::CreateExecutor(uint64_t cluster_id, pb::common
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DeleteExecutor(uint64_t cluster_id, const pb::common::Executor& executor,
+butil::Status CoordinatorControl::DeleteExecutor(int64_t cluster_id, const pb::common::Executor& executor,
                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0 || executor.id().length() <= 0 || executor.executor_user().user().length() <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id <= 0 || executor.id().length() <= 0");
@@ -3265,7 +3266,7 @@ butil::Status CoordinatorControl::DeleteExecutor(uint64_t cluster_id, const pb::
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CreateExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser& executor_user,
+butil::Status CoordinatorControl::CreateExecutorUser(int64_t cluster_id, pb::common::ExecutorUser& executor_user,
                                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id <= 0");
@@ -3295,7 +3296,7 @@ butil::Status CoordinatorControl::CreateExecutorUser(uint64_t cluster_id, pb::co
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::UpdateExecutorUser(uint64_t cluster_id, const pb::common::ExecutorUser& executor_user,
+butil::Status CoordinatorControl::UpdateExecutorUser(int64_t cluster_id, const pb::common::ExecutorUser& executor_user,
                                                      const pb::common::ExecutorUser& executor_user_update,
                                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
@@ -3332,7 +3333,7 @@ butil::Status CoordinatorControl::UpdateExecutorUser(uint64_t cluster_id, const 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DeleteExecutorUser(uint64_t cluster_id, pb::common::ExecutorUser& executor_user,
+butil::Status CoordinatorControl::DeleteExecutorUser(int64_t cluster_id, pb::common::ExecutorUser& executor_user,
                                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (cluster_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id <= 0");
@@ -3368,9 +3369,9 @@ butil::Status CoordinatorControl::DeleteExecutorUser(uint64_t cluster_id, pb::co
 }
 
 // UpdateExecutorMap
-uint64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,
-                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
-  uint64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
+int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,
+                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+  int64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
 
   bool need_update_epoch = false;
   {
@@ -3792,9 +3793,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
   }
 }
 
-uint64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
-                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
-  //   uint64_t store_map_epoch =
+int64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  //   int64_t store_map_epoch =
   //   GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
   if (store_metrics.id() <= 0) {
     DINGO_LOG(ERROR) << "ERROR: UpdateStoreMetrics store_metrics.id() <= "
@@ -3892,7 +3893,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + id_epoch_map_.MemorySize());
 
     // dump id & epoch to kv
-    butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp;
+    butil::FlatMap<int64_t, pb::coordinator_internal::IdEpochInternal> id_epoch_map_temp;
     id_epoch_map_temp.init(100);
     int ret = id_epoch_map_.GetRawMapCopy(id_epoch_map_temp);
     for (auto& it : id_epoch_map_temp) {
@@ -4037,7 +4038,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
   }
 }
 
-int CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
+int CoordinatorControl::GetStoreOperation(int64_t store_id, pb::coordinator::StoreOperation& store_operation) {
   DINGO_LOG(INFO) << "GetStoreOperation store_id = " << store_id;
 
   store_operation.set_id(store_id);
@@ -4067,7 +4068,7 @@ int CoordinatorControl::GetStoreOperation(uint64_t store_id, pb::coordinator::St
   return 0;
 }
 
-int CoordinatorControl::GetStoreOperationForSend(uint64_t store_id, pb::coordinator::StoreOperation& store_operation) {
+int CoordinatorControl::GetStoreOperationForSend(int64_t store_id, pb::coordinator::StoreOperation& store_operation) {
   pb::coordinator_internal::StoreOperationInternal store_operation_internal;
   int ret = store_operation_map_.Get(store_id, store_operation_internal);
   if (ret < 0) {
@@ -4132,7 +4133,7 @@ int CoordinatorControl::GetStoreOperationForSend(uint64_t store_id, pb::coordina
   return 0;
 }
 
-void CoordinatorControl::GetTaskList(butil::FlatMap<uint64_t, pb::coordinator::TaskList>& task_lists) {
+void CoordinatorControl::GetTaskList(butil::FlatMap<int64_t, pb::coordinator::TaskList>& task_lists) {
   task_list_map_.GetRawMapCopy(task_lists);
 }
 
@@ -4146,7 +4147,7 @@ pb::coordinator::TaskList* CoordinatorControl::CreateTaskList(pb::coordinator_in
   return increment_task_list;
 }
 
-void CoordinatorControl::AddCreateTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
+void CoordinatorControl::AddCreateTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
                                        const pb::common::RegionDefinition& region_definition) {
   // this create region task
   auto* new_task = task_list->add_tasks();
@@ -4160,7 +4161,7 @@ void CoordinatorControl::AddCreateTask(pb::coordinator::TaskList* task_list, uin
   *(region_cmd_to_add->mutable_create_request()->mutable_region_definition()) = region_definition;
 }
 
-void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id) {
+void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id) {
   // this is delete_region task
   auto* delete_region_task = task_list->add_tasks();
 
@@ -4169,7 +4170,7 @@ void CoordinatorControl::AddDeleteTask(pb::coordinator::TaskList* task_list, uin
 }
 
 void CoordinatorControl::GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation& store_operation,
-                                                       uint64_t store_id, uint64_t region_id) {
+                                                       int64_t store_id, int64_t region_id) {
   auto* store_operation_delete = &store_operation;
   store_operation_delete->set_id(store_id);
   auto* region_cmd_delete = store_operation_delete->add_region_cmds();
@@ -4180,7 +4181,7 @@ void CoordinatorControl::GenDeleteRegionStoreOperation(pb::coordinator::StoreOpe
 }
 
 void CoordinatorControl::AddDeleteTaskWithCheck(
-    pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
+    pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
     const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer>& peers) {
   // this is delete_region task
   // precheck if region in RegionMap is REGION_NORMAL and
@@ -4198,7 +4199,7 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
 }
 
 // void CoordinatorControl::AddPurgeTask(pb::coordinator::TaskList*
-// task_list, uint64_t store_id, uint64_t region_id,
+// task_list, int64_t store_id, int64_t region_id,
 //                                       pb::coordinator_internal::MetaIncrement&
 //                                       meta_increment) {
 //   // this is purge_region task
@@ -4222,7 +4223,7 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
 //   region_cmd_to_purge->mutable_purge_request()->set_region_id(region_id);
 // }
 
-void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
+void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
                                            const pb::common::RegionDefinition& region_definition) {
   // this is change_peer task
   auto* new_task = task_list->add_tasks();
@@ -4236,8 +4237,8 @@ void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list,
   *(region_cmd_to_change->mutable_change_peer_request()->mutable_region_definition()) = region_definition;
 }
 
-void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
-                                               uint64_t region_id, const pb::common::Peer& new_leader_peer) {
+void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                               int64_t region_id, const pb::common::Peer& new_leader_peer) {
   // this is transfer_leader task
   auto* new_task = task_list->add_tasks();
   auto* store_operation_transfer = new_task->add_store_operations();
@@ -4252,8 +4253,8 @@ void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_l
   *(region_cmd_to_transfer->mutable_transfer_leader_request()->mutable_peer()) = new_leader_peer;
 }
 
-void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                      uint64_t merge_to_region_id) {
+void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
+                                      int64_t merge_to_region_id) {
   // build merege task
   auto* merge_task = task_list->add_tasks();
   auto* store_operation_merge = merge_task->add_store_operations();
@@ -4268,8 +4269,8 @@ void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, uint
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
 
-void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint64_t store_id, uint64_t region_id,
-                                      uint64_t split_to_region_id, const std::string& water_shed_key,
+void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
+                                      int64_t split_to_region_id, const std::string& water_shed_key,
                                       bool store_create_region) {
   // build split_region task
   auto* split_region_task = task_list->add_tasks();
@@ -4295,7 +4296,7 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, uint
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
 
-void CoordinatorControl::AddCheckSplitResultTask(pb::coordinator::TaskList* task_list, uint64_t split_to_region_id) {
+void CoordinatorControl::AddCheckSplitResultTask(pb::coordinator::TaskList* task_list, int64_t split_to_region_id) {
   // build split_region task
   auto* split_result_check_task = task_list->add_tasks();
   auto* split_result_check = split_result_check_task->mutable_pre_check();
@@ -4304,8 +4305,8 @@ void CoordinatorControl::AddCheckSplitResultTask(pb::coordinator::TaskList* task
   split_result_check->mutable_region_check()->set_state(pb::common::RegionState::REGION_NORMAL);
 }
 
-void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
-                                                 uint64_t region_id) {
+void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                                 int64_t region_id) {
   // build check_vector_index task
   auto* check_vector_task = task_list->add_tasks();
   auto* region_check = check_vector_task->mutable_pre_check();
@@ -4318,8 +4319,8 @@ void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task
   region_check->mutable_store_region_check()->set_is_ready(true);
 }
 
-void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
-                                                uint64_t region_id) {
+void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                                int64_t region_id) {
   // build check_vector_index task
   auto* load_vector_task = task_list->add_tasks();
   auto* region_check = load_vector_task->mutable_pre_check();
@@ -4340,8 +4341,8 @@ void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
 
-void CoordinatorControl::AddCheckStoreRegionTask(pb::coordinator::TaskList* task_list, uint64_t store_id,
-                                                 uint64_t region_id) {
+void CoordinatorControl::AddCheckStoreRegionTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                                 int64_t region_id) {
   // build check_vector_index task
   auto* check_region_task = task_list->add_tasks();
   auto* region_check = check_region_task->mutable_pre_check();
@@ -4383,8 +4384,8 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
     }
 
     if (region_check.peers_size() > 0) {
-      std::vector<uint64_t> peers_to_check;
-      std::vector<uint64_t> peers_of_region;
+      std::vector<int64_t> peers_to_check;
+      std::vector<int64_t> peers_of_region;
 
       for (const auto& it : region_check.peers()) {
         peers_to_check.push_back(it.store_id());
@@ -4443,8 +4444,8 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
     }
 
     if (region_check.peers_size() > 0) {
-      std::vector<uint64_t> peers_to_check;
-      std::vector<uint64_t> peers_of_region;
+      std::vector<int64_t> peers_to_check;
+      std::vector<int64_t> peers_of_region;
 
       for (const auto& it : region_check.peers()) {
         peers_to_check.push_back(it.store_id());
@@ -4575,7 +4576,7 @@ butil::Status CoordinatorControl::ProcessTaskList() {
 
   AtomicGuard atomic_guard(is_processing_task_list_);
 
-  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map;
+  butil::FlatMap<int64_t, pb::coordinator::TaskList> task_list_map;
   task_list_map.init(100);
   auto ret = task_list_map_.GetRawMapCopy(task_list_map);
   if (ret < 0) {
@@ -4612,9 +4613,9 @@ butil::Status CoordinatorControl::ProcessTaskList() {
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CleanTaskList(uint64_t task_list_id,
+butil::Status CoordinatorControl::CleanTaskList(int64_t task_list_id,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
-  butil::FlatMap<uint64_t, pb::coordinator::TaskList> task_list_map;
+  butil::FlatMap<int64_t, pb::coordinator::TaskList> task_list_map;
   task_list_map.init(100);
   auto ret = task_list_map_.GetRawMapCopy(task_list_map);
   if (ret < 0) {

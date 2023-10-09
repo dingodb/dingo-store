@@ -40,7 +40,7 @@ namespace dingodb {
 
 struct VersionListener {
   std::atomic_int ref_count;
-  std::atomic_uint64_t version;
+  std::atomic_int64_t version;
   bthread::Mutex mutex;
   bthread::ConditionVariable condition;
 };
@@ -52,27 +52,27 @@ class VersionService {
   VersionService(const VersionService&) = delete;
   VersionService& operator=(const VersionService&) = delete;
 
-  int AddListenableVersion(VersionType type, uint64_t id, uint64_t version);
-  int DelListenableVersion(VersionType type, uint64_t id);
+  int AddListenableVersion(VersionType type, int64_t id, int64_t version);
+  int DelListenableVersion(VersionType type, int64_t id);
 
-  uint64_t GetCurrentVersion(VersionType type, uint64_t id);
-  uint64_t GetNewVersion(VersionType type, uint64_t id, uint64_t curr_version, uint wait_seconds);
+  int64_t GetCurrentVersion(VersionType type, int64_t id);
+  int64_t GetNewVersion(VersionType type, int64_t id, int64_t curr_version, uint wait_seconds);
 
-  uint64_t IncVersion(VersionType type, uint64_t id);
-  int UpdateVersion(VersionType type, uint64_t id, uint64_t version);
+  int64_t IncVersion(VersionType type, int64_t id);
+  int UpdateVersion(VersionType type, int64_t id, int64_t version);
 
-  static int AddListenableVersion(VersionId id, uint64_t version) {
+  static int AddListenableVersion(VersionId id, int64_t version) {
     return GetInstance().AddListenableVersion(id.type(), id.id(), version);
   }
   static int DelListenableVersion(VersionId id) { return GetInstance().DelListenableVersion(id.type(), id.id()); }
 
-  static uint64_t GetCurrentVersion(VersionId id) { return GetInstance().GetCurrentVersion(id.type(), id.id()); }
-  static uint64_t GetNewVersion(VersionId id, uint64_t curr_version, uint wait_seconds) {
+  static int64_t GetCurrentVersion(VersionId id) { return GetInstance().GetCurrentVersion(id.type(), id.id()); }
+  static int64_t GetNewVersion(VersionId id, int64_t curr_version, uint wait_seconds) {
     return GetInstance().GetNewVersion(id.type(), id.id(), curr_version, wait_seconds);
   }
 
-  static uint64_t IncVersion(VersionId id) { return GetInstance().IncVersion(id.type(), id.id()); }
-  static int UpdateVersion(VersionId id, uint64_t version) {
+  static int64_t IncVersion(VersionId id) { return GetInstance().IncVersion(id.type(), id.id()); }
+  static int UpdateVersion(VersionId id, int64_t version) {
     return GetInstance().UpdateVersion(id.type(), id.id(), version);
   }
 
@@ -81,7 +81,7 @@ class VersionService {
   ~VersionService() = default;
 
   bthread::Mutex mutex_;
-  std::array<std::unordered_map<uint64_t, VersionListener*>, VersionType_ARRAYSIZE> version_listeners_;
+  std::array<std::unordered_map<int64_t, VersionListener*>, VersionType_ARRAYSIZE> version_listeners_;
 };
 
 class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {

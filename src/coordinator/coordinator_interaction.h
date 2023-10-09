@@ -64,7 +64,7 @@ class CoordinatorInteraction {
 
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& api_name, const Request& request, Response& response,
-                            uint64_t time_out_ms = 60000);
+                            int64_t time_out_ms = 60000);
 
   const ::google::protobuf::ServiceDescriptor* GetServiceDescriptor() const;
 
@@ -84,15 +84,15 @@ class CoordinatorInteraction {
 
   template <typename Request, typename Response>
   butil::Status SendRequestByList(const std::string& api_name, const Request& request, Response& response,
-                                  uint64_t time_out_ms);
+                                  int64_t time_out_ms);
   template <typename Request, typename Response>
   butil::Status SendRequestByService(const std::string& api_name, const Request& request, Response& response,
-                                     uint64_t time_out_ms);
+                                     int64_t time_out_ms);
 };
 
 template <typename Request, typename Response>
 butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, const Request& request,
-                                                  Response& response, uint64_t time_out_ms) {
+                                                  Response& response, int64_t time_out_ms) {
   if (use_service_name_) {
     return SendRequestByService(api_name, request, response, time_out_ms);
   } else {
@@ -102,7 +102,7 @@ butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, c
 
 template <typename Request, typename Response>
 butil::Status CoordinatorInteraction::SendRequestByService(const std::string& api_name, const Request& request,
-                                                           Response& response, uint64_t time_out_ms) {
+                                                           Response& response, int64_t time_out_ms) {
   const ::google::protobuf::ServiceDescriptor* service_desc = GetServiceDescriptor();
   if (service_desc == nullptr) {
     return butil::Status(pb::error::ENOT_SUPPORT, "Service type not found");
@@ -230,7 +230,7 @@ butil::Status CoordinatorInteraction::SendRequestByService(const std::string& ap
 
 template <typename Request, typename Response>
 butil::Status CoordinatorInteraction::SendRequestByList(const std::string& api_name, const Request& request,
-                                                        Response& response, uint64_t time_out_ms) {
+                                                        Response& response, int64_t time_out_ms) {
   const ::google::protobuf::ServiceDescriptor* service_desc = GetServiceDescriptor();
   if (service_desc == nullptr) {
     return butil::Status(pb::error::ENOT_SUPPORT, "Service type not found");

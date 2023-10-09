@@ -594,7 +594,7 @@ bool Server::Ip2Hostname(std::string& ip2hostname) {
   return true;
 }
 
-store::RegionPtr Server::GetRegion(uint64_t region_id) {
+store::RegionPtr Server::GetRegion(int64_t region_id) {
   if (store_meta_manager_ == nullptr) {
     return nullptr;
   }
@@ -617,7 +617,7 @@ std::vector<store::RegionPtr> Server::GetAllAliveRegion() {
 }
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
-                                                                              const uint64_t region_id,
+                                                                              const int64_t region_id,
                                                                               const std::string& region_name
                                                                               /*std::shared_ptr<Context>& ctx*/) {
   /**

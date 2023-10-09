@@ -52,7 +52,7 @@ void SendGetRegionCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 void SendCreateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendUpdateStore(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
-void SendStoreHearbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, uint64_t store_id);
+void SendStoreHearbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t store_id);
 void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
@@ -160,8 +160,8 @@ void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_int
 
 // debug
 void SendDebug();
-std::string EncodeUint64(uint64_t value);
-uint64_t DecodeUint64(const std::string& str);
+std::string EncodeUint64(int64_t value);
+int64_t DecodeUint64(const std::string& str);
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel);
 
 class Bthread {

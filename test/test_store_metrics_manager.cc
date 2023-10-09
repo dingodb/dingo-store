@@ -115,7 +115,7 @@ class StoreRegionMetricsTest : public testing::Test {
 
 std::shared_ptr<dingodb::RawRocksEngine> StoreRegionMetricsTest::engine = nullptr;
 
-dingodb::store::RegionPtr BuildRegion(uint64_t region_id, const std::string& raft_group_name,
+dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
                                       std::vector<std::string>& raft_addrs) {
   dingodb::pb::common::RegionDefinition region_definition;
   region_definition.set_id(region_id);

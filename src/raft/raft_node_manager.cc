@@ -23,12 +23,12 @@ RaftNodeManager::RaftNodeManager() { bthread_mutex_init(&mutex_, nullptr); }
 
 RaftNodeManager::~RaftNodeManager() { bthread_mutex_destroy(&mutex_); }
 
-bool RaftNodeManager::IsExist(uint64_t node_id) {
+bool RaftNodeManager::IsExist(int64_t node_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   return nodes_.find(node_id) != nodes_.end();
 }
 
-std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
+std::shared_ptr<RaftNode> RaftNodeManager::GetNode(int64_t node_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = nodes_.find(node_id);
   if (it == nodes_.end()) {
@@ -39,7 +39,7 @@ std::shared_ptr<RaftNode> RaftNodeManager::GetNode(uint64_t node_id) {
   return it->second;
 }
 
-void RaftNodeManager::AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node) {
+void RaftNodeManager::AddNode(int64_t node_id, std::shared_ptr<RaftNode> node) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (nodes_.find(node_id) != nodes_.end()) {
     DINGO_LOG(WARNING) << fmt::format("node {} already exist!", node_id);
@@ -49,7 +49,7 @@ void RaftNodeManager::AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node) 
   nodes_.insert(std::make_pair(node_id, node));
 }
 
-void RaftNodeManager::DeleteNode(uint64_t node_id) {
+void RaftNodeManager::DeleteNode(int64_t node_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   nodes_.erase(node_id);
 }

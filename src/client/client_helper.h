@@ -159,7 +159,7 @@ class Helper {
     return addrs;
   }
 
-  static std::string EncodeRegionRange(uint64_t partition_id) {
+  static std::string EncodeRegionRange(int64_t partition_id) {
     dingodb::Buf buf(8);
     buf.WriteLong(partition_id);
 
@@ -167,11 +167,11 @@ class Helper {
   }
 
   static std::string CalculateVectorMiddleKey(const std::string& start_key, const std::string& end_key) {
-    uint64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
-    uint64_t min_vector_id = dingodb::VectorCodec::DecodeVectorId(start_key);
-    uint64_t max_vector_id = dingodb::VectorCodec::DecodeVectorId(end_key);
-    max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
-    uint64_t mid_vector_id = min_vector_id + (max_vector_id - min_vector_id) / 2;
+    int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
+    int64_t min_vector_id = dingodb::VectorCodec::DecodeVectorId(start_key);
+    int64_t max_vector_id = dingodb::VectorCodec::DecodeVectorId(end_key);
+    max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
+    int64_t mid_vector_id = min_vector_id + (max_vector_id - min_vector_id) / 2;
 
     DINGO_LOG(INFO) << "mid_vector_id: " << mid_vector_id;
     std::string result;

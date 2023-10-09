@@ -193,7 +193,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
-  std::vector<uint64_t> vector_ids;
+  std::vector<int64_t> vector_ids;
   if (request->vector_with_ids_size() <= 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   } else {
@@ -337,8 +337,9 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
   }
 
   for (const auto& vector : request->vectors()) {
-    if (vector.id() == 0 || vector.id() == UINT64_MAX) {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is not allowed to be zero or UNINT64_MAX");
+    if (vector.id() == 0 || vector.id() == INT64_MAX || vector.id() < 0) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                           "Param vector id is not allowed to be zero or NINT64_MAX or netative");
     }
 
     if (vector.vector().float_values().empty()) {
@@ -369,7 +370,7 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
     return status;
   }
 
-  std::vector<uint64_t> vector_ids;
+  std::vector<int64_t> vector_ids;
   for (const auto& vector : request->vectors()) {
     vector_ids.push_back(vector.id());
   }
@@ -618,7 +619,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
 
-  uint64_t vector_id = 0;
+  int64_t vector_id = 0;
   status = storage_->VectorGetBorderId(region->Id(), region->RawRange(), request->get_min(), vector_id);
   if (!status.ok()) {
     auto* err = response->mutable_error();
@@ -856,7 +857,7 @@ butil::Status IndexServiceImpl::ValidateVectorCountRequest(const dingodb::pb::in
     return status;
   }
 
-  std::vector<uint64_t> vector_ids;
+  std::vector<int64_t> vector_ids;
   if (request->vector_id_start() != 0) {
     vector_ids.push_back(request->vector_id_start());
   }
@@ -866,8 +867,8 @@ butil::Status IndexServiceImpl::ValidateVectorCountRequest(const dingodb::pb::in
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
-static pb::common::Range GenCountRange(store::RegionPtr region, uint64_t start_vector_id,  // NOLINT
-                                       uint64_t end_vector_id) {                           // NOLINT
+static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_vector_id,  // NOLINT
+                                       int64_t end_vector_id) {                           // NOLINT
   pb::common::Range range;
 
   if (start_vector_id == 0) {
@@ -937,7 +938,7 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
     return;
   }
 
-  uint64_t count = 0;
+  int64_t count = 0;
   status = storage_->VectorCount(region->Id(),
                                  GenCountRange(region, request->vector_id_start(), request->vector_id_end()), count);
   if (!status.ok()) {
@@ -1050,7 +1051,7 @@ butil::Status IndexServiceImpl::ValidateVectorSearchDebugRequest(
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
-  std::vector<uint64_t> vector_ids;
+  std::vector<int64_t> vector_ids;
   if (request->vector_with_ids_size() <= 0) {
     if (request->vector().id() > 0) {
       vector_ids.push_back(request->vector().id());

@@ -64,7 +64,7 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     return;
   }
 
-  auto error_func = [response](uint64_t command_id, ::dingodb::pb::coordinator::RegionCmdType region_cmd_type,
+  auto error_func = [response](int64_t command_id, ::dingodb::pb::coordinator::RegionCmdType region_cmd_type,
                                butil::Status status) {
     auto* result = response->add_region_cmd_results();
     result->set_region_cmd_id(command_id);

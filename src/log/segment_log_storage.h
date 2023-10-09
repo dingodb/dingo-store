@@ -41,7 +41,7 @@ struct LogEntry {
 
 class BAIDU_CACHELINE_ALIGNMENT Segment {
  public:
-  Segment(uint64_t region_id, const std::string& path, const int64_t first_index, int checksum_type)
+  Segment(int64_t region_id, const std::string& path, const int64_t first_index, int checksum_type)
       : path_(path),
         region_id_(region_id),
         bytes_(0),
@@ -51,7 +51,7 @@ class BAIDU_CACHELINE_ALIGNMENT Segment {
         first_index_(first_index),
         last_index_(first_index - 1),
         checksum_type_(checksum_type) {}
-  Segment(uint64_t region_id, const std::string& path, const int64_t first_index, const int64_t last_index,
+  Segment(int64_t region_id, const std::string& path, const int64_t first_index, const int64_t last_index,
           int checksum_type)
       : path_(path),
         region_id_(region_id),
@@ -116,11 +116,11 @@ class BAIDU_CACHELINE_ALIGNMENT Segment {
     int64_t term;
   };
 
-  int LoadEntry(off_t offset, EntryHeader* head, butil::IOBuf* body, size_t size_hint) const;
+  int LoadEntry(off_t offset, EntryHeader* head, butil::IOBuf* data, size_t size_hint) const;
   int GetMeta(int64_t index, LogMeta* meta) const;
   int TruncateMetaAndGetLast(int64_t last);
 
-  uint64_t region_id_;
+  int64_t region_id_;
 
   std::string path_;
   int64_t bytes_;
@@ -146,7 +146,7 @@ class SegmentLogStorage {
  public:
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
-  explicit SegmentLogStorage(const std::string& path, uint64_t region_id, uint64_t max_segment_size,
+  explicit SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
                              bool enable_sync = true)
       : path_(path),
         region_id_(region_id),
@@ -164,7 +164,7 @@ class SegmentLogStorage {
   // init logstorage, check consistency and integrity
   int Init(braft::ConfigurationManager* configuration_manager);
 
-  uint64_t RegionId() const { return region_id_; }
+  int64_t RegionId() const { return region_id_; }
 
   // first log index in log
   int64_t FirstLogIndex();
@@ -226,7 +226,7 @@ class SegmentLogStorage {
   void TruncateActualPrefixLog();
 
   std::string path_;
-  uint64_t region_id_;
+  int64_t region_id_;
 
   butil::atomic<int64_t> first_log_index_;
   butil::atomic<int64_t> last_log_index_;
@@ -300,7 +300,7 @@ class SegmentLogStorageWrapper : public braft::LogStorage {
   void sync() { log_storage_->Sync(); }
 
  private:
-  uint64_t region_id_;
+  int64_t region_id_;
   std::shared_ptr<SegmentLogStorage> log_storage_;
 };
 

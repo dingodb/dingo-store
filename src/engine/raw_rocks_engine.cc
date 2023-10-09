@@ -387,8 +387,8 @@ std::shared_ptr<RawRocksEngine::ColumnFamily> RawRocksEngine::GetColumnFamily(co
   return iter->second;
 }
 
-std::vector<uint64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_name,
-                                                          std::vector<pb::common::Range>& ranges) {
+std::vector<int64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_name,
+                                                         std::vector<pb::common::Range>& ranges) {
   rocksdb::SizeApproximationOptions options;
 
   rocksdb::Range inner_ranges[ranges.size()];
@@ -400,7 +400,7 @@ std::vector<uint64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_
   uint64_t sizes[ranges.size()];
   db_->GetApproximateSizes(options, GetColumnFamily(cf_name)->GetHandle(), inner_ranges, ranges.size(), sizes);
 
-  std::vector<uint64_t> result;
+  std::vector<int64_t> result;
   result.reserve(ranges.size());
   for (int i = 0; i < ranges.size(); ++i) {
     result.push_back(sizes[i]);
@@ -421,9 +421,9 @@ void SetCfConfigurationElement(const std::map<std::string, std::string>& cf_conf
     try {
       if (std::is_same_v<size_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
         value = std::stoul(value_string);
-      } else if (std::is_same_v<uint64_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
-        if (std::is_same_v<uint64_t, unsigned long long>) {  // NOLINT
-          value = std::stoull(value_string);
+      } else if (std::is_same_v<int64_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
+        if (std::is_same_v<int64_t, unsigned long long>) {  // NOLINT
+          value = std::stoll(value_string);
         } else {
           value = std::stoul(value_string);
         }
@@ -432,14 +432,14 @@ void SetCfConfigurationElement(const std::map<std::string, std::string>& cf_conf
       } else if (std::is_same_v<double, std::remove_reference_t<std::remove_cv_t<T>>>) {
         value = std::stod(value_string);
       } else {
-        DINGO_LOG(WARNING) << fmt::format("only support int size_t uint64_t");
+        DINGO_LOG(WARNING) << fmt::format("only support int size_t int64_t");
         value = default_value;
       }
     } catch (const std::invalid_argument& e) {
-      DINGO_LOG(ERROR) << fmt::format("{} trans string to  (int size_t uint64_t) failed : {}", value_string, e.what());
+      DINGO_LOG(ERROR) << fmt::format("{} trans string to  (int size_t int64_t) failed : {}", value_string, e.what());
       value = default_value;
     } catch (const std::out_of_range& e) {
-      DINGO_LOG(ERROR) << fmt::format("{} trans string to  (int size_t uint64_t) failed : {}", value_string, e.what());
+      DINGO_LOG(ERROR) << fmt::format("{} trans string to  (int size_t int64_t) failed : {}", value_string, e.what());
       value = default_value;
     }
   }
@@ -804,13 +804,13 @@ butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> 
 }
 
 butil::Status RawRocksEngine::Reader::KvCount(const std::string& start_key, const std::string& end_key,
-                                              uint64_t& count) {
+                                              int64_t& count) {
   auto snapshot = std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
   return KvCount(snapshot, start_key, end_key, count);
 }
 
 butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                                              const std::string& end_key, uint64_t& count) {
+                                              const std::string& end_key, int64_t& count) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     DINGO_LOG(ERROR) << fmt::format("start_key empty not support");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");

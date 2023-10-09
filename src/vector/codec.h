@@ -24,14 +24,14 @@ namespace dingodb {
 
 class VectorCodec {
  public:
-  static void EncodeVectorKey(uint64_t partition_id, uint64_t vector_id, std::string& result);
+  static void EncodeVectorKey(int64_t partition_id, int64_t vector_id, std::string& result);
   // Foramt: prefix/partition_id/vector_id
-  static void EncodeVectorData(uint64_t partition_id, uint64_t vector_id, std::string& result);
-  static void EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, std::string& result);
-  static void EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, std::string& result);
+  static void EncodeVectorData(int64_t partition_id, int64_t vector_id, std::string& result);
+  static void EncodeVectorScalar(int64_t partition_id, int64_t vector_id, std::string& result);
+  static void EncodeVectorTable(int64_t partition_id, int64_t vector_id, std::string& result);
 
-  static uint64_t DecodeVectorId(const std::string& value);
-  static uint64_t DecodePartitionId(const std::string& value);
+  static int64_t DecodeVectorId(const std::string& value);
+  static int64_t DecodePartitionId(const std::string& value);
 
   static std::string FillVectorDataPrefix(const std::string& value);
   static std::string FillVectorScalarPrefix(const std::string& value);

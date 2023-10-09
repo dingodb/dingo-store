@@ -33,15 +33,15 @@ class RaftNodeManager {
   RaftNodeManager(const RaftNodeManager &) = delete;
   const RaftNodeManager &operator=(const RaftNodeManager &) = delete;
 
-  bool IsExist(uint64_t node_id);
-  std::shared_ptr<RaftNode> GetNode(uint64_t node_id);
-  void AddNode(uint64_t node_id, std::shared_ptr<RaftNode> node);
-  void DeleteNode(uint64_t node_id);
+  bool IsExist(int64_t node_id);
+  std::shared_ptr<RaftNode> GetNode(int64_t node_id);
+  void AddNode(int64_t node_id, std::shared_ptr<RaftNode> node);
+  void DeleteNode(int64_t node_id);
 
  private:
   bthread_mutex_t mutex_;
 
-  std::map<uint64_t, std::shared_ptr<RaftNode> > nodes_;
+  std::map<int64_t, std::shared_ptr<RaftNode> > nodes_;
 };
 
 }  // namespace dingodb

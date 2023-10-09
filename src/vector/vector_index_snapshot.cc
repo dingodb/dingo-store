@@ -48,7 +48,7 @@ namespace dingodb {
 
 namespace vector_index {
 
-SnapshotMeta::SnapshotMeta(uint64_t vector_index_id, const std::string& path)
+SnapshotMeta::SnapshotMeta(int64_t vector_index_id, const std::string& path)
     : vector_index_id_(vector_index_id), path_(path) {}
 
 SnapshotMeta::~SnapshotMeta() {
@@ -61,7 +61,7 @@ bool SnapshotMeta::Init() {
   std::filesystem::path path(path_);
   path.filename();
 
-  uint64_t snapshot_index_id = 0;
+  int64_t snapshot_index_id = 0;
   // int match = sscanf(path.filename().c_str(), "snapshot_%020" PRId64, &snapshot_index_id);  // NOLINT
   try {
     char* endptr;
@@ -131,7 +131,7 @@ std::vector<SnapshotMetaPtr> SnapshotMetaSet::GetSnapshots() {
   return result;
 }
 
-bool SnapshotMetaSet::IsExistSnapshot(uint64_t snapshot_log_id) {
+bool SnapshotMetaSet::IsExistSnapshot(int64_t snapshot_log_id) {
   auto snapshot = GetLastSnapshot();
   if (snapshot == nullptr) {
     return false;

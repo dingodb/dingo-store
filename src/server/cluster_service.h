@@ -36,7 +36,7 @@ class ClusterStatImpl : public pb::cluster::ClusterStat, public brpc::Tabbed {
  private:
   std::shared_ptr<CoordinatorControl> controller_;
   static std::string GetTabHead();
-  static bool GetRegionInfo(uint64_t region_id, const pb::common::RegionMap& region_map, pb::common::Region& result);
+  static bool GetRegionInfo(int64_t region_id, const pb::common::RegionMap& region_map, pb::common::Region& result);
   static void PrintSchema(std::ostream& os, const std::string& schema_name);
   static void PrintRegionNode(std::ostream& os, const pb::common::Region& region);
   static void PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition);

@@ -20,24 +20,23 @@ option java_package = "io.dingodb.fileservice";
 option cc_generic_services = true;
 
 message GetFileRequest {
-  uint64 reader_id = 1;
+  int64 reader_id = 1;
   string filename = 2;
-  uint64 offset = 3;
-  uint64 size = 4;
+  int64 offset = 3;
+  int64 size = 4;
 }
 
 message GetFileResponse {
   // Data is in attachment
   bool eof = 1;
-  uint64 read_size = 2;
+  int64 read_size = 2;
 }
 
 message CleanFileReaderRequest {
-  uint64 reader_id = 1;
+  int64 reader_id = 1;
 }
 
-message CleanFileReaderResponse {
-}
+message CleanFileReaderResponse {}
 
 service FileService {
   rpc GetFile(GetFileRequest) returns (GetFileResponse);

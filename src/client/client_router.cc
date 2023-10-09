@@ -22,7 +22,7 @@
 namespace client {
 
 // Query region
-static dingodb::pb::common::Region SendQueryRegion(uint64_t region_id) {
+static dingodb::pb::common::Region SendQueryRegion(int64_t region_id) {
   dingodb::pb::coordinator::QueryRegionRequest request;
   dingodb::pb::coordinator::QueryRegionResponse response;
 
@@ -43,11 +43,11 @@ bool RegionEntry::IsDirty() { return is_dirty_.load(); }
 
 void RegionEntry::SetDirty(bool dirty) { is_dirty_.store(dirty); }
 
-uint64_t RegionEntry::RegionId() { return region_.id(); }
+int64_t RegionEntry::RegionId() { return region_.id(); }
 
-uint64_t RegionEntry::PartitionId() { return region_.definition().part_id(); }
+int64_t RegionEntry::PartitionId() { return region_.definition().part_id(); }
 
-uint64_t RegionEntry::TableId() { return region_.definition().table_id(); }
+int64_t RegionEntry::TableId() { return region_.definition().table_id(); }
 
 dingodb::pb::common::Region& RegionEntry::Region() { return region_; }
 void RegionEntry::SetRegion(const dingodb::pb::common::Region& region) { region_ = region; }
@@ -103,7 +103,7 @@ void RegionRouter::AddRegionEntry(RegionEntryPtr region) {
   route_map_.insert_or_assign(region->Range().start_key(), region);
 }
 
-RegionEntryPtr RegionRouter::AddRegionEntry(uint64_t region_id) {
+RegionEntryPtr RegionRouter::AddRegionEntry(int64_t region_id) {
   auto region = SendQueryRegion(region_id);
   if (region.id() == 0) {
     return nullptr;
@@ -142,7 +142,7 @@ RegionEntryPtr RegionRouter::QueryRegionEntry(const std::string& key) {
   return nullptr;
 }
 
-RegionEntryPtr RegionRouter::QueryRegionEntry(uint64_t region_id) {
+RegionEntryPtr RegionRouter::QueryRegionEntry(int64_t region_id) {
   RegionEntryPtr region_entry;
 
   {
@@ -167,7 +167,7 @@ RegionEntryPtr RegionRouter::QueryRegionEntry(uint64_t region_id) {
   return region_entry;
 }
 
-std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByTable(uint64_t table_id) {
+std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByTable(int64_t table_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<RegionEntryPtr> region_entries;
@@ -183,7 +183,7 @@ std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByTable(uint64_t table
   return region_entries;
 }
 
-std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByPartition(uint64_t partition_id) {
+std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByPartition(int64_t partition_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<RegionEntryPtr> region_entries;
@@ -199,7 +199,7 @@ std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByPartition(uint64_t p
   return region_entries;
 }
 
-dingodb::pb::store::Context RegionRouter::GenConext(uint64_t region_id) {
+dingodb::pb::store::Context RegionRouter::GenConext(int64_t region_id) {
   auto region_entry = QueryRegionEntry(region_id);
   if (region_entry != nullptr) {
     return region_entry->GenConext();

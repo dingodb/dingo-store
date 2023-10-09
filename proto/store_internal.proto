@@ -36,15 +36,15 @@ message RaftMeta {
 }
 
 message RegionSplitRecord {
-  uint64 region_id = 1;
+  int64 region_id = 1;
   string split_time = 2;
 }
 
 message Region {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.common.RegionType region_type = 10;
   dingodb.pb.common.RegionDefinition definition = 20;
-  uint64 leader_id = 30;
+  int64 leader_id = 30;
   dingodb.pb.common.StoreRegionState state = 40;
   repeated dingodb.pb.common.StoreRegionState history_states = 50;
 
@@ -52,25 +52,25 @@ message Region {
 
   bool temporary_disable_change = 69;  // store local control
   bool disable_change = 70;  // external control, e.g. coordinator/store, region split/merge/conf_change switch
-  uint64 last_split_timestamp = 71;
-  uint64 parent_id = 72;
+  int64 last_split_timestamp = 71;
+  int64 parent_id = 72;
   repeated RegionSplitRecord childs = 73;
-  uint64 snapshot_epoch_version = 74;  // latest region raft snapshot epoch version
+  int64 snapshot_epoch_version = 74;  // latest region raft snapshot epoch version
 }
 
 message VectorIndexMeta {
-  uint64 id = 1;
-  uint64 version = 2;
+  int64 id = 1;
+  int64 version = 2;
   int32 type = 3;
   int32 status = 4;
-  uint64 apply_log_id = 5;
-  uint64 snapshot_log_id = 6;
+  int64 apply_log_id = 5;
+  int64 snapshot_log_id = 6;
   bool is_hold_vector_index = 10;
 }
 
 message VectorIndexSnapshotMeta {
-  uint64 vector_index_id = 1;
-  uint64 snapshot_log_id = 2;
+  int64 vector_index_id = 1;
+  int64 snapshot_log_id = 2;
   dingodb.pb.common.Range range = 3;
 }
 
@@ -79,8 +79,8 @@ message RaftSnapshotRegionMeta {
   dingodb.pb.common.RegionEpoch epoch = 1;
   dingodb.pb.common.Range range = 2;
 
-  uint64 term = 3;
-  uint64 log_index = 4;
+  int64 term = 3;
+  int64 log_index = 4;
 }
 
 message LogMeta {

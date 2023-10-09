@@ -53,37 +53,37 @@ class Storage {
   butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 const std::vector<std::string>& expect_values, bool is_atomic);
 
-  butil::Status KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, uint64_t region_id,
-                            const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
+  butil::Status KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, int64_t region_id,
+                            const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
                             bool disable_auto_release, bool disable_coprocessor,
                             const pb::store::Coprocessor& coprocessor, std::string* scan_id,
                             std::vector<pb::common::KeyValue>* kvs);
 
-  static butil::Status KvScanContinue(std::shared_ptr<Context> ctx, const std::string& scan_id, uint64_t max_fetch_cnt,
+  static butil::Status KvScanContinue(std::shared_ptr<Context> ctx, const std::string& scan_id, int64_t max_fetch_cnt,
                                       std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
 
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors);
-  butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids);
+  butil::Status VectorDelete(std::shared_ptr<Context> ctx, const std::vector<int64_t>& ids);
 
   butil::Status VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                  std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                   std::vector<pb::index::VectorWithDistanceResult>& results);
-  butil::Status VectorGetBorderId(uint64_t region_id, const pb::common::Range& region_range, bool get_min,
-                                  uint64_t& vector_id);
+  butil::Status VectorGetBorderId(int64_t region_id, const pb::common::Range& region_range, bool get_min,
+                                  int64_t& vector_id);
   butil::Status VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
-  butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+  butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
                                        VectorIndexWrapperPtr vector_index_wrapper,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
-  butil::Status VectorCount(uint64_t region_id, const pb::common::Range& range, uint64_t& count);
+  butil::Status VectorCount(int64_t region_id, const pb::common::Range& range, int64_t& count);
 
   static butil::Status VectorCalcDistance(
-      std::shared_ptr<Context> ctx, uint64_t region_id, const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
+      std::shared_ptr<Context> ctx, int64_t region_id, const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
       std::vector<std::vector<float>>& distances,                            // NOLINT
       std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,    // NOLINT
       std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);  // NOLINT
@@ -94,7 +94,7 @@ class Storage {
                                        int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
                                        int64_t& search_time_us);
 
-  butil::Status ValidateLeader(uint64_t region_id);
+  butil::Status ValidateLeader(int64_t region_id);
 
  private:
   std::shared_ptr<Engine> engine_;

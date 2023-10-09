@@ -35,14 +35,14 @@ namespace dingodb {
 // This is for IdEpoch with atomic GetNextId function
 // all membber functions return 1 if success, return -1 if failed
 // all inner functions return 0 if success, return -1 if failed
-using DingoSafeIdEpochMapBase = DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
+using DingoSafeIdEpochMapBase = DingoSafeMap<int64_t, pb::coordinator_internal::IdEpochInternal>;
 class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
  public:
-  using TypeFlatMap = butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
+  using TypeFlatMap = butil::FlatMap<int64_t, pb::coordinator_internal::IdEpochInternal>;
   using TypeSafeMap = butil::DoublyBufferedData<TypeFlatMap>;
   using TypeScopedPtr = typename TypeSafeMap::ScopedPtr;
 
-  int GetPresentId(const uint64_t &key, uint64_t &value) {
+  int GetPresentId(const int64_t &key, int64_t &value) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
@@ -60,7 +60,7 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
     return 1;
   }
 
-  uint64_t GetPresentId(const uint64_t &key) {
+  int64_t GetPresentId(const int64_t &key) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
@@ -77,7 +77,7 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
     return 0;
   }
 
-  int GetNextId(const uint64_t &key, uint64_t &value) {
+  int GetNextId(const int64_t &key, int64_t &value) {
     if (safe_map.Modify(InnerGetNextId, key, value) > 0) {
       return 1;
     } else {
@@ -85,7 +85,7 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
     }
   }
 
-  int UpdatePresentId(const uint64_t &key, const uint64_t &value) {
+  int UpdatePresentId(const int64_t &key, const int64_t &value) {
     if (safe_map.Modify(InnerUpdatePresentId, key, value) > 0) {
       return 1;
     } else {
@@ -94,10 +94,10 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
   }
 
  private:
-  static size_t InnerGetNextId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+  static size_t InnerGetNextId(TypeFlatMap &map, const int64_t &key, const int64_t &value) {
     // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
     // const_cast to modify the input parameter here
-    auto &value_mod = const_cast<uint64_t &>(value);
+    auto &value_mod = const_cast<int64_t &>(value);
 
     auto *value_ptr = map.seek(key);
     if (value_ptr == nullptr) {
@@ -117,7 +117,7 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
     return 1;
   }
 
-  static size_t InnerUpdatePresentId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+  static size_t InnerUpdatePresentId(TypeFlatMap &map, const int64_t &key, const int64_t &value) {
     auto *value_ptr = map.seek(key);
     if (value_ptr == nullptr) {
       // if not exist, construct a new internal with input value
@@ -138,14 +138,14 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
   }
 };
 
-using DingoSafeSchemaMapBase = DingoSafeMap<uint64_t, pb::coordinator_internal::SchemaInternal>;
+using DingoSafeSchemaMapBase = DingoSafeMap<int64_t, pb::coordinator_internal::SchemaInternal>;
 class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
  public:
-  using TypeFlatMap = butil::FlatMap<uint64_t, pb::coordinator_internal::IdEpochInternal>;
+  using TypeFlatMap = butil::FlatMap<int64_t, pb::coordinator_internal::IdEpochInternal>;
   using TypeSafeMap = butil::DoublyBufferedData<TypeFlatMap>;
   using TypeScopedPtr = typename TypeSafeMap::ScopedPtr;
 
-  int GetPresentId(const uint64_t &key, uint64_t &value) {
+  int GetPresentId(const int64_t &key, int64_t &value) {
     TypeScopedPtr ptr;
     if (safe_map.Read(&ptr) != 0) {
       return -1;
@@ -163,7 +163,7 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
     return 1;
   }
 
-  int GetNextId(const uint64_t &key, uint64_t &value) {
+  int GetNextId(const int64_t &key, int64_t &value) {
     if (safe_map.Modify(InnerGetNextId, key, value) > 0) {
       return 1;
     } else {
@@ -171,7 +171,7 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
     }
   }
 
-  int UpdatePresentId(const uint64_t &key, const uint64_t &value) {
+  int UpdatePresentId(const int64_t &key, const int64_t &value) {
     if (safe_map.Modify(InnerUpdatePresentId, key, value) > 0) {
       return 1;
     } else {
@@ -181,15 +181,15 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
 
   // Erase
   // erase key-value pair from map
-  // int Erase(const uint64_t &key) {
-  //   return DingoSafeMap<uint64_t, pb::coordinator_internal::IdEpochInternal>::Erase(key);
+  // int Erase(const int64_t &key) {
+  //   return DingoSafeMap<int64_t, pb::coordinator_internal::IdEpochInternal>::Erase(key);
   // }
 
  private:
-  static size_t InnerGetNextId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+  static size_t InnerGetNextId(TypeFlatMap &map, const int64_t &key, const int64_t &value) {
     // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
     // const_cast to modify the input parameter here
-    auto &value_mod = const_cast<uint64_t &>(value);
+    auto &value_mod = const_cast<int64_t &>(value);
 
     auto *value_ptr = map.seek(key);
     if (value_ptr == nullptr) {
@@ -209,7 +209,7 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
     return 1;
   }
 
-  static size_t InnerUpdatePresentId(TypeFlatMap &map, const uint64_t &key, const uint64_t &value) {
+  static size_t InnerUpdatePresentId(TypeFlatMap &map, const int64_t &key, const int64_t &value) {
     auto *value_ptr = map.seek(key);
     if (value_ptr == nullptr) {
       // if not exist, construct a new internal with input value
@@ -236,9 +236,9 @@ template <typename T>
 class MetaSafeMapStorage {
  public:
   const std::string internal_prefix;
-  MetaSafeMapStorage(DingoSafeMap<uint64_t, T> *elements_ptr)
+  MetaSafeMapStorage(DingoSafeMap<int64_t, T> *elements_ptr)
       : internal_prefix(std::string("meta_map_safe") + typeid(T).name()), elements_(elements_ptr){};
-  MetaSafeMapStorage(DingoSafeMap<uint64_t, T> *elements_ptr, const std::string &prefix)
+  MetaSafeMapStorage(DingoSafeMap<int64_t, T> *elements_ptr, const std::string &prefix)
       : internal_prefix(std::string("meta_map_safe") + prefix), elements_(elements_ptr){};
   ~MetaSafeMapStorage() = default;
 
@@ -255,13 +255,13 @@ class MetaSafeMapStorage {
     return true;
   }
 
-  bool IsExist(uint64_t id) {
+  bool IsExist(int64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = elements_->find(id);
     return static_cast<bool>(it != elements_->end());
   }
 
-  uint64_t ParseId(const std::string &str) {
+  int64_t ParseId(const std::string &str) {
     if (str.size() <= internal_prefix.size()) {
       DINGO_LOG(ERROR) << "Parse id failed, invalid str:[" << str << "], prefix:[" << internal_prefix << "]";
       return 0;
@@ -270,18 +270,18 @@ class MetaSafeMapStorage {
     // std::string s(str.c_str() + internal_prefix.size() + 1);
     std::string s = str.substr(internal_prefix.size() + 1);
     try {
-      return std::stoull(s, nullptr, 10);
+      return std::stoll(s, nullptr, 10);
     } catch (std::invalid_argument &e) {
-      DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
+      DINGO_LOG(ERROR) << "string to int64_t failed: " << e.what();
     }
 
     return 0;
   }
 
-  // std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
-  std::string GenKey(uint64_t id) { return internal_prefix + "_" + std::to_string(id); }
+  // std::string GenKey(int64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
+  std::string GenKey(int64_t id) { return internal_prefix + "_" + std::to_string(id); }
 
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(int64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
     T value;
     if (elements_->Get(id, value) < 0) {
@@ -308,7 +308,7 @@ class MetaSafeMapStorage {
   }
 
   std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    butil::FlatMap<uint64_t, T> temp_map;
+    butil::FlatMap<int64_t, T> temp_map;
     temp_map.init(10000);
     elements_->GetRawMapCopy(temp_map);
 
@@ -325,11 +325,11 @@ class MetaSafeMapStorage {
 
   void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
     // std::unique_lock<std::shared_mutex> lock(mutex_);
-    std::vector<uint64_t> key_list;
+    std::vector<int64_t> key_list;
     std::vector<T> value_list;
 
     for (const auto &kv : kvs) {
-      uint64_t id = ParseId(kv.key());
+      int64_t id = ParseId(kv.key());
       T element;
       element.ParsePartialFromArray(kv.value().data(), kv.value().size());
       // elements_->insert_or_assign(id, element);
@@ -346,8 +346,8 @@ class MetaSafeMapStorage {
 
  private:
   // Coordinator all region meta data in this server.
-  // std::map<uint64_t, std::shared_ptr<T>> *elements_;
-  DingoSafeMap<uint64_t, T> *elements_;
+  // std::map<int64_t, std::shared_ptr<T>> *elements_;
+  DingoSafeMap<int64_t, T> *elements_;
 };
 
 // MetaSafeStringMapStorage is a template class for meta storage
@@ -469,9 +469,9 @@ template <typename T>
 class MetaMapStorage {
  public:
   const std::string internal_prefix;
-  MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr)
+  MetaMapStorage(butil::FlatMap<int64_t, T> *elements_ptr)
       : internal_prefix(std::string("meta_map_flat") + typeid(T).name()), elements_(elements_ptr){};
-  MetaMapStorage(butil::FlatMap<uint64_t, T> *elements_ptr, const std::string &prefix)
+  MetaMapStorage(butil::FlatMap<int64_t, T> *elements_ptr, const std::string &prefix)
       : internal_prefix(std::string("meta_map_flat") + prefix), elements_(elements_ptr){};
   ~MetaMapStorage() = default;
 
@@ -488,13 +488,13 @@ class MetaMapStorage {
     return true;
   }
 
-  bool IsExist(uint64_t id) {
+  bool IsExist(int64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = elements_->find(id);
     return static_cast<bool>(it != elements_->end());
   }
 
-  uint64_t ParseId(const std::string &str) {
+  int64_t ParseId(const std::string &str) {
     if (str.size() <= internal_prefix.size()) {
       DINGO_LOG(ERROR) << "Parse id failed, invalid str " << str;
       return 0;
@@ -503,18 +503,18 @@ class MetaMapStorage {
     // std::string s(str.c_str() + internal_prefix.size() + 1);
     std::string s = str.substr(internal_prefix.size() + 1);
     try {
-      return std::stoull(s, nullptr, 10);
+      return std::stoll(s, nullptr, 10);
     } catch (std::invalid_argument &e) {
-      DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
+      DINGO_LOG(ERROR) << "string to int64_t failed: " << e.what();
     }
 
     return 0;
   }
 
-  // std::string GenKey(uint64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
-  std::string GenKey(uint64_t id) { return internal_prefix + "_" + std::to_string(id); }
+  // std::string GenKey(int64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
+  std::string GenKey(int64_t id) { return internal_prefix + "_" + std::to_string(id); }
 
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(uint64_t id) {
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(int64_t id) {
     // std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = elements_->find(id);
     if (it == elements_->end()) {
@@ -557,7 +557,7 @@ class MetaMapStorage {
   void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
     // std::unique_lock<std::shared_mutex> lock(mutex_);
     for (const auto &kv : kvs) {
-      uint64_t id = ParseId(kv.key());
+      int64_t id = ParseId(kv.key());
       T element;
       element.ParsePartialFromArray(kv.value().data(), kv.value().size());
       // elements_->insert_or_assign(id, element);
@@ -570,8 +570,8 @@ class MetaMapStorage {
 
  private:
   // Coordinator all region meta data in this server.
-  // std::map<uint64_t, std::shared_ptr<T>> *elements_;
-  butil::FlatMap<uint64_t, T> *elements_;
+  // std::map<int64_t, std::shared_ptr<T>> *elements_;
+  butil::FlatMap<int64_t, T> *elements_;
 };
 
 // MetaSafeStringStdMapStorage is a template class for meta storage

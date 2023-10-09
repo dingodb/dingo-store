@@ -178,7 +178,7 @@ std::shared_ptr<dingodb::RawRocksEngine> RaftSnapshotTest::engine = nullptr;
 //   snapshot_storage->close(snapshot_writer);
 
 //   // Count key before load snapshot
-//   uint64_t count = 0;
+//   int64_t count = 0;
 //   reader->KvCount(range->start_key(), range->end_key(), count);
 //   std::cout << "range key count: " << count << std::endl;
 
@@ -194,7 +194,7 @@ std::shared_ptr<dingodb::RawRocksEngine> RaftSnapshotTest::engine = nullptr;
 // }
 
 TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
-  uint64_t start_time = dingodb::Helper::TimestampMs();
+  int64_t start_time = dingodb::Helper::TimestampMs();
 
   // Ready data
   auto writer = RaftSnapshotTest::engine->NewWriter(kDefaultCf);
@@ -248,7 +248,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
 
   // Count key before load snapshot
   auto reader = RaftSnapshotTest::engine->NewReader(kDefaultCf);
-  uint64_t expect_count = 0;
+  int64_t expect_count = 0;
   reader->KvCount(range->start_key(), range->end_key(), expect_count);
 
   std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
@@ -263,7 +263,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   start_time = dingodb::Helper::TimestampMs();
 
   // Count key after load snapshot
-  uint64_t actual_count = 0;
+  int64_t actual_count = 0;
   reader->KvCount(range->start_key(), range->end_key(), actual_count);
   std::cout << fmt::format("Count expect {} actual {}", expect_count, actual_count) << std::endl;
   EXPECT_EQ(expect_count, actual_count);

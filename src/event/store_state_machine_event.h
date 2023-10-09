@@ -36,8 +36,8 @@ struct SmApplyEvent : public Event {
   std::shared_ptr<RawEngine> engine;
   braft::Closure* done;
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;
-  uint64_t term_id;
-  uint64_t log_id;
+  int64_t term_id;
+  int64_t log_id;
 };
 
 class SmApplyEventListener : public EventListener {
@@ -181,7 +181,7 @@ struct SmConfigurationCommittedEvent : public Event {
   SmConfigurationCommittedEvent() : Event(EventSource::kRaftStateMachine, EventType::kSmConfigurationCommited) {}
   ~SmConfigurationCommittedEvent() override = default;
 
-  uint64_t node_id;
+  int64_t node_id;
   braft::Configuration conf;
 };
 

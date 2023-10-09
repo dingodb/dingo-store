@@ -36,7 +36,7 @@
 
 namespace dingodb {
 
-int VersionService::AddListenableVersion(VersionType type, uint64_t id, uint64_t version) {
+int VersionService::AddListenableVersion(VersionType type, int64_t id, int64_t version) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     return -1;
@@ -48,7 +48,7 @@ int VersionService::AddListenableVersion(VersionType type, uint64_t id, uint64_t
   return 0;
 }
 
-int VersionService::DelListenableVersion(VersionType type, uint64_t id) {
+int VersionService::DelListenableVersion(VersionType type, int64_t id) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     version_listeners_[type].erase(id);
@@ -66,7 +66,7 @@ int VersionService::DelListenableVersion(VersionType type, uint64_t id) {
   return -1;
 }
 
-uint64_t VersionService::GetCurrentVersion(VersionType type, uint64_t id) {
+int64_t VersionService::GetCurrentVersion(VersionType type, int64_t id) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     return exist->second->version;
@@ -74,7 +74,7 @@ uint64_t VersionService::GetCurrentVersion(VersionType type, uint64_t id) {
   return 0;
 }
 
-uint64_t VersionService::GetNewVersion(VersionType type, uint64_t id, uint64_t curr_version, uint wait_seconds) {
+int64_t VersionService::GetNewVersion(VersionType type, int64_t id, int64_t curr_version, uint wait_seconds) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     VersionListener* version_listener = exist->second;
@@ -85,14 +85,14 @@ uint64_t VersionService::GetNewVersion(VersionType type, uint64_t id, uint64_t c
     lock.unlock();
     std::unique_lock<bthread::Mutex> lock(version_listener->mutex);
     version_listener->condition.wait_for(lock, std::chrono::microseconds(std::chrono::seconds(wait_seconds)).count());
-    uint64_t version = version_listener->version;
+    int64_t version = version_listener->version;
     version_listener->ref_count--;
     return version;
   }
   return 0;
 }
 
-int VersionService::UpdateVersion(VersionType type, uint64_t id, uint64_t version) {
+int VersionService::UpdateVersion(VersionType type, int64_t id, int64_t version) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     VersionListener* version_listener = exist->second;
@@ -103,11 +103,11 @@ int VersionService::UpdateVersion(VersionType type, uint64_t id, uint64_t versio
   return -1;
 }
 
-uint64_t VersionService::IncVersion(VersionType type, uint64_t id) {
+int64_t VersionService::IncVersion(VersionType type, int64_t id) {
   std::unique_lock<bthread::Mutex> lock(mutex_);
   if (auto exist = version_listeners_[type].find(id); version_listeners_[type].end() != exist) {
     VersionListener* version_listener = exist->second;
-    uint64_t new_version = version_listener->version++;
+    int64_t new_version = version_listener->version++;
     version_listener->condition.notify_all();
     return new_version;
   }
@@ -139,7 +139,7 @@ void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* contro
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // lease grant
-  uint64_t granted_id = 0;
+  int64_t granted_id = 0;
   int64_t granted_ttl_seconds = 0;
 
   auto ret =
@@ -446,7 +446,7 @@ void VersionServiceProtoImpl::KvRange(google::protobuf::RpcController* /*control
   }
 
   std::vector<pb::version::Kv> kvs;
-  uint64_t total_count_in_range = 0;
+  int64_t total_count_in_range = 0;
   auto ret = coordinator_control_->KvRange(request->key(), request->range_end(), real_limit, request->keys_only(),
                                            request->count_only(), kvs, total_count_in_range);
   if (!ret.ok()) {
@@ -488,10 +488,10 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   pb::version::Kv prev_kv;
-  uint64_t main_revision =
+  int64_t main_revision =
       coordinator_control_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
-  uint64_t sub_revision = 1;
-  uint64_t lease_grant_id = 0;
+  int64_t sub_revision = 1;
+  int64_t lease_grant_id = 0;
 
   auto ret = coordinator_control_->KvPut(request->key_value(), request->lease(), request->need_prev_kv(),
                                          request->ignore_value(), request->ignore_lease(), main_revision, sub_revision,
@@ -545,11 +545,11 @@ void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* /*c
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   std::vector<pb::version::Kv> prev_kvs;
-  uint64_t main_revision =
+  int64_t main_revision =
       coordinator_control_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
-  uint64_t sub_revision = 1;
+  int64_t sub_revision = 1;
 
-  uint64_t deleted_count = 0;
+  int64_t deleted_count = 0;
   auto ret =
       coordinator_control_->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(), main_revision,
                                           sub_revision, true, deleted_count, prev_kvs, meta_increment);
@@ -604,7 +604,7 @@ void VersionServiceProtoImpl::KvCompaction(google::protobuf::RpcController* /*co
   }
 
   std::vector<std::string> keys_to_compact;
-  uint64_t total_count_in_range = 0;
+  int64_t total_count_in_range = 0;
   auto ret = coordinator_control_->KvRangeRawKeys(request->key(), request->range_end(), keys_to_compact);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));

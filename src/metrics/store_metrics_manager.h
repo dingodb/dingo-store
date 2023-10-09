@@ -44,8 +44,8 @@ class RegionMetrics {
   std::string Serialize();
   void DeSerialize(const std::string& data);
 
-  uint64_t LastLogIndex() const { return last_log_index_; }
-  void SetLastLogIndex(uint64_t last_log_index) { last_log_index_ = last_log_index; }
+  int64_t LastLogIndex() const { return last_log_index_; }
+  void SetLastLogIndex(int64_t last_log_index) { last_log_index_ = last_log_index; }
 
   bool NeedUpdateMinKey() const { return need_update_min_key_; }
   void SetNeedUpdateMinKey(bool need_update_min_key) { need_update_min_key_ = need_update_min_key; }
@@ -56,8 +56,8 @@ class RegionMetrics {
   bool NeedUpdateKeyCount() const { return need_update_key_count_; }
   void SetNeedUpdateKeyCount(bool need_update_key_count) { need_update_key_count_ = need_update_key_count; }
 
-  uint64_t Id() const { return inner_region_metrics_.id(); }
-  void SetId(uint64_t region_id) { inner_region_metrics_.set_id(region_id); }
+  int64_t Id() const { return inner_region_metrics_.id(); }
+  void SetId(int64_t region_id) { inner_region_metrics_.set_id(region_id); }
 
   const std::string& MinKey() const { return inner_region_metrics_.min_key(); }
   void SetMinKey(const std::string& min_key) { inner_region_metrics_.set_min_key(min_key); }
@@ -65,11 +65,11 @@ class RegionMetrics {
   const std::string& MaxKey() const { return inner_region_metrics_.max_key(); }
   void SetMaxKey(const std::string& max_key) { inner_region_metrics_.set_max_key(max_key); }
 
-  uint64_t RegionSize() const { return inner_region_metrics_.region_size(); }
-  void SetRegionSize(uint64_t region_size) { inner_region_metrics_.set_region_size(region_size); }
+  int64_t RegionSize() const { return inner_region_metrics_.region_size(); }
+  void SetRegionSize(int64_t region_size) { inner_region_metrics_.set_region_size(region_size); }
 
-  uint64_t KeyCount() const { return inner_region_metrics_.row_count(); }
-  void SetKeyCount(uint64_t key_count) { inner_region_metrics_.set_row_count(key_count); }
+  int64_t KeyCount() const { return inner_region_metrics_.row_count(); }
+  void SetKeyCount(int64_t key_count) { inner_region_metrics_.set_row_count(key_count); }
 
   // vector index start
   pb::common::VectorIndexType GetVectorIndexType() const {
@@ -121,7 +121,7 @@ class RegionMetrics {
 
  private:
   // update metrics until raft log index
-  uint64_t last_log_index_;
+  int64_t last_log_index_;
   // need update region min key
   bool need_update_min_key_;
   // need update region max key
@@ -177,11 +177,11 @@ class StoreRegionMetrics : public TransformKvAble {
   // Collect other metrics, e.g. min_key/max_key/key_count.
   bool CollectMetrics();
 
-  static store::RegionMetricsPtr NewMetrics(uint64_t region_id);
+  static store::RegionMetricsPtr NewMetrics(int64_t region_id);
 
   void AddMetrics(store::RegionMetricsPtr metrics);
-  void DeleteMetrics(uint64_t region_id);
-  store::RegionMetricsPtr GetMetrics(uint64_t region_id);
+  void DeleteMetrics(int64_t region_id);
+  store::RegionMetricsPtr GetMetrics(int64_t region_id);
   std::vector<store::RegionMetricsPtr> GetAllMetrics();
 
   std::string GetRegionMinKey(store::RegionPtr region);
@@ -192,8 +192,8 @@ class StoreRegionMetrics : public TransformKvAble {
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
   // Todo: later optimize
-  uint64_t GetRegionKeyCount(store::RegionPtr region);
-  std::vector<std::pair<uint64_t, uint64_t>> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
+  int64_t GetRegionKeyCount(store::RegionPtr region);
+  std::vector<std::pair<int64_t, int64_t>> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
 
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
@@ -204,7 +204,7 @@ class StoreRegionMetrics : public TransformKvAble {
 
   std::shared_ptr<Engine> engine_;
   bthread_mutex_t mutex_;
-  std::map<uint64_t, store::RegionMetricsPtr> metricses_;
+  std::map<int64_t, store::RegionMetricsPtr> metricses_;
 };
 
 class StoreMetricsManager {

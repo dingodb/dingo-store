@@ -530,8 +530,8 @@ void SendGetRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   // }
 
   std::cout << "\n";
-  uint64_t normal_region_count = 0;
-  uint64_t online_region_count = 0;
+  int64_t normal_region_count = 0;
+  int64_t online_region_count = 0;
   for (const auto& region : response.regionmap().regions()) {
     std::cout << "id=" << region.id() << " name=" << region.definition().name()
               << " epoch=" << region.definition().epoch().conf_version() << "," << region.definition().epoch().version()
@@ -885,7 +885,7 @@ void SendExecutorHeartbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SendStoreHearbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, uint64_t store_id) {
+void SendStoreHearbeat(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t store_id) {
   dingodb::pb::coordinator::StoreHeartbeatRequest request;
   dingodb::pb::coordinator::StoreHeartbeatResponse response;
 
@@ -913,7 +913,7 @@ void SendGetStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   dingodb::pb::coordinator::GetStoreMetricsResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_store_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoll(FLAGS_id));
   }
 
   if (FLAGS_store_id > 0) {
@@ -948,7 +948,7 @@ void SendDeleteStoreMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coo
   dingodb::pb::coordinator::DeleteStoreMetricsResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_store_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoll(FLAGS_id));
   }
 
   auto status = coordinator_interaction->SendRequest("DeleteStoreMetrics", request, response);
@@ -961,7 +961,7 @@ void SendGetRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coord
   dingodb::pb::coordinator::GetRegionMetricsResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_region_id(std::stoull(FLAGS_id));
+    request.set_region_id(std::stoll(FLAGS_id));
   }
 
   if (FLAGS_region_id > 0) {
@@ -981,7 +981,7 @@ void SendDeleteRegionMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> co
   dingodb::pb::coordinator::DeleteRegionMetricsResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_region_id(std::stoull(FLAGS_id));
+    request.set_region_id(std::stoll(FLAGS_id));
   }
 
   if (FLAGS_region_id > 0) {
@@ -1023,7 +1023,7 @@ void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   dingodb::pb::coordinator::QueryRegionResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_region_id(std::stoull(FLAGS_id));
+    request.set_region_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty";
     return;
@@ -1049,7 +1049,7 @@ void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> c
     return;
   }
 
-  uint64_t region_id_split = std::stoull(FLAGS_id);
+  int64_t region_id_split = std::stoll(FLAGS_id);
   // query region
   dingodb::pb::coordinator::QueryRegionRequest query_request;
   dingodb::pb::coordinator::QueryRegionResponse query_response;
@@ -1072,7 +1072,7 @@ void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> c
   new_region_definition.set_name(query_response.region().definition().name() + "_split");
   new_region_definition.set_id(0);
 
-  std::vector<uint64_t> new_region_store_ids;
+  std::vector<int64_t> new_region_store_ids;
   for (const auto& it : query_response.region().definition().peers()) {
     new_region_store_ids.push_back(it.store_id());
   }
@@ -1102,7 +1102,7 @@ void SendDropRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   dingodb::pb::coordinator::DropRegionResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_region_id(std::stoull(FLAGS_id));
+    request.set_region_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty";
     return;
@@ -1118,7 +1118,7 @@ void SendDropRegionPermanently(std::shared_ptr<dingodb::CoordinatorInteraction> 
   dingodb::pb::coordinator::DropRegionPermanentlyResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_region_id(std::stoull(FLAGS_id));
+    request.set_region_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty";
     return;
@@ -1173,7 +1173,7 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     std::string real_mid;
     if (query_response.region().definition().index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
       if (FLAGS_vector_id > 0) {
-        uint64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
+        int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
         dingodb::VectorCodec::EncodeVectorKey(partition_id, FLAGS_vector_id, real_mid);
       } else {
         real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
@@ -1251,7 +1251,7 @@ void SendAddPeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
     return;
   }
 
-  uint64_t store_id = std::stoull(FLAGS_id);
+  int64_t store_id = std::stoll(FLAGS_id);
 
   // get StoreMap
   dingodb::pb::coordinator::GetStoreMapRequest request;
@@ -1327,7 +1327,7 @@ void SendRemovePeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coord
     return;
   }
 
-  uint64_t store_id = std::stoull(FLAGS_id);
+  int64_t store_id = std::stoll(FLAGS_id);
 
   // query region
   dingodb::pb::coordinator::QueryRegionRequest query_request;
@@ -1450,7 +1450,7 @@ void SendGetOrphanRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   dingodb::pb::coordinator::GetOrphanRegionResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_store_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoll(FLAGS_id));
   }
 
   auto status = coordinator_interaction->SendRequest("GetOrphanRegion", request, response);
@@ -1475,7 +1475,7 @@ void SendGetStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   dingodb::pb::coordinator::GetStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_store_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoll(FLAGS_id));
   }
 
   auto status = coordinator_interaction->SendRequest("GetStoreOperation", request, response);
@@ -1495,7 +1495,7 @@ void SendCleanStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> co
   dingodb::pb::coordinator::CleanStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_store_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty(this is store_id)";
     return;
@@ -1511,7 +1511,7 @@ void SendAddStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   dingodb::pb::coordinator::AddStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.mutable_store_operation()->set_id(std::stoull(FLAGS_id));
+    request.mutable_store_operation()->set_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty (this is store_id)";
     return;
@@ -1537,7 +1537,7 @@ void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> c
   dingodb::pb::coordinator::RemoveStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_store_id(std::stoull(FLAGS_id));
+    request.set_store_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty (this is store_id)";
     return;
@@ -1572,7 +1572,7 @@ void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
     DINGO_LOG(ERROR) << "id is empty, if you want to clean all task_list, set --id=0";
     return;
   }
-  request.set_task_list_id(std::stoull(FLAGS_id));
+  request.set_task_list_id(std::stoll(FLAGS_id));
 
   auto status = coordinator_interaction->SendRequest("CleanTaskList", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

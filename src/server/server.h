@@ -125,7 +125,7 @@ class Server {
 
   bool Ip2Hostname(std::string& ip2hostname);
 
-  uint64_t Id() const { return id_; }
+  int64_t Id() const { return id_; }
   std::string Keyring() const { return keyring_; }
 
   std::string ServerAddr() { return server_addr_; }
@@ -159,7 +159,7 @@ class Server {
 
   std::shared_ptr<Storage> GetStorage() { return storage_; }
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
-  store::RegionPtr GetRegion(uint64_t region_id);
+  store::RegionPtr GetRegion(int64_t region_id);
   std::vector<store::RegionPtr> GetAllAliveRegion();
   std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager() { return store_metrics_manager_; }
   std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
@@ -212,7 +212,7 @@ class Server {
   ~Server() = default;
 
   std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
-                                                                        uint64_t region_id,
+                                                                        int64_t region_id,
                                                                         const std::string& region_name
                                                                         /*std::shared_ptr<Context>& ctx*/);
 
@@ -221,7 +221,7 @@ class Server {
   // This is server instance id, every store server has one id, it's unique,
   // represent store's identity, provided by coordinator.
   // read from store config file.
-  uint64_t id_;
+  int64_t id_;
   // This is keyring, the password for this instance to join in the cluster
   std::string keyring_;
   // Role, include store/coordinator
@@ -236,7 +236,7 @@ class Server {
 
   struct HostnameItem {
     std::string hostname;
-    uint64_t timestamp;
+    int64_t timestamp;
   };
   DingoSafeMap<std::string, HostnameItem> ip2hostname_cache_;
 

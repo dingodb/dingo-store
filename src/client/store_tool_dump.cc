@@ -232,8 +232,8 @@ void PrintValue(const dingodb::pb::meta::ColumnDefinition& column_definition, co
   } else if (value.type() == typeid(std::optional<int64_t>)) {
     auto v = std::any_cast<std::optional<int64_t>>(value);
     std::cout << v.value_or(0);
-  } else if (value.type() == typeid(std::optional<uint64_t>)) {
-    auto v = std::any_cast<std::optional<uint64_t>>(value);
+  } else if (value.type() == typeid(std::optional<int64_t>)) {
+    auto v = std::any_cast<std::optional<int64_t>>(value);
     std::cout << v.value_or(0);
   } else if (value.type() == typeid(std::optional<double>)) {
     auto v = std::any_cast<std::optional<double>>(value);
@@ -447,7 +447,7 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
   }
 
   for (const auto& partition : table_definition.table_partition().partitions()) {
-    uint64_t partition_id = partition.id().entity_id();
+    int64_t partition_id = partition.id().entity_id();
     DINGO_LOG(INFO) << fmt::format("partition id {}", partition_id);
 
     {

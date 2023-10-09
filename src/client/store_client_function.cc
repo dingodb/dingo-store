@@ -124,7 +124,7 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
 
 // ============================== meta service ===========================
 
-dingodb::pb::meta::TableDefinition SendGetIndex(uint64_t index_id) {
+dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -138,7 +138,7 @@ dingodb::pb::meta::TableDefinition SendGetIndex(uint64_t index_id) {
   return response.table_definition_with_ids()[0].table_definition();
 }
 
-dingodb::pb::meta::TableDefinition SendGetTable(uint64_t table_id) {
+dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -152,7 +152,7 @@ dingodb::pb::meta::TableDefinition SendGetTable(uint64_t table_id) {
   return response.table_definition_with_ids()[0].table_definition();
 }
 
-dingodb::pb::meta::TableRange SendGetTableRange(uint64_t table_id) {
+dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id) {
   dingodb::pb::meta::GetTableRangeRequest request;
   dingodb::pb::meta::GetTableRangeResponse response;
 
@@ -166,7 +166,7 @@ dingodb::pb::meta::TableRange SendGetTableRange(uint64_t table_id) {
   return response.table_range();
 }
 
-dingodb::pb::meta::IndexRange SendGetIndexRange(uint64_t table_id) {
+dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id) {
   dingodb::pb::meta::GetIndexRangeRequest request;
   dingodb::pb::meta::GetIndexRangeResponse response;
 
@@ -180,7 +180,7 @@ dingodb::pb::meta::IndexRange SendGetIndexRange(uint64_t table_id) {
   return response.index_range();
 }
 
-std::vector<uint64_t> SendGetTablesBySchema() {
+std::vector<int64_t> SendGetTablesBySchema() {
   dingodb::pb::meta::GetTablesBySchemaRequest request;
   dingodb::pb::meta::GetTablesBySchemaResponse response;
 
@@ -191,7 +191,7 @@ std::vector<uint64_t> SendGetTablesBySchema() {
 
   InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTablesBySchema", request, response);
 
-  std::vector<uint64_t> table_ids;
+  std::vector<int64_t> table_ids;
   for (const auto& id : response.table_definition_with_ids()) {
     table_ids.push_back(id.table_id().entity_id());
   }
@@ -199,7 +199,7 @@ std::vector<uint64_t> SendGetTablesBySchema() {
   return table_ids;
 }
 
-int GetCreateTableId(uint64_t& table_id) {
+int GetCreateTableId(int64_t& table_id) {
   dingodb::pb::meta::CreateTableIdRequest request;
   dingodb::pb::meta::CreateTableIdResponse response;
 
@@ -224,7 +224,7 @@ int GetCreateTableId(uint64_t& table_id) {
 dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string& table_name, int partition_num) {
   dingodb::pb::meta::CreateTableRequest request;
 
-  uint64_t new_table_id = 0;
+  int64_t new_table_id = 0;
   int ret = GetCreateTableId(new_table_id);
   if (ret != 0) {
     DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -233,9 +233,9 @@ dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string&
 
   uint32_t part_count = partition_num;
 
-  std::vector<uint64_t> part_ids;
+  std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    uint64_t new_part_id = 0;
+    int64_t new_part_id = 0;
     int ret = GetCreateTableId(new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
@@ -296,7 +296,7 @@ dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string&
   return request;
 }
 
-uint64_t SendCreateTable(const std::string& table_name, int partition_num) {
+int64_t SendCreateTable(const std::string& table_name, int partition_num) {
   auto request = BuildCreateTableRequest(table_name, partition_num);
   if (request.table_id().entity_id() == 0) {
     DINGO_LOG(WARNING) << "BuildCreateTableRequest failed";
@@ -310,7 +310,7 @@ uint64_t SendCreateTable(const std::string& table_name, int partition_num) {
   return response.table_id().entity_id();
 }
 
-void SendDropTable(uint64_t table_id) {
+void SendDropTable(int64_t table_id) {
   dingodb::pb::meta::DropTableRequest request;
   dingodb::pb::meta::DropTableResponse response;
 
@@ -322,7 +322,7 @@ void SendDropTable(uint64_t table_id) {
   InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "DropTable", request, response);
 }
 
-uint64_t SendGetTableByName(const std::string& table_name) {
+int64_t SendGetTableByName(const std::string& table_name) {
   dingodb::pb::meta::GetTableByNameRequest request;
   dingodb::pb::meta::GetTableByNameResponse response;
 
@@ -340,7 +340,7 @@ uint64_t SendGetTableByName(const std::string& table_name) {
 
 // ============================== meta service ===========================
 
-void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn) {
+void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
@@ -385,7 +385,7 @@ void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn) {
     key->assign(FLAGS_key);
   }
 
-  std::vector<uint64_t> vt_ids;
+  std::vector<int64_t> vt_ids;
   if (FLAGS_with_vector_ids) {
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
@@ -468,7 +468,7 @@ void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn) {
     std::cout << "]";
     std::cout << '\n';
 
-    std::vector<uint64_t> result_vt_ids;
+    std::vector<int64_t> result_vt_ids;
     for (const auto& vector_with_distance_result : response.batch_results()) {
       for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
         auto id = vector_with_distance.vector_with_id().id();
@@ -498,7 +498,7 @@ void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn) {
   }
 
   if (FLAGS_with_scalar_pre_filter || FLAGS_with_scalar_post_filter) {
-    std::vector<uint64_t> result_vt_ids;
+    std::vector<int64_t> result_vt_ids;
     for (const auto& vector_with_distance_result : response.batch_results()) {
       for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
         auto id = vector_with_distance.vector_with_id().id();
@@ -523,7 +523,7 @@ void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn) {
   }
 }
 
-void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t start_vector_id, uint32_t topn,
+void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, uint32_t topn,
                            uint32_t batch_count, const std::string& key, const std::string& value) {
   dingodb::pb::index::VectorSearchDebugRequest request;
   dingodb::pb::index::VectorSearchDebugResponse response;
@@ -588,7 +588,7 @@ void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t star
     key->assign(FLAGS_key);
   }
 
-  std::vector<uint64_t> vt_ids;
+  std::vector<int64_t> vt_ids;
   if (FLAGS_with_vector_ids) {
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
@@ -685,7 +685,7 @@ void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t star
     std::cout << "response.batch_results() size : " << response.batch_results().size() << std::endl;
 
     for (const auto& vector_with_distance_result : response.batch_results()) {
-      std::vector<uint64_t> result_vt_ids;
+      std::vector<int64_t> result_vt_ids;
       for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
         auto id = vector_with_distance.vector_with_id().id();
         result_vt_ids.push_back(id);
@@ -715,7 +715,7 @@ void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t star
 
   if (FLAGS_with_scalar_pre_filter) {
     for (const auto& vector_with_distance_result : response.batch_results()) {
-      std::vector<uint64_t> result_vt_ids;
+      std::vector<int64_t> result_vt_ids;
       for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
         auto id = vector_with_distance.vector_with_id().id();
         result_vt_ids.push_back(id);
@@ -742,7 +742,7 @@ void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t star
 #endif
 }
 
-void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count) {
+void SendVectorBatchSearch(int64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
 
@@ -799,7 +799,7 @@ void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn
     key->assign(FLAGS_key);
   }
 
-  std::vector<uint64_t> vt_ids;
+  std::vector<int64_t> vt_ids;
   if (FLAGS_with_vector_ids) {
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
@@ -880,7 +880,7 @@ void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn
     std::cout << "response.batch_results() size : " << response.batch_results().size() << '\n';
 
     for (const auto& vector_with_distance_result : response.batch_results()) {
-      std::vector<uint64_t> result_vt_ids;
+      std::vector<int64_t> result_vt_ids;
       for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
         auto id = vector_with_distance.vector_with_id().id();
         result_vt_ids.push_back(id);
@@ -910,7 +910,7 @@ void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn
 
   if (FLAGS_with_scalar_pre_filter) {
     for (const auto& vector_with_distance_result : response.batch_results()) {
-      std::vector<uint64_t> result_vt_ids;
+      std::vector<int64_t> result_vt_ids;
       for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
         auto id = vector_with_distance.vector_with_id().id();
         result_vt_ids.push_back(id);
@@ -936,7 +936,7 @@ void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn
   }
 }
 
-void SendVectorBatchQuery(uint64_t region_id, std::vector<uint64_t> vector_ids) {
+void SendVectorBatchQuery(int64_t region_id, std::vector<int64_t> vector_ids) {
   dingodb::pb::index::VectorBatchQueryRequest request;
   dingodb::pb::index::VectorBatchQueryResponse response;
 
@@ -967,7 +967,7 @@ void SendVectorBatchQuery(uint64_t region_id, std::vector<uint64_t> vector_ids) 
   DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
 }
 
-void SendVectorScanQuery(uint64_t region_id, uint64_t start_id, uint64_t end_id, uint64_t limit, bool is_reverse) {
+void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse) {
   dingodb::pb::index::VectorScanQueryRequest request;
   dingodb::pb::index::VectorScanQueryResponse response;
 
@@ -1032,7 +1032,7 @@ void SendVectorScanQuery(uint64_t region_id, uint64_t start_id, uint64_t end_id,
                   << " vector count: " << response.vectors().size();
 }
 
-void SendVectorGetRegionMetrics(uint64_t region_id) {
+void SendVectorGetRegionMetrics(int64_t region_id) {
   dingodb::pb::index::VectorGetRegionMetricsRequest request;
   dingodb::pb::index::VectorGetRegionMetricsResponse response;
 
@@ -1043,7 +1043,7 @@ void SendVectorGetRegionMetrics(uint64_t region_id) {
   DINGO_LOG(INFO) << "VectorGetRegionMetrics response: " << response.DebugString();
 }
 
-int SendBatchVectorAdd(uint64_t region_id, uint32_t dimension, std::vector<uint64_t> vector_ids, bool with_scalar,
+int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_t> vector_ids, bool with_scalar,
                        bool with_table) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
@@ -1106,7 +1106,7 @@ int SendBatchVectorAdd(uint64_t region_id, uint32_t dimension, std::vector<uint6
   return response.error().errcode();
 }
 
-uint64_t DecodeVectorId(const std::string& value) {
+int64_t DecodeVectorId(const std::string& value) {
   dingodb::Buf buf(value);
   if (value.size() == 17) {
     buf.Skip(9);
@@ -1125,13 +1125,13 @@ uint64_t DecodeVectorId(const std::string& value) {
   return dingodb::DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
 }
 
-bool QueryRegionIdByVectorId(dingodb::pb::meta::IndexRange& index_range, uint64_t vector_id,  // NOLINT
-                             uint64_t& region_id) {                                           // NOLINT
+bool QueryRegionIdByVectorId(dingodb::pb::meta::IndexRange& index_range, int64_t vector_id,  // NOLINT
+                             int64_t& region_id) {                                           // NOLINT
   for (const auto& item : index_range.range_distribution()) {
     const auto& range = item.range();
-    uint64_t min_vector_id = DecodeVectorId(range.start_key());
-    uint64_t max_vector_id = DecodeVectorId(range.end_key());
-    max_vector_id = max_vector_id == 0 ? UINT64_MAX : max_vector_id;
+    int64_t min_vector_id = DecodeVectorId(range.start_key());
+    int64_t max_vector_id = DecodeVectorId(range.end_key());
+    max_vector_id = max_vector_id == 0 ? INT64_MAX : max_vector_id;
     if (vector_id >= min_vector_id && vector_id < max_vector_id) {
       region_id = item.id().entity_id();
       return true;
@@ -1160,14 +1160,14 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
   PrintIndexRange(index_range);
 
   int end_id = ctx->start_id + ctx->count;
-  std::vector<uint64_t> vector_ids;
+  std::vector<int64_t> vector_ids;
   vector_ids.reserve(ctx->step_count);
   for (int i = ctx->start_id; i < end_id; i += ctx->step_count) {
     for (int j = i; j < i + ctx->step_count; ++j) {
       vector_ids.push_back(j);
     }
 
-    uint64_t region_id = 0;
+    int64_t region_id = 0;
     if (!QueryRegionIdByVectorId(index_range, i, region_id)) {
       DINGO_LOG(ERROR) << fmt::format("query region id by vector id failed, vector id {}", i);
       return;
@@ -1188,7 +1188,7 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
 
 void SendVectorAdd(std::shared_ptr<Context> ctx) {  // NOLINT
   int end_id = ctx->start_id + ctx->count;
-  std::vector<uint64_t> vector_ids;
+  std::vector<int64_t> vector_ids;
   vector_ids.reserve(ctx->step_count);
   for (int i = ctx->start_id; i < end_id; i += ctx->step_count) {
     for (int j = i; j < i + ctx->step_count; ++j) {
@@ -1202,8 +1202,8 @@ void SendVectorAdd(std::shared_ptr<Context> ctx) {  // NOLINT
   }
 }
 
-void SendVectorDelete(uint64_t region_id, uint32_t start_id,  // NOLINT
-                      uint32_t count) {                       // NOLINT
+void SendVectorDelete(int64_t region_id, uint32_t start_id,  // NOLINT
+                      uint32_t count) {                      // NOLINT
   dingodb::pb::index::VectorDeleteRequest request;
   dingodb::pb::index::VectorDeleteResponse response;
 
@@ -1225,7 +1225,7 @@ void SendVectorDelete(uint64_t region_id, uint32_t start_id,  // NOLINT
                                  response.key_states().size() - success_count);
 }
 
-void SendVectorGetMaxId(uint64_t region_id) {  // NOLINT
+void SendVectorGetMaxId(int64_t region_id) {  // NOLINT
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
 
@@ -1236,7 +1236,7 @@ void SendVectorGetMaxId(uint64_t region_id) {  // NOLINT
   DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
 }
 
-void SendVectorGetMinId(uint64_t region_id) {  // NOLINT
+void SendVectorGetMinId(int64_t region_id) {  // NOLINT
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
 
@@ -1248,7 +1248,7 @@ void SendVectorGetMinId(uint64_t region_id) {  // NOLINT
   DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
 }
 
-void SendVectorAddBatch(uint64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
+void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
                         const std::string& file) {
   if (step_count == 0) {
     DINGO_LOG(ERROR) << "step_count must be greater than 0";
@@ -1340,7 +1340,7 @@ void SendVectorAddBatch(uint64_t region_id, uint32_t dimension, uint32_t count, 
 
       *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
-      uint64_t real_start_id = start_id + x * step_count;
+      int64_t real_start_id = start_id + x * step_count;
       for (int i = real_start_id; i < real_start_id + step_count; ++i) {
         auto* vector_with_id = request.add_vectors();
         vector_with_id->set_id(i);
@@ -1390,7 +1390,7 @@ void SendVectorAddBatch(uint64_t region_id, uint32_t dimension, uint32_t count, 
   out.close();
 }
 
-void SendVectorAddBatchDebug(uint64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
+void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
                              int64_t start_id, const std::string& file) {
   if (step_count == 0) {
     DINGO_LOG(ERROR) << "step_count must be greater than 0";
@@ -1482,7 +1482,7 @@ void SendVectorAddBatchDebug(uint64_t region_id, uint32_t dimension, uint32_t co
 
       *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
-      uint64_t real_start_id = start_id + x * step_count;
+      int64_t real_start_id = start_id + x * step_count;
       for (int i = real_start_id; i < real_start_id + step_count; ++i) {
         auto* vector_with_id = request.add_vectors();
         vector_with_id->set_id(i);
@@ -1648,7 +1648,7 @@ void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, con
   DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
 }
 
-void SendVectorCount(uint64_t region_id, uint64_t start_vector_id, uint64_t end_vector_id) {
+void SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id) {
   ::dingodb::pb::index::VectorCountRequest request;
   ::dingodb::pb::index::VectorCountResponse response;
 
@@ -1661,7 +1661,7 @@ void SendVectorCount(uint64_t region_id, uint64_t start_vector_id, uint64_t end_
   DINGO_LOG(INFO) << "VectorCount response: " << response.DebugString();
 }
 
-void SendKvGet(uint64_t region_id, const std::string& key, std::string& value) {
+void SendKvGet(int64_t region_id, const std::string& key, std::string& value) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
 
@@ -1673,7 +1673,7 @@ void SendKvGet(uint64_t region_id, const std::string& key, std::string& value) {
   value = response.value();
 }
 
-void SendKvBatchGet(uint64_t region_id, const std::string& prefix, int count) {
+void SendKvBatchGet(int64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchGetRequest request;
   dingodb::pb::store::KvBatchGetResponse response;
 
@@ -1686,7 +1686,7 @@ void SendKvBatchGet(uint64_t region_id, const std::string& prefix, int count) {
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchGet", request, response);
 }
 
-int SendKvPut(uint64_t region_id, const std::string& key, std::string value) {
+int SendKvPut(int64_t region_id, const std::string& key, std::string value) {
   dingodb::pb::store::KvPutRequest request;
   dingodb::pb::store::KvPutResponse response;
 
@@ -1699,7 +1699,7 @@ int SendKvPut(uint64_t region_id, const std::string& key, std::string value) {
   return response.error().errcode();
 }
 
-void SendKvBatchPut(uint64_t region_id, const std::string& prefix, int count) {
+void SendKvBatchPut(int64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchPutRequest request;
   dingodb::pb::store::KvBatchPutResponse response;
 
@@ -1714,7 +1714,7 @@ void SendKvBatchPut(uint64_t region_id, const std::string& prefix, int count) {
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPut", request, response);
 }
 
-void SendKvPutIfAbsent(uint64_t region_id, const std::string& key) {
+void SendKvPutIfAbsent(int64_t region_id, const std::string& key) {
   dingodb::pb::store::KvPutIfAbsentRequest request;
   dingodb::pb::store::KvPutIfAbsentResponse response;
 
@@ -1726,7 +1726,7 @@ void SendKvPutIfAbsent(uint64_t region_id, const std::string& key) {
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPutIfAbsent", request, response);
 }
 
-void SendKvBatchPutIfAbsent(uint64_t region_id, const std::string& prefix, int count) {
+void SendKvBatchPutIfAbsent(int64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchPutIfAbsentRequest request;
   dingodb::pb::store::KvBatchPutIfAbsentResponse response;
 
@@ -1741,7 +1741,7 @@ void SendKvBatchPutIfAbsent(uint64_t region_id, const std::string& prefix, int c
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPutIfAbsent", request, response);
 }
 
-void SendKvBatchDelete(uint64_t region_id, const std::string& key) {
+void SendKvBatchDelete(int64_t region_id, const std::string& key) {
   dingodb::pb::store::KvBatchDeleteRequest request;
   dingodb::pb::store::KvBatchDeleteResponse response;
 
@@ -1751,7 +1751,7 @@ void SendKvBatchDelete(uint64_t region_id, const std::string& key) {
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchDelete", request, response);
 }
 
-void SendKvDeleteRange(uint64_t region_id, const std::string& prefix) {
+void SendKvDeleteRange(int64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvDeleteRangeRequest request;
   dingodb::pb::store::KvDeleteRangeResponse response;
 
@@ -1766,7 +1766,7 @@ void SendKvDeleteRange(uint64_t region_id, const std::string& prefix) {
   DINGO_LOG(INFO) << "delete count: " << response.delete_count();
 }
 
-void SendKvScan(uint64_t region_id, const std::string& prefix) {
+void SendKvScan(int64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvScanBeginRequest request;
   dingodb::pb::store::KvScanBeginResponse response;
 
@@ -1817,7 +1817,7 @@ void SendKvScan(uint64_t region_id, const std::string& prefix) {
                                                            release_response);
 }
 
-void SendKvCompareAndSet(uint64_t region_id, const std::string& key) {
+void SendKvCompareAndSet(int64_t region_id, const std::string& key) {
   dingodb::pb::store::KvCompareAndSetRequest request;
   dingodb::pb::store::KvCompareAndSetResponse response;
 
@@ -1830,7 +1830,7 @@ void SendKvCompareAndSet(uint64_t region_id, const std::string& key) {
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvCompareAndSet", request, response);
 }
 
-void SendKvBatchCompareAndSet(uint64_t region_id, const std::string& prefix, int count) {
+void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchCompareAndSetRequest request;
   dingodb::pb::store::KvBatchCompareAndSetResponse response;
 
@@ -1851,7 +1851,7 @@ void SendKvBatchCompareAndSet(uint64_t region_id, const std::string& prefix, int
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchCompareAndSet", request, response);
 }
 
-dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, const std::string& raft_group,
+dingodb::pb::common::RegionDefinition BuildRegionDefinition(int64_t region_id, const std::string& raft_group,
                                                             std::vector<std::string>& raft_addrs,
                                                             const std::string& start_key, const std::string& end_key) {
   dingodb::pb::common::RegionDefinition region_definition;
@@ -1881,7 +1881,7 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinition(uint64_t region_id, 
   return region_definition;
 }
 
-void SendAddRegion(uint64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
+void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
   dingodb::pb::region_control::AddRegionRequest request;
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::region_control::AddRegionResponse response;
@@ -1890,7 +1890,7 @@ void SendAddRegion(uint64_t region_id, const std::string& raft_group, std::vecto
                                                                  response);
 }
 
-void SendChangeRegion(uint64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
+void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
   dingodb::pb::region_control::ChangeRegionRequest request;
   dingodb::pb::region_control::ChangeRegionResponse response;
 
@@ -1901,7 +1901,7 @@ void SendChangeRegion(uint64_t region_id, const std::string& raft_group, std::ve
                                                               response);
 }
 
-void SendDestroyRegion(uint64_t region_id) {
+void SendDestroyRegion(int64_t region_id) {
   dingodb::pb::region_control::DestroyRegionRequest request;
   dingodb::pb::region_control::DestroyRegionResponse response;
 
@@ -1911,7 +1911,7 @@ void SendDestroyRegion(uint64_t region_id) {
                                                               response);
 }
 
-void SendSnapshot(uint64_t region_id) {
+void SendSnapshot(int64_t region_id) {
   dingodb::pb::region_control::SnapshotRequest request;
   dingodb::pb::region_control::SnapshotResponse response;
 
@@ -1920,7 +1920,7 @@ void SendSnapshot(uint64_t region_id) {
   InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Snapshot", request, response);
 }
 
-void SendSnapshotVectorIndex(uint64_t vector_index_id) {
+void SendSnapshotVectorIndex(int64_t vector_index_id) {
   dingodb::pb::region_control::SnapshotVectorIndexRequest request;
   dingodb::pb::region_control::SnapshotVectorIndexResponse response;
 
@@ -1930,7 +1930,7 @@ void SendSnapshotVectorIndex(uint64_t vector_index_id) {
                                                               response);
 }
 
-void SendTransferLeader(uint64_t region_id, const dingodb::pb::common::Peer& peer) {
+void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer) {
   dingodb::pb::region_control::TransferLeaderRequest request;
   dingodb::pb::region_control::TransferLeaderResponse response;
 
@@ -1941,7 +1941,7 @@ void SendTransferLeader(uint64_t region_id, const dingodb::pb::common::Peer& pee
                                                               response);
 }
 
-void SendTransferLeaderByCoordinator(uint64_t region_id, uint64_t leader_store_id) {
+void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id) {
   dingodb::pb::coordinator::TransferLeaderRegionRequest request;
   dingodb::pb::coordinator::TransferLeaderRegionResponse response;
 
@@ -1953,7 +1953,7 @@ void SendTransferLeaderByCoordinator(uint64_t region_id, uint64_t leader_store_i
 }
 
 struct BatchPutGetParam {
-  uint64_t region_id;
+  int64_t region_id;
   int32_t req_num;
   int32_t thread_no;
   std::string prefix;
@@ -1962,7 +1962,7 @@ struct BatchPutGetParam {
 };
 
 void BatchPut(std::shared_ptr<Context> ctx) {
-  std::vector<uint64_t> latencys;
+  std::vector<int64_t> latencys;
   for (int i = 0; i < ctx->req_num; ++i) {
     std::string key = ctx->prefix + Helper::GenRandomStringV2(32);
     std::string value = Helper::GenRandomString(256);
@@ -1970,11 +1970,11 @@ void BatchPut(std::shared_ptr<Context> ctx) {
     latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 
-  int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
+  int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<int64_t>(0));
   DINGO_LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
 }
 
-bool QueryRegionIdByKey(dingodb::pb::meta::TableRange& table_range, const std::string& key, uint64_t& region_id) {
+bool QueryRegionIdByKey(dingodb::pb::meta::TableRange& table_range, const std::string& key, int64_t& region_id) {
   for (const auto& item : table_range.range_distribution()) {
     const auto& range = item.range();
     if (key >= range.start_key() && key < range.end_key()) {
@@ -2005,13 +2005,13 @@ void BatchPutTable(std::shared_ptr<Context> ctx) {
   auto table_range = SendGetTableRange(ctx->table_id);
   PrintTableRange(table_range);
 
-  std::vector<uint64_t> latencys;
+  std::vector<int64_t> latencys;
   for (int i = 0; i < ctx->req_num; ++i) {
-    uint64_t partition_id = partitions.at(i % partitions.size()).id().entity_id();
+    int64_t partition_id = partitions.at(i % partitions.size()).id().entity_id();
     std::string key = client::Helper::EncodeRegionRange(partition_id) + Helper::GenRandomString(32);
     std::string value = Helper::GenRandomString(256);
 
-    uint64_t region_id = 0;
+    int64_t region_id = 0;
     if (!QueryRegionIdByKey(table_range, key, region_id)) {
       break;
     }
@@ -2058,10 +2058,10 @@ void TestBatchPut(std::shared_ptr<Context> ctx) {
   }
 }
 
-void BatchPutGet(uint64_t region_id, const std::string& prefix, int req_num) {
+void BatchPutGet(int64_t region_id, const std::string& prefix, int req_num) {
   auto dataset = Helper::GenDataset(prefix, req_num);
 
-  std::vector<uint64_t> latencys;
+  std::vector<int64_t> latencys;
   latencys.reserve(dataset.size());
   for (auto& [key, value] : dataset) {
     SendKvPut(region_id, key, value);
@@ -2069,7 +2069,7 @@ void BatchPutGet(uint64_t region_id, const std::string& prefix, int req_num) {
     latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 
-  int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
+  int64_t sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<int64_t>(0));
   DINGO_LOG(INFO) << "Put average latency: " << sum / latencys.size() << " us";
 
   latencys.clear();
@@ -2082,11 +2082,11 @@ void BatchPutGet(uint64_t region_id, const std::string& prefix, int req_num) {
     latencys.push_back(InteractionManager::GetInstance().GetLatency());
   }
 
-  sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<uint64_t>(0));
+  sum = std::accumulate(latencys.begin(), latencys.end(), static_cast<int64_t>(0));
   DINGO_LOG(INFO) << "Get average latency: " << sum / latencys.size() << " us";
 }
 
-void TestBatchPutGet(uint64_t region_id, int thread_num, int req_num, const std::string& prefix) {
+void TestBatchPutGet(int64_t region_id, int thread_num, int req_num, const std::string& prefix) {
   std::vector<bthread_t> tids;
   tids.resize(thread_num);
   for (int i = 0; i < thread_num; ++i) {
@@ -2118,7 +2118,7 @@ void TestBatchPutGet(uint64_t region_id, int thread_num, int req_num, const std:
 }
 
 struct AddRegionParam {
-  uint64_t start_region_id;
+  int64_t start_region_id;
   int32_t region_count;
   std::string raft_group;
   int req_num;
@@ -2174,7 +2174,7 @@ void* OperationRegionRoutine(void* arg) {
 
   bthread_usleep((Helper::GetRandInt() % 1000) * 1000L);
   for (int i = 0; i < param->region_count; ++i) {
-    uint64_t region_id = param->start_region_id + i;
+    int64_t region_id = param->start_region_id + i;
 
     // Create region
     {
@@ -2214,7 +2214,7 @@ void* OperationRegionRoutine(void* arg) {
   return nullptr;
 }
 
-void TestRegionLifecycle(uint64_t region_id, const std::string& raft_group, std::vector<std::string>& raft_addrs,
+void TestRegionLifecycle(int64_t region_id, const std::string& raft_group, std::vector<std::string>& raft_addrs,
                          int region_count, int thread_num, int req_num, const std::string& prefix) {
   int32_t step = region_count / thread_num;
   std::vector<bthread_t> tids;
@@ -2239,7 +2239,7 @@ void TestRegionLifecycle(uint64_t region_id, const std::string& raft_group, std:
   }
 }
 
-void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
+void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> /*ctx*/, int64_t region_id,
                                        int req_num,  // NOLINT (*unused)
                                        const std::string& prefix) {
   // put data
@@ -2273,7 +2273,7 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
   DINGO_LOG(INFO) << "======= Create table " << ctx->table_name;
-  uint64_t table_id = SendCreateTable(ctx->table_name, ctx->partition_num);
+  int64_t table_id = SendCreateTable(ctx->table_name, ctx->partition_num);
   if (table_id == 0) {
     DINGO_LOG(ERROR) << "create table failed";
     return nullptr;
@@ -2289,7 +2289,7 @@ void* CreateAndPutAndGetAndDestroyTableRoutine(void* arg) {
         bthread_usleep(1 * 1000 * 1000);
         continue;
       }
-      uint64_t region_id = range_dist.id().entity_id();
+      int64_t region_id = range_dist.id().entity_id();
       std::string prefix = range_dist.range().start_key();
 
       BatchPutGet(region_id, prefix, kBatchSize);
@@ -2313,7 +2313,7 @@ dingodb::pb::common::StoreMap SendGetStoreMap() {
   return response.storemap();
 }
 
-dingodb::pb::common::Region SendQueryRegion(uint64_t region_id) {
+dingodb::pb::common::Region SendQueryRegion(int64_t region_id) {
   dingodb::pb::coordinator::QueryRegionRequest request;
   dingodb::pb::coordinator::QueryRegionResponse response;
 
@@ -2324,7 +2324,7 @@ dingodb::pb::common::Region SendQueryRegion(uint64_t region_id) {
   return response.region();
 }
 
-dingodb::pb::store::Context GetRegionContext(uint64_t region_id) {
+dingodb::pb::store::Context GetRegionContext(int64_t region_id) {
   const auto& region = SendQueryRegion(region_id);
   dingodb::pb::store::Context context;
   context.set_region_id(region_id);
@@ -2385,7 +2385,7 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
   std::shared_ptr<Context> ctx(static_cast<Context*>(arg));
 
   for (;;) {
-    uint64_t table_id = SendGetTableByName(ctx->table_name);
+    int64_t table_id = SendGetTableByName(ctx->table_name);
     if (table_id == 0) {
       DINGO_LOG(INFO) << fmt::format("table: {} table_id: {}", ctx->table_name, table_id);
       bthread_usleep(1 * 1000 * 1000);
@@ -2397,7 +2397,7 @@ void* AutoExpandAndShrinkAndSplitRegion(void* arg) {
 
     // Traverse region
     for (const auto& range_dist : table_range.range_distribution()) {
-      uint64_t region_id = range_dist.id().entity_id();
+      int64_t region_id = range_dist.id().entity_id();
       if (region_id == 0) {
         DINGO_LOG(INFO) << fmt::format("Get table range failed, table: {} region_id: {}", ctx->table_name, region_id);
         continue;

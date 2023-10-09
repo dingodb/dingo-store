@@ -23,14 +23,14 @@ option java_package = "io.dingodb.node";
 option cc_generic_services = true;
 
 message NodeInfo {
-  uint64 id = 1;
+  int64 id = 1;
   dingodb.pb.common.ClusterRole role = 2;
   dingodb.pb.common.Location server_location = 3;
   dingodb.pb.common.Location raft_location = 4;
 }
 
 message GetNodeInfoRequest {
-  uint64 cluster_id = 1;
+  int64 cluster_id = 1;
 }
 
 message GetNodeInfoResponse {
@@ -57,8 +57,7 @@ message LogDetail {
   uint32 verbose = 4;
 }
 
-message GetLogLevelRequest {
-};
+message GetLogLevelRequest {};
 message GetLogLevelResponse {
   dingodb.pb.error.Error error = 1;
   LogLevel log_level = 2;
@@ -74,10 +73,8 @@ message ChangeLogLevelResponse {
   dingodb.pb.error.Error error = 1;
 };
 
-message MetricsRequest {
-};
-message MetricsResponse {
-};
+message MetricsRequest {};
+message MetricsResponse {};
 
 message FailPointAction {
   string type = 1;       // action type
@@ -120,8 +117,8 @@ message DeleteFailPointResponse {
 }
 
 message VectorIndexSnapshotMeta {
-  uint64 vector_index_id = 1;
-  uint64 snapshot_log_index = 2;
+  int64 vector_index_id = 1;
+  int64 snapshot_log_index = 2;
   repeated string filenames = 3;
 }
 
@@ -135,7 +132,7 @@ message InstallVectorIndexSnapshotResponse {
 }
 
 message GetVectorIndexSnapshotRequest {
-  uint64 vector_index_id = 1;
+  int64 vector_index_id = 1;
 }
 
 message GetVectorIndexSnapshotResponse {
@@ -145,7 +142,7 @@ message GetVectorIndexSnapshotResponse {
 }
 
 message CheckVectorIndexRequest {
-  uint64 vector_index_id = 1;
+  int64 vector_index_id = 1;
 }
 
 message CheckVectorIndexResponse {

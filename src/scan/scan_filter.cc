@@ -16,7 +16,7 @@
 
 namespace dingodb {
 
-ScanFilter::ScanFilter(bool key_only, size_t max_fetch_cnt, uint64_t max_bytes_rpc)
+ScanFilter::ScanFilter(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc)
     : key_only_(key_only),
       max_fetch_cnt_(max_fetch_cnt),
       max_bytes_rpc_(max_bytes_rpc),
@@ -46,7 +46,7 @@ void ScanFilter::Reset() {
   cur_bytes_rpc_ = 0;
 }
 
-void ScanFilter::Reset(bool key_only, size_t max_fetch_cnt, uint64_t max_bytes_rpc) {
+void ScanFilter::Reset(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc) {
   key_only_ = key_only;
   max_fetch_cnt_ = max_fetch_cnt;
   max_bytes_rpc_ = max_bytes_rpc;
