@@ -630,8 +630,8 @@ class CoordinatorControl : public MetaControl {
   int64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
 
   // update present id/epoch
-  uint64_t UpdatePresentId(const pb::coordinator_internal::IdEpochType &key, uint64_t new_id,
-                           pb::coordinator_internal::MetaIncrement &meta_increment);
+  int64_t UpdatePresentId(const pb::coordinator_internal::IdEpochType &key, int64_t new_id,
+                          pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // init ids
   void InitIds();
@@ -863,9 +863,9 @@ class CoordinatorControl : public MetaControl {
                             std::vector<pb::coordinator_internal::RegionInternal> &regions);
 
   // GC
-  butil::Status UpdateGCSafePoint(uint64_t safe_point, uint64_t &new_safe_point,
+  butil::Status UpdateGCSafePoint(int64_t safe_point, int64_t &new_safe_point,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status GetGCSafePoint(uint64_t &safe_point);
+  butil::Status GetGCSafePoint(int64_t &safe_point);
 
  private:
   butil::Status ValidateTaskListConflict(int64_t region_id, int64_t second_region_id);

@@ -298,8 +298,8 @@ message CoordinatorMemoryInfo {
   int64 deleted_index_map_count = 50;
   int64 deleted_index_map_size = 51;
 
-  uint64 range_region_map_count = 52;
-  uint64 range_region_map_size = 53;
+  int64 range_region_map_count = 52;
+  int64 range_region_map_size = 53;
 
   repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
 }
@@ -731,14 +731,14 @@ message RegionStatus {
   // for index, the region is index (including vector index and scalar index)
   dingodb.pb.common.RegionType region_type = 5;
   // the create timestamp in ms of region
-  uint64 create_timestamp = 10;
+  int64 create_timestamp = 10;
   // the last update(heartbeat) timestamp in ms of region
-  uint64 last_update_timestamp = 11;
+  int64 last_update_timestamp = 11;
 }
 
 message ScanRegionInfo {
   // this is really region id, its parent entity is part_id
-  uint64 region_id = 1;
+  int64 region_id = 1;
   // the range of this part
   dingodb.pb.common.Range range = 2;
   // the leader's store location
@@ -795,19 +795,19 @@ message RaftControlResponse {
 };
 
 message UpdateGCSafePointRequest {
-  uint64 safe_point = 1;
+  int64 safe_point = 1;
 }
 
 message UpdateGCSafePointResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 new_safe_point = 2;
+  int64 new_safe_point = 2;
 }
 
 message GetGCSafePointRequest {}
 
 message GetGCSafePointResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 safe_point = 2;
+  int64 safe_point = 2;
 }
 
 service CoordinatorService {

@@ -1761,7 +1761,7 @@ void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController * /*con
     auto *region_status = new_region->mutable_status();
     region_status->set_state(part_region.state());
 
-    uint64_t leader_id = 0;
+    int64_t leader_id = 0;
     pb::common::RegionStatus inner_region_status;
     coordinator_control_->GetRegionLeaderAndStatus(part_region.id(), inner_region_status, leader_id);
 
@@ -1812,7 +1812,7 @@ void CoordinatorServiceImpl::UpdateGCSafePoint(google::protobuf::RpcController *
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  uint64_t new_gc_safe_point = 0;
+  int64_t new_gc_safe_point = 0;
   auto ret = this->coordinator_control_->UpdateGCSafePoint(request->safe_point(), new_gc_safe_point, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "UpdateGCSafePoint failed, gc_safe_point:" << request->safe_point()
@@ -1855,7 +1855,7 @@ void CoordinatorServiceImpl::GetGCSafePoint(google::protobuf::RpcController * /*
     return RedirectResponse(response);
   }
 
-  uint64_t gc_safe_point = 0;
+  int64_t gc_safe_point = 0;
   auto ret = this->coordinator_control_->GetGCSafePoint(gc_safe_point);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "GetGCSafePoint failed, errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();

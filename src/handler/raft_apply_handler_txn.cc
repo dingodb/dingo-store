@@ -45,7 +45,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
                                                   std::shared_ptr<RawEngine> engine,
                                                   const pb::raft::MultiCfPutAndDeleteRequest &request,
                                                   [[maybe_unused]] store::RegionMetricsPtr region_metrics,
-                                                  uint64_t term_id, uint64_t log_id) {
+                                                  int64_t term_id, int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -140,8 +140,8 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
                                           [[maybe_unused]] store::RegionPtr region,
                                           [[maybe_unused]] std::shared_ptr<RawEngine> engine,
                                           const pb::raft::TxnPrewriteRequest &request,
-                                          [[maybe_unused]] store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                                          uint64_t log_id) {
+                                          [[maybe_unused]] store::RegionMetricsPtr region_metrics, int64_t term_id,
+                                          int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -164,11 +164,11 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
   std::vector<pb::common::KeyValue> kv_puts_data;
   std::vector<pb::common::KeyValue> kv_puts_lock;
 
-  const uint64_t &start_ts = request.start_ts();
-  const uint64_t &lock_ttl = request.lock_ttl();
-  const uint64_t &txn_size = request.mutations_size();
+  const int64_t &start_ts = request.start_ts();
+  const int64_t &lock_ttl = request.lock_ttl();
+  const int64_t &txn_size = request.mutations_size();
   const bool &try_one_pc = request.try_one_pc();
-  const uint64_t &max_commit_ts = request.max_commit_ts();
+  const int64_t &max_commit_ts = request.max_commit_ts();
 
   auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
   auto *error = response->mutable_error();
@@ -248,8 +248,8 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
 
     // 2.2 check commit
     // if there is a commit, there will be a key | commit_ts : WriteInfo| in write_cf
-    uint64_t commit_ts = 0;
-    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, start_ts, UINT64_MAX, 0, mutation.key(), false, true, true,
+    int64_t commit_ts = 0;
+    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, start_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true,
                                               write_info, commit_ts);
     if (!ret2.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnPrewrite, term: {} apply_log_id: {}", region->Id(),
@@ -394,7 +394,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
 
 void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                         std::shared_ptr<RawEngine> engine, const pb::raft::TxnCommitRequest &request,
-                                        store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id) {
+                                        store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
                                  log_id)
                   << ", request: " << request.ShortDebugString();
@@ -411,8 +411,8 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
 
-  const uint64_t &start_ts = request.start_ts();
-  const uint64_t &commit_ts = request.commit_ts();
+  const int64_t &start_ts = request.start_ts();
+  const int64_t &commit_ts = request.commit_ts();
 
   auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
   auto *error = response->mutable_error();
@@ -465,8 +465,8 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
 
     // check if the key is already committed, if it is committed can skip it
     pb::store::WriteInfo write_info;
-    uint64_t commit_ts = 0;
-    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, start_ts, UINT64_MAX, start_ts, key, false, true, true,
+    int64_t commit_ts = 0;
+    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, start_ts, Constant::kMaxVer, start_ts, key, false, true, true,
                                               write_info, commit_ts);
     if (!ret2.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
@@ -500,9 +500,9 @@ void TxnHandler::HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::Reg
 
 butil::Status TxnHandler::DoTxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                       std::shared_ptr<RawEngine> engine,
-                                      const std::vector<pb::store::LockInfo> &lock_infos, uint64_t start_ts,
-                                      uint64_t commit_ts, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                                      uint64_t log_id) {
+                                      const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
+                                      int64_t commit_ts, store::RegionMetricsPtr region_metrics, int64_t term_id,
+                                      int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
                                  log_id)
                   << ", lock_infos count: " << lock_infos.size();
@@ -665,8 +665,8 @@ butil::Status TxnHandler::DoTxnCommit(std::shared_ptr<Context> ctx, store::Regio
 void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                 std::shared_ptr<RawEngine> engine,
                                                 const pb::raft::TxnCheckTxnStatusRequest &request,
-                                                store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id,
-                                                uint64_t log_id) {
+                                                store::RegionMetricsPtr /*region_metrics*/, int64_t term_id,
+                                                int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -687,9 +687,9 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
   auto write_reader = engine->NewReader(Constant::kTxnWriteCF);
 
   const std::string &primary_key = request.primary_key();
-  const uint64_t &lock_ts = request.lock_ts();
-  const uint64_t &caller_start_ts = request.caller_start_ts();
-  const uint64_t &current_ts = request.current_ts();
+  const int64_t &lock_ts = request.lock_ts();
+  const int64_t &caller_start_ts = request.caller_start_ts();
+  const int64_t &current_ts = request.current_ts();
 
   auto *response = dynamic_cast<pb::store::TxnCheckTxnStatusResponse *>(ctx->Response());
   auto *error = response->mutable_error();
@@ -720,7 +720,7 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
       return;
     }
 
-    uint64_t current_ms = request.current_ts() >> 18;
+    int64_t current_ms = request.current_ts() >> 18;
 
     DINGO_LOG(INFO) << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString()
                     << ", request: " << request.ShortDebugString() << ", current_ms: " << current_ms;
@@ -781,9 +781,9 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
     }
 
     // if there is not a rollback to lock_ts, try to get the commit_ts
-    uint64_t commit_ts = 0;
-    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, lock_ts, UINT64_MAX, lock_ts, primary_key, false, true, true,
-                                              write_info, commit_ts);
+    int64_t commit_ts = 0;
+    auto ret2 = TxnEngineHelper::GetWriteInfo(engine, lock_ts, Constant::kMaxVer, lock_ts, primary_key, false, true,
+                                              true, write_info, commit_ts);
     if (!ret2.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnCheckTxnStatus, term: {} apply_log_id: {}",
                                       region->Id(), term_id, log_id)
@@ -812,8 +812,7 @@ void TxnHandler::HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, st
 void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              std::shared_ptr<RawEngine> engine,
                                              const pb::raft::TxnResolveLockRequest &request,
-                                             store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                                             uint64_t log_id) {
+                                             store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnResolveLock, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -834,8 +833,8 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
 
-  const uint64_t &start_ts = request.start_ts();
-  const uint64_t &commit_ts = request.commit_ts();
+  const int64_t &start_ts = request.start_ts();
+  const int64_t &commit_ts = request.commit_ts();
 
   auto *response = dynamic_cast<pb::store::TxnResolveLockResponse *>(ctx->Response());
   auto *error = response->mutable_error();
@@ -953,8 +952,8 @@ void TxnHandler::HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store
 void TxnHandler::HandleTxnBatchRollbackRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                std::shared_ptr<RawEngine> engine,
                                                const pb::raft::TxnBatchRollbackRequest &request,
-                                               store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id,
-                                               uint64_t log_id) {
+                                               store::RegionMetricsPtr /*region_metrics*/, int64_t term_id,
+                                               int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnBatchRollback, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -972,7 +971,7 @@ void TxnHandler::HandleTxnBatchRollbackRequest(std::shared_ptr<Context> ctx, sto
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
 
-  const uint64_t &start_ts = request.start_ts();
+  const int64_t &start_ts = request.start_ts();
 
   auto *response = dynamic_cast<pb::store::TxnBatchRollbackResponse *>(ctx->Response());
   auto *error = response->mutable_error();
@@ -1040,8 +1039,8 @@ void TxnHandler::HandleTxnBatchRollbackRequest(std::shared_ptr<Context> ctx, sto
 void TxnHandler::HandleTxnHeartBeatRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                            std::shared_ptr<RawEngine> engine,
                                            const pb::raft::TxnHeartBeatRequest &request,
-                                           store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id,
-                                           uint64_t log_id) {
+                                           store::RegionMetricsPtr /*region_metrics*/, int64_t term_id,
+                                           int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnHeartBeat, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -1058,8 +1057,8 @@ void TxnHandler::HandleTxnHeartBeatRequest(std::shared_ptr<Context> ctx, store::
   auto *txn_result = response->mutable_txn_result();
 
   const std::string &primary_lock = request.primary_lock();
-  const uint64_t &start_ts = request.start_ts();
-  const uint64_t &advise_lock_ttl = request.advise_lock_ttl();
+  const int64_t &start_ts = request.start_ts();
+  const int64_t &advise_lock_ttl = request.advise_lock_ttl();
 
   pb::store::LockInfo lock_info;
   auto ret = TxnEngineHelper::GetLockInfo(lock_reader, primary_lock, lock_info);
@@ -1120,8 +1119,8 @@ void TxnHandler::HandleTxnHeartBeatRequest(std::shared_ptr<Context> ctx, store::
 void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              std::shared_ptr<RawEngine> engine,
                                              const pb::raft::TxnDeleteRangeRequest &request,
-                                             store::RegionMetricsPtr /*region_metrics*/, uint64_t term_id,
-                                             uint64_t log_id) {
+                                             store::RegionMetricsPtr /*region_metrics*/, int64_t term_id,
+                                             int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnDeleteRange, term: {} apply_log_id: {}", region->Id(),
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
@@ -1139,7 +1138,7 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
 
   pb::common::Range range;
 
-  range.set_start_key(Helper::EncodeTxnKey(request.start_key(), UINT64_MAX));
+  range.set_start_key(Helper::EncodeTxnKey(request.start_key(), Constant::kMaxVer));
   range.set_end_key(Helper::EncodeTxnKey(request.end_key(), 0));
 
   std::vector<pb::common::Range> data_ranges;
@@ -1165,8 +1164,8 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
 }
 
 int TxnHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term,
-                       uint64_t log_id) {
+                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term,
+                       int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Handle txn, term: {} apply_log_id: {}", region->Id(), term, log_id);
 
   const auto &txn_raft_req = req.txn_raft_req();
