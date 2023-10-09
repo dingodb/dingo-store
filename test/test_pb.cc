@@ -14,9 +14,12 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 
+#include "engine/write_data.h"
+#include "proto/raft.pb.h"
 #include "proto/store.pb.h"
 
 class StorePbTest : public testing::Test {
@@ -38,4 +41,43 @@ TEST(StorePbTest, GetTypeName) {
 
   std::cout << "put_if_absent_name : " << put_if_absent_name << std::endl;
   EXPECT_EQ(put_if_absent_name, "dingodb.pb.store.KvPutIfAbsentResponse");
+}
+
+// uint64 id = 1;
+// Vector vector = 2;  // vector data
+// // scalar data of this vector, key: scalar key, value: scalar value data. meta data.
+// VectorScalardata scalar_data = 3;
+// VectorTableData table_data = 4;  // table data of this vector, only SQL can use this field
+
+dingodb::pb::common::VectorWithId GenVector(uint16_t id, int dimension) {
+  dingodb::pb::common::VectorWithId vector;
+
+  vector.set_id(id);
+  for (int i = 0; i < dimension; ++i) {
+    vector.mutable_vector()->add_float_values(1.1111);
+  }
+
+  return vector;
+}
+
+TEST(StorePbTest, MemoryLeak) {
+  for (;;) {
+    std::vector<dingodb::pb::common::VectorWithId> vectors;
+    vectors.reserve(1024);
+
+    for (int i = 0; i < 1024; ++i) {
+      vectors.push_back(GenVector(i, 512));
+    }
+    auto write_data = dingodb::WriteDataBuilder::BuildWrite("default", vectors);
+
+    auto raft_cmd = std::make_shared<dingodb::pb::raft::RaftCmdRequest>();
+
+    dingodb::pb::raft::RequestHeader* header = raft_cmd->mutable_header();
+    header->set_region_id(1111);
+
+    auto* requests = raft_cmd->mutable_requests();
+    for (auto& datum : write_data->Datums()) {
+      requests->AddAllocated(datum->TransformToRaft());
+    }
+  }
 }
