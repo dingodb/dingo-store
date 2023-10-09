@@ -18,7 +18,7 @@ cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(dingo-store C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
-option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
+option(LINK_TCMALLOC "Link tcmalloc if possible" ON)
 option(BUILD_UNIT_TESTS "Build unit test" OFF)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" ON)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
@@ -26,14 +26,22 @@ option(WITH_DISKANN "Build with diskann index" OFF)
 option(WITH_MKL "Build with intel mkl" OFF)
 option(BOOST_SEARCH_PATH "")
 option(BUILD_GOOGLE_SANITIZE "enable google sanitize" OFF)
+option(BRPC_ENABLE_CPU_PROFILER "enable brpc cpu profiler" OFF)
+
+message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
+message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
+
+if(BRPC_ENABLE_CPU_PROFILER)
+    message(STATUS "Enable BRPC_ENABLE_CPU_PROFILER")
+    add_definitions(-DBRPC_ENABLE_CPU_PROFILER=ON)
+    set(LINK_TCMALLOC ON)
+endif()
 
 if(BUILD_GOOGLE_SANITIZE)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
     message(STATUS "enable google sanitize")
 endif()
-
-
 
 # To avoid rocksdb PROTABLE options on old arch machine when build using docker
 set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
