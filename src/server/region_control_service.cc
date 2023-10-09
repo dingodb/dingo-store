@@ -240,7 +240,7 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   }
 }
 
-static pb::common::RegionMetrics GetRegionActualMetrics(uint64_t region_id) {
+static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   pb::common::RegionMetrics region_metrics;
   region_metrics.set_id(region_id);
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
@@ -250,7 +250,7 @@ static pb::common::RegionMetrics GetRegionActualMetrics(uint64_t region_id) {
 
   auto raw_engine = Server::GetInstance()->GetRawEngine();
 
-  uint64_t size = 0;
+  int64_t size = 0;
   int32_t key_count = 0;
   std::string min_key, max_key;
   auto ranges = region->PhysicsRange();
@@ -437,13 +437,13 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       entry->set_dimension(vector_index_wrapper->GetDimension());
       entry->set_apply_log_index(vector_index_wrapper->ApplyLogId());
       entry->set_snapshot_log_index(vector_index_wrapper->SnapshotLogId());
-      uint64_t key_count = 0;
+      int64_t key_count = 0;
       vector_index_wrapper->GetCount(key_count);
       entry->set_key_count(key_count);
-      uint64_t deleted_key_count = 0;
+      int64_t deleted_key_count = 0;
       vector_index_wrapper->GetDeletedCount(deleted_key_count);
       entry->set_deleted_key_count(deleted_key_count);
-      uint64_t memory_size = 0;
+      int64_t memory_size = 0;
       vector_index_wrapper->GetMemorySize(memory_size);
       entry->set_memory_size(memory_size);
     }

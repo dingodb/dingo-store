@@ -23,19 +23,19 @@ namespace dingodb {
 class Constant {
  public:
   // Define Global Region Id for Coordinator(As only One)
-  static const uint64_t kCoordinatorRegionId = 0;
+  static const int64_t kCoordinatorRegionId = 0;
 
   // Define Global Region Id for auto increment
-  static const uint64_t kAutoIncrementRegionId = 1;
+  static const int64_t kAutoIncrementRegionId = 1;
 
   // Define Global Region Id for tso
-  static const uint64_t kTsoRegionId = 2;
+  static const int64_t kTsoRegionId = 2;
 
   // Define Global TableID for Coordinator(As only one)
-  static const uint64_t kCoordinatorTableId = 0;
+  static const int64_t kCoordinatorTableId = 0;
 
   // Define Global SchemaId for Coordinator(As only one)
-  static const uint64_t kCoordinatorSchemaId = 0;
+  static const int64_t kCoordinatorSchemaId = 0;
 
   // Define mbvar metrics number
   static const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
@@ -61,7 +61,7 @@ class Constant {
   inline static const std::string kDefaultRaftSnapshotPolicy = "checkpoint";
 
   // flat map init capacity
-  static const uint64_t kStoreRegionMetaInitCapacity = 1024;
+  static const int64_t kStoreRegionMetaInitCapacity = 1024;
 
   // internal schema name
   inline static const std::string kRootSchemaName = "ROOT";
@@ -164,7 +164,7 @@ class Constant {
   inline static const std::string kRaftSnapshotRegionMetaFileName = "region_meta";
 
   static constexpr uint32_t kCollectApproximateSizeBatchSize = 1024;
-  static constexpr uint64_t kVectorIndexSnapshotCatchupMargin = 4000;
+  static constexpr int64_t kVectorIndexSnapshotCatchupMargin = 4000;
 
   static constexpr uint32_t kRaftElectionTimeoutSDefaultValue = 6;
 

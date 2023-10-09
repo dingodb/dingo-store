@@ -57,7 +57,7 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
  public:
   CoordinatorClosure(const pb::coordinator::StoreHeartbeatRequest* request,
                      pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done,
-                     uint64_t new_storemap_epoch, std::shared_ptr<CoordinatorControl> coordinator_control)
+                     int64_t new_storemap_epoch, std::shared_ptr<CoordinatorControl> coordinator_control)
       : request_(request),
         response_(response),
         done_(done),
@@ -102,8 +102,8 @@ class CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator
   const pb::coordinator::StoreHeartbeatRequest* request_;
   pb::coordinator::StoreHeartbeatResponse* response_;
   google::protobuf::Closure* done_;
-  uint64_t new_regionmap_epoch_;
-  uint64_t new_storemap_epoch_;
+  int64_t new_regionmap_epoch_;
+  int64_t new_storemap_epoch_;
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
@@ -113,7 +113,7 @@ class CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordina
  public:
   CoordinatorClosure(const pb::coordinator::ExecutorHeartbeatRequest* request,
                      pb::coordinator::ExecutorHeartbeatResponse* response, google::protobuf::Closure* done,
-                     uint64_t new_executormap_epoch, std::shared_ptr<CoordinatorControl> coordinator_control)
+                     int64_t new_executormap_epoch, std::shared_ptr<CoordinatorControl> coordinator_control)
       : request_(request),
         response_(response),
         done_(done),
@@ -144,7 +144,7 @@ class CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordina
   const pb::coordinator::ExecutorHeartbeatRequest* request_;
   pb::coordinator::ExecutorHeartbeatResponse* response_;
   google::protobuf::Closure* done_;
-  uint64_t new_executormap_epoch_;
+  int64_t new_executormap_epoch_;
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 

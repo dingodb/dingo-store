@@ -79,7 +79,7 @@ int SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
 }
 
 // Launch save raft snapshot
-static void LaunchSaveRaftSnapshot(uint64_t region_id) {
+static void LaunchSaveRaftSnapshot(int64_t region_id) {
   auto engine = Server::GetInstance()->GetEngine();
   if (engine != nullptr) {
     auto ctx = std::make_shared<Context>();

@@ -132,7 +132,7 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
   }
 }
 
-VectorIndexHnsw::VectorIndexHnsw(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
   bthread_mutex_init(&mutex_, nullptr);
@@ -229,8 +229,8 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     }
     return butil::Status();
   } catch (std::runtime_error& e) {
-    uint64_t current_element_count = hnsw_index_->getCurrentElementCount();
-    uint64_t max_element_count = hnsw_index_->getMaxElements();
+    int64_t current_element_count = hnsw_index_->getCurrentElementCount();
+    int64_t max_element_count = hnsw_index_->getMaxElements();
     std::string s = fmt::format("upsert vector failed, error={} current_element_count={} max_element_count={}",
                                 e.what(), current_element_count, max_element_count);
     DINGO_LOG(ERROR) << s;
@@ -238,7 +238,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   }
 }
 
-butil::Status VectorIndexHnsw::Delete(const std::vector<uint64_t>& delete_ids) {
+butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
     DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
@@ -471,7 +471,7 @@ void VectorIndexHnsw::LockWrite() { bthread_mutex_lock(&mutex_); }
 
 void VectorIndexHnsw::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 
-butil::Status VectorIndexHnsw::ResizeMaxElements(uint64_t new_max_elements) {
+butil::Status VectorIndexHnsw::ResizeMaxElements(int64_t new_max_elements) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -484,7 +484,7 @@ butil::Status VectorIndexHnsw::ResizeMaxElements(uint64_t new_max_elements) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexHnsw::GetMaxElements(uint64_t& max_elements) {
+butil::Status VectorIndexHnsw::GetMaxElements(int64_t& max_elements) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -509,27 +509,27 @@ hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->
 
 int32_t VectorIndexHnsw::GetDimension() { return this->dimension_; }
 
-butil::Status VectorIndexHnsw::GetCount(uint64_t& count) {
+butil::Status VectorIndexHnsw::GetCount(int64_t& count) {
   // std::unique_lock<std::mutex> lock_table(this->hnsw_index_->label_lookup_lock);
   // count = this->hnsw_index_->label_lookup_.size();
   count = this->hnsw_index_->getCurrentElementCount();
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexHnsw::GetDeletedCount(uint64_t& deleted_count) {
+butil::Status VectorIndexHnsw::GetDeletedCount(int64_t& deleted_count) {
   // std::unique_lock<std::mutex> lock_deleted_elements(this->hnsw_index_->deleted_elements_lock);
   // deleted_count = this->hnsw_index_->deleted_elements.size();
   deleted_count = this->hnsw_index_->getDeletedCount();
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexHnsw::GetMemorySize(uint64_t& memory_size) {
+butil::Status VectorIndexHnsw::GetMemorySize(int64_t& memory_size) {
   memory_size = hnsw_index_->indexFileSize();
   return butil::Status::OK();
 }
 
 bool VectorIndexHnsw::NeedToRebuild() {
-  uint64_t element_count = 0, deleted_count = 0;
+  int64_t element_count = 0, deleted_count = 0;
 
   element_count = this->hnsw_index_->getCurrentElementCount();
 

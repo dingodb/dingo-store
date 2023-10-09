@@ -36,7 +36,7 @@
 
 namespace dingodb {
 
-std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
+std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
                                                      const pb::common::VectorIndexParameter& index_parameter,
                                                      const pb::common::Range& range) {
   std::shared_ptr<VectorIndex> vector_index = nullptr;
@@ -80,7 +80,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(uint64_t id,
   return vector_index;
 }
 
-std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(uint64_t id,
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(int64_t id,
                                                          const pb::common::VectorIndexParameter& index_parameter,
                                                          const pb::common::Range& range) {
   const auto& hnsw_parameter = index_parameter.hnsw_parameter();
@@ -124,7 +124,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(uint64_t id,
   }
 }
 
-std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(uint64_t id,
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(int64_t id,
                                                          const pb::common::VectorIndexParameter& index_parameter,
                                                          const pb::common::Range& range) {
   const auto& flat_parameter = index_parameter.flat_parameter();
@@ -156,7 +156,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(uint64_t id,
   }
 }
 
-std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(uint64_t id,
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(int64_t id,
                                                             const pb::common::VectorIndexParameter& index_parameter,
                                                             const pb::common::Range& range) {
   const auto& ivf_flat_parameter = index_parameter.ivf_flat_parameter();
@@ -185,7 +185,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(uint64_t id,
                        << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     } else {
-      DINGO_LOG(INFO) << "create ivf flat index success, id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      DINGO_LOG(INFO) << "create ivf flat index success, id=" << id
+                      << ", parameter=" << index_parameter.ShortDebugString();
     }
     return new_ivf_flat_index;
   } catch (std::exception& e) {

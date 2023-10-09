@@ -224,7 +224,7 @@ butil::Status CoordinatorControl::DeleteRawKvRev(const pb::coordinator_internal:
 // return: errno
 butil::Status CoordinatorControl::KvRange(const std::string &key, const std::string &range_end, int64_t limit,
                                           bool keys_only, bool count_only, std::vector<pb::version::Kv> &kv,
-                                          uint64_t &total_count_in_range) {
+                                          int64_t &total_count_in_range) {
   DINGO_LOG(INFO) << "KvRange, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only;
 
@@ -356,9 +356,9 @@ butil::Status CoordinatorControl::KvRangeRawKeys(const std::string &key, const s
 // in and out:  sub_revision
 // out:  prev_kv
 // return: errno
-butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in, uint64_t lease_id, bool need_prev_kv,
-                                        bool igore_value, bool ignore_lease, uint64_t main_revision,
-                                        uint64_t &sub_revision, pb::version::Kv &prev_kv, uint64_t &lease_grant_id,
+butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv,
+                                        bool igore_value, bool ignore_lease, int64_t main_revision,
+                                        int64_t &sub_revision, pb::version::Kv &prev_kv, int64_t &lease_grant_id,
                                         pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
                   << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << igore_value
@@ -408,7 +408,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
 
   lease_grant_id = lease_id;
 
-  uint64_t total_count_in_range = 0;
+  int64_t total_count_in_range = 0;
   this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
   if (ignore_lease) {
     if (!kvs_temp.empty()) {
@@ -447,7 +447,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
   // get prev_kvs
   if (need_prev_kv) {
     if (kvs_temp.empty()) {
-      uint64_t total_count_in_range = 0;
+      int64_t total_count_in_range = 0;
       this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
     }
     if (!kvs_temp.empty()) {
@@ -492,14 +492,14 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
 // out:  prev_kvs
 // return: errno
 butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
-                                                uint64_t main_revision, uint64_t &sub_revision,
-                                                bool need_lease_remove_keys, uint64_t &deleted_count,
+                                                int64_t main_revision, int64_t &sub_revision,
+                                                bool need_lease_remove_keys, int64_t &deleted_count,
                                                 std::vector<pb::version::Kv> &prev_kvs,
                                                 pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", need_prev: " << need_prev_kv;
 
   std::vector<pb::version::Kv> kvs_to_delete;
-  uint64_t total_count_in_range = 0;
+  int64_t total_count_in_range = 0;
 
   bool key_only = !need_prev_kv;
 
@@ -510,7 +510,7 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
     return ret;
   }
 
-  std::map<uint64_t, std::set<std::string>> keys_to_remove_lease;
+  std::map<int64_t, std::set<std::string>> keys_to_remove_lease;
 
   // do kv_delete
   for (const auto &kv_to_delete : kvs_to_delete) {
@@ -560,7 +560,7 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
 
 butil::Status CoordinatorControl::KvPutApply(const std::string &key,
                                              const pb::coordinator_internal::RevisionInternal &op_revision,
-                                             bool ignore_lease, uint64_t lease_id, bool ignore_value,
+                                             bool ignore_lease, int64_t lease_id, bool ignore_value,
                                              const std::string &value) {
   DINGO_LOG(INFO) << "KvPutApply, key: " << key << ", op_revision: " << op_revision.ShortDebugString()
                   << ", ignore_lease: " << ignore_lease << ", lease_id: " << lease_id
@@ -572,7 +572,7 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   pb::coordinator_internal::RevisionInternal new_create_revision;
   new_create_revision.set_main(op_revision.main());
   new_create_revision.set_sub(op_revision.sub());
-  uint64_t new_version = 1;
+  int64_t new_version = 1;
 
   pb::version::Kv prev_kv;
   pb::version::Kv new_kv;
@@ -718,7 +718,7 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   pb::coordinator_internal::RevisionInternal new_create_revision;
   new_create_revision.set_main(op_revision.main());
   new_create_revision.set_sub(op_revision.sub());
-  uint64_t new_version = 1;
+  int64_t new_version = 1;
 
   pb::version::Kv prev_kv;
   pb::version::Kv new_kv;
@@ -853,7 +853,7 @@ void CoordinatorControl::CompactionTask() {
   // build revision struct
   pb::coordinator_internal::RevisionInternal compact_revision;
 
-  uint64_t now_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
+  int64_t now_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
   if (now_revision < FLAGS_compaction_retention_rev_count) {
     DINGO_LOG(INFO) << "compaction task skip, now_revision: " << now_revision
                     << ", compaction_retention_rev_count: " << FLAGS_compaction_retention_rev_count;

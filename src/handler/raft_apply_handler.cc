@@ -39,8 +39,8 @@
 namespace dingodb {
 
 int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/,
-                       uint64_t /*log_id*/) {
+                       const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t /*term_id*/,
+                       int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put();
   // region is spliting, check key out range
@@ -85,7 +85,7 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
 
 int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
-                               uint64_t /*term_id*/, uint64_t /*log_id*/) {
+                               int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
@@ -152,7 +152,7 @@ int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
 
 int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                  std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                 store::RegionMetricsPtr region_metrics, uint64_t /*term_id*/, uint64_t /*log_id*/) {
+                                 store::RegionMetricsPtr region_metrics, int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.compare_and_set();
   // region is spliting, check key out range
@@ -237,7 +237,7 @@ int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
 int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
-                               uint64_t /*term_id*/, uint64_t /*log_id*/) {
+                               int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_range();
   // region is spliting, check key out range
@@ -262,9 +262,9 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   if (!writer) {
     DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
   }
-  uint64_t delete_count = 0;
+  int64_t delete_count = 0;
   if (1 == request.ranges().size()) {
-    uint64_t internal_delete_count = 0;
+    int64_t internal_delete_count = 0;
     const auto &range = request.ranges()[0];
     status = reader->KvCount(range.start_key(), range.end_key(), internal_delete_count);
     if (status.ok() && 0 != internal_delete_count) {
@@ -274,7 +274,7 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   } else {
     auto snapshot = engine->GetSnapshot();
     for (const auto &range : request.ranges()) {
-      uint64_t internal_delete_count = 0;
+      int64_t internal_delete_count = 0;
       status = reader->KvCount(snapshot, range.start_key(), range.end_key(), internal_delete_count);
       if (!status.ok()) {
         delete_count = 0;
@@ -306,7 +306,7 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
 
 int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
-                               uint64_t /*term_id*/, uint64_t /*log_id*/) {
+                               int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
@@ -371,7 +371,7 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
 }
 
 // Launch rebuild vector index through raft state machine
-static void LaunchRebuildVectorIndex(uint64_t region_id) {
+static void LaunchRebuildVectorIndex(int64_t region_id) {
   auto engine = Server::GetInstance()->GetEngine();
   if (engine != nullptr) {
     auto ctx = std::make_shared<Context>();
@@ -434,8 +434,8 @@ void SplitHandler::SplitClosure::Run() {
 }
 
 // Pre create region split
-bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr from_region, uint64_t term_id,
-                                uint64_t log_id) {
+bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr from_region, int64_t term_id,
+                                int64_t log_id) {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
 
   if (request.epoch().version() != from_region->Epoch().version()) {
@@ -556,7 +556,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   return true;
 }
 
-store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition, uint64_t parent_region_id) {  // NOLINT
+store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition, int64_t parent_region_id) {  // NOLINT
   store::RegionPtr region = store::Region::New(definition);
   region->SetState(pb::common::STANDBY);
   region->SetSplitStrategy(pb::raft::POST_CREATE_REGION);
@@ -613,11 +613,11 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
 }
 
 // Post create region split
-bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr parent_region,
-                                 uint64_t term_id, uint64_t log_id) {
+bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr parent_region, int64_t term_id,
+                                 int64_t log_id) {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  uint64_t parent_region_id = request.from_region_id();
-  uint64_t child_region_id = request.to_region_id();
+  int64_t parent_region_id = request.from_region_id();
+  int64_t child_region_id = request.to_region_id();
 
   if (request.epoch().version() != parent_region->Epoch().version()) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -712,8 +712,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 // region-100: [start_key,end_key) ->
 // region-101: [start_key, split_key) and region-100: [split_key, end_key)
 int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region, std::shared_ptr<RawEngine>,
-                         const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                         uint64_t log_id) {
+                         const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+                         int64_t log_id) {
   const auto &request = req.split();
 
   if (request.split_strategy() == pb::raft::PRE_CREATE_REGION) {
@@ -742,8 +742,8 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
 }
 
 int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
-                                    const pb::raft::Request &, store::RegionMetricsPtr, uint64_t term_id,
-                                    uint64_t log_id) {
+                                    const pb::raft::Request &, store::RegionMetricsPtr, int64_t term_id,
+                                    int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] save snapshot, term({}) log_id({})",
                                  region->ParentId(), region->Id(), term_id, log_id);
   auto engine = Server::GetInstance()->GetEngine();
@@ -760,7 +760,7 @@ int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr r
 
 int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                              const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
-                             uint64_t /*term_id*/, uint64_t log_id) {
+                             int64_t /*term_id*/, int64_t log_id) {
   auto set_ctx_status = [ctx](butil::Status status) {
     if (ctx) {
       ctx->SetStatus(status);
@@ -773,8 +773,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
     const auto &range = region->RawRange();
-    uint64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-    uint64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+    int64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+    int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
     for (const auto &vector : request.vectors()) {
       if (vector.id() < start_vector_id || vector.id() >= end_vector_id) {
         if (ctx) {
@@ -830,7 +830,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t vector_index_id = vector_index_wrapper->Id();
   bool is_ready = vector_index_wrapper->IsReady();
   // if leadder vector_index is nullptr, return internal error
   if (ctx != nullptr && !is_ready) {
@@ -915,7 +915,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
 int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                store::RegionMetricsPtr /*region_metrics*/, uint64_t /*term_id*/, uint64_t log_id) {
+                                store::RegionMetricsPtr /*region_metrics*/, int64_t /*term_id*/, int64_t log_id) {
   auto set_ctx_status = [ctx](butil::Status status) {
     if (ctx) {
       ctx->SetStatus(status);
@@ -928,8 +928,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
     const auto &range = region->RawRange();
-    uint64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-    uint64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+    int64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+    int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
     for (auto vector_id : request.ids()) {
       if (vector_id < start_vector_id || vector_id >= end_vector_id) {
         if (ctx) {
@@ -962,7 +962,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   // Transform vector to kv
   std::vector<bool> key_states(request.ids_size(), false);
   std::vector<std::string> keys;
-  std::vector<uint64_t> delete_ids;
+  std::vector<int64_t> delete_ids;
 
   for (int i = 0; i < request.ids_size(); i++) {
     // set key_states
@@ -1001,7 +1001,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t vector_index_id = vector_index_wrapper->Id();
   bool is_ready = vector_index_wrapper->IsReady();
   // if leadder vector_index is nullptr, return internal error
   if (ctx != nullptr && !is_ready) {
@@ -1078,8 +1078,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 }
 
 int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
-                                      [[maybe_unused]] const pb::raft::Request &req, store::RegionMetricsPtr, uint64_t,
-                                      uint64_t log_id) {
+                                      [[maybe_unused]] const pb::raft::Request &req, store::RegionMetricsPtr, int64_t,
+                                      int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Handle rebuild vector index, apply_log_id: {}",
                                  region->Id(), log_id);
   auto vector_index_wrapper = region->VectorIndexWrapper();

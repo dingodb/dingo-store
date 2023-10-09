@@ -84,27 +84,27 @@ pb::common::RegionEpoch Region::Epoch() {
   return inner_region_.definition().epoch();
 }
 
-void Region::SetEpochVersion(uint64_t version) {
+void Region::SetEpochVersion(int64_t version) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
 }
 
-void Region::SetEpochConfVersion(uint64_t version) {
+void Region::SetEpochConfVersion(int64_t version) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_epoch()->set_conf_version(version);
 }
 
-void Region::SetSnapshotEpochVersion(uint64_t version) {
+void Region::SetSnapshotEpochVersion(int64_t version) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_snapshot_epoch_version(version);
 }
 
-uint64_t Region::LeaderId() {
+int64_t Region::LeaderId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.leader_id();
 }
 
-void Region::SetLeaderId(uint64_t leader_id) {
+void Region::SetLeaderId(int64_t leader_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_leader_id(leader_id);
 }
@@ -239,7 +239,7 @@ void Region::SetTemporaryDisableChange(bool disable_change) {
 pb::raft::SplitStrategy Region::SplitStrategy() { return split_strategy_; }
 void Region::SetSplitStrategy(pb::raft::SplitStrategy split_strategy) { split_strategy_ = split_strategy; }
 
-uint64_t Region::LastSplitTimestamp() {
+int64_t Region::LastSplitTimestamp() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.last_split_timestamp();
 }
@@ -249,11 +249,11 @@ void Region::UpdateLastSplitTimestamp() {
   inner_region_.set_last_split_timestamp(Helper::TimestampMs());
 }
 
-uint64_t Region::ParentId() {
+int64_t Region::ParentId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.parent_id();
 }
-void Region::SetParentId(uint64_t region_id) {
+void Region::SetParentId(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_parent_id(region_id);
 }
@@ -267,7 +267,7 @@ void Region::AddChild(pb::store_internal::RegionSplitRecord& record) {
   inner_region_.add_childs()->Swap(&record);
 }
 
-uint64_t Region::PartitionId() {
+int64_t Region::PartitionId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().part_id();
 }
@@ -304,14 +304,14 @@ bool StoreServerMeta::Init() {
   return true;
 }
 
-uint64_t StoreServerMeta::GetEpoch() const { return epoch_; }
+int64_t StoreServerMeta::GetEpoch() const { return epoch_; }
 
-StoreServerMeta& StoreServerMeta::SetEpoch(uint64_t epoch) {
+StoreServerMeta& StoreServerMeta::SetEpoch(int64_t epoch) {
   epoch_ = epoch;
   return *this;
 }
 
-bool StoreServerMeta::IsExist(uint64_t store_id) {
+bool StoreServerMeta::IsExist(int64_t store_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   return stores_.find(store_id) != stores_.end();
 }
@@ -331,12 +331,12 @@ void StoreServerMeta::UpdateStore(std::shared_ptr<pb::common::Store> store) {
   epoch_ += 1;
   stores_.insert_or_assign(store->id(), store);
 }
-void StoreServerMeta::DeleteStore(uint64_t store_id) {
+void StoreServerMeta::DeleteStore(int64_t store_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   stores_.erase(store_id);
 }
 
-std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) {
+std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(int64_t store_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = stores_.find(store_id);
   if (it == stores_.end()) {
@@ -347,7 +347,7 @@ std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(uint64_t store_id) 
   return it->second;
 }
 
-std::map<uint64_t, std::shared_ptr<pb::common::Store>> StoreServerMeta::GetAllStore() {
+std::map<int64_t, std::shared_ptr<pb::common::Store>> StoreServerMeta::GetAllStore() {
   BAIDU_SCOPED_LOCK(mutex_);
   return stores_;
 }
@@ -400,7 +400,7 @@ bool StoreRegionMeta::Init() {
   return true;
 }
 
-uint64_t StoreRegionMeta::GetEpoch() { return 0; }
+int64_t StoreRegionMeta::GetEpoch() { return 0; }
 
 void StoreRegionMeta::AddRegion(store::RegionPtr region) {
   if (regions_.Get(region->Id()) != nullptr) {
@@ -416,7 +416,7 @@ void StoreRegionMeta::AddRegion(store::RegionPtr region) {
   }
 }
 
-void StoreRegionMeta::DeleteRegion(uint64_t region_id) {
+void StoreRegionMeta::DeleteRegion(int64_t region_id) {
   regions_.Erase(region_id);
 
   if (meta_writer_ != nullptr) {
@@ -499,20 +499,20 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
                                   pb::common::StoreRegionState_Name(new_state), (successed ? "true" : "false"));
 }
 
-void StoreRegionMeta::UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state) {
+void StoreRegionMeta::UpdateState(int64_t region_id, pb::common::StoreRegionState new_state) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
     UpdateState(region, new_state);
   }
 }
 
-void StoreRegionMeta::UpdateLeaderId(store::RegionPtr region, uint64_t leader_id) {
+void StoreRegionMeta::UpdateLeaderId(store::RegionPtr region, int64_t leader_id) {
   assert(region != nullptr);
 
   region->SetLeaderId(leader_id);
 }
 
-void StoreRegionMeta::UpdateLeaderId(uint64_t region_id, uint64_t leader_id) {
+void StoreRegionMeta::UpdateLeaderId(int64_t region_id, int64_t leader_id) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
     UpdateLeaderId(region, leader_id);
@@ -525,7 +525,7 @@ void StoreRegionMeta::UpdatePeers(store::RegionPtr region, std::vector<pb::commo
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdatePeers(uint64_t region_id, std::vector<pb::common::Peer>& peers) {
+void StoreRegionMeta::UpdatePeers(int64_t region_id, std::vector<pb::common::Peer>& peers) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
     UpdatePeers(region, peers);
@@ -541,14 +541,14 @@ void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Ran
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateRange(uint64_t region_id, const pb::common::Range& range) {
+void StoreRegionMeta::UpdateRange(int64_t region_id, const pb::common::Range& range) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
     UpdateRange(region, range);
   }
 }
 
-void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, uint64_t version) {
+void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, int64_t version) {
   assert(region != nullptr);
   if (version <= region->Epoch().version()) {
     return;
@@ -558,7 +558,7 @@ void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, uint64_t versi
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, uint64_t version) {
+void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version) {
   assert(region != nullptr);
   if (version <= region->InnerRegion().snapshot_epoch_version()) {
     return;
@@ -568,14 +568,14 @@ void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, uint64
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateEpochVersion(uint64_t region_id, uint64_t version) {
+void StoreRegionMeta::UpdateEpochVersion(int64_t region_id, int64_t version) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
     UpdateEpochVersion(region, version);
   }
 }
 
-void StoreRegionMeta::UpdateEpochConfVersion(store::RegionPtr region, uint64_t version) {
+void StoreRegionMeta::UpdateEpochConfVersion(store::RegionPtr region, int64_t version) {
   assert(region != nullptr);
   if (version <= region->Epoch().conf_version()) {
     return;
@@ -585,7 +585,7 @@ void StoreRegionMeta::UpdateEpochConfVersion(store::RegionPtr region, uint64_t v
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateEpochConfVersion(uint64_t region_id, uint64_t version) {
+void StoreRegionMeta::UpdateEpochConfVersion(int64_t region_id, int64_t version) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
     UpdateEpochConfVersion(region, version);
@@ -613,9 +613,9 @@ void StoreRegionMeta::UpdateTemporaryDisableChange(store::RegionPtr region, bool
   meta_writer_->Put(TransformToKv(region));
 }
 
-bool StoreRegionMeta::IsExistRegion(uint64_t region_id) { return GetRegion(region_id) != nullptr; }
+bool StoreRegionMeta::IsExistRegion(int64_t region_id) { return GetRegion(region_id) != nullptr; }
 
-store::RegionPtr StoreRegionMeta::GetRegion(uint64_t region_id) {
+store::RegionPtr StoreRegionMeta::GetRegion(int64_t region_id) {
   auto region = regions_.Get(region_id);
   if (region == nullptr) {
     return nullptr;
@@ -677,7 +677,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(std::any ob
 
 void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   for (const auto& kv : kvs) {
-    uint64_t region_id = ParseRegionId(kv.key());
+    int64_t region_id = ParseRegionId(kv.key());
     auto region = store::Region::New();
     region->DeSerialize(kv.value());
     region->Recover();
@@ -699,7 +699,7 @@ bool StoreRaftMeta::Init() {
   return true;
 }
 
-StoreRaftMeta::RaftMetaPtr StoreRaftMeta::NewRaftMeta(uint64_t region_id) {
+StoreRaftMeta::RaftMetaPtr StoreRaftMeta::NewRaftMeta(int64_t region_id) {
   auto raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
   raft_meta->set_region_id(region_id);
   raft_meta->set_term(0);
@@ -731,14 +731,14 @@ void StoreRaftMeta::UpdateRaftMeta(RaftMetaPtr raft_meta) {
   meta_writer_->Put(TransformToKv(raft_meta));
 }
 
-void StoreRaftMeta::SaveRaftMeta(uint64_t region_id) {
+void StoreRaftMeta::SaveRaftMeta(int64_t region_id) {
   auto raft_meta = GetRaftMeta(region_id);
   if (raft_meta != nullptr) {
     meta_writer_->Put(TransformToKv(raft_meta));
   }
 }
 
-void StoreRaftMeta::DeleteRaftMeta(uint64_t region_id) {
+void StoreRaftMeta::DeleteRaftMeta(int64_t region_id) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
     raft_metas_.erase(region_id);
@@ -747,7 +747,7 @@ void StoreRaftMeta::DeleteRaftMeta(uint64_t region_id) {
   meta_writer_->Delete(GenKey(region_id));
 }
 
-StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(uint64_t region_id) {
+StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = raft_metas_.find(region_id);
   if (it == raft_metas_.end()) {
@@ -780,7 +780,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(std::any obj)
 void StoreRaftMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
-    uint64_t region_id = ParseRegionId(kv.key());
+    int64_t region_id = ParseRegionId(kv.key());
     RaftMetaPtr raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
     raft_meta->ParsePartialFromArray(kv.value().data(), kv.value().size());
     raft_metas_.insert_or_assign(region_id, raft_meta);

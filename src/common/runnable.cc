@@ -37,7 +37,7 @@ int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NO
       continue;
     }
 
-    uint64_t start_time = Helper::TimestampMs();
+    int64_t start_time = Helper::TimestampMs();
     (*iter)->Run();
     DINGO_LOG(INFO) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
                                    Helper::TimestampMs() - start_time);

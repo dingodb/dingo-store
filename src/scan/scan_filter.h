@@ -24,7 +24,7 @@ namespace dingodb {
 
 class ScanFilter {
  public:
-  explicit ScanFilter(bool key_only, size_t max_fetch_cnt, uint64_t max_bytes_rpc);
+  explicit ScanFilter(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc);
   ~ScanFilter() = default;
   ScanFilter(const ScanFilter& rhs) = default;
   ScanFilter& operator=(const ScanFilter& rhs) = default;
@@ -35,14 +35,14 @@ class ScanFilter {
 
   void Reset();
 
-  void Reset(bool key_only, size_t max_fetch_cnt, uint64_t max_bytes_rpc);
+  void Reset(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc);
 
  private:
   bool key_only_;
   size_t max_fetch_cnt_;
-  uint64_t max_bytes_rpc_;
+  int64_t max_bytes_rpc_;
   size_t cur_fetch_cnt_;
-  uint64_t cur_bytes_rpc_;
+  int64_t cur_bytes_rpc_;
 };
 
 }  // namespace dingodb

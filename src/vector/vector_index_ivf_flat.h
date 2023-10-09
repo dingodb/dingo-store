@@ -65,7 +65,7 @@ class IvfFlatIDSelector : public faiss::IDSelector {
 
 class VectorIndexIvfFlat : public VectorIndex {
  public:
-  explicit VectorIndexIvfFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+  explicit VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                               const pb::common::Range& ranges);
 
   ~VectorIndexIvfFlat() override;
@@ -87,7 +87,7 @@ class VectorIndexIvfFlat : public VectorIndex {
   // not exist add. if exist update
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
-  butil::Status Delete(const std::vector<uint64_t>& delete_ids) override;
+  butil::Status Delete(const std::vector<int64_t>& delete_ids) override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                        std::vector<std::shared_ptr<FilterFunctor>> filters,
@@ -98,9 +98,9 @@ class VectorIndexIvfFlat : public VectorIndex {
   void UnlockWrite() override;
 
   int32_t GetDimension() override;
-  butil::Status GetCount([[maybe_unused]] uint64_t& count) override;
-  butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) override;
-  butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size) override;
+  butil::Status GetCount([[maybe_unused]] int64_t& count) override;
+  butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
+  butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
 
   butil::Status Train(const std::vector<float>& train_datas) override;

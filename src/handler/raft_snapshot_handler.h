@@ -54,7 +54,7 @@ class RaftSnapshot {
                                             std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
   bool SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region, GenSnapshotFileFunc func,
-                    uint64_t region_version, int64_t term, int64_t log_index);
+                    int64_t region_version, int64_t term, int64_t log_index);
 
   bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
 

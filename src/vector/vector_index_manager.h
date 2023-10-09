@@ -87,7 +87,7 @@ class VectorIndexManager {
   static bool Init(std::vector<store::RegionPtr> regions);
 
   // Check whether should hold vector index.
-  static bool NeedHoldVectorIndex(uint64_t region_id);
+  static bool NeedHoldVectorIndex(int64_t region_id);
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
@@ -129,8 +129,8 @@ class VectorIndexManager {
   static std::shared_ptr<VectorIndex> BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
 
   // Replay log to vector index.
-  static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, uint64_t start_log_id,
-                                              uint64_t end_log_id);
+  static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, int64_t start_log_id,
+                                              int64_t end_log_id);
 
   // Scrub vector index.
   static butil::Status ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save);

@@ -50,8 +50,8 @@ class CreateRegionTask : public TaskRunnable {
   static butil::Status PreValidateCreateRegion(const pb::coordinator::RegionCmd& command);
 
  private:
-  static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id);
-  static butil::Status CreateRegion(const pb::common::RegionDefinition& definition, uint64_t parent_region_id);
+  static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, int64_t region_id);
+  static butil::Status CreateRegion(const pb::common::RegionDefinition& definition, int64_t parent_region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -72,7 +72,7 @@ class DeleteRegionTask : public TaskRunnable {
  private:
   static butil::Status ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
                                             store::RegionPtr region);
-  static butil::Status DeleteRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
+  static butil::Status DeleteRegion(std::shared_ptr<Context> ctx, int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -135,9 +135,9 @@ class TransferLeaderTask : public TaskRunnable {
   static butil::Status PreValidateTransferLeader(const pb::coordinator::RegionCmd& command);
 
  private:
-  static butil::Status ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager, uint64_t region_id,
+  static butil::Status ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager, int64_t region_id,
                                               const pb::common::Peer& peer);
-  static butil::Status TransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id, const pb::common::Peer& peer);
+  static butil::Status TransferLeader(std::shared_ptr<Context> ctx, int64_t region_id, const pb::common::Peer& peer);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -154,7 +154,7 @@ class SnapshotRegionTask : public TaskRunnable {
   void Run() override;
 
  private:
-  static butil::Status Snapshot(std::shared_ptr<Context> ctx, uint64_t region_id);
+  static butil::Status Snapshot(std::shared_ptr<Context> ctx, int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -175,7 +175,7 @@ class PurgeRegionTask : public TaskRunnable {
 
  private:
   static butil::Status ValidatePurgeRegion(store::RegionPtr region);
-  static butil::Status PurgeRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
+  static butil::Status PurgeRegion(std::shared_ptr<Context> ctx, int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -196,7 +196,7 @@ class StopRegionTask : public TaskRunnable {
 
  private:
   static butil::Status ValidateStopRegion(store::RegionPtr region);
-  static butil::Status StopRegion(std::shared_ptr<Context> ctx, uint64_t region_id);
+  static butil::Status StopRegion(std::shared_ptr<Context> ctx, int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -214,7 +214,7 @@ class DestroyRegionExecutorTask : public TaskRunnable {
   void Run() override;
 
  private:
-  static butil::Status DestroyRegionExecutor(std::shared_ptr<Context> ctx, uint64_t region_id);
+  static butil::Status DestroyRegionExecutor(std::shared_ptr<Context> ctx, int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -231,7 +231,7 @@ class SnapshotVectorIndexTask : public TaskRunnable {
   void Run() override;
 
  private:
-  static butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, uint64_t vector_index_id);
+  static butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, int64_t vector_index_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -252,7 +252,7 @@ class UpdateDefinitionTask : public TaskRunnable {
  private:
   static butil::Status ValidateUpdateDefinition(store::RegionPtr region);
 
-  static butil::Status UpdateDefinition(std::shared_ptr<Context> ctx, uint64_t region_id,
+  static butil::Status UpdateDefinition(std::shared_ptr<Context> ctx, int64_t region_id,
                                         const pb::common::RegionDefinition& new_definition);
 
   std::shared_ptr<Context> ctx_;
@@ -272,7 +272,7 @@ class SwitchSplitTask : public TaskRunnable {
   static butil::Status PreValidateSwitchSplit(const pb::coordinator::RegionCmd& command);
 
  private:
-  static butil::Status SwitchSplit(std::shared_ptr<Context> ctx, uint64_t region_id, bool disable_split);
+  static butil::Status SwitchSplit(std::shared_ptr<Context> ctx, int64_t region_id, bool disable_split);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -291,8 +291,8 @@ class HoldVectorIndexTask : public TaskRunnable {
   static butil::Status PreValidateHoldVectorIndex(const pb::coordinator::RegionCmd& command);
 
  private:
-  static butil::Status HoldVectorIndex(std::shared_ptr<Context> ctx, uint64_t region_id, bool is_hold);
-  static butil::Status ValidateHoldVectorIndex(uint64_t region_id);
+  static butil::Status HoldVectorIndex(std::shared_ptr<Context> ctx, int64_t region_id, bool is_hold);
+  static butil::Status ValidateHoldVectorIndex(int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
@@ -315,11 +315,11 @@ class ControlExecutor {
 
 class RegionControlExecutor : public ControlExecutor {
  public:
-  explicit RegionControlExecutor(uint64_t region_id) : region_id_(region_id) {}
+  explicit RegionControlExecutor(int64_t region_id) : region_id_(region_id) {}
   ~RegionControlExecutor() override = default;
 
  private:
-  uint64_t region_id_;
+  int64_t region_id_;
 };
 
 class RegionCommandManager : public TransformKvAble {
@@ -337,15 +337,15 @@ class RegionCommandManager : public TransformKvAble {
 
   bool Init();
 
-  bool IsExist(uint64_t command_id);
+  bool IsExist(int64_t command_id);
 
   void AddCommand(std::shared_ptr<pb::coordinator::RegionCmd> region_cmd);
   void UpdateCommandStatus(std::shared_ptr<pb::coordinator::RegionCmd> region_cmd,
                            pb::coordinator::RegionCmdStatus status);
-  void UpdateCommandStatus(uint64_t command_id, pb::coordinator::RegionCmdStatus status);
-  std::shared_ptr<pb::coordinator::RegionCmd> GetCommand(uint64_t command_id);
+  void UpdateCommandStatus(int64_t command_id, pb::coordinator::RegionCmdStatus status);
+  std::shared_ptr<pb::coordinator::RegionCmd> GetCommand(int64_t command_id);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(pb::coordinator::RegionCmdStatus status);
-  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(uint64_t region_id);
+  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetCommands(int64_t region_id);
   std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> GetAllCommand();
 
  private:
@@ -359,7 +359,7 @@ class RegionCommandManager : public TransformKvAble {
 
   bthread_mutex_t mutex_;
   // key: command id, value: command
-  std::unordered_map<uint64_t, std::shared_ptr<pb::coordinator::RegionCmd>> region_commands_;
+  std::unordered_map<int64_t, std::shared_ptr<pb::coordinator::RegionCmd>> region_commands_;
 };
 
 // Control all regions execute commands.
@@ -376,12 +376,12 @@ class RegionController {
   bool Recover();
   void Destroy();
 
-  bool InitVectorAppliedLogId(uint64_t region_id);
+  bool InitVectorAppliedLogId(int64_t region_id);
 
-  std::vector<uint64_t> GetAllRegion();
+  std::vector<int64_t> GetAllRegion();
 
-  bool RegisterExecutor(uint64_t region_id);
-  void UnRegisterExecutor(uint64_t region_id);
+  bool RegisterExecutor(int64_t region_id);
+  void UnRegisterExecutor(int64_t region_id);
 
   butil::Status DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                              std::shared_ptr<pb::coordinator::RegionCmd> command);
@@ -395,12 +395,12 @@ class RegionController {
   static ValidateFunc GetValidater(pb::coordinator::RegionCmdType);
 
  private:
-  std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(uint64_t region_id);
+  std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(int64_t region_id);
   butil::Status InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                                   std::shared_ptr<pb::coordinator::RegionCmd> command);
 
   bthread_mutex_t mutex_;
-  std::unordered_map<uint64_t, std::shared_ptr<RegionControlExecutor>> executors_;
+  std::unordered_map<int64_t, std::shared_ptr<RegionControlExecutor>> executors_;
 
   // When have no regoin executor, used this executorm, like PURGE.
   std::shared_ptr<ControlExecutor> share_executor_;

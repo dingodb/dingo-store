@@ -39,7 +39,7 @@ class CoordinatorBvarMetricsStore {
   CoordinatorBvarMetricsStore(const CoordinatorBvarMetricsStore &) = delete;
   void operator=(const CoordinatorBvarMetricsStore &) = delete;
 
-  void UpdateStoreBvar(uint64_t store_id, uint64_t total_capacity, uint64_t free_capacity) {
+  void UpdateStoreBvar(int64_t store_id, int64_t total_capacity, int64_t free_capacity) {
     auto *stats = store_metrics_.get_stats({std::to_string(store_id), "total_capacity"});
     if (stats) {
       stats->set_value(total_capacity);
@@ -54,7 +54,7 @@ class CoordinatorBvarMetricsStore {
     }
   }
 
-  void DeleteStoreBvar(uint64_t store_id) {
+  void DeleteStoreBvar(int64_t store_id) {
     store_metrics_.delete_stats({std::to_string(store_id), "total_capacity"});
     store_metrics_.delete_stats({std::to_string(store_id), "free_capacity"});
     store_metrics_.delete_stats({std::to_string(store_id), "used_percent"});
@@ -63,7 +63,7 @@ class CoordinatorBvarMetricsStore {
   void Clear() { store_metrics_.delete_stats(); }
 
  private:
-  DingoMultiDimension<bvar::Status<uint64_t>> store_metrics_;
+  DingoMultiDimension<bvar::Status<int64_t>> store_metrics_;
 };
 
 class CoordinatorBvarMetricsRegion {
@@ -76,7 +76,7 @@ class CoordinatorBvarMetricsRegion {
   CoordinatorBvarMetricsRegion(const CoordinatorBvarMetricsRegion &) = delete;
   void operator=(const CoordinatorBvarMetricsRegion &) = delete;
 
-  void UpdateRegionBvar(uint64_t region_id, uint64_t region_row_count, uint64_t region_size) {
+  void UpdateRegionBvar(int64_t region_id, int64_t region_row_count, int64_t region_size) {
     auto *stats = region_metrics_.get_stats({std::to_string(region_id), "row_count"});
     if (stats) {
       stats->set_value(region_row_count);
@@ -87,7 +87,7 @@ class CoordinatorBvarMetricsRegion {
     }
   }
 
-  void DeleteRegionBvar(uint64_t region_id) {
+  void DeleteRegionBvar(int64_t region_id) {
     region_metrics_.delete_stats({std::to_string(region_id), "row_count"});
     region_metrics_.delete_stats({std::to_string(region_id), "size"});
   }
@@ -95,7 +95,7 @@ class CoordinatorBvarMetricsRegion {
   void Clear() { region_metrics_.delete_stats(); }
 
  private:
-  DingoMultiDimension<bvar::Status<uint64_t>> region_metrics_;
+  DingoMultiDimension<bvar::Status<int64_t>> region_metrics_;
 };
 
 class CoordinatorBvarMetricsTable {
@@ -108,7 +108,7 @@ class CoordinatorBvarMetricsTable {
   CoordinatorBvarMetricsTable(const CoordinatorBvarMetricsTable &) = delete;
   void operator=(const CoordinatorBvarMetricsTable &) = delete;
 
-  void UpdateTableBvar(uint64_t table_id, uint64_t table_row_count, uint64_t table_part_count) {
+  void UpdateTableBvar(int64_t table_id, int64_t table_row_count, int64_t table_part_count) {
     auto *stats = table_metrics_.get_stats({std::to_string(table_id), "row_count"});
     if (stats) {
       stats->set_value(table_row_count);
@@ -119,7 +119,7 @@ class CoordinatorBvarMetricsTable {
     }
   }
 
-  void DeleteTableBvar(uint64_t table_id) {
+  void DeleteTableBvar(int64_t table_id) {
     table_metrics_.delete_stats({std::to_string(table_id), "row_count"});
     table_metrics_.delete_stats({std::to_string(table_id), "part_count"});
   }
@@ -127,7 +127,7 @@ class CoordinatorBvarMetricsTable {
   void Clear() { table_metrics_.delete_stats(); }
 
  private:
-  DingoMultiDimension<bvar::Status<uint64_t>> table_metrics_;
+  DingoMultiDimension<bvar::Status<int64_t>> table_metrics_;
 };
 
 class CoordinatorBvarMetricsIndex {
@@ -140,7 +140,7 @@ class CoordinatorBvarMetricsIndex {
   CoordinatorBvarMetricsIndex(const CoordinatorBvarMetricsIndex &) = delete;
   void operator=(const CoordinatorBvarMetricsIndex &) = delete;
 
-  void UpdateIndexBvar(uint64_t index_id, uint64_t index_row_count, uint64_t index_part_count) {
+  void UpdateIndexBvar(int64_t index_id, int64_t index_row_count, int64_t index_part_count) {
     auto *stats = index_metrics_.get_stats({std::to_string(index_id), "row_count"});
     if (stats) {
       stats->set_value(index_row_count);
@@ -151,7 +151,7 @@ class CoordinatorBvarMetricsIndex {
     }
   }
 
-  void DeleteIndexBvar(uint64_t index_id) {
+  void DeleteIndexBvar(int64_t index_id) {
     index_metrics_.delete_stats({std::to_string(index_id), "row_count"});
     index_metrics_.delete_stats({std::to_string(index_id), "part_count"});
   }
@@ -159,7 +159,7 @@ class CoordinatorBvarMetricsIndex {
   void Clear() { index_metrics_.delete_stats(); }
 
  private:
-  DingoMultiDimension<bvar::Status<uint64_t>> index_metrics_;
+  DingoMultiDimension<bvar::Status<int64_t>> index_metrics_;
 };
 
 }  // namespace dingodb

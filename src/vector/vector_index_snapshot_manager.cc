@@ -88,7 +88,7 @@ static butil::EndPoint ParseHost(const std::string& uri) {
 }
 
 // Parse reader id
-static uint64_t ParseReaderId(const std::string& uri) {
+static int64_t ParseReaderId(const std::string& uri) {
   std::vector<std::string> strs;
   butil::SplitString(uri, '/', &strs);
 
@@ -99,7 +99,7 @@ static uint64_t ParseReaderId(const std::string& uri) {
   std::string& reader_id_str = strs[3];
 
   char* end = nullptr;
-  uint64_t result = std::strtoull(reader_id_str.c_str(), &end, 10);
+  int64_t result = std::strtoull(reader_id_str.c_str(), &end, 10);
   if ((end - reader_id_str.c_str()) + 1 <= reader_id_str.size()) {
     return 0;
   }
@@ -107,7 +107,7 @@ static uint64_t ParseReaderId(const std::string& uri) {
   return result;
 }
 
-static uint64_t ParseMetaLogId(const std::string& path) {
+static int64_t ParseMetaLogId(const std::string& path) {
   std::ifstream file;
   file.open(path, std::ifstream::in);
 
@@ -127,7 +127,7 @@ static uint64_t ParseMetaLogId(const std::string& path) {
   return 0;
 }
 
-butil::Status VectorIndexSnapshotManager::GetSnapshotList(uint64_t vector_index_id, std::vector<std::string>& paths) {
+butil::Status VectorIndexSnapshotManager::GetSnapshotList(int64_t vector_index_id, std::vector<std::string>& paths) {
   std::string snapshot_parent_path = GetSnapshotParentPath(vector_index_id);
 
   auto sub_paths = Helper::TraverseDirectory(snapshot_parent_path, "snapshot", false, true);
@@ -141,29 +141,29 @@ butil::Status VectorIndexSnapshotManager::GetSnapshotList(uint64_t vector_index_
   return butil::Status();
 }
 
-std::string VectorIndexSnapshotManager::GetSnapshotParentPath(uint64_t vector_index_id) {
+std::string VectorIndexSnapshotManager::GetSnapshotParentPath(int64_t vector_index_id) {
   return fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), vector_index_id);
 }
 
-std::string VectorIndexSnapshotManager::GetSnapshotTmpPath(uint64_t vector_index_id) {
+std::string VectorIndexSnapshotManager::GetSnapshotTmpPath(int64_t vector_index_id) {
   return fmt::format("{}/tmp_{}", GetSnapshotParentPath(vector_index_id), Helper::TimestampNs());
 }
 
-std::string VectorIndexSnapshotManager::GetSnapshotNewPath(uint64_t vector_index_id, uint64_t snapshot_log_id) {
+std::string VectorIndexSnapshotManager::GetSnapshotNewPath(int64_t vector_index_id, int64_t snapshot_log_id) {
   return fmt::format("{}/snapshot_{:020}", GetSnapshotParentPath(vector_index_id), snapshot_log_id);
 }
 
 butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::EndPoint& endpoint,
                                                                 vector_index::SnapshotMetaPtr snapshot) {
   assert(snapshot != nullptr);
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] last vector index snapshot: {}",
                                  snapshot->VectorIndexId(), snapshot->Path());
 
   // Get uri
   auto reader = std::make_shared<FileReaderWrapper>(snapshot);
-  uint64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
+  int64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
   auto config = Server::GetInstance()->GetConfig();
   auto host = config->GetString("server.host");
   int port = config->GetInt("server.port");
@@ -222,7 +222,7 @@ butil::Status VectorIndexSnapshotManager::LaunchPullSnapshot(const butil::EndPoi
   }
 
   // Clean corresponding reader id.
-  uint64_t reader_id = ParseReaderId(response.uri());
+  int64_t reader_id = ParseReaderId(response.uri());
   if (reader_id > 0) {
     pb::fileservice::CleanFileReaderRequest request;
     request.set_reader_id(reader_id);
@@ -236,7 +236,7 @@ butil::Status VectorIndexSnapshotManager::LaunchPullSnapshot(const butil::EndPoi
 butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_index::SnapshotMetaPtr snapshot) {
   assert(snapshot != nullptr);
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   auto raft_raft_engine = Server::GetInstance()->GetRaftStoreEngine();
   if (raft_raft_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
@@ -300,7 +300,7 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(std::shared_ptr<Con
   }
 
   auto reader = std::make_shared<FileReaderWrapper>(snapshot);
-  uint64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
+  int64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
   response->set_uri(fmt::format("remote://{}:{}/{}", host, port, reader_id));
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] response: {}", snapshot->VectorIndexId(),
@@ -312,13 +312,13 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(std::shared_ptr<Con
 butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index::SnapshotMetaSetPtr snapshot_set) {
   assert(snapshot_set != nullptr);
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
   if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
     return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
   }
 
-  uint64_t vector_index_id = snapshot_set->VectorIndexId();
+  int64_t vector_index_id = snapshot_set->VectorIndexId();
   auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
   auto raft_node = raft_kv_engine->GetNode(vector_index_id);
   if (raft_node == nullptr) {
@@ -329,7 +329,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   pb::node::GetVectorIndexSnapshotRequest request;
   request.set_vector_index_id(vector_index_id);
 
-  uint64_t max_snapshot_log_index = 0;
+  int64_t max_snapshot_log_index = 0;
   butil::EndPoint endpoint;
 
   auto self_peer = raft_node->GetPeerId();
@@ -390,7 +390,7 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
                                                                const pb::node::VectorIndexSnapshotMeta& meta,
                                                                vector_index::SnapshotMetaSetPtr snapshot_set) {
   // Parse reader_id and endpoint
-  uint64_t reader_id = ParseReaderId(uri);
+  int64_t reader_id = ParseReaderId(uri);
   butil::EndPoint endpoint = ParseHost(uri);
   if (reader_id == 0 || endpoint.port == 0) {
     return butil::Status(pb::error::EINTERNAL, "Parse uri to reader_id and endpoint error");
@@ -413,7 +413,7 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
   }
 
   for (const auto& filename : meta.filenames()) {
-    uint64_t offset = 0;
+    int64_t offset = 0;
     std::ofstream ofile;
 
     std::string filepath = fmt::format("{}/{}", tmp_snapshot_path, filename);
@@ -487,7 +487,7 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
 
 // Save vector index snapshot, just one concurrence.
 butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWrapperPtr vector_index_wrapper,
-                                                                  uint64_t& snapshot_log_index) {
+                                                                  int64_t& snapshot_log_index) {
   assert(vector_index_wrapper != nullptr);
 
   auto vector_index = vector_index_wrapper->GetOwnVectorIndex();
@@ -502,15 +502,15 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     return butil::Status::OK();
   }
 
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t vector_index_id = vector_index_wrapper->Id();
 
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
 
   // lock write for atomic ops
   // this lock will be unlocked after fork()
   vector_index->LockWrite();
 
-  uint64_t apply_log_index = vector_index_wrapper->ApplyLogId();
+  int64_t apply_log_index = vector_index_wrapper->ApplyLogId();
   auto snapshot_set = vector_index_wrapper->SnapshotSet();
 
   // If already exist snapshot then give up.
@@ -795,7 +795,7 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
     VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
 
-  uint64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t vector_index_id = vector_index_wrapper->Id();
   auto snapshot_set = vector_index_wrapper->SnapshotSet();
 
   // Read vector index snapshot log id form snapshot meta file.

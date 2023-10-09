@@ -28,7 +28,7 @@
 
 namespace dingodb {
 
-butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, uint64_t region_id) {
+butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, int64_t region_id) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
@@ -47,7 +47,7 @@ butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& 
   return butil::Status::OK();
 }
 
-butil::Status ServiceHelper::GetStoreRegionInfo(uint64_t region_id, pb::error::StoreRegionInfo& store_region_info) {
+butil::Status ServiceHelper::GetStoreRegionInfo(int64_t region_id, pb::error::StoreRegionInfo& store_region_info) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
@@ -163,7 +163,7 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vector<std::string_view>& keys) {
+butil::Status ServiceHelper::ValidateRegion(int64_t region_id, const std::vector<std::string_view>& keys) {
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
@@ -181,17 +181,17 @@ butil::Status ServiceHelper::ValidateRegion(uint64_t region_id, const std::vecto
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const std::vector<uint64_t>& vector_ids) {
+butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const std::vector<int64_t>& vector_ids) {
   auto status = ValidateRegionState(region);
   if (!status.ok()) {
     return status;
   }
 
   const auto& range = region->RawRange();
-  uint64_t min_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-  uint64_t max_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+  int64_t min_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+  int64_t max_vector_id = VectorCodec::DecodeVectorId(range.end_key());
   if (max_vector_id == 0) {
-    max_vector_id = UINT64_MAX;
+    max_vector_id = INT64_MAX;
   }
   for (auto vector_id : vector_ids) {
     if (vector_id < min_vector_id || vector_id >= max_vector_id) {
@@ -217,45 +217,5 @@ butil::Status ServiceHelper::ValidateClusterReadOnly() {
 
   return butil::Status();
 }
-
-// butil::Status ServiceHelper::CheckSystemCapacity() {
-//   auto store_metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
-//   if (store_metrics_manager == nullptr) {
-//     DINGO_LOG(WARNING) << "store metrics manager is nullptr.";
-//     return butil::Status();
-//   }
-
-//   auto metrics = store_metrics_manager->GetStoreMetrics()->Metrics();
-//   if (metrics == nullptr) {
-//     DINGO_LOG(WARNING) << "store metrics is nullptr.";
-//     return butil::Status();
-//   }
-
-//   uint64_t free_capacity = metrics->store_own_metrics().system_free_capacity();
-//   uint64_t total_capacity = metrics->store_own_metrics().system_total_capacity();
-//   if (total_capacity != 0) {
-//     double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
-//     if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
-//       std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
-//                                   total_capacity, disk_free_capacity_ratio);
-//       DINGO_LOG(WARNING) << s;
-//       return butil::Status(pb::error::ESYSTEM_DISK_CAPACITY_FULL, s);
-//     }
-//   }
-
-//   uint64_t available_memory = metrics->store_own_metrics().system_available_memory();
-//   uint64_t total_memory = metrics->store_own_metrics().system_total_memory();
-//   if (total_memory != 0 && available_memory != UINT64_MAX) {
-//     double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
-//     if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
-//       std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
-//                                   total_memory, memory_free_capacity_ratio);
-//       DINGO_LOG(WARNING) << s;
-//       return butil::Status(pb::error::ESYSTEM_MEMORY_CAPACITY_FULL, s);
-//     }
-//   }
-
-//   return butil::Status();
-// }
 
 }  // namespace dingodb

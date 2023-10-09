@@ -60,7 +60,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // valid param L2
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);

@@ -598,11 +598,15 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
 // GetNextId only update id_epoch_map_temp_ in leader, the persistent id_epoch_map_ will be updated in on_apply
 // When on_leader_start, the id_epoch_map_temp_ will init from id_epoch_map_
 // only id_epoch_map_ is in state machine, and will persistent to raft and local rocksdb
-uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
-                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
+int64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
+                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
-  uint64_t next_id = 0;
+  int64_t next_id = 0;
   id_epoch_map_safe_temp_.GetNextId(key, next_id);
+
+  if (next_id == INT64_MAX || next_id < 0) {
+    DINGO_LOG(FATAL) << "GetNextId next_id=" << next_id << " key=" << key << ", FATAL id is used up";
+  }
 
   // generate meta_increment
   auto* idepoch = meta_increment.add_idepochs();
@@ -616,8 +620,8 @@ uint64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTy
   return next_id;
 }
 
-uint64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
-  uint64_t value = 0;
+int64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
+  int64_t value = 0;
   id_epoch_map_safe_temp_.GetPresentId(key, value);
 
   return value;

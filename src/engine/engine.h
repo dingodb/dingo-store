@@ -53,7 +53,7 @@ class Engine {
   virtual std::shared_ptr<RawEngine> GetRawEngine() { return nullptr; }
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
-  virtual butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
+  virtual butil::Status DoSnapshot(std::shared_ptr<Context> ctx, int64_t region_id) = 0;
 
   virtual butil::Status Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) = 0;
   virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) = 0;
@@ -72,7 +72,7 @@ class Engine {
                                  std::vector<pb::common::KeyValue>& kvs) = 0;
 
     virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
-                                  const std::string& end_key, uint64_t& count) = 0;
+                                  const std::string& end_key, int64_t& count) = 0;
   };
 
   // Vector reader
@@ -82,20 +82,20 @@ class Engine {
     virtual ~VectorReader() = default;
 
     struct Context {
-      uint64_t partition_id{};
-      uint64_t region_id{};
+      int64_t partition_id{};
+      int64_t region_id{};
 
       pb::common::Range region_range;
 
       std::vector<pb::common::VectorWithId> vector_with_ids;
-      std::vector<uint64_t> vector_ids;
+      std::vector<int64_t> vector_ids;
       pb::common::VectorSearchParameter parameter;
       std::vector<std::string> selected_scalar_keys;
       pb::common::VectorScalardata scalar_data_for_filter;
 
-      uint64_t start_id{};
-      uint64_t end_id{};
-      uint64_t limit{};
+      int64_t start_id{};
+      int64_t end_id{};
+      int64_t limit{};
 
       bool with_vector_data{};
       bool with_scalar_data{};
@@ -113,14 +113,14 @@ class Engine {
                                            std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
     virtual butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                            uint64_t& vector_id) = 0;
+                                            int64_t& vector_id) = 0;
     virtual butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                           std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
-    virtual butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+    virtual butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
                                                  VectorIndexWrapperPtr vector_index,
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
 
-    virtual butil::Status VectorCount(const pb::common::Range& range, uint64_t& count) = 0;
+    virtual butil::Status VectorCount(const pb::common::Range& range, int64_t& count) = 0;
 
     // This function is for testing only
     virtual butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,

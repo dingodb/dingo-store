@@ -60,9 +60,9 @@ struct Context {
   int partition_num;
   int req_num;
 
-  uint64_t table_id;
-  uint64_t index_id;
-  uint64_t region_id;
+  int64_t table_id;
+  int64_t index_id;
+  int64_t region_id;
 
   int32_t thread_num;
   int32_t thread_no;
@@ -86,64 +86,64 @@ struct Context {
 };
 
 // meta
-dingodb::pb::meta::TableDefinition SendGetIndex(uint64_t index_id);
-dingodb::pb::meta::TableDefinition SendGetTable(uint64_t table_id);
-dingodb::pb::meta::TableRange SendGetTableRange(uint64_t table_id);
+dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id);
+dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id);
+dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
 
 // coordinator
-dingodb::pb::common::Region SendQueryRegion(uint64_t region_id);
-dingodb::pb::store::Context GetRegionContext(uint64_t region_id);
+dingodb::pb::common::Region SendQueryRegion(int64_t region_id);
+dingodb::pb::store::Context GetRegionContext(int64_t region_id);
 
 // vector
-void SendVectorSearch(uint64_t region_id, uint32_t dimension, uint32_t topn);
-void SendVectorSearchDebug(uint64_t region_id, uint32_t dimension, uint64_t start_vector_id, uint32_t topn,
+void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn);
+void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, uint32_t topn,
                            uint32_t batch_count, const std::string& key, const std::string& value);
-void SendVectorBatchSearch(uint64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count);
-void SendVectorBatchQuery(uint64_t region_id, std::vector<uint64_t> vector_ids);
+void SendVectorBatchSearch(int64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count);
+void SendVectorBatchQuery(int64_t region_id, std::vector<int64_t> vector_ids);
 void SendVectorAddRetry(std::shared_ptr<Context> ctx);
 void SendVectorAdd(std::shared_ptr<Context> ctx);
-void SendVectorDelete(uint64_t region_id, uint32_t start_id, uint32_t count);
-void SendVectorGetMaxId(uint64_t region_id);
-void SendVectorGetMinId(uint64_t region_id);
-void SendVectorAddBatch(uint64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
+void SendVectorDelete(int64_t region_id, uint32_t start_id, uint32_t count);
+void SendVectorGetMaxId(int64_t region_id);
+void SendVectorGetMinId(int64_t region_id);
+void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
                         const std::string& file);
-void SendVectorScanQuery(uint64_t region_id, uint64_t start_id, uint64_t end_id, uint64_t limit, bool is_reverse);
-void SendVectorAddBatchDebug(uint64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
+void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
+void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
                              int64_t start_id, const std::string& file);
-void SendVectorGetRegionMetrics(uint64_t region_id);
+void SendVectorGetRegionMetrics(int64_t region_id);
 void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, const std::string& metric_type,
                             int32_t left_vector_size, int32_t right_vector_size, bool is_return_normlize);
 
-void SendVectorCount(uint64_t region_id, uint64_t start_vector_id, uint64_t end_vector_id);
+void SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id);
 
 // key/value
-void SendKvGet(uint64_t region_id, const std::string& key, std::string& value);
-void SendKvBatchGet(uint64_t region_id, const std::string& prefix, int count);
-int SendKvPut(uint64_t region_id, const std::string& key, std::string value = "");
-void SendKvBatchPut(uint64_t region_id, const std::string& prefix, int count);
-void SendKvPutIfAbsent(uint64_t region_id, const std::string& key);
-void SendKvBatchPutIfAbsent(uint64_t region_id, const std::string& prefix, int count);
-void SendKvBatchDelete(uint64_t region_id, const std::string& key);
-void SendKvDeleteRange(uint64_t region_id, const std::string& prefix);
-void SendKvScan(uint64_t region_id, const std::string& prefix);
-void SendKvCompareAndSet(uint64_t region_id, const std::string& key);
-void SendKvBatchCompareAndSet(uint64_t region_id, const std::string& prefix, int count);
+void SendKvGet(int64_t region_id, const std::string& key, std::string& value);
+void SendKvBatchGet(int64_t region_id, const std::string& prefix, int count);
+int SendKvPut(int64_t region_id, const std::string& key, std::string value = "");
+void SendKvBatchPut(int64_t region_id, const std::string& prefix, int count);
+void SendKvPutIfAbsent(int64_t region_id, const std::string& key);
+void SendKvBatchPutIfAbsent(int64_t region_id, const std::string& prefix, int count);
+void SendKvBatchDelete(int64_t region_id, const std::string& key);
+void SendKvDeleteRange(int64_t region_id, const std::string& prefix);
+void SendKvScan(int64_t region_id, const std::string& prefix);
+void SendKvCompareAndSet(int64_t region_id, const std::string& key);
+void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int count);
 
 // region
-void SendAddRegion(uint64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
-void SendChangeRegion(uint64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
-void SendDestroyRegion(uint64_t region_id);
-void SendSnapshot(uint64_t region_id);
+void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
+void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
+void SendDestroyRegion(int64_t region_id);
+void SendSnapshot(int64_t region_id);
 void BatchSendAddRegion(int start_region_id, int region_count, int thread_num, const std::string& raft_group,
                         std::vector<std::string>& raft_addrs);
-void SendSnapshotVectorIndex(uint64_t vector_index_id);
+void SendSnapshotVectorIndex(int64_t vector_index_id);
 
 // test
 void TestBatchPut(std::shared_ptr<Context> ctx);
-void TestBatchPutGet(uint64_t region_id, int thread_num, int req_num, const std::string& prefix);
-void TestRegionLifecycle(uint64_t region_id, const std::string& raft_group, std::vector<std::string>& raft_addrs,
+void TestBatchPutGet(int64_t region_id, int thread_num, int req_num, const std::string& prefix);
+void TestRegionLifecycle(int64_t region_id, const std::string& raft_group, std::vector<std::string>& raft_addrs,
                          int region_count, int thread_num, int req_num, const std::string& prefix);
-void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, uint64_t region_id, int req_num,
+void TestDeleteRangeWhenTransferLeader(std::shared_ptr<Context> ctx, int64_t region_id, int req_num,
                                        const std::string& prefix);
 void AutoTest(std::shared_ptr<Context> ctx);
 

@@ -47,7 +47,7 @@ class StoreBvarMetrics {
     }
   }
 
-  void UpdateLeaderSwitchCount(std::string region_id, uint64_t value) {
+  void UpdateLeaderSwitchCount(std::string region_id, int64_t value) {
     auto* region_stat = leader_switch_count_.get_stats({region_id});
     if (region_stat != nullptr) {
       region_stat->set_value(value);
@@ -84,10 +84,10 @@ class StoreBvarMetrics {
   }
 
  private:
-  bvar::MultiDimension<bvar::Status<uint64_t>> leader_switch_time_;
-  bvar::MultiDimension<bvar::Status<uint64_t>> leader_switch_count_;
-  bvar::MultiDimension<bvar::PerSecondEx<bvar::Adder<uint64_t>>> commit_count_per_second_;
-  bvar::MultiDimension<bvar::PerSecondEx<bvar::Adder<uint64_t>>> apply_count_per_second_;
+  bvar::MultiDimension<bvar::Status<int64_t>> leader_switch_time_;
+  bvar::MultiDimension<bvar::Status<int64_t>> leader_switch_count_;
+  bvar::MultiDimension<bvar::PerSecondEx<bvar::Adder<int64_t>>> commit_count_per_second_;
+  bvar::MultiDimension<bvar::PerSecondEx<bvar::Adder<int64_t>>> apply_count_per_second_;
 };
 
 }  // namespace dingodb

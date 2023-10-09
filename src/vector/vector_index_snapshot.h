@@ -34,25 +34,25 @@ namespace vector_index {
 // Indicate a vector index snapshot
 class SnapshotMeta {
  public:
-  SnapshotMeta(uint64_t vector_index_id, const std::string& path);
+  SnapshotMeta(int64_t vector_index_id, const std::string& path);
   ~SnapshotMeta();
 
-  static std::shared_ptr<SnapshotMeta> New(uint64_t vector_index_id, const std::string& path) {
+  static std::shared_ptr<SnapshotMeta> New(int64_t vector_index_id, const std::string& path) {
     return std::make_shared<SnapshotMeta>(vector_index_id, path);
   }
 
   bool Init();
 
-  uint64_t VectorIndexId() const { return vector_index_id_; }
-  uint64_t SnapshotLogId() const { return snapshot_log_id_; }
+  int64_t VectorIndexId() const { return vector_index_id_; }
+  int64_t SnapshotLogId() const { return snapshot_log_id_; }
   std::string Path() const { return path_; }
   std::string MetaPath();
   std::string IndexDataPath();
   std::vector<std::string> ListFileNames();
 
  private:
-  uint64_t vector_index_id_;
-  uint64_t snapshot_log_id_;
+  int64_t vector_index_id_;
+  int64_t snapshot_log_id_;
   std::string path_;
 };
 
@@ -60,30 +60,28 @@ using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;
 
 class SnapshotMetaSet {
  public:
-  SnapshotMetaSet(uint64_t vector_index_id) : vector_index_id_(vector_index_id) {
-    bthread_mutex_init(&mutex_, nullptr);
-  }
+  SnapshotMetaSet(int64_t vector_index_id) : vector_index_id_(vector_index_id) { bthread_mutex_init(&mutex_, nullptr); }
   ~SnapshotMetaSet() { bthread_mutex_destroy(&mutex_); }
 
-  static std::shared_ptr<SnapshotMetaSet> New(uint64_t vector_index_id) {
+  static std::shared_ptr<SnapshotMetaSet> New(int64_t vector_index_id) {
     return std::make_shared<SnapshotMetaSet>(vector_index_id);
   }
 
-  uint64_t VectorIndexId() const { return vector_index_id_; }
+  int64_t VectorIndexId() const { return vector_index_id_; }
 
   bool AddSnapshot(SnapshotMetaPtr snapshot);
   void ClearSnapshot();
   vector_index::SnapshotMetaPtr GetLastSnapshot();
   std::vector<vector_index::SnapshotMetaPtr> GetSnapshots();
-  bool IsExistSnapshot(uint64_t snapshot_log_id);
+  bool IsExistSnapshot(int64_t snapshot_log_id);
   bool IsExistLastSnapshot();
 
  private:
-  uint64_t vector_index_id_;
+  int64_t vector_index_id_;
 
   bthread_mutex_t mutex_;
   // vector index snapshots, key: log_id
-  std::map<uint64_t, SnapshotMetaPtr> snapshots_;
+  std::map<int64_t, SnapshotMetaPtr> snapshots_;
 };
 
 using SnapshotMetaSetPtr = std::shared_ptr<SnapshotMetaSet>;

@@ -206,7 +206,7 @@ void TsoControl::Process(google::protobuf::RpcController* controller, const pb::
     return;
   }
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  uint64_t log_id = 0;
+  int64_t log_id = 0;
   if (cntl->has_log_id()) {
     log_id = cntl->log_id();
   }
@@ -421,7 +421,7 @@ void TsoControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { raft_node_ =
 
 // on_apply callback
 void TsoControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool is_leader,
-                                    uint64_t /*term*/, uint64_t /*index*/, google::protobuf::Message* response) {
+                                    int64_t /*term*/, int64_t /*index*/, google::protobuf::Message* response) {
   for (int i = 0; i < meta_increment.timestamp_oracles_size(); i++) {
     const auto& tso = meta_increment.timestamp_oracles(i);
 
@@ -454,7 +454,7 @@ void TsoControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& met
   }
 }
 
-int TsoControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
+int TsoControl::GetAppliedTermAndIndex(int64_t& term, int64_t& index) {
   term = 0;
   index = 0;
   return 0;

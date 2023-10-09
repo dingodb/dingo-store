@@ -28,14 +28,14 @@
 namespace dingodb {
 class AutoIncrementSnapshot : public dingodb::Snapshot {
  public:
-  explicit AutoIncrementSnapshot(const butil::FlatMap<uint64_t, uint64_t> *snapshot) : snapshot_(snapshot) {}
+  explicit AutoIncrementSnapshot(const butil::FlatMap<int64_t, int64_t> *snapshot) : snapshot_(snapshot) {}
   ~AutoIncrementSnapshot() override { delete snapshot_; };
 
   const void *Inner() override { return snapshot_; }
-  const butil::FlatMap<uint64_t, uint64_t> *GetSnapshot() { return snapshot_; }
+  const butil::FlatMap<int64_t, int64_t> *GetSnapshot() { return snapshot_; }
 
  private:
-  const butil::FlatMap<uint64_t, uint64_t> *snapshot_;
+  const butil::FlatMap<int64_t, int64_t> *snapshot_;
 };
 
 class AutoIncrementControl : public MetaControl {
@@ -47,16 +47,16 @@ class AutoIncrementControl : public MetaControl {
   static bool Init();
   static bool Recover();
 
-  butil::Status GetAutoIncrements(butil::FlatMap<uint64_t, uint64_t> &auto_increments);
-  butil::Status GetAutoIncrement(uint64_t table_id, uint64_t &start_id);
-  butil::Status CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
+  butil::Status GetAutoIncrements(butil::FlatMap<int64_t, int64_t> &auto_increments);
+  butil::Status GetAutoIncrement(int64_t table_id, int64_t &start_id);
+  butil::Status CreateAutoIncrement(int64_t table_id, int64_t start_id,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status UpdateAutoIncrement(uint64_t table_id, uint64_t start_id, bool force,
+  butil::Status UpdateAutoIncrement(int64_t table_id, int64_t start_id, bool force,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status GenerateAutoIncrement(uint64_t table_id, uint32_t count, uint32_t auto_increment_increment,
+  butil::Status GenerateAutoIncrement(int64_t table_id, uint32_t count, uint32_t auto_increment_increment,
                                       uint32_t auto_increment_offset,
                                       pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status DeleteAutoIncrement(uint64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DeleteAutoIncrement(int64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // Get raft leader's server location
   void GetLeaderLocation(pb::common::Location &leader_server_location) override;
@@ -77,10 +77,10 @@ class AutoIncrementControl : public MetaControl {
   std::shared_ptr<RaftNode> GetRaftNode() override { return raft_node_; }
 
   // on_apply callback
-  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, uint64_t term,
-                          uint64_t index, google::protobuf::Message *response) override;
+  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, int64_t term,
+                          int64_t index, google::protobuf::Message *response) override;
 
-  int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) override;
+  int GetAppliedTermAndIndex(int64_t &term, int64_t &index) override;
   std::shared_ptr<Snapshot> PrepareRaftSnapshot() override;
   bool LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
                               pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;
@@ -92,15 +92,15 @@ class AutoIncrementControl : public MetaControl {
   static butil::Status CheckAutoIncrementInTableDefinition(const pb::meta::TableDefinition &table_definition,
                                                            bool &has_auto_increment_column);
 
-  static butil::Status SyncSendCreateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment);
-  static void AsyncSendUpdateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment);
-  static void AsyncSendDeleteAutoIncrementInternal(uint64_t table_id);
+  static butil::Status SyncSendCreateAutoIncrementInternal(int64_t table_id, int64_t auto_increment);
+  static void AsyncSendUpdateAutoIncrementInternal(int64_t table_id, int64_t auto_increment);
+  static void AsyncSendDeleteAutoIncrementInternal(int64_t table_id);
 
  private:
-  static uint64_t GetGenerateEndId(uint64_t start_id, uint32_t count, uint32_t increment, uint32_t offset);
-  static uint64_t GetRealStartId(uint64_t start_id, uint32_t auto_increment_increment, uint32_t auto_increment_offset);
+  static int64_t GetGenerateEndId(int64_t start_id, uint32_t count, uint32_t increment, uint32_t offset);
+  static int64_t GetRealStartId(int64_t start_id, uint32_t auto_increment_increment, uint32_t auto_increment_offset);
 
-  butil::FlatMap<uint64_t, uint64_t> auto_increment_map_;
+  butil::FlatMap<int64_t, int64_t> auto_increment_map_;
   bthread_mutex_t auto_increment_map_mutex_;
 
   // node is leader or not

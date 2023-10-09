@@ -33,7 +33,7 @@ class DingoSafeMapTest : public testing::Test {
 };
 
 TEST(DingoSafeMapTest, DingoSafeMap) {
-  dingodb::DingoSafeMap<uint64_t, uint64_t> safe_map;
+  dingodb::DingoSafeMap<int64_t, int64_t> safe_map;
   safe_map.Init(1000);
   safe_map.Put(1, 1);
   auto val1 = safe_map.Get(1);
@@ -50,7 +50,7 @@ TEST(DingoSafeMapTest, DingoSafeMap) {
   EXPECT_EQ(val3, 2);
 
   safe_map.PutIfExists(2, 2);
-  uint64_t val4 = 0;
+  int64_t val4 = 0;
   auto ret4 = safe_map.Get(2, val4);
   EXPECT_EQ(ret4, -1);
   EXPECT_EQ(val4, 0);
@@ -59,8 +59,8 @@ TEST(DingoSafeMapTest, DingoSafeMap) {
   auto val5 = safe_map.Get(1);
   EXPECT_EQ(val5, 3);
 
-  std::vector<uint64_t> key_list = {1, 2, 3};
-  std::vector<uint64_t> value_list = {1, 2, 3};
+  std::vector<int64_t> key_list = {1, 2, 3};
+  std::vector<int64_t> value_list = {1, 2, 3};
   safe_map.MultiPut(key_list, value_list);
   auto val6 = safe_map.Get(3);
   EXPECT_EQ(val6, 3);
@@ -76,10 +76,10 @@ TEST(DingoSafeMapTest, DingoSafeMap) {
 }
 
 TEST(DingoSafeMapTest, DingoSafeMapCopy) {
-  dingodb::DingoSafeMap<uint64_t, uint64_t> safe_map;
+  dingodb::DingoSafeMap<int64_t, int64_t> safe_map;
   safe_map.Init(1000);
 
-  butil::FlatMap<uint64_t, uint64_t> map2;
+  butil::FlatMap<int64_t, int64_t> map2;
   map2.init(100);
   map2.insert(1, 1);
   map2.insert(2, 2);
@@ -98,7 +98,7 @@ TEST(DingoSafeMapTest, DingoSafeMapCopy) {
   auto ret9 = safe_map.Exists(4);
   EXPECT_EQ(ret9, false);
 
-  butil::FlatMap<uint64_t, uint64_t> map3;
+  butil::FlatMap<int64_t, int64_t> map3;
   map3.init(100);
   safe_map.GetRawMapCopy(map3);
   EXPECT_EQ(map3.size(), 3);

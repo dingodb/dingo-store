@@ -50,7 +50,7 @@ namespace dingodb {
 // But one region can refer other vector index when region split.
 class VectorIndex {
  public:
-  VectorIndex(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+  VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
               const pb::common::Range& range)
       : id(id), apply_log_id(0), snapshot_log_id(0), vector_index_parameter(vector_index_parameter), range(range) {
     vector_index_type = vector_index_parameter.vector_index_type();
@@ -67,37 +67,37 @@ class VectorIndex {
    public:
     virtual ~FilterFunctor() = default;
     virtual void Build([[maybe_unused]] std::vector<faiss::idx_t>& id_map) {}
-    virtual bool Check(uint64_t vector_id) = 0;
+    virtual bool Check(int64_t vector_id) = 0;
   };
 
   // Range filter
   class RangeFilterFunctor : public FilterFunctor {
    public:
-    RangeFilterFunctor(uint64_t min_vector_id, uint64_t max_vector_id)
+    RangeFilterFunctor(int64_t min_vector_id, int64_t max_vector_id)
         : min_vector_id_(min_vector_id), max_vector_id_(max_vector_id) {}
-    bool Check(uint64_t vector_id) override { return vector_id >= min_vector_id_ && vector_id < max_vector_id_; }
+    bool Check(int64_t vector_id) override { return vector_id >= min_vector_id_ && vector_id < max_vector_id_; }
 
    private:
-    uint64_t min_vector_id_;
-    uint64_t max_vector_id_;
+    int64_t min_vector_id_;
+    int64_t max_vector_id_;
   };
 
   // Range filter just for flat
   // Range transform list
   class FlatRangeFilterFunctor : public FilterFunctor {
    public:
-    FlatRangeFilterFunctor(uint64_t min_vector_id, uint64_t max_vector_id)
+    FlatRangeFilterFunctor(int64_t min_vector_id, int64_t max_vector_id)
         : min_vector_id_(min_vector_id), max_vector_id_(max_vector_id) {}
 
     void Build(std::vector<faiss::idx_t>& id_map) override { this->id_map_ = &id_map; }
 
-    bool Check(uint64_t index) override {
+    bool Check(int64_t index) override {
       return (*id_map_)[index] >= min_vector_id_ && (*id_map_)[index] < max_vector_id_;
     }
 
    private:
-    uint64_t min_vector_id_;
-    uint64_t max_vector_id_;
+    int64_t min_vector_id_;
+    int64_t max_vector_id_;
     std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
@@ -111,7 +111,7 @@ class VectorIndex {
     HnswListFilterFunctor& operator=(const HnswListFilterFunctor&) = delete;
     HnswListFilterFunctor& operator=(HnswListFilterFunctor&&) = delete;
 
-    explicit HnswListFilterFunctor(const std::vector<uint64_t>& vector_ids) {
+    explicit HnswListFilterFunctor(const std::vector<int64_t>& vector_ids) {
       for (auto vector_id : vector_ids) {
         vector_ids_.insert(vector_id);
       }
@@ -119,49 +119,16 @@ class VectorIndex {
 
     ~HnswListFilterFunctor() override = default;
 
-    bool Check(uint64_t vector_id) override { return vector_ids_.find(vector_id) != vector_ids_.end(); }
+    bool Check(int64_t vector_id) override { return vector_ids_.find(vector_id) != vector_ids_.end(); }
 
    private:
-    std::unordered_set<uint64_t> vector_ids_;
+    std::unordered_set<int64_t> vector_ids_;
   };
-
-  // List filter just for flat
-  // class FlatListFilterFunctor : public FilterFunctor {
-  //  public:
-  //   explicit FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
-  //       : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {}
-  //   FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
-  //   FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
-  //   FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
-  //   FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
-
-  //   void Build(std::vector<faiss::idx_t>& id_map) override {
-  //     this->id_map_ = &id_map;
-
-  //     for (auto vector_id : vector_ids_) {
-  //       array_indexs_.insert(vector_id);
-  //     }
-  //   }
-
-  //   bool Check(uint64_t index) override {
-  //     if (index >= (*id_map_).size()) {
-  //       return false;
-  //     }
-
-  //     auto vector_id = (*id_map_)[index];
-  //     return array_indexs_.find(vector_id) != array_indexs_.end();
-  //   }
-
-  //  private:
-  //   std::vector<uint64_t> vector_ids_;
-  //   std::unordered_set<uint64_t> array_indexs_;
-  //   std::vector<faiss::idx_t>* id_map_{nullptr};
-  // };
 
   class FlatListFilterFunctor : public FilterFunctor {
    public:
-    explicit FlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
-        : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {
+    explicit FlatListFilterFunctor(std::vector<int64_t>&& vector_ids)  // NOLINT
+        : vector_ids_(std::forward<std::vector<int64_t>>(vector_ids)) {
       // highly optimized code, do not modify it
       array_indexs_.rehash(vector_ids_.size());
       array_indexs_.insert(vector_ids_.begin(), vector_ids_.end());
@@ -171,18 +138,18 @@ class VectorIndex {
     FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
     FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
 
-    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+    bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
 
    private:
-    std::vector<uint64_t> vector_ids_;
-    std::unordered_set<uint64_t> array_indexs_;
+    std::vector<int64_t> vector_ids_;
+    std::unordered_set<int64_t> array_indexs_;
   };
 
   // List filter just for ivf flat
   class IvfFlatListFilterFunctor : public FilterFunctor {
    public:
-    explicit IvfFlatListFilterFunctor(std::vector<uint64_t>&& vector_ids)
-        : vector_ids_(std::forward<std::vector<uint64_t>>(vector_ids)) {
+    explicit IvfFlatListFilterFunctor(std::vector<int64_t>&& vector_ids)  // NOLINT
+        : vector_ids_(std::forward<std::vector<int64_t>>(vector_ids)) {
       // highly optimized code, do not modify it
       array_indexs_.rehash(vector_ids_.size());
       array_indexs_.insert(vector_ids_.begin(), vector_ids_.end());
@@ -192,24 +159,24 @@ class VectorIndex {
     IvfFlatListFilterFunctor& operator=(const IvfFlatListFilterFunctor&) = delete;
     IvfFlatListFilterFunctor& operator=(IvfFlatListFilterFunctor&&) = delete;
 
-    bool Check(uint64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+    bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
 
    private:
-    std::vector<uint64_t> vector_ids_;
-    std::unordered_set<uint64_t> array_indexs_;
+    std::vector<int64_t> vector_ids_;
+    std::unordered_set<int64_t> array_indexs_;
   };
 
   virtual int32_t GetDimension() = 0;
-  virtual butil::Status GetCount([[maybe_unused]] uint64_t& count);
-  virtual butil::Status GetDeletedCount([[maybe_unused]] uint64_t& deleted_count);
-  virtual butil::Status GetMemorySize([[maybe_unused]] uint64_t& memory_size);
+  virtual butil::Status GetCount([[maybe_unused]] int64_t& count);
+  virtual butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count);
+  virtual butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size);
   virtual bool IsExceedsMaxElements() = 0;
 
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
   virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
-  virtual butil::Status Delete([[maybe_unused]] const std::vector<uint64_t>& delete_ids) = 0;
+  virtual butil::Status Delete([[maybe_unused]] const std::vector<int64_t>& delete_ids) = 0;
 
   virtual butil::Status Save([[maybe_unused]] const std::string& path);
 
@@ -231,28 +198,28 @@ class VectorIndex {
   virtual bool IsTrained() { return true; }
   virtual bool SupportSave() { return false; }
 
-  uint64_t Id() const { return id; }
+  int64_t Id() const { return id; }
 
   pb::common::VectorIndexType VectorIndexType() { return vector_index_type; }
 
-  uint64_t ApplyLogId() const;
-  void SetApplyLogId(uint64_t apply_log_id);
+  int64_t ApplyLogId() const;
+  void SetApplyLogId(int64_t apply_log_id);
 
-  uint64_t SnapshotLogId() const;
-  void SetSnapshotLogId(uint64_t snapshot_log_id);
+  int64_t SnapshotLogId() const;
+  void SetSnapshotLogId(int64_t snapshot_log_id);
 
   pb::common::Range Range() { return range; }
 
  protected:
   // vector index id
-  uint64_t id;
+  int64_t id;
   // vector index type, e.g. hnsw/flat
   pb::common::VectorIndexType vector_index_type;
 
   // apply max log id
-  std::atomic<uint64_t> apply_log_id;
+  std::atomic<int64_t> apply_log_id;
   // last snapshot log id
-  std::atomic<uint64_t> snapshot_log_id;
+  std::atomic<int64_t> snapshot_log_id;
 
   pb::common::Range range;
 
@@ -263,7 +230,7 @@ using VectorIndexPtr = std::shared_ptr<VectorIndex>;
 
 class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrapper> {
  public:
-  VectorIndexWrapper(uint64_t id, pb::common::VectorIndexParameter index_parameter,
+  VectorIndexWrapper(int64_t id, pb::common::VectorIndexParameter index_parameter,
                      int64_t save_snapshot_threshold_write_key_num)
       : id_(id),
         vector_index_type_(index_parameter.vector_index_type()),
@@ -280,10 +247,12 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
     worker_ = Worker::New();
     snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
     bthread_mutex_init(&vector_index_mutex_, nullptr);
+    is_loadorbuilding_.store(false);
+    is_rebuilding_.store(false);
   }
   ~VectorIndexWrapper();
 
-  static std::shared_ptr<VectorIndexWrapper> New(uint64_t id, pb::common::VectorIndexParameter index_parameter);
+  static std::shared_ptr<VectorIndexWrapper> New(int64_t id, pb::common::VectorIndexParameter index_parameter);
 
   std::shared_ptr<VectorIndexWrapper> GetSelf();
 
@@ -294,14 +263,20 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   butil::Status SaveMeta();
   butil::Status LoadMeta();
 
-  uint64_t Id() const { return id_; }
+  int64_t Id() const { return id_; }
 
-  uint64_t Version() const { return version_; }
-  void SetVersion(uint64_t version) { version_ = version; }
+  int64_t Version() const { return version_; }
+  void SetVersion(int64_t version) { version_ = version; }
 
   bool IsReady() { return ready_.load(); }
-
   bool IsStop() { return stop_.load(); }
+  bool IsOwnReady() { return GetOwnVectorIndex() != nullptr; }
+
+  bool IsLoadorbuilding() { return is_loadorbuilding_.load(); }
+  void SetLoadoruilding(bool is_building) { return is_loadorbuilding_.store(is_building); }
+
+  bool IsRebuilding() { return is_rebuilding_.load(); }
+  void SetIsRebuilding(bool is_building) { return is_rebuilding_.store(is_building); }
 
   bool IsBuildError() { return build_error_.load(); }
 
@@ -331,13 +306,13 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   pb::common::VectorIndexParameter IndexParameter() { return index_parameter_; }
 
-  uint64_t ApplyLogId();
-  void SetApplyLogId(uint64_t apply_log_id);
-  void SaveApplyLogId(uint64_t apply_log_id);
+  int64_t ApplyLogId();
+  void SetApplyLogId(int64_t apply_log_id);
+  void SaveApplyLogId(int64_t apply_log_id);
 
-  uint64_t SnapshotLogId();
-  void SetSnapshotLogId(uint64_t snapshot_log_id);
-  void SaveSnapshotLogId(uint64_t snapshot_log_id);
+  int64_t SnapshotLogId();
+  void SetSnapshotLogId(int64_t snapshot_log_id);
+  void SaveSnapshotLogId(int64_t snapshot_log_id);
 
   bool IsSwitchingVectorIndex();
   void SetIsSwitchingVectorIndex(bool is_switching);
@@ -363,18 +338,18 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   void DecPendingTaskNum();
 
   int32_t GetDimension();
-  butil::Status GetCount(uint64_t& count);
-  butil::Status GetDeletedCount(uint64_t& deleted_count);
-  butil::Status GetMemorySize(uint64_t& memory_size);
+  butil::Status GetCount(int64_t& count);
+  butil::Status GetDeletedCount(int64_t& deleted_count);
+  butil::Status GetMemorySize(int64_t& memory_size);
   bool IsExceedsMaxElements();
 
   bool NeedToRebuild();
-  bool NeedToSave(uint64_t last_save_log_behind);
+  bool NeedToSave(int64_t last_save_log_behind);
   bool SupportSave();
 
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids);
-  butil::Status Delete(const std::vector<uint64_t>& delete_ids);
+  butil::Status Delete(const std::vector<int64_t>& delete_ids);
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                        const pb::common::Range& region_range,
                        std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
@@ -383,11 +358,15 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
  private:
   // vector index id
-  uint64_t id_;
+  int64_t id_;
   // vector index version
-  uint64_t version_{0};
+  int64_t version_{0};
   // vector index is ready
   std::atomic<bool> ready_;
+  // vector is loadorbuilding
+  std::atomic<bool> is_loadorbuilding_;
+  // vector is rebuilding
+  std::atomic<bool> is_rebuilding_;
   // stop vector index
   std::atomic<bool> stop_;
   // vector index build status
@@ -403,9 +382,9 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   pb::common::VectorIndexParameter index_parameter_;
 
   // apply max log id
-  std::atomic<uint64_t> apply_log_id_;
+  std::atomic<int64_t> apply_log_id_;
   // last snapshot log id
-  std::atomic<uint64_t> snapshot_log_id_;
+  std::atomic<int64_t> snapshot_log_id_;
 
   // Indicate switching vector index.
   std::atomic<bool> is_switching_vector_index_;
@@ -426,10 +405,10 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   std::atomic<int> pending_task_num_;
 
   // write(add/update/delete) key count
-  uint64_t write_key_count_{0};
-  uint64_t last_save_write_key_count_{0};
+  int64_t write_key_count_{0};
+  int64_t last_save_write_key_count_{0};
   // save snapshot threshold write key num
-  uint64_t save_snapshot_threshold_write_key_num_;
+  int64_t save_snapshot_threshold_write_key_num_;
 
   // need hold vector index
   std::atomic<bool> is_hold_vector_index_;

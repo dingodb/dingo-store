@@ -39,7 +39,7 @@ Snapshot* Storage::GetSnapshot() { return nullptr; }
 
 void Storage::ReleaseSnapshot() {}
 
-butil::Status Storage::ValidateLeader(uint64_t region_id) {
+butil::Status Storage::ValidateLeader(int64_t region_id) {
   if (engine_->GetID() == pb::common::ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
     auto node = raft_kv_engine->GetNode(region_id);
@@ -151,8 +151,8 @@ butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::
                              });
 }
 
-butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, uint64_t region_id,
-                                   const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
+butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, int64_t region_id,
+                                   const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
                                    bool disable_auto_release, bool disable_coprocessor,
                                    const pb::store::Coprocessor& coprocessor, std::string* scan_id,
                                    std::vector<pb::common::KeyValue>* kvs) {
@@ -185,7 +185,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
   return status;
 }
 
-butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::string& scan_id, uint64_t max_fetch_cnt,
+butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::string& scan_id, int64_t max_fetch_cnt,
                                       std::vector<pb::common::KeyValue>* kvs) {
   ScanManager* manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
@@ -237,7 +237,7 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector
                              });
 }
 
-butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<uint64_t>& ids) {
+butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<int64_t>& ids) {
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -288,8 +288,8 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
   return butil::Status();
 }
 
-butil::Status Storage::VectorGetBorderId(uint64_t region_id, const pb::common::Range& region_range, bool get_min,
-                                         uint64_t& vector_id) {
+butil::Status Storage::VectorGetBorderId(int64_t region_id, const pb::common::Range& region_range, bool get_min,
+                                         int64_t& vector_id) {
   auto status = ValidateLeader(region_id);
   if (!status.ok()) {
     return status;
@@ -320,7 +320,7 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
   return butil::Status();
 }
 
-butil::Status Storage::VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,
+butil::Status Storage::VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
                                               VectorIndexWrapperPtr vector_index_wrapper,
                                               pb::common::VectorIndexMetrics& region_metrics) {
   auto status = ValidateLeader(region_id);
@@ -337,7 +337,7 @@ butil::Status Storage::VectorGetRegionMetrics(uint64_t region_id, const pb::comm
   return butil::Status();
 }
 
-butil::Status Storage::VectorCount(uint64_t region_id, const pb::common::Range& range, uint64_t& count) {
+butil::Status Storage::VectorCount(int64_t region_id, const pb::common::Range& range, int64_t& count) {
   auto status = ValidateLeader(region_id);
   if (!status.ok()) {
     return status;
@@ -353,7 +353,7 @@ butil::Status Storage::VectorCount(uint64_t region_id, const pb::common::Range& 
 }
 
 butil::Status Storage::VectorCalcDistance([[maybe_unused]] std::shared_ptr<Context> ctx,
-                                          [[maybe_unused]] uint64_t region_id,
+                                          [[maybe_unused]] int64_t region_id,
                                           const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
                                           std::vector<std::vector<float>>& distances,
                                           std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,

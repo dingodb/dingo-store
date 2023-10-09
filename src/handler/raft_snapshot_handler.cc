@@ -43,7 +43,7 @@ struct SaveRaftSnapshotArg {
   braft::SnapshotWriter* writer;
   braft::Closure* done;
   RaftSnapshot* raft_snapshot;
-  uint64_t region_version;
+  int64_t region_version;
   int64_t term;
   int64_t log_index;
 };
@@ -164,7 +164,7 @@ bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region, i
 }
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
-                                GenSnapshotFileFunc func, uint64_t region_version, int64_t term, int64_t log_index) {
+                                GenSnapshotFileFunc func, int64_t region_version, int64_t term, int64_t log_index) {
   if (region->RawRange().start_key().empty() || region->RawRange().end_key().empty()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, range is invalid", region->Id());
     return false;

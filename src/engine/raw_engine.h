@@ -80,9 +80,9 @@ class RawEngine {
     virtual butil::Status KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                  const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) = 0;
 
-    virtual butil::Status KvCount(const std::string& start_key, const std::string& end_key, uint64_t& count) = 0;
+    virtual butil::Status KvCount(const std::string& start_key, const std::string& end_key, int64_t& count) = 0;
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                                  const std::string& end_key, uint64_t& count) = 0;
+                                  const std::string& end_key, int64_t& count) = 0;
 
     virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
     virtual std::shared_ptr<dingodb::Iterator> NewIterator(IteratorOptions options) = 0;
@@ -142,8 +142,8 @@ class RawEngine {
       std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name,
       std::vector<dingodb::pb::common::Range> ranges) = 0;
 
-  virtual std::vector<uint64_t> GetApproximateSizes(const std::string& cf_name,
-                                                    std::vector<pb::common::Range>& ranges) = 0;
+  virtual std::vector<int64_t> GetApproximateSizes(const std::string& cf_name,
+                                                   std::vector<pb::common::Range>& ranges) = 0;
 
  protected:
   RawEngine() = default;

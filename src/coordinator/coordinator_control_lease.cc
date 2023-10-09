@@ -41,7 +41,7 @@ namespace dingodb {
 DEFINE_uint64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
 DEFINE_uint64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
 
-butil::Status CoordinatorControl::LeaseGrant(uint64_t lease_id, int64_t ttl_seconds, uint64_t &granted_id,
+butil::Status CoordinatorControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64_t &granted_id,
                                              int64_t &granted_ttl_seconds,
                                              pb::coordinator_internal::MetaIncrement &meta_increment) {
   if (ttl_seconds > FLAGS_version_lease_max_ttl_seconds) {
@@ -95,7 +95,7 @@ butil::Status CoordinatorControl::LeaseGrant(uint64_t lease_id, int64_t ttl_seco
   return butil::Status::OK();
 }  // namespace dingodb
 
-butil::Status CoordinatorControl::LeaseRenew(uint64_t lease_id, int64_t &ttl_seconds,
+butil::Status CoordinatorControl::LeaseRenew(int64_t lease_id, int64_t &ttl_seconds,
                                              pb::coordinator_internal::MetaIncrement &meta_increment) {
   pb::coordinator_internal::LeaseInternal lease;
 
@@ -130,8 +130,7 @@ butil::Status CoordinatorControl::LeaseRenew(uint64_t lease_id, int64_t &ttl_sec
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
-                                              pb::coordinator_internal::MetaIncrement &meta_increment,
+butil::Status CoordinatorControl::LeaseRevoke(int64_t lease_id, pb::coordinator_internal::MetaIncrement &meta_increment,
                                               bool has_mutex_locked) {
   pb::coordinator_internal::LeaseInternal lease;
   if (!has_mutex_locked) {
@@ -173,9 +172,9 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
   lease_with_keys = std::move(keys_iter->second);
   for (const auto &key : lease_with_keys.keys) {
     std::vector<pb::version::Kv> prev_kvs;
-    uint64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
-    uint64_t sub_revision = 1;
-    uint64_t deleted_count = 0;
+    int64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+    int64_t sub_revision = 1;
+    int64_t deleted_count = 0;
     auto ret_status = this->KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, deleted_count,
                                           prev_kvs, meta_increment);
     if (!ret_status.ok()) {
@@ -194,7 +193,7 @@ butil::Status CoordinatorControl::LeaseRevoke(uint64_t lease_id,
 }
 
 butil::Status CoordinatorControl::ListLeases(std::vector<pb::coordinator_internal::LeaseInternal> &leases) {
-  butil::FlatMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_map;
+  butil::FlatMap<int64_t, pb::coordinator_internal::LeaseInternal> version_lease_map;
   lease_map_.GetRawMapCopy(version_lease_map);
   for (auto &it : version_lease_map) {
     leases.emplace_back(std::move(it.second));
@@ -203,7 +202,7 @@ butil::Status CoordinatorControl::ListLeases(std::vector<pb::coordinator_interna
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::LeaseQuery(uint64_t lease_id, bool get_keys, int64_t &granted_ttl_seconds,
+butil::Status CoordinatorControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &granted_ttl_seconds,
                                              int64_t &remaining_ttl_seconds, std::set<std::string> &keys) {
   BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
 
@@ -231,7 +230,7 @@ butil::Status CoordinatorControl::LeaseQuery(uint64_t lease_id, bool get_keys, i
 void CoordinatorControl::LeaseTask() {
   DINGO_LOG(INFO) << "lease task start";
 
-  std::vector<uint64_t> lease_ids_to_revoke;
+  std::vector<int64_t> lease_ids_to_revoke;
   pb::coordinator_internal::MetaIncrement meta_increment;
   {
     BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
@@ -266,9 +265,9 @@ void CoordinatorControl::LeaseTask() {
 
 void CoordinatorControl::BuildLeaseToKeyMap() {
   // build lease_to_key_map_temp_
-  std::map<uint64_t, LeaseWithKeys> t_lease_to_key;
+  std::map<int64_t, LeaseWithKeys> t_lease_to_key;
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::LeaseInternal> version_lease_to_key_map_copy;
+  butil::FlatMap<int64_t, pb::coordinator_internal::LeaseInternal> version_lease_to_key_map_copy;
   version_lease_to_key_map_copy.init(10000);
   lease_map_.GetRawMapCopy(version_lease_to_key_map_copy);
 
@@ -322,7 +321,7 @@ void CoordinatorControl::BuildLeaseToKeyMap() {
   lease_to_key_map_temp_.swap(t_lease_to_key);
 }
 
-butil::Status CoordinatorControl::LeaseAddKeys(uint64_t lease_id, std::set<std::string> &keys) {
+butil::Status CoordinatorControl::LeaseAddKeys(int64_t lease_id, std::set<std::string> &keys) {
   DINGO_LOG(INFO) << "lease id " << lease_id << " add keys " << keys.size();
 
   BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
@@ -350,7 +349,7 @@ butil::Status CoordinatorControl::LeaseAddKeys(uint64_t lease_id, std::set<std::
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::LeaseRemoveKeys(uint64_t lease_id, std::set<std::string> &keys) {
+butil::Status CoordinatorControl::LeaseRemoveKeys(int64_t lease_id, std::set<std::string> &keys) {
   DINGO_LOG(INFO) << "lease id " << lease_id << " remove keys " << keys.size();
 
   BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);
@@ -378,7 +377,7 @@ butil::Status CoordinatorControl::LeaseRemoveKeys(uint64_t lease_id, std::set<st
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::LeaseRemoveMultiLeaseKeys(std::map<uint64_t, std::set<std::string>> &lease_to_keys) {
+butil::Status CoordinatorControl::LeaseRemoveMultiLeaseKeys(std::map<int64_t, std::set<std::string>> &lease_to_keys) {
   DINGO_LOG(INFO) << "lease remove multi lease keys, lease count " << lease_to_keys.size();
 
   BAIDU_SCOPED_LOCK(lease_to_key_map_temp_mutex_);

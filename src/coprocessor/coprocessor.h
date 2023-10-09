@@ -43,7 +43,7 @@ class Coprocessor {
   butil::Status Open(const pb::store::Coprocessor& coprocessor);
 
   butil::Status Execute(const std::shared_ptr<EngineIterator>& iter, bool key_only, size_t max_fetch_cnt,
-                        uint64_t max_bytes_rpc, std::vector<pb::common::KeyValue>* kvs);
+                        int64_t max_bytes_rpc, std::vector<pb::common::KeyValue>* kvs);
   void Close();
 
  private:
@@ -53,7 +53,7 @@ class Coprocessor {
 
   butil::Status DoExecuteForSelection(const std::vector<std::any>& selection_record, bool* has_result_kv,
                                       pb::common::KeyValue* result_kv);
-  butil::Status GetKeyValueFromAggregation(bool key_only, size_t max_fetch_cnt, uint64_t max_bytes_rpc,
+  butil::Status GetKeyValueFromAggregation(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                            std::vector<pb::common::KeyValue>* kvs);
 
   butil::Status CompareSerialSchema(const pb::store::Coprocessor& coprocessor);

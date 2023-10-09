@@ -42,11 +42,11 @@ namespace dingodb {
 
 DEFINE_uint64(max_partition_num_of_table, 1024, "max partition num of table");
 
-void CoordinatorControl::GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t part_count,
+void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                    pb::meta::EntityType entity_type,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment,
                                                    pb::meta::TableIdWithPartIds* ids) {
-  uint64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+  int64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
 
   auto* table_id = ids->mutable_table_id();
   table_id->set_entity_id(new_table_id);
@@ -54,7 +54,7 @@ void CoordinatorControl::GenerateTableIdAndPartIds(uint64_t schema_id, uint64_t 
   table_id->set_entity_type(entity_type);
 
   for (uint32_t i = 0; i < part_count; i++) {
-    uint64_t new_part_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+    int64_t new_part_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
 
     auto* part_id = ids->add_part_ids();
     part_id->set_entity_id(new_part_id);
@@ -110,7 +110,7 @@ void CoordinatorControl::GenerateRootSchemas(pb::coordinator_internal::SchemaInt
 // check if schema_id is exist
 // if exist return true
 // else return false
-bool CoordinatorControl::ValidateSchema(uint64_t schema_id) {
+bool CoordinatorControl::ValidateSchema(int64_t schema_id) {
   // BAIDU_SCOPED_LOCK(schema_map_mutex_);
   bool ret = schema_map_.Exists(schema_id);
   if (!ret) {
@@ -131,8 +131,8 @@ bool CoordinatorControl::ValidateSchema(uint64_t schema_id) {
 // out: meta_increment
 // return OK if success
 // return other if failed
-butil::Status CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::string schema_name,
-                                               uint64_t& new_schema_id,
+butil::Status CoordinatorControl::CreateSchema(int64_t parent_schema_id, std::string schema_name,
+                                               int64_t& new_schema_id,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate if parent_schema_id is root schema
   // only root schema can have sub schema
@@ -147,7 +147,7 @@ butil::Status CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::s
   }
 
   // check if schema_name exists
-  uint64_t value = 0;
+  int64_t value = 0;
   schema_name_map_safe_temp_.Get(schema_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " CreateSchema schema_name is exist " << schema_name;
@@ -192,7 +192,7 @@ butil::Status CoordinatorControl::CreateSchema(uint64_t parent_schema_id, std::s
 // in: parent_schema_id
 // in: schema_id
 // return: 0 or -1
-butil::Status CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t schema_id,
+butil::Status CoordinatorControl::DropSchema(int64_t parent_schema_id, int64_t schema_id,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id <= COORDINATOR_ID_OF_MAP_MIN) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -243,7 +243,7 @@ butil::Status CoordinatorControl::DropSchema(uint64_t parent_schema_id, uint64_t
 // get schemas
 // in: schema_id
 // out: schemas
-butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
+butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
   // only root schema can has sub schemas
   if (schema_id != 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -257,7 +257,7 @@ butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb:
 
   {
     // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    butil::FlatMap<uint64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
+    butil::FlatMap<int64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
     int ret = schema_map_.GetRawMapCopy(schema_map_copy);
     if (ret < 0) {
@@ -307,7 +307,7 @@ butil::Status CoordinatorControl::GetSchemas(uint64_t schema_id, std::vector<pb:
 // GetSchema
 // in: schema_id
 // out: schema
-butil::Status CoordinatorControl::GetSchema(uint64_t schema_id, pb::meta::Schema& schema) {
+butil::Status CoordinatorControl::GetSchema(int64_t schema_id, pb::meta::Schema& schema) {
   // only root schema can has sub schemas
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -354,7 +354,7 @@ butil::Status CoordinatorControl::GetSchemaByName(const std::string& schema_name
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_name illegal");
   }
 
-  uint64_t temp_schema_id = 0;
+  int64_t temp_schema_id = 0;
   auto ret = schema_name_map_safe_temp_.Get(schema_name, temp_schema_id);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "WARNING: schema_name not found " << schema_name;
@@ -370,7 +370,7 @@ butil::Status CoordinatorControl::GetSchemaByName(const std::string& schema_name
 // in: schema_id
 // out: new_table_id, meta_increment
 // return: 0 success, -1 failed
-butil::Status CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& new_table_id,
+butil::Status CoordinatorControl::CreateTableId(int64_t schema_id, int64_t& new_table_id,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema_id is existed
   {
@@ -390,7 +390,7 @@ butil::Status CoordinatorControl::CreateTableId(uint64_t schema_id, uint64_t& ne
 }
 
 // RollbackCreateTable
-butil::Status CoordinatorControl::RollbackCreateTable(uint64_t schema_id, const std::string& table_name) {
+butil::Status CoordinatorControl::RollbackCreateTable(int64_t schema_id, const std::string& table_name) {
   // check if table_name exists
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_name);
   table_name_map_safe_temp_.Erase(new_table_check_name);
@@ -399,7 +399,7 @@ butil::Status CoordinatorControl::RollbackCreateTable(uint64_t schema_id, const 
 }
 
 // RollbackCreateIndex
-butil::Status CoordinatorControl::RollbackCreateIndex(uint64_t schema_id, const std::string& table_name) {
+butil::Status CoordinatorControl::RollbackCreateIndex(int64_t schema_id, const std::string& table_name) {
   // check if table_name exists
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_name);
   index_name_map_safe_temp_.Erase(new_table_check_name);
@@ -411,8 +411,8 @@ butil::Status CoordinatorControl::RollbackCreateIndex(uint64_t schema_id, const 
 // in: schema_id, table_definition
 // out: new_table_id, new_regin_ids meta_increment
 // return: 0 success, -1 failed
-butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
-                                              uint64_t& new_table_id, std::vector<uint64_t>& region_ids,
+butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta::TableDefinition& table_definition,
+                                              int64_t& new_table_id, std::vector<int64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create table
@@ -459,7 +459,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   }
 
   // store new_part_id for next usage
-  std::vector<uint64_t> new_part_ids;
+  std::vector<int64_t> new_part_ids;
   std::vector<pb::common::Range> new_part_ranges;
 
   if (table_partition.partitions_size() > 0) {
@@ -494,7 +494,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   }
 
   // check if part_id is legal
-  std::set<uint64_t> part_id_set;
+  std::set<int64_t> part_id_set;
   for (auto id : new_part_ids) {
     auto ret = part_id_set.insert(id);
     if (!ret.second) {
@@ -507,7 +507,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // check if table_name exists
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
 
-  uint64_t value = 0;
+  int64_t value = 0;
   table_name_map_safe_temp_.Get(new_table_check_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createtable table_name is exist " << table_definition.name();
@@ -560,7 +560,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
   // create table
   // extract part info, create region for each part
 
-  std::vector<uint64_t> new_region_ids;
+  std::vector<int64_t> new_region_ids;
   int32_t replica = table_definition.replica();
   if (replica < 1) {
     replica = 3;
@@ -571,8 +571,8 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 
   // for partitions
   for (int i = 0; i < new_part_ranges.size(); i++) {
-    uint64_t new_region_id = 0;
-    uint64_t new_part_id = new_part_ids[i];
+    int64_t new_region_id = 0;
+    int64_t new_part_id = new_part_ids[i];
     auto new_part_range = new_part_ranges[i];
 
     std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
@@ -651,7 +651,7 @@ butil::Status CoordinatorControl::CreateTable(uint64_t schema_id, const pb::meta
 // in: schema_id, table_id
 // out: meta_increment
 // return: errno
-butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_id,
+butil::Status CoordinatorControl::DropTable(int64_t schema_id, int64_t table_id,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -676,7 +676,7 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
   // call DropRegion
   // for (int i = 0; i < table_internal.partitions_size(); i++) {
   //   // part id
-  //   uint64_t region_id = table_internal.partitions(i).region_id();
+  //   int64_t region_id = table_internal.partitions(i).region_id();
 
   //   DropRegion(region_id, meta_increment);
   // }
@@ -724,7 +724,7 @@ butil::Status CoordinatorControl::DropTable(uint64_t schema_id, uint64_t table_i
 // in: schema_id
 // out: new_index_id, meta_increment
 // return: 0 success, -1 failed
-butil::Status CoordinatorControl::CreateIndexId(uint64_t schema_id, uint64_t& new_index_id,
+butil::Status CoordinatorControl::CreateIndexId(int64_t schema_id, int64_t& new_index_id,
                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema_id is existed
   {
@@ -1074,9 +1074,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 // in: schema_id, table_definition
 // out: new_index_id, new_region_ids meta_increment
 // return: 0 success, -1 failed
-butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta::TableDefinition& table_definition,
-                                              uint64_t table_id, uint64_t& new_index_id,
-                                              std::vector<uint64_t>& region_ids,
+butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta::TableDefinition& table_definition,
+                                              int64_t table_id, int64_t& new_index_id, std::vector<int64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate schema
   // root schema cannot create index
@@ -1119,7 +1118,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   }
 
   // store new_part_id for next usage
-  std::vector<uint64_t> new_part_ids;
+  std::vector<int64_t> new_part_ids;
   std::vector<pb::common::Range> new_part_ranges;
 
   if (index_partition.partitions_size() > 0) {
@@ -1153,7 +1152,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   }
 
   // check if part_id is legal
-  std::set<uint64_t> part_id_set;
+  std::set<int64_t> part_id_set;
   for (auto id : new_part_ids) {
     auto ret = part_id_set.insert(id);
     if (!ret.second) {
@@ -1167,7 +1166,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
 
   // check if index_name exists
-  uint64_t value = 0;
+  int64_t value = 0;
   index_name_map_safe_temp_.Get(new_index_check_name, value);
   if (value != 0) {
     DINGO_LOG(INFO) << " Createindex index_name is exist " << table_definition.name();
@@ -1220,24 +1219,19 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
   // create index
   // extract part info, create region for each part
 
-  std::vector<uint64_t> new_region_ids;
+  std::vector<int64_t> new_region_ids;
   int32_t replica = table_definition.replica();
   if (replica < 1) {
     replica = 3;
   }
 
   for (int i = 0; i < new_part_ranges.size(); i++) {
-    uint64_t new_region_id = 0;
-    uint64_t new_part_id = new_part_ids[i];
+    int64_t new_region_id = 0;
+    int64_t new_part_id = new_part_ids[i];
     auto new_part_range = new_part_ranges[i];
 
     std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
-
-    // TODO: after sdk support part_id, this should be removed
-    // pb::common::Range raw_range;
-    // raw_range.set_start_key(Helper::EncodeIndexRegionHeader(new_part_id, 0));
-    // raw_range.set_end_key(Helper::EncodeIndexRegionHeader(new_part_id, UINT64_MAX));
 
     auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, "", replica,
                                            new_part_range, new_part_range, schema_id, 0, new_index_id, new_part_id,
@@ -1312,7 +1306,7 @@ butil::Status CoordinatorControl::CreateIndex(uint64_t schema_id, const pb::meta
 // in: table_definition
 // return: errno
 // TODO: now only support update hnsw index's max_elements
-butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index_id,
+butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_id,
                                               const pb::meta::TableDefinition& new_table_definition,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "UpdateIndex in control schema_id=" << schema_id;
@@ -1469,7 +1463,7 @@ butil::Status CoordinatorControl::UpdateIndex(uint64_t schema_id, uint64_t index
 // in: schema_id, index_id, check_compatibility
 // out: meta_increment
 // return: errno
-butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_id, bool check_compatibility,
+butil::Status CoordinatorControl::DropIndex(int64_t schema_id, int64_t index_id, bool check_compatibility,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -1500,7 +1494,7 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
   // call DropRegion
   // for (int i = 0; i < table_internal.partitions_size(); i++) {
   //   // part id
-  //   uint64_t region_id = table_internal.partitions(i).region_id();
+  //   int64_t region_id = table_internal.partitions(i).region_id();
 
   //   DropRegion(region_id, meta_increment);
   // }
@@ -1543,7 +1537,7 @@ butil::Status CoordinatorControl::DropIndex(uint64_t schema_id, uint64_t index_i
 }
 
 // get tables
-butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
+butil::Status CoordinatorControl::GetTables(int64_t schema_id,
                                             std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
 
@@ -1568,7 +1562,7 @@ butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
     }
 
     for (int i = 0; i < schema_internal.table_ids_size(); i++) {
-      uint64_t table_id = schema_internal.table_ids(i);
+      int64_t table_id = schema_internal.table_ids(i);
 
       pb::coordinator_internal::TableInternal table_internal;
       int ret = table_map_.Get(table_id, table_internal);
@@ -1598,7 +1592,7 @@ butil::Status CoordinatorControl::GetTables(uint64_t schema_id,
 }
 
 // get indexes
-butil::Status CoordinatorControl::GetIndexes(uint64_t schema_id,
+butil::Status CoordinatorControl::GetIndexes(int64_t schema_id,
                                              std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   DINGO_LOG(INFO) << "GetIndexes in control schema_id=" << schema_id;
 
@@ -1623,7 +1617,7 @@ butil::Status CoordinatorControl::GetIndexes(uint64_t schema_id,
     }
 
     for (int i = 0; i < schema_internal.index_ids_size(); i++) {
-      uint64_t index_id = schema_internal.index_ids(i);
+      int64_t index_id = schema_internal.index_ids(i);
 
       pb::coordinator_internal::TableInternal table_internal;
       int ret = index_map_.Get(index_id, table_internal);
@@ -1658,7 +1652,7 @@ butil::Status CoordinatorControl::GetIndexes(uint64_t schema_id,
 }
 
 // get tables count
-butil::Status CoordinatorControl::GetTablesCount(uint64_t schema_id, uint64_t& tables_count) {
+butil::Status CoordinatorControl::GetTablesCount(int64_t schema_id, int64_t& tables_count) {
   DINGO_LOG(INFO) << "GetTables in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
@@ -1684,7 +1678,7 @@ butil::Status CoordinatorControl::GetTablesCount(uint64_t schema_id, uint64_t& t
 }
 
 // get indexes count
-butil::Status CoordinatorControl::GetIndexesCount(uint64_t schema_id, uint64_t& indexes_count) {
+butil::Status CoordinatorControl::GetIndexesCount(int64_t schema_id, int64_t& indexes_count) {
   DINGO_LOG(INFO) << "GetIndexes in control schema_id=" << schema_id;
 
   if (schema_id < 0) {
@@ -1701,7 +1695,7 @@ butil::Status CoordinatorControl::GetIndexesCount(uint64_t schema_id, uint64_t& 
 
   indexes_count = 0;
   for (int i = 0; i < schema_internal.index_ids_size(); i++) {
-    uint64_t index_id = schema_internal.index_ids(i);
+    int64_t index_id = schema_internal.index_ids(i);
 
     pb::coordinator_internal::TableInternal table_internal;
     if (index_map_.Get(index_id, table_internal) < 0) {
@@ -1721,7 +1715,7 @@ butil::Status CoordinatorControl::GetIndexesCount(uint64_t schema_id, uint64_t& 
 }
 
 // get table
-butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id,
+butil::Status CoordinatorControl::GetTable(int64_t schema_id, int64_t table_id,
                                            pb::meta::TableDefinitionWithId& table_definition_with_id) {
   DINGO_LOG(INFO) << "GetTable in control schema_id=" << schema_id;
 
@@ -1768,7 +1762,7 @@ butil::Status CoordinatorControl::GetTable(uint64_t schema_id, uint64_t table_id
 }
 
 // get index
-butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id, bool /*check_compatibility*/,
+butil::Status CoordinatorControl::GetIndex(int64_t schema_id, int64_t index_id, bool /*check_compatibility*/,
                                            pb::meta::TableDefinitionWithId& table_definition_with_id) {
   DINGO_LOG(INFO) << "GetIndex in control schema_id=" << schema_id;
 
@@ -1819,7 +1813,7 @@ butil::Status CoordinatorControl::GetIndex(uint64_t schema_id, uint64_t index_id
 }
 
 // get table by name
-butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::string& table_name,
+butil::Status CoordinatorControl::GetTableByName(int64_t schema_id, const std::string& table_name,
                                                  pb::meta::TableDefinitionWithId& table_definition) {
   DINGO_LOG(INFO) << fmt::format("GetTableByName in control schema_id={} table_name={}", schema_id, table_name);
 
@@ -1840,7 +1834,7 @@ butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::
 
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_name);
 
-  uint64_t temp_table_id = 0;
+  int64_t temp_table_id = 0;
   auto ret = table_name_map_safe_temp_.Get(new_table_check_name, temp_table_id);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "WARNING: table_name not found " << table_name;
@@ -1854,7 +1848,7 @@ butil::Status CoordinatorControl::GetTableByName(uint64_t schema_id, const std::
 }
 
 // get index by name
-butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::string& index_name,
+butil::Status CoordinatorControl::GetIndexByName(int64_t schema_id, const std::string& index_name,
                                                  pb::meta::TableDefinitionWithId& table_definition) {
   DINGO_LOG(INFO) << fmt::format("GetIndexByName in control schema_id={} index_name={}", schema_id, index_name);
 
@@ -1875,7 +1869,7 @@ butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::
 
   std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, index_name);
 
-  uint64_t temp_index_id = 0;
+  int64_t temp_index_id = 0;
   auto ret = index_name_map_safe_temp_.Get(new_index_check_name, temp_index_id);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ERRROR: index_name not found " << index_name;
@@ -1889,7 +1883,7 @@ butil::Status CoordinatorControl::GetIndexByName(uint64_t schema_id, const std::
 }
 
 // get table range
-butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t table_id,
+butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table_id,
                                                 pb::meta::TableRange& table_range) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -1910,7 +1904,7 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     }
   }
 
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
   std::vector<bool> region_exists;
   for (const auto& part : table_internal.partitions()) {
@@ -1931,8 +1925,8 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
     // range_distribution id
-    uint64_t region_id = table_internal.partitions(i).region_id();
-    uint64_t part_id = table_internal.partitions(i).part_id();
+    int64_t region_id = table_internal.partitions(i).region_id();
+    int64_t part_id = table_internal.partitions(i).part_id();
 
     // get region
     const auto& part_region = region_internals[i];
@@ -1957,7 +1951,7 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     auto* region_status = range_distribution->mutable_status();
     region_status->set_state(part_region.state());
 
-    uint64_t leader_id = 0;
+    int64_t leader_id = 0;
     pb::common::RegionStatus inner_region_status;
     GetRegionLeaderAndStatus(region_id, inner_region_status, leader_id);
 
@@ -2019,11 +2013,11 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
     }
 
     // range_distribution regionmap_epoch
-    uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+    int64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
     range_distribution->set_regionmap_epoch(region_map_epoch);
 
     // range_distribution storemap_epoch
-    uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+    int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
     range_distribution->set_storemap_epoch(store_map_epoch);
   }
 
@@ -2031,7 +2025,7 @@ butil::Status CoordinatorControl::GetTableRange(uint64_t schema_id, uint64_t tab
 }
 
 // get index range
-butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t index_id,
+butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index_id,
                                                 pb::meta::IndexRange& index_range) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -2052,7 +2046,7 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     }
   }
 
-  std::vector<uint64_t> region_ids;
+  std::vector<int64_t> region_ids;
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
   std::vector<bool> region_exists;
   for (const auto& part : table_internal.partitions()) {
@@ -2073,8 +2067,8 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
     // range_distribution id
-    uint64_t region_id = table_internal.partitions(i).region_id();
-    uint64_t part_id = table_internal.partitions(i).part_id();
+    int64_t region_id = table_internal.partitions(i).region_id();
+    int64_t part_id = table_internal.partitions(i).part_id();
 
     // get region
     const auto& part_region = region_internals[i];
@@ -2099,7 +2093,7 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     auto* region_status = range_distribution->mutable_status();
     region_status->set_state(part_region.state());
 
-    uint64_t leader_id = 0;
+    int64_t leader_id = 0;
     pb::common::RegionStatus inner_region_status;
     GetRegionLeaderAndStatus(region_id, inner_region_status, leader_id);
 
@@ -2141,11 +2135,11 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
     }
 
     // range_distribution regionmap_epoch
-    uint64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+    int64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
     range_distribution->set_regionmap_epoch(region_map_epoch);
 
     // range_distribution storemap_epoch
-    uint64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+    int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
     range_distribution->set_storemap_epoch(store_map_epoch);
   }
 
@@ -2153,7 +2147,7 @@ butil::Status CoordinatorControl::GetIndexRange(uint64_t schema_id, uint64_t ind
 }
 
 // get table metrics
-butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t table_id,
+butil::Status CoordinatorControl::GetTableMetrics(int64_t schema_id, int64_t table_id,
                                                   pb::meta::TableMetricsWithId& table_metrics) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -2222,7 +2216,7 @@ butil::Status CoordinatorControl::GetTableMetrics(uint64_t schema_id, uint64_t t
 }
 
 // get index metrics
-butil::Status CoordinatorControl::GetIndexMetrics(uint64_t schema_id, uint64_t index_id,
+butil::Status CoordinatorControl::GetIndexMetrics(int64_t schema_id, int64_t index_id,
                                                   pb::meta::IndexMetricsWithId& index_metrics) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -2291,7 +2285,7 @@ butil::Status CoordinatorControl::GetIndexMetrics(uint64_t schema_id, uint64_t i
 }
 
 // CalculateTableMetricsSingle
-uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::meta::TableMetrics& table_metrics) {
+int64_t CoordinatorControl::CalculateTableMetricsSingle(int64_t table_id, pb::meta::TableMetrics& table_metrics) {
   pb::coordinator_internal::TableInternal table_internal;
   {
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
@@ -2303,14 +2297,14 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
   }
 
   // build result metrics
-  uint64_t row_count = 0;
-  uint64_t table_size = 0;
+  int64_t row_count = 0;
+  int64_t table_size = 0;
   std::string min_key(10, '\x00');
   std::string max_key(10, '\xFF');
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
     // part id
-    uint64_t region_id = table_internal.partitions(i).region_id();
+    int64_t region_id = table_internal.partitions(i).region_id();
 
     // get region
     pb::common::RegionMetrics region_metrics;
@@ -2360,7 +2354,7 @@ uint64_t CoordinatorControl::CalculateTableMetricsSingle(uint64_t table_id, pb::
 }
 
 // CalculateIndexMetricsSingle
-uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::meta::IndexMetrics& index_metrics) {
+int64_t CoordinatorControl::CalculateIndexMetricsSingle(int64_t index_id, pb::meta::IndexMetrics& index_metrics) {
   pb::coordinator_internal::TableInternal table_internal;
   {
     // BAIDU_SCOPED_LOCK(index_map_mutex_);
@@ -2372,7 +2366,7 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
   }
 
   // build result metrics
-  uint64_t row_count = 0;
+  int64_t row_count = 0;
   std::string min_key(10, '\x00');
   std::string max_key(10, '\xFF');
 
@@ -2386,7 +2380,7 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
     // part id
-    uint64_t region_id = table_internal.partitions(i).region_id();
+    int64_t region_id = table_internal.partitions(i).region_id();
 
     // get region
     pb::common::RegionMetrics region_metrics;
@@ -2488,12 +2482,12 @@ uint64_t CoordinatorControl::CalculateIndexMetricsSingle(uint64_t index_id, pb::
 void CoordinatorControl::CalculateTableMetrics() {
   // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::TableMetricsInternal> temp_table_metrics_map;
+  butil::FlatMap<int64_t, pb::coordinator_internal::TableMetricsInternal> temp_table_metrics_map;
   temp_table_metrics_map.init(10000);
   table_metrics_map_.GetRawMapCopy(temp_table_metrics_map);
 
   for (auto& table_metrics_internal : temp_table_metrics_map) {
-    uint64_t table_id = table_metrics_internal.first;
+    int64_t table_id = table_metrics_internal.first;
     pb::meta::TableMetrics table_metrics;
     if (CalculateTableMetricsSingle(table_id, table_metrics) < 0) {
       DINGO_LOG(ERROR) << "ERRROR: CalculateTableMetricsSingle failed, remove metrics from map" << table_id;
@@ -2521,12 +2515,12 @@ void CoordinatorControl::CalculateTableMetrics() {
 void CoordinatorControl::CalculateIndexMetrics() {
   // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
 
-  butil::FlatMap<uint64_t, pb::coordinator_internal::IndexMetricsInternal> temp_index_metrics_map;
+  butil::FlatMap<int64_t, pb::coordinator_internal::IndexMetricsInternal> temp_index_metrics_map;
   temp_index_metrics_map.init(10000);
   index_metrics_map_.GetRawMapCopy(temp_index_metrics_map);
 
   for (auto& index_metrics_internal : temp_index_metrics_map) {
-    uint64_t index_id = index_metrics_internal.first;
+    int64_t index_id = index_metrics_internal.first;
     pb::meta::IndexMetrics index_metrics;
     if (CalculateIndexMetricsSingle(index_id, index_metrics) < 0) {
       DINGO_LOG(ERROR) << "ERRROR: CalculateIndexMetricsSingle failed, remove metrics from map" << index_id;
@@ -2547,7 +2541,7 @@ void CoordinatorControl::CalculateIndexMetrics() {
   }
 }
 
-butil::Status CoordinatorControl::GenerateTableIds(uint64_t schema_id, const pb::meta::TableWithPartCount& count,
+butil::Status CoordinatorControl::GenerateTableIds(int64_t schema_id, const pb::meta::TableWithPartCount& count,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment,
                                                    pb::meta::GenerateTableIdsResponse* response) {
   if (count.index_count() != count.index_part_count_size()) {
@@ -2581,7 +2575,7 @@ void CoordinatorControl::CreateTableIndexesMap(pb::coordinator_internal::TableIn
   *(table_index_increment->mutable_table_indexes()) = table_index_internal;
 }
 
-butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t table_id,
+butil::Status CoordinatorControl::GetTableIndexes(int64_t schema_id, int64_t table_id,
                                                   pb::meta::GetTablesResponse* response) {
   pb::meta::TableDefinitionWithId definition_with_id;
   butil::Status ret = GetTable(schema_id, table_id, definition_with_id);
@@ -2612,7 +2606,7 @@ butil::Status CoordinatorControl::GetTableIndexes(uint64_t schema_id, uint64_t t
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DropTableIndexes(uint64_t schema_id, uint64_t table_id,
+butil::Status CoordinatorControl::DropTableIndexes(int64_t schema_id, int64_t table_id,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (!ValidateSchema(schema_id)) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
@@ -2652,7 +2646,7 @@ butil::Status CoordinatorControl::DropTableIndexes(uint64_t schema_id, uint64_t 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t index_id,
+butil::Status CoordinatorControl::RemoveTableIndex(int64_t table_id, int64_t index_id,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   butil::Status ret = DropIndex(table_id, index_id, false, meta_increment);
   if (!ret.ok()) {
@@ -2697,7 +2691,7 @@ butil::Status CoordinatorControl::RemoveTableIndex(uint64_t table_id, uint64_t i
 // in: table_id
 // in: auto_split
 // out: meta_increment
-butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t table_id, bool auto_split,
+butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t table_id, bool auto_split,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id < 0) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
@@ -2726,7 +2720,7 @@ butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t t
   }
 
   for (int i = 0; i < table_internal.partitions_size(); i++) {
-    uint64_t region_id = table_internal.partitions(i).region_id();
+    int64_t region_id = table_internal.partitions(i).region_id();
 
     // get region
     pb::coordinator_internal::RegionInternal part_region;
@@ -2764,9 +2758,9 @@ butil::Status CoordinatorControl::SwitchAutoSplit(uint64_t schema_id, uint64_t t
 }
 
 butil::Status CoordinatorControl::GetDeletedTable(
-    uint64_t deleted_table_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+    int64_t deleted_table_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   if (deleted_table_id == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
     temp_table_map.init(1000);
     auto ret = deleted_table_map_.GetRawMapCopy(temp_table_map);
     if (ret < 0) {
@@ -2796,9 +2790,9 @@ butil::Status CoordinatorControl::GetDeletedTable(
 }
 
 butil::Status CoordinatorControl::GetDeletedIndex(
-    uint64_t deleted_index_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
+    int64_t deleted_index_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   if (deleted_index_id == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
     temp_table_map.init(1000);
     auto ret = deleted_index_map_.GetRawMapCopy(temp_table_map);
     if (ret < 0) {
@@ -2827,11 +2821,11 @@ butil::Status CoordinatorControl::GetDeletedIndex(
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CleanDeletedTable(uint64_t table_id) {
+butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   if (table_id == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
     temp_table_map.init(1000);
     auto ret = deleted_table_map_.GetRawMapCopy(temp_table_map);
     if (ret < 0) {
@@ -2866,11 +2860,11 @@ butil::Status CoordinatorControl::CleanDeletedTable(uint64_t table_id) {
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CleanDeletedIndex(uint64_t index_id) {
+butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   if (index_id == 0) {
-    butil::FlatMap<uint64_t, pb::coordinator_internal::TableInternal> temp_table_map;
+    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
     temp_table_map.init(1000);
     auto ret = deleted_index_map_.GetRawMapCopy(temp_table_map);
     if (ret < 0) {

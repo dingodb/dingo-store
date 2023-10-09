@@ -72,14 +72,14 @@ class VectorIndexHnswSearchParamTest : public testing::Test {
   inline static uint32_t max_elements = data_base_size;
   inline static int32_t nlinks = 2;
   inline static int step_count = 10;
-  inline static uint64_t id_for_l2 = 1;
-  inline static uint64_t id_for_ip = 2;
-  inline static uint64_t id_for_cosine = 3;
+  inline static int64_t id_for_l2 = 1;
+  inline static int64_t id_for_ip = 2;
+  inline static int64_t id_for_cosine = 3;
   // include this ID
-  inline static uint64_t vector_id_start = 1000;
+  inline static int64_t vector_id_start = 1000;
 
   // vector_id_end = vector_id_start + data_base_size [Do not include this ID]
-  inline static uint64_t vector_id_end = vector_id_start + data_base_size;
+  inline static int64_t vector_id_end = vector_id_start + data_base_size;
 
   inline static int vector_ids_search_size = 10;
 
@@ -90,7 +90,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
   static const pb::common::Range kRange;
   // valid param L2
   {
-    uint64_t id = id_for_l2;
+    int64_t id = id_for_l2;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -105,7 +105,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
 
   // IP
   {
-    uint64_t id = id_for_ip;
+    int64_t id = id_for_ip;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -121,7 +121,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
 
   // cosine
   {
-    uint64_t id = id_for_cosine;
+    int64_t id = id_for_cosine;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);
@@ -198,7 +198,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
   butil::Status ok;
 
   auto lambda_random_function = []() {
-    std::vector<uint64_t> vector_ids;
+    std::vector<int64_t> vector_ids;
     vector_ids.resize(data_base_size);
 
     for (size_t i = 0, id = vector_id_start; i < data_base_size; i++, id++) {
@@ -208,13 +208,13 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
     auto seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::shuffle(vector_ids.begin(), vector_ids.end(), std::default_random_engine(seed));
 
-    std::vector<uint64_t> vector_ids_for_search;
+    std::vector<int64_t> vector_ids_for_search;
     vector_ids_for_search.resize(vector_ids_search_size);
     for (size_t i = 0; i < vector_ids_search_size; i++) {
       vector_ids_for_search[i] = vector_ids[i];
     }
 
-    return std::tuple<std::vector<uint64_t>, std::vector<uint64_t>>(vector_ids, vector_ids_for_search);
+    return std::tuple<std::vector<int64_t>, std::vector<int64_t>>(vector_ids, vector_ids_for_search);
   };
 
   auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_hnsw,
@@ -240,7 +240,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
     ok = vector_index_hnsw->Search(vector_with_ids, topk, filters, results, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::vector<uint64_t> result_vector_ids;
+    std::vector<int64_t> result_vector_ids;
     {
       size_t i = 0;
       std::cout << "[" << i << "]" << std::endl;
@@ -318,7 +318,7 @@ TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
   butil::Status ok;
 
   auto lambda_random_function = []() {
-    std::vector<uint64_t> vector_ids;
+    std::vector<int64_t> vector_ids;
     vector_ids.resize(data_base_size);
 
     for (size_t i = 0, id = vector_id_start; i < data_base_size; i++, id++) {
@@ -328,13 +328,13 @@ TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
     auto seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::shuffle(vector_ids.begin(), vector_ids.end(), std::default_random_engine(seed));
 
-    std::vector<uint64_t> vector_ids_for_search;
+    std::vector<int64_t> vector_ids_for_search;
     vector_ids_for_search.resize(vector_ids_search_size);
     for (size_t i = 0; i < vector_ids_search_size; i++) {
       vector_ids_for_search[i] = vector_ids[i];
     }
 
-    return std::tuple<std::vector<uint64_t>, std::vector<uint64_t>>(vector_ids, vector_ids_for_search);
+    return std::tuple<std::vector<int64_t>, std::vector<int64_t>>(vector_ids, vector_ids_for_search);
   };
 
   auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_hnsw,

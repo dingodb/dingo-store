@@ -60,8 +60,8 @@ float GenRandomFloat() {
 }
 
 braft::LogEntry* GenLogEntry() {
-  static uint64_t auto_vector_id = 0;
-  static uint64_t auto_log_index = 0;
+  static int64_t auto_vector_id = 0;
+  static int64_t auto_log_index = 0;
 
   auto* log_entry = new braft::LogEntry();
   log_entry->AddRef();
@@ -95,7 +95,7 @@ braft::LogEntry* GenLogEntry() {
 }
 
 TEST_F(SegmentLogStorageTest, AppendEntries) {
-  uint64_t begin_log_index = log_stroage->FirstLogIndex();
+  int64_t begin_log_index = log_stroage->FirstLogIndex();
 
   const int k_log_entry_count = 1000;
   for (int i = 0; i < k_log_entry_count; ++i) {
@@ -118,8 +118,8 @@ TEST_F(SegmentLogStorageTest, GetEntrys) {
     log_entry->Release();
   }
 
-  uint64_t begin_index = 600;
-  uint64_t end_index = 1000;
+  int64_t begin_index = 600;
+  int64_t end_index = 1000;
   auto log_entrys = log_stroage->GetEntrys(begin_index, end_index);
 
   DINGO_LOG(INFO) << fmt::format("log entrys count {}", log_entrys.size());

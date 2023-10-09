@@ -34,7 +34,7 @@ namespace dingodb {
 // Encapsulation braft node
 class RaftNode {
  public:
-  RaftNode(uint64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
+  RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
            std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage);
   ~RaftNode() = default;
 
@@ -44,7 +44,7 @@ class RaftNode {
   void Destroy();
 
   std::string GetRaftGroupName() const { return raft_group_name_; }
-  uint64_t GetNodeId() const { return node_id_; }
+  int64_t GetNodeId() const { return node_id_; }
 
   butil::Status Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd);
 
@@ -74,7 +74,7 @@ class RaftNode {
 
  private:
   std::string path_;
-  uint64_t node_id_;
+  int64_t node_id_;
   std::string str_node_id_;
   std::string raft_group_name_;
 

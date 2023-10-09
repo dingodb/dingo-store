@@ -368,7 +368,7 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
     return;
   }
 
-  uint64_t vector_index_id = request->meta().vector_index_id();
+  int64_t vector_index_id = request->meta().vector_index_id();
   auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(vector_index_id);
   if (region == nullptr) {
@@ -461,7 +461,7 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* controll
     error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
     return;
   }
-  if (vector_index_wrapper->IsReady() && vector_index_wrapper->GetOwnVectorIndex() != nullptr) {
+  if (vector_index_wrapper->IsReady() && vector_index_wrapper->IsOwnReady()) {
     response->set_is_exist(true);
   }
 }

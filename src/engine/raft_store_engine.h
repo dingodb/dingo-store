@@ -58,13 +58,13 @@ class RaftControlAble {
   virtual butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter, bool is_recover) = 0;
   virtual butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region,
                                 std::shared_ptr<MetaControl> meta_control, bool is_volatile) = 0;
-  virtual butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
-  virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) = 0;
-  virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
+  virtual butil::Status StopNode(std::shared_ptr<Context> ctx, int64_t region_id) = 0;
+  virtual butil::Status DestroyNode(std::shared_ptr<Context> ctx, int64_t region_id) = 0;
+  virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, int64_t region_id,
                                    std::vector<pb::common::Peer> peers) = 0;
-  virtual std::shared_ptr<RaftNode> GetNode(uint64_t region_id) = 0;
+  virtual std::shared_ptr<RaftNode> GetNode(int64_t region_id) = 0;
 
-  virtual butil::Status TransferLeader(uint64_t region_id, const pb::common::Peer& peer) = 0;
+  virtual butil::Status TransferLeader(int64_t region_id, const pb::common::Peer& peer) = 0;
 
  protected:
   RaftControlAble() = default;
@@ -86,16 +86,16 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter, bool is_recover) override;
   butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region, std::shared_ptr<MetaControl> meta_control,
                         bool is_volatile) override;
-  butil::Status ChangeNode(std::shared_ptr<Context> ctx, uint64_t region_id,
+  butil::Status ChangeNode(std::shared_ptr<Context> ctx, int64_t region_id,
                            std::vector<pb::common::Peer> peers) override;
-  butil::Status StopNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
-  butil::Status DestroyNode(std::shared_ptr<Context> ctx, uint64_t region_id) override;
-  std::shared_ptr<RaftNode> GetNode(uint64_t region_id) override;
+  butil::Status StopNode(std::shared_ptr<Context> ctx, int64_t region_id) override;
+  butil::Status DestroyNode(std::shared_ptr<Context> ctx, int64_t region_id) override;
+  std::shared_ptr<RaftNode> GetNode(int64_t region_id) override;
 
-  butil::Status TransferLeader(uint64_t region_id, const pb::common::Peer& peer) override;
+  butil::Status TransferLeader(int64_t region_id, const pb::common::Peer& peer) override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
-  butil::Status DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) override;
+  butil::Status DoSnapshot(std::shared_ptr<Context> ctx, int64_t region_id) override;
 
   butil::Status Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) override;
@@ -112,7 +112,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                          std::vector<pb::common::KeyValue>& kvs) override;
 
     butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                          uint64_t& count) override;
+                          int64_t& count) override;
 
    private:
     std::shared_ptr<RawEngine::Reader> reader_;
@@ -130,14 +130,14 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,                            // NOLINT
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;      // NOLINT
     butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min,                  // NOLINT
-                                    uint64_t& vector_id) override;                                        // NOLINT
+                                    int64_t& vector_id) override;                                         // NOLINT
     butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,                             // NOLINT
                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;       // NOLINT
-    butil::Status VectorGetRegionMetrics(uint64_t region_id, const pb::common::Range& region_range,       // NOLINT
+    butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,        // NOLINT
                                          VectorIndexWrapperPtr vector_index,                              // NOLINT
                                          pb::common::VectorIndexMetrics& region_metrics) override;        // NOLINT
 
-    butil::Status VectorCount(const pb::common::Range& range, uint64_t& count) override;  // NOLINT
+    butil::Status VectorCount(const pb::common::Range& range, int64_t& count) override;  // NOLINT
 
     butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
                                          std::vector<pb::index::VectorWithDistanceResult>& results,

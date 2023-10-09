@@ -57,18 +57,18 @@ class VectorIndexSnapshotManager {
   static butil::Status PullLastSnapshotFromPeers(vector_index::SnapshotMetaSetPtr snapshot_set);
 
   // Save vecgor index snapshot.
-  static butil::Status SaveVectorIndexSnapshot(VectorIndexWrapperPtr vector_index, uint64_t& snapshot_log_index);
+  static butil::Status SaveVectorIndexSnapshot(VectorIndexWrapperPtr vector_index, int64_t& snapshot_log_index);
 
   // Load vector index from snapshot.
   static std::shared_ptr<VectorIndex> LoadVectorIndexSnapshot(VectorIndexWrapperPtr vector_index_wrapper);
 
-  static std::string GetSnapshotParentPath(uint64_t vector_index_id);
+  static std::string GetSnapshotParentPath(int64_t vector_index_id);
 
-  static butil::Status GetSnapshotList(uint64_t vector_index_id, std::vector<std::string>& paths);
+  static butil::Status GetSnapshotList(int64_t vector_index_id, std::vector<std::string>& paths);
 
  private:
-  static std::string GetSnapshotTmpPath(uint64_t vector_index_id);
-  static std::string GetSnapshotNewPath(uint64_t vector_index_id, uint64_t snapshot_log_id);
+  static std::string GetSnapshotTmpPath(int64_t vector_index_id);
+  static std::string GetSnapshotNewPath(int64_t vector_index_id, int64_t snapshot_log_id);
   static butil::Status DownloadSnapshotFile(const std::string& uri, const pb::node::VectorIndexSnapshotMeta& meta,
                                             vector_index::SnapshotMetaSetPtr snapshot_set);
 };

@@ -54,7 +54,7 @@ RaftStoreEngine::~RaftStoreEngine() = default;
 bool RaftStoreEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
 
 // Clean region raft directory
-static bool CleanRaftDirectory(uint64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
+static bool CleanRaftDirectory(int64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
   std::string region_raft_path = fmt::format("{}/{}", raft_path, region_id);
   if (!Helper::RemoveAllFileOrDirectory(region_raft_path)) {
     return false;
@@ -65,7 +65,7 @@ static bool CleanRaftDirectory(uint64_t region_id, const std::string& raft_path,
 }
 
 // check region raft complete
-static bool IsCompleteRaftNode(uint64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
+static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
   std::string raft_meta_path = fmt::format("{}/{}/raft_meta/raft_meta", raft_path, region_id);
   if (!Helper::IsExistPath(raft_meta_path)) {
     DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft_meta file.", region_id);
@@ -245,7 +245,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id,
+butil::Status RaftStoreEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, int64_t region_id,
                                           std::vector<pb::common::Peer> peers) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
@@ -260,7 +260,7 @@ butil::Status RaftStoreEngine::ChangeNode(std::shared_ptr<Context> /*ctx*/, uint
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
+butil::Status RaftStoreEngine::StopNode(std::shared_ptr<Context> /*ctx*/, int64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -272,7 +272,7 @@ butil::Status RaftStoreEngine::StopNode(std::shared_ptr<Context> /*ctx*/, uint64
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uint64_t region_id) {
+butil::Status RaftStoreEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, int64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -284,11 +284,9 @@ butil::Status RaftStoreEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, uin
   return butil::Status();
 }
 
-std::shared_ptr<RaftNode> RaftStoreEngine::GetNode(uint64_t region_id) {
-  return raft_node_manager_->GetNode(region_id);
-}
+std::shared_ptr<RaftNode> RaftStoreEngine::GetNode(int64_t region_id) { return raft_node_manager_->GetNode(region_id); }
 
-butil::Status RaftStoreEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t region_id) {
+butil::Status RaftStoreEngine::DoSnapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -298,7 +296,7 @@ butil::Status RaftStoreEngine::DoSnapshot(std::shared_ptr<Context> ctx, uint64_t
   return butil::Status();
 }
 
-butil::Status RaftStoreEngine::TransferLeader(uint64_t region_id, const pb::common::Peer& peer) {
+butil::Status RaftStoreEngine::TransferLeader(int64_t region_id, const pb::common::Peer& peer) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -379,7 +377,7 @@ butil::Status RaftStoreEngine::Reader::KvScan(std::shared_ptr<Context> /*ctx*/, 
 }
 
 butil::Status RaftStoreEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/, const std::string& start_key,
-                                               const std::string& end_key, uint64_t& count) {
+                                               const std::string& end_key, int64_t& count) {
   return reader_->KvCount(start_key, end_key, count);
 }
 
@@ -400,7 +398,7 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Ve
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                                               uint64_t& vector_id) {
+                                                               int64_t& vector_id) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
 }
@@ -411,7 +409,7 @@ butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<Vec
   return vector_reader->VectorScanQuery(ctx, vector_with_ids);
 }
 
-butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(uint64_t region_id,
+butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(int64_t region_id,
                                                                     const pb::common::Range& region_range,
                                                                     VectorIndexWrapperPtr vector_index,
                                                                     pb::common::VectorIndexMetrics& region_metrics) {
@@ -419,7 +417,7 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(uint64_t reg
   return vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
 }
 
-butil::Status RaftStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, uint64_t& count) {
+butil::Status RaftStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorCount(range, count);
 }

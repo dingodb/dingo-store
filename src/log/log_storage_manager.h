@@ -28,13 +28,13 @@ class LogStorageManager {
   LogStorageManager() { bthread_mutex_init(&mutex_, nullptr); }
   ~LogStorageManager() { bthread_mutex_destroy(&mutex_); }
 
-  void AddLogStorage(uint64_t region_id, std::shared_ptr<SegmentLogStorage> log_storage);
-  void DeleteStorage(uint64_t region_id);
-  std::shared_ptr<SegmentLogStorage> GetLogStorage(uint64_t region_id);
+  void AddLogStorage(int64_t region_id, std::shared_ptr<SegmentLogStorage> log_storage);
+  void DeleteStorage(int64_t region_id);
+  std::shared_ptr<SegmentLogStorage> GetLogStorage(int64_t region_id);
 
  private:
   bthread_mutex_t mutex_;
-  std::map<uint64_t, std::shared_ptr<SegmentLogStorage>> log_storages_;
+  std::map<int64_t, std::shared_ptr<SegmentLogStorage>> log_storages_;
 };
 
 }  // namespace dingodb

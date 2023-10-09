@@ -165,10 +165,10 @@ TEST_F(ScanTest, ScanBegin) {
 
   butil::Status ok;
 
-  uint64_t region_id = 1;
+  int64_t region_id = 1;
   pb::common::Range range;
 
-  uint64_t max_fetch_cnt = 10;
+  int64_t max_fetch_cnt = 10;
   bool key_only = false;
   bool disable_auto_release = true;
   std::vector<pb::common::KeyValue> kvs;
@@ -357,10 +357,10 @@ TEST_F(ScanTest, ScanBeginEqual) {
 
   EXPECT_NE(scan.get(), nullptr);
 
-  uint64_t region_id = 1;
+  int64_t region_id = 1;
   pb::common::Range range;
 
-  uint64_t max_fetch_cnt = 10;
+  int64_t max_fetch_cnt = 10;
   bool key_only = false;
   bool disable_auto_release = true;
   std::vector<pb::common::KeyValue> kvs;
@@ -398,10 +398,10 @@ TEST_F(ScanTest, ScanBeginOthers) {
 
     EXPECT_NE(scan.get(), nullptr);
 
-    uint64_t region_id = 1;
+    int64_t region_id = 1;
     pb::common::Range range;
 
-    uint64_t max_fetch_cnt = 100;
+    int64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
@@ -438,10 +438,10 @@ TEST_F(ScanTest, ScanBeginOthers) {
 
     EXPECT_NE(scan.get(), nullptr);
 
-    uint64_t region_id = 1;
+    int64_t region_id = 1;
     pb::common::Range range;
 
-    uint64_t max_fetch_cnt = 100;
+    int64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
@@ -480,10 +480,10 @@ TEST_F(ScanTest, ScanBeginOthers) {
 
     EXPECT_NE(scan.get(), nullptr);
 
-    uint64_t region_id = 1;
+    int64_t region_id = 1;
     pb::common::Range range;
 
-    uint64_t max_fetch_cnt = 100;
+    int64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
@@ -518,10 +518,10 @@ TEST_F(ScanTest, ScanBeginOthers) {
 
     EXPECT_NE(scan.get(), nullptr);
 
-    uint64_t region_id = 1;
+    int64_t region_id = 1;
     pb::common::Range range;
 
-    uint64_t max_fetch_cnt = 100;
+    int64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
@@ -558,10 +558,10 @@ TEST_F(ScanTest, ScanBeginOthers) {
 
     EXPECT_NE(scan.get(), nullptr);
 
-    uint64_t region_id = 1;
+    int64_t region_id = 1;
     pb::common::Range range;
 
-    uint64_t max_fetch_cnt = 100;
+    int64_t max_fetch_cnt = 100;
     bool key_only = false;
     bool disable_auto_release = true;
     std::vector<pb::common::KeyValue> kvs;
@@ -607,10 +607,10 @@ TEST_F(ScanTest, ScanBeginNormal) {
 
   EXPECT_NE(scan.get(), nullptr);
 
-  uint64_t region_id = 1;
+  int64_t region_id = 1;
   pb::common::Range range;
 
-  uint64_t max_fetch_cnt = 0;
+  int64_t max_fetch_cnt = 0;
   bool key_only = false;
   bool disable_auto_release = true;
   std::vector<pb::common::KeyValue> kvs;
@@ -639,7 +639,7 @@ TEST_F(ScanTest, ScanContinue) {
   auto *manager = this->GetManager();
   butil::Status ok;
 
-  uint64_t max_fetch_cnt = 2;
+  int64_t max_fetch_cnt = 2;
   std::vector<pb::common::KeyValue> kvs;
 
   // scan_id empty failed
@@ -728,10 +728,10 @@ TEST_F(ScanTest, scan) {
 
   EXPECT_NE(scan.get(), nullptr);
 
-  uint64_t region_id = 1;
+  int64_t region_id = 1;
   pb::common::Range range;
 
-  uint64_t max_fetch_cnt = 0;
+  int64_t max_fetch_cnt = 0;
   bool key_only = true;
   bool disable_auto_release = false;
   std::vector<pb::common::KeyValue> kvs;

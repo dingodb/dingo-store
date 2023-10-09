@@ -84,7 +84,7 @@ void RegionMetrics::UpdateMaxAndMinKeyPolicy() {
 bool StoreMetrics::Init() { return CollectMetrics(); }
 
 bool StoreMetrics::CollectMetrics() {
-  std::map<std::string, uint64_t> output;
+  std::map<std::string, int64_t> output;
 
   auto role = Server::GetInstance()->GetRole();
   auto config = ConfigManager::GetInstance()->GetConfig(role);
@@ -131,8 +131,8 @@ bool StoreMetrics::CollectMetrics() {
 
   // calc is_read_only for self store
   bool self_store_is_read_only = false;
-  uint64_t free_capacity = metrics_->store_own_metrics().system_free_capacity();
-  uint64_t total_capacity = metrics_->store_own_metrics().system_total_capacity();
+  int64_t free_capacity = metrics_->store_own_metrics().system_free_capacity();
+  int64_t total_capacity = metrics_->store_own_metrics().system_total_capacity();
   if (total_capacity != 0) {
     double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
     if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
@@ -143,9 +143,9 @@ bool StoreMetrics::CollectMetrics() {
     }
   }
 
-  uint64_t available_memory = metrics_->store_own_metrics().system_available_memory();
-  uint64_t total_memory = metrics_->store_own_metrics().system_total_memory();
-  if (total_memory != 0 && available_memory != UINT64_MAX) {
+  int64_t available_memory = metrics_->store_own_metrics().system_available_memory();
+  int64_t total_memory = metrics_->store_own_metrics().system_total_memory();
+  if (total_memory != 0 && available_memory != INT64_MAX) {
     double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
     if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
       std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
@@ -208,16 +208,16 @@ std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
   return std::string(max_key.data(), max_key.size());
 }
 
-uint64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
+int64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
   auto reader = raw_engine_->NewReader(Constant::kStoreDataCF);
 
-  uint64_t count = 0;
+  int64_t count = 0;
   reader->KvCount(region->RawRange().start_key(), region->RawRange().end_key(), count);
 
   return count;
 }
 
-std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproximateSize(
+std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximateSize(
     std::vector<store::RegionPtr> regions) {
   std::vector<store::RegionPtr> valid_regions;
   std::vector<pb::common::Range> ranges;
@@ -234,11 +234,11 @@ std::vector<std::pair<uint64_t, uint64_t>> StoreRegionMetrics::GetRegionApproxim
     }
   }
 
-  std::vector<std::pair<uint64_t, uint64_t>> region_sizes;
+  std::vector<std::pair<int64_t, int64_t>> region_sizes;
   auto sizes = raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
   int i = 0;
   for (const auto& region : valid_regions) {
-    uint64_t size = 0;
+    int64_t size = 0;
     if (region->Type() == pb::common::INDEX_REGION) {
       for (int j = 0; j < Constant::kVectorDataCategoryNum; ++j) {
         size += sizes[i + j];
@@ -305,13 +305,13 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
   }
 
   // Get approximate size
-  uint64_t start_time = Helper::TimestampMs();
+  int64_t start_time = Helper::TimestampMs();
   auto batch_regions = GenBatchRegion(need_collect_regions);
   for (auto& regions : batch_regions) {
     auto region_sizes = GetRegionApproximateSize(regions);
     for (auto& item : region_sizes) {
-      uint64_t region_id = item.first;
-      uint64_t size = item.second;
+      int64_t region_id = item.first;
+      int64_t size = item.second;
 
       auto region_metrics = GetMetrics(region_id);
       if (region_metrics != nullptr) {
@@ -337,7 +337,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     if (raft_meta == nullptr) {
       continue;
     }
-    uint64_t applied_index = raft_meta->applied_index();
+    int64_t applied_index = raft_meta->applied_index();
     if (applied_index != 0 && region_metrics->LastLogIndex() >= applied_index) {
       continue;
     }
@@ -350,7 +350,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     }
     need_collect_regions.push_back(region);
 
-    uint64_t start_time = Helper::TimestampMs();
+    int64_t start_time = Helper::TimestampMs();
     // Get min key
     bool is_collect_min_key = false;
     if (region_metrics->NeedUpdateMinKey()) {
@@ -380,25 +380,25 @@ bool StoreRegionMetrics::CollectMetrics() {
       if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index_wrapper->Type()) {
         region_metrics->SetVectorIndexType(vector_index_wrapper->Type());
 
-        uint64_t current_count = 0;
+        int64_t current_count = 0;
         vector_index_wrapper->GetCount(current_count);
         region_metrics->SetVectorCurrentCount(current_count);
 
-        uint64_t deleted_count = 0;
+        int64_t deleted_count = 0;
         vector_index_wrapper->GetDeletedCount(deleted_count);
         region_metrics->SetVectorDeletedCount(deleted_count);
 
         auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
-        uint64_t max_id = 0;
+        int64_t max_id = 0;
 
         reader->VectorGetBorderId(region->RawRange(), false, max_id);
         region_metrics->SetVectorMaxId(max_id);
 
-        uint64_t min_id = 0;
+        int64_t min_id = 0;
         reader->VectorGetBorderId(region->RawRange(), true, min_id);
         region_metrics->SetVectorMinId(min_id);
 
-        uint64_t total_memory_usage = 0;
+        int64_t total_memory_usage = 0;
         vector_index_wrapper->GetMemorySize(total_memory_usage);
         region_metrics->SetVectorMemoryBytes(total_memory_usage);
 
@@ -433,7 +433,7 @@ bool StoreRegionMetrics::CollectMetrics() {
   return true;
 }
 
-store::RegionMetricsPtr StoreRegionMetrics::NewMetrics(uint64_t region_id) {
+store::RegionMetricsPtr StoreRegionMetrics::NewMetrics(int64_t region_id) {
   auto metrics = std::make_shared<store::RegionMetrics>();
   metrics->SetId(region_id);
   return metrics;
@@ -448,7 +448,7 @@ void StoreRegionMetrics::AddMetrics(store::RegionMetricsPtr metrics) {
   meta_writer_->Put(TransformToKv(metrics));
 }
 
-void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
+void StoreRegionMetrics::DeleteMetrics(int64_t region_id) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
     metricses_.erase(region_id);
@@ -457,7 +457,7 @@ void StoreRegionMetrics::DeleteMetrics(uint64_t region_id) {
   meta_writer_->Delete(GenKey(region_id));
 }
 
-store::RegionMetricsPtr StoreRegionMetrics::GetMetrics(uint64_t region_id) {
+store::RegionMetricsPtr StoreRegionMetrics::GetMetrics(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = metricses_.find(region_id);
   if (it == metricses_.end()) {
@@ -490,7 +490,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMetrics::TransformToKv(std::any
 void StoreRegionMetrics::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
-    uint64_t region_id = ParseRegionId(kv.key());
+    int64_t region_id = ParseRegionId(kv.key());
     auto region_metrics = std::make_shared<store::RegionMetrics>();
     region_metrics->DeSerialize(kv.value());
     metricses_.insert_or_assign(region_id, region_metrics);

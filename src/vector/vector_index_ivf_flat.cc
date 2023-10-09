@@ -46,7 +46,7 @@
 
 namespace dingodb {
 
-VectorIndexIvfFlat::VectorIndexIvfFlat(uint64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                        const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, range) {
   bthread_mutex_init(&mutex_, nullptr);
@@ -149,7 +149,7 @@ butil::Status VectorIndexIvfFlat::Add(const std::vector<pb::common::VectorWithId
   return AddOrUpsert(vector_with_ids, false);
 }
 
-butil::Status VectorIndexIvfFlat::Delete(const std::vector<uint64_t>& delete_ids) {
+butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
     DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
@@ -437,7 +437,7 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
 
 int32_t VectorIndexIvfFlat::GetDimension() { return this->dimension_; }
 
-butil::Status VectorIndexIvfFlat::GetCount(uint64_t& count) {
+butil::Status VectorIndexIvfFlat::GetCount(int64_t& count) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (DoIsTrained()) {
     count = index_->ntotal;
@@ -447,12 +447,12 @@ butil::Status VectorIndexIvfFlat::GetCount(uint64_t& count) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::GetDeletedCount(uint64_t& deleted_count) {
+butil::Status VectorIndexIvfFlat::GetDeletedCount(int64_t& deleted_count) {
   deleted_count = 0;
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::GetMemorySize(uint64_t& memory_size) {
+butil::Status VectorIndexIvfFlat::GetMemorySize(int64_t& memory_size) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {

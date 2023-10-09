@@ -94,8 +94,8 @@ class Context {
     return *this;
   }
 
-  uint64_t RegionId() const { return region_id_; }
-  Context& SetRegionId(uint64_t region_id) {
+  int64_t RegionId() const { return region_id_; }
+  Context& SetRegionId(int64_t region_id) {
     region_id_ = region_id;
     return *this;
   }
@@ -134,7 +134,7 @@ class Context {
   const google::protobuf::Message* request_;
   google::protobuf::Message* response_;
 
-  uint64_t region_id_;
+  int64_t region_id_;
   // Column family name
   std::string cf_name_;
   // Rocksdb delete range in files

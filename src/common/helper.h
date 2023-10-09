@@ -138,7 +138,7 @@ class Helper {
   static std::string PrefixNext(const std::string_view& input);
 
   // generate min and max start key of dingo-store
-  // partition_id cannot be 0 and UINT64_MAX
+  // partition_id cannot be 0 and INT64_MAX
   static std::string GenMaxStartKey();
   static std::string GenMinStartKey();
 
@@ -174,32 +174,32 @@ class Helper {
 
   // generate random string for keyring
   static std::string GenerateRandomString(int length);
-  static uint64_t GenerateRealRandomInteger(uint64_t min_value, uint64_t max_value);
-  static uint64_t GenerateRandomInteger(uint64_t min_value, uint64_t max_value);
+  static int64_t GenerateRealRandomInteger(int64_t min_value, int64_t max_value);
+  static int64_t GenerateRandomInteger(int64_t min_value, int64_t max_value);
   static float GenerateRandomFloat(float min_value, float max_value);
-  static uint64_t GenId();
+  static int64_t GenId();
 
   // calc hnsw count from memory
-  static uint32_t CalcHnswCountFromMemory(uint64_t memory_size_limit, uint64_t dimension, uint64_t nlinks);
+  static uint32_t CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dimension, int64_t nlinks);
 
   // Gen coordinator new_table_check_name
-  static std::string GenNewTableCheckName(uint64_t schema_id, const std::string& table_name);
+  static std::string GenNewTableCheckName(int64_t schema_id, const std::string& table_name);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
 
   // nanosecond timestamp
-  static uint64_t TimestampNs();
+  static int64_t TimestampNs();
   // millisecond timestamp
-  static uint64_t TimestampMs();
+  static int64_t TimestampMs();
   // second timestamp
-  static uint64_t Timestamp();
+  static int64_t Timestamp();
   static std::string NowTime();
 
   // format millisecond timestamp
-  static std::string FormatMsTime(uint64_t timestamp, const std::string& format);
+  static std::string FormatMsTime(int64_t timestamp, const std::string& format);
   // format second timestamp
-  static std::string FormatTime(uint64_t timestamp, const std::string& format);
+  static std::string FormatTime(int64_t timestamp, const std::string& format);
 
   // format: "2021-01-01T00:00:00.000Z"
   static std::string GetNowFormatMsTime();
@@ -208,11 +208,11 @@ class Helper {
   // We are based on this assumption. In general, it is rare to see all 0xFF
   static bool KeyIsEndOfAllTable(const std::string& key);
 
-  static bool GetSystemDiskCapacity(const std::string& path, std::map<std::string, uint64_t>& output);
-  static bool GetSystemMemoryInfo(std::map<std::string, uint64_t>& output);
-  static bool GetSystemCpuUsage(std::map<std::string, uint64_t>& output);
-  static bool GetSystemDiskIoUtil(const std::string& device_name, std::map<std::string, uint64_t>& output);
-  static bool GetProcessMemoryInfo(std::map<std::string, uint64_t>& output);
+  static bool GetSystemDiskCapacity(const std::string& path, std::map<std::string, int64_t>& output);
+  static bool GetSystemMemoryInfo(std::map<std::string, int64_t>& output);
+  static bool GetSystemCpuUsage(std::map<std::string, int64_t>& output);
+  static bool GetSystemDiskIoUtil(const std::string& device_name, std::map<std::string, int64_t>& output);
+  static bool GetProcessMemoryInfo(std::map<std::string, int64_t>& output);
 
   static void AlignByteArrays(std::string& a, std::string& b);
   // Notice: String will add one element as a prefix of the result, this element is for the carry
@@ -252,7 +252,7 @@ class Helper {
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
   // for index region, encode raw_range
-  // static std::string EncodeIndexRegionHeader(uint64_t partition_id, uint64_t vector_id);
+  // static std::string EncodeIndexRegionHeader(int64_t partition_id, int64_t vector_id);
 
   // Upper string
   static std::string ToUpper(const std::string& str);

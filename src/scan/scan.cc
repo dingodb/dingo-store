@@ -36,13 +36,13 @@
 namespace dingodb {
 
 // timeout millisecond to destroy
-uint64_t ScanContext::timeout_ms_ = 0;
+int64_t ScanContext::timeout_ms_ = 0;
 
 // Maximum number of bytes per transfer from rpc default 4M
-uint64_t ScanContext::max_bytes_rpc_ = 0;
+int64_t ScanContext::max_bytes_rpc_ = 0;
 
 // kv count per transfer specified by the server
-uint64_t ScanContext::max_fetch_cnt_by_server_ = 0;
+int64_t ScanContext::max_fetch_cnt_by_server_ = 0;
 
 ScanContext::ScanContext()
     : region_id_(0),
@@ -64,7 +64,7 @@ ScanContext::ScanContext()
 }
 ScanContext::~ScanContext() { Close(); }
 
-void ScanContext::Init(uint64_t timeout_ms, uint64_t max_bytes_rpc, uint64_t max_fetch_cnt_by_server) {
+void ScanContext::Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server) {
   timeout_ms_ = timeout_ms;
   max_bytes_rpc_ = max_bytes_rpc;
   max_fetch_cnt_by_server_ = max_fetch_cnt_by_server;
@@ -239,7 +239,7 @@ bool ScanContext::IsRecyclable() {
       }
 
       std::chrono::milliseconds now = GetCurrentTime();
-      std::chrono::duration<uint64_t, std::milli> diff = now - last_time_ms_;
+      std::chrono::duration<int64_t, std::milli> diff = now - last_time_ms_;
       if (diff.count() >= timeout_ms_) {
         state_ = ScanState::kAllowImmediateRecycling;
         ret = true;
@@ -253,8 +253,8 @@ bool ScanContext::IsRecyclable() {
   return ret;
 }
 
-butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint64_t region_id,
-                                     const pb::common::Range& range, uint64_t max_fetch_cnt, bool key_only,
+butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64_t region_id,
+                                     const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
                                      bool disable_auto_release, bool disable_coprocessor,
                                      const pb::store::Coprocessor& coprocessor,
                                      std::vector<pb::common::KeyValue>* kvs) {
@@ -337,7 +337,7 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, uint6
 }
 
 butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
-                                        uint64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs) {
+                                        int64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs) {
   if (BAIDU_UNLIKELY(scan_id.empty() || scan_id != context->scan_id_)) {
     DINGO_LOG(ERROR) << fmt::format("scan_id empty or unequal not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");

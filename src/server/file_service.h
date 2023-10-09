@@ -66,19 +66,19 @@ class FileServiceReaderManager {
  public:
   static FileServiceReaderManager& GetInstance();
 
-  uint64_t AddReader(std::shared_ptr<FileReaderWrapper> reader);
-  int DeleteReader(uint64_t reader_id);
-  std::shared_ptr<FileReaderWrapper> GetReader(uint64_t reader_id);
-  std::vector<uint64_t> GetAllReaderId();
+  int64_t AddReader(std::shared_ptr<FileReaderWrapper> reader);
+  int DeleteReader(int64_t reader_id);
+  std::shared_ptr<FileReaderWrapper> GetReader(int64_t reader_id);
+  std::vector<int64_t> GetAllReaderId();
 
  private:
   FileServiceReaderManager();
   ~FileServiceReaderManager();
 
-  uint64_t next_id_;
+  int64_t next_id_;
 
   bthread_mutex_t mutex_;
-  std::map<uint64_t, std::shared_ptr<FileReaderWrapper>> readers_;
+  std::map<int64_t, std::shared_ptr<FileReaderWrapper>> readers_;
 };
 
 }  // namespace dingodb

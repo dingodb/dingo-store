@@ -35,7 +35,7 @@ namespace dingodb {
 MetaStateMachine::MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile)
     : meta_control_(meta_control), is_volatile_state_machine_(is_volatile) {}
 
-void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t index,
+void MetaStateMachine::DispatchRequest(bool is_leader, int64_t term, int64_t index,
                                        const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
   for (const auto& req : raft_cmd.requests()) {
     switch (req.cmd_type()) {
@@ -48,7 +48,7 @@ void MetaStateMachine::DispatchRequest(bool is_leader, uint64_t term, uint64_t i
   }
 }
 
-void MetaStateMachine::HandleMetaProcess(bool is_leader, uint64_t term, uint64_t index,
+void MetaStateMachine::HandleMetaProcess(bool is_leader, int64_t term, int64_t index,
                                          const pb::raft::RaftCmdRequest& raft_cmd,
                                          google::protobuf::Message* response) {
   // return response about diffrent Closure
@@ -163,8 +163,8 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
 
   // if last_include_index < last_applied_index, we should not load snapshot
   // because we have already applied logs after last_include_index
-  uint64_t term = 0;
-  uint64_t index = 0;
+  int64_t term = 0;
+  int64_t index = 0;
   ret = this->meta_control_->GetAppliedTermAndIndex(term, index);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "Fail to GetAppliedTermAndIndex, need snapshot install, when load snapshot from "

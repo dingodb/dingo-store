@@ -48,7 +48,7 @@ DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds"
 DEFINE_int32(region_delete_after_deleted_time, 604800, "delete region after deleted time in seconds");
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
-                                       std::vector<uint64_t> region_ids, bool is_update_epoch_version) {
+                                       std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   auto start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance()->GetEngine();
   auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
@@ -112,15 +112,15 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     auto vector_index_wrapper = region_meta->VectorIndexWrapper();
     if (vector_index_wrapper != nullptr) {
       auto* vector_index_status = tmp_region_metrics.mutable_vector_index_status();
-      vector_index_status->set_is_ready(vector_index_wrapper->IsReady());
       vector_index_status->set_is_stop(vector_index_wrapper->IsStop());
+      vector_index_status->set_is_ready(vector_index_wrapper->IsReady());
+      vector_index_status->set_is_own_ready(vector_index_wrapper->IsOwnReady());
       vector_index_status->set_is_build_error(vector_index_wrapper->IsBuildError());
       vector_index_status->set_is_rebuild_error(vector_index_wrapper->IsRebuildError());
+      vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
+      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsHoldVectorIndex());
       vector_index_status->set_apply_log_id(vector_index_wrapper->ApplyLogId());
       vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
-      vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
-      // vector_index_status->set_is_hold_vector_index(vector_index_wrapper->GetOwnVectorIndex() != nullptr);
-      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsHoldVectorIndex());
     }
 
     mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
@@ -145,7 +145,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
 }
 
 static std::vector<std::shared_ptr<pb::common::Store>> GetNewStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store>> local_stores,
+    std::map<int64_t, std::shared_ptr<pb::common::Store>> local_stores,
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
   std::vector<std::shared_ptr<pb::common::Store>> new_stores;
   for (const auto& remote_store : remote_stores) {
@@ -158,7 +158,7 @@ static std::vector<std::shared_ptr<pb::common::Store>> GetNewStore(
 }
 
 static std::vector<std::shared_ptr<pb::common::Store>> GetChangedStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store>> local_stores,
+    std::map<int64_t, std::shared_ptr<pb::common::Store>> local_stores,
     const google::protobuf::RepeatedPtrField<dingodb::pb::common::Store>& remote_stores) {
   std::vector<std::shared_ptr<pb::common::Store>> changed_stores;
   for (const auto& remote_store : remote_stores) {
@@ -178,9 +178,9 @@ static std::vector<std::shared_ptr<pb::common::Store>> GetChangedStore(
 }
 
 static std::vector<std::shared_ptr<pb::common::Store>> GetDeletedStore(
-    std::map<uint64_t, std::shared_ptr<pb::common::Store>> local_stores,
+    std::map<int64_t, std::shared_ptr<pb::common::Store>> local_stores,
     const google::protobuf::RepeatedPtrField<pb::common::Store>& remote_stores) {
-  std::set<uint64_t> remote_store_ids;
+  std::set<int64_t> remote_store_ids;
   for (const auto& store : remote_stores) {
     remote_store_ids.insert(store.id());
   }
@@ -587,7 +587,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     }
   }
 
-  butil::FlatMap<uint64_t, pb::common::Store> store_to_push;
+  butil::FlatMap<int64_t, pb::common::Store> store_to_push;
   store_to_push.init(1000, 80);  // notice: FlagMap must init before use
   coordinator_control->GetPushStoreMap(store_to_push);
 
@@ -732,7 +732,7 @@ void Heartbeat::Destroy() { worker_->Destroy(); }
 
 bool Heartbeat::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
 
-void Heartbeat::TriggerStoreHeartbeat(std::vector<uint64_t> region_ids, bool is_update_epoch_version) {
+void Heartbeat::TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<HeartbeatTask>(Server::GetInstance()->GetCoordinatorInteraction(), region_ids,
                                               is_update_epoch_version);

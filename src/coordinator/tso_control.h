@@ -134,10 +134,10 @@ class TsoControl : public MetaControl {
   std::shared_ptr<RaftNode> GetRaftNode() override { return raft_node_; }
 
   // on_apply callback
-  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, uint64_t term,
-                          uint64_t index, google::protobuf::Message *response) override;
+  void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, int64_t term,
+                          int64_t index, google::protobuf::Message *response) override;
 
-  int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) override;
+  int GetAppliedTermAndIndex(int64_t &term, int64_t &index) override;
   std::shared_ptr<Snapshot> PrepareRaftSnapshot() override;
   bool LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapshot,
                               pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;

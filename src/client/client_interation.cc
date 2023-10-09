@@ -130,7 +130,7 @@ bool InteractionManager::CreateStoreInteraction(std::vector<std::string> addrs) 
   return true;
 }
 
-butil::Status InteractionManager::CreateStoreInteraction(uint64_t region_id) {
+butil::Status InteractionManager::CreateStoreInteraction(int64_t region_id) {
   auto region_entry = RegionRouter::GetInstance().QueryRegionEntry(region_id);
   if (region_entry == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("not found region entry {}", region_id);
@@ -143,7 +143,8 @@ butil::Status InteractionManager::CreateStoreInteraction(uint64_t region_id) {
 
   return butil::Status();
 }
-uint64_t InteractionManager::GetLatency() const {
+
+int64_t InteractionManager::GetLatency() const {
   if (store_interaction_ == nullptr) {
     return 0;
   }

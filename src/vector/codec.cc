@@ -24,7 +24,7 @@
 
 namespace dingodb {
 
-void VectorCodec::EncodeVectorKey(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+void VectorCodec::EncodeVectorKey(int64_t partition_id, int64_t vector_id, std::string& result) {
   Buf buf(16);
   buf.WriteLong(partition_id);
   // buf.WriteLong(vector_id);
@@ -33,7 +33,7 @@ void VectorCodec::EncodeVectorKey(uint64_t partition_id, uint64_t vector_id, std
   buf.GetBytes(result);
 }
 
-void VectorCodec::EncodeVectorData(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+void VectorCodec::EncodeVectorData(int64_t partition_id, int64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.Write(Constant::kVectorDataPrefix);
   buf.WriteLong(partition_id);
@@ -43,7 +43,7 @@ void VectorCodec::EncodeVectorData(uint64_t partition_id, uint64_t vector_id, st
   buf.GetBytes(result);
 }
 
-void VectorCodec::EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+void VectorCodec::EncodeVectorScalar(int64_t partition_id, int64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.Write(Constant::kVectorScalarPrefix);
   buf.WriteLong(partition_id);
@@ -53,7 +53,7 @@ void VectorCodec::EncodeVectorScalar(uint64_t partition_id, uint64_t vector_id, 
   buf.GetBytes(result);
 }
 
-void VectorCodec::EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, std::string& result) {
+void VectorCodec::EncodeVectorTable(int64_t partition_id, int64_t vector_id, std::string& result) {
   Buf buf(17);
   buf.Write(Constant::kVectorTablePrefix);
   buf.WriteLong(partition_id);
@@ -63,7 +63,7 @@ void VectorCodec::EncodeVectorTable(uint64_t partition_id, uint64_t vector_id, s
   buf.GetBytes(result);
 }
 
-uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
+int64_t VectorCodec::DecodeVectorId(const std::string& value) {
   Buf buf(value);
   if (value.size() == 17) {
     buf.Skip(9);
@@ -81,7 +81,7 @@ uint64_t VectorCodec::DecodeVectorId(const std::string& value) {
   return DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
 }
 
-uint64_t VectorCodec::DecodePartitionId(const std::string& value) {
+int64_t VectorCodec::DecodePartitionId(const std::string& value) {
   Buf buf(value);
 
   if (value.size() == 17) {

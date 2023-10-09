@@ -56,7 +56,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
   static const pb::common::Range kRange;
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_EQ(vector_index_flat.get(), nullptr);
@@ -64,7 +64,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
     EXPECT_EQ(vector_index_flat.get(), nullptr);
@@ -72,7 +72,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
     vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
@@ -81,7 +81,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
@@ -90,7 +90,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(64);
@@ -100,7 +100,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // invalid param
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(64);
@@ -111,7 +111,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // valid param IP
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
@@ -123,7 +123,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
   // valid param L2
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
@@ -139,23 +139,23 @@ TEST_F(VectorIndexMemoryTest, DeleteNoData) {
 
   // id not found
   {
-    uint64_t id = 10000000;
-    std::vector<uint64_t> ids;
+    int64_t id = 10000000;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_flat->Delete(ids);
   }
 
   // id exist
   {
-    uint64_t id = 0;
-    std::vector<uint64_t> ids;
+    int64_t id = 0;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_flat->Delete(ids);
   }
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -164,7 +164,7 @@ TEST_F(VectorIndexMemoryTest, DeleteNoData) {
 
   // id exist batch again
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -261,23 +261,23 @@ TEST_F(VectorIndexMemoryTest, Delete) {
 
   // id not found
   {
-    uint64_t id = 10000000;
-    std::vector<uint64_t> ids;
+    int64_t id = 10000000;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_flat->Delete(ids);
   }
 
   // id exist
   {
-    uint64_t id = 0;
-    std::vector<uint64_t> ids;
+    int64_t id = 0;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_flat->Delete(ids);
   }
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -286,7 +286,7 @@ TEST_F(VectorIndexMemoryTest, Delete) {
 
   // id exist batch again
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -347,7 +347,7 @@ TEST_F(VectorIndexMemoryTest, Upsert) {
   // {
   //   vector_index_flat_.reset();
 
-  //   uint64_t id = 1;
+  //   int64_t id = 1;
   //   pb::common::VectorIndexParameter index_parameter;
   //   index_parameter.set_vector_index_type(
   //       ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
@@ -476,7 +476,7 @@ TEST_F(VectorIndexMemoryTest, Search) {
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -488,7 +488,7 @@ TEST_F(VectorIndexMemoryTest, CreateCosine) {
   static const pb::common::Range kRange;
   // valid param COSINE
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
@@ -587,23 +587,23 @@ TEST_F(VectorIndexMemoryTest, DeleteCosine) {
 
   // id not found
   {
-    uint64_t id = 10000000;
-    std::vector<uint64_t> ids;
+    int64_t id = 10000000;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_flat->Delete(ids);
   }
 
   // id exist
   {
-    uint64_t id = 0;
-    std::vector<uint64_t> ids;
+    int64_t id = 0;
+    std::vector<int64_t> ids;
     ids.push_back(id);
     vector_index_flat->Delete(ids);
   }
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -612,7 +612,7 @@ TEST_F(VectorIndexMemoryTest, DeleteCosine) {
 
   // id exist batch again
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
@@ -673,7 +673,7 @@ TEST_F(VectorIndexMemoryTest, UpsertCosine) {
   // {
   //   vector_index_flat_.reset();
 
-  //   uint64_t id = 1;
+  //   int64_t id = 1;
   //   pb::common::VectorIndexParameter index_parameter;
   //   index_parameter.set_vector_index_type(
   //       ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
@@ -801,7 +801,7 @@ TEST_F(VectorIndexMemoryTest, SearchCosine) {
 
   // id exist batch
   {
-    std::vector<uint64_t> ids;
+    std::vector<int64_t> ids;
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }

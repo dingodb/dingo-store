@@ -15,7 +15,7 @@ enum VersionType {
 
 message VersionId {
   VersionType type = 1;
-  uint64 id = 2;
+  int64 id = 2;
 }
 
 message GetCurrVersionRequest {
@@ -24,17 +24,17 @@ message GetCurrVersionRequest {
 
 message GetCurrVersionResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 version = 2;
+  int64 version = 2;
 }
 
 message GetNewVersionRequest {
   VersionId verId = 1;
-  uint64 version = 2;
+  int64 version = 2;
 }
 
 message GetNewVersionResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 version = 2;
+  int64 version = 2;
 }
 
 // kv
@@ -43,7 +43,7 @@ message Kv {
   int64 create_revision = 2;
   int64 mod_revision = 3;
   int64 version = 4;
-  uint64 lease = 6;
+  int64 lease = 6;
 }
 
 message Event {
@@ -60,9 +60,9 @@ message Event {
 
 message ResponseHeader {
   // cluster_id is the ID of the cluster which sent the response.
-  uint64 cluster_id = 1;  // NOT IMPLEMENTED
+  int64 cluster_id = 1;  // NOT IMPLEMENTED
   // coordinator_id is the ID of the coordinator which sent the response.
-  uint64 coordinator_id = 2;  // NOT IMPLEMENTED
+  int64 coordinator_id = 2;  // NOT IMPLEMENTED
   // revision is the key-value store revision when the request was applied, and it's
   // unset (so 0) in case of calls not interacting with key-value store.
   // For watch progress responses, the header.revision indicates progress. All future events
@@ -70,7 +70,7 @@ message ResponseHeader {
   // header.revision number.
   int64 revision = 3;
   // raft_term is the raft term when the request was applied.
-  uint64 raft_term = 4;  // NOT IMPLEMENTED
+  int64 raft_term = 4;  // NOT IMPLEMENTED
 }
 
 message RangeRequest {
@@ -139,7 +139,7 @@ message PutRequest {
 
   // lease is the lease ID to associate with the key in the key-value store. A lease
   // value of 0 indicates no lease.
-  uint64 lease = 2;
+  int64 lease = 2;
 
   // If need_prev_kv is set, gets the previous key-value pair before changing it.
   // The previous key-value pair will be returned in the put response.
@@ -196,7 +196,7 @@ message CompactionRequest {
   bytes range_end = 2;
 
   // the revision smaller than compact_revision will be compacted
-  uint64 compact_revision = 3;
+  int64 compact_revision = 3;
 }
 
 message CompactionResponse {
@@ -210,21 +210,21 @@ message LeaseGrantRequest {
   // TTL is the advisory time-to-live in seconds. Expired lease will return -1.
   int64 TTL = 1;
   // ID is the requested ID for the lease. If ID is set to 0, the lessor chooses an ID.
-  uint64 ID = 2;
+  int64 ID = 2;
 }
 
 message LeaseGrantResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // ID is the lease ID for the granted lease.
-  uint64 ID = 3;
+  int64 ID = 3;
   // TTL is the server chosen lease time-to-live in seconds.
   int64 TTL = 4;
 }
 
 message LeaseRevokeRequest {
   // ID is the lease ID to revoke. When the ID is revoked, all associated keys will be deleted.
-  uint64 ID = 1;
+  int64 ID = 1;
 }
 
 message LeaseRevokeResponse {
@@ -234,21 +234,21 @@ message LeaseRevokeResponse {
 
 message LeaseRenewRequest {
   // ID is the lease ID for the lease to keep alive.
-  uint64 ID = 1;
+  int64 ID = 1;
 }
 
 message LeaseRenewResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // ID is the lease ID from the keep alive request.
-  uint64 ID = 3;
+  int64 ID = 3;
   // TTL is the new time-to-live for the lease.
   int64 TTL = 4;
 }
 
 message LeaseQueryRequest {
   // ID is the lease ID for the lease.
-  uint64 ID = 1;
+  int64 ID = 1;
   // keys is true to query all the keys attached to this lease.
   bool keys = 2;
 }
@@ -257,7 +257,7 @@ message LeaseQueryResponse {
   dingodb.pb.error.Error error = 1;
   ResponseHeader header = 2;
   // ID is the lease ID from the keep alive request.
-  uint64 ID = 3;
+  int64 ID = 3;
   // TTL is the remaining TTL in seconds for the lease; the lease will expire in under TTL+1 seconds.
   int64 TTL = 4;
   // GrantedTTL is the initial granted time in seconds upon lease creation/renewal.
@@ -269,7 +269,7 @@ message LeaseQueryResponse {
 message ListLeasesRequest {}
 
 message LeaseStatus {
-  uint64 ID = 1;
+  int64 ID = 1;
 }
 
 message ListLeasesResponse {
@@ -307,7 +307,7 @@ message OneTimeWatchRequest {
   // start_revision is an optional revision to watch from (inclusive). No start_revision is "now".
   // if start_revision == 0, watch from now on;
   // if start_revision > 0, watch from the min(start_revision, current_revision)
-  uint64 start_revision = 3;
+  int64 start_revision = 3;
 
   // filters filter the events at server side before it sends back to the watcher.
   repeated EventFilterType filters = 4;
@@ -409,7 +409,7 @@ message GetRawKvIndexRequest {
 
 message KvIndexInternal {
   message Generation {
-    uint64 verison = 1;                       // if verison == 0, means this is a empty generation
+    int64 verison = 1;                        // if verison == 0, means this is a empty generation
     RevisionInternal create_revision = 2;     // the create revision of this generation
     repeated RevisionInternal revisions = 3;  // the revisions of this generation
   }
@@ -426,8 +426,8 @@ message GetRawKvIndexResponse {
 }
 
 message RevisionInternal {
-  uint64 main = 1;
-  uint64 sub = 2;
+  int64 main = 1;
+  int64 sub = 2;
 }
 
 message KvInternal {
@@ -435,8 +435,8 @@ message KvInternal {
   bytes value = 2;
   RevisionInternal create_revision = 3;
   RevisionInternal mod_revision = 4;
-  uint64 version = 5;
-  uint64 lease = 6;
+  int64 version = 5;
+  int64 lease = 6;
   bool is_deleted = 7;  // for delete operation, we set is_deleted to true, and set value to empty
 }
 

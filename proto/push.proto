@@ -32,7 +32,7 @@ message PushHeartbeatResponse {
 
 message RegionCmdResult {
   dingodb.pb.error.Error error = 1;
-  uint64 region_cmd_id = 2;
+  int64 region_cmd_id = 2;
   dingodb.pb.coordinator.RegionCmdType region_cmd_type = 3;
 }
 

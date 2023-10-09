@@ -50,12 +50,12 @@ bool AutoIncrementControl::Recover() {
   return true;
 }
 
-butil::Status AutoIncrementControl::GetAutoIncrement(uint64_t table_id, uint64_t& start_id) {
+butil::Status AutoIncrementControl::GetAutoIncrement(int64_t table_id, int64_t& start_id) {
   DINGO_LOG(INFO) << table_id << " | " << start_id;
   butil::Status status;
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
-    uint64_t* start_id_ptr = nullptr;
+    int64_t* start_id_ptr = nullptr;
     start_id_ptr = auto_increment_map_.seek(table_id);
 
     if (start_id_ptr == nullptr) {
@@ -69,13 +69,13 @@ butil::Status AutoIncrementControl::GetAutoIncrement(uint64_t table_id, uint64_t
   return status;
 }
 
-butil::Status AutoIncrementControl::GetAutoIncrements(butil::FlatMap<uint64_t, uint64_t>& auto_increments) {
+butil::Status AutoIncrementControl::GetAutoIncrements(butil::FlatMap<int64_t, int64_t>& auto_increments) {
   BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
   auto_increments = auto_increment_map_;
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint64_t start_id,
+butil::Status AutoIncrementControl::CreateAutoIncrement(int64_t table_id, int64_t start_id,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "create auto increment table id: " << table_id << " start id: " << start_id << "";
   {
@@ -102,10 +102,10 @@ butil::Status AutoIncrementControl::CreateAutoIncrement(uint64_t table_id, uint6
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::UpdateAutoIncrement(uint64_t table_id, uint64_t start_id, bool force,
+butil::Status AutoIncrementControl::UpdateAutoIncrement(int64_t table_id, int64_t start_id, bool force,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << table_id << " | " << start_id << " | " << force;
-  uint64_t source_start_id = 0;
+  int64_t source_start_id = 0;
   butil::Status ret = GetAutoIncrement(table_id, source_start_id);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "cannot find table_id: " << table_id;
@@ -126,12 +126,12 @@ butil::Status AutoIncrementControl::UpdateAutoIncrement(uint64_t table_id, uint6
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::GenerateAutoIncrement(uint64_t table_id, uint32_t count,
+butil::Status AutoIncrementControl::GenerateAutoIncrement(int64_t table_id, uint32_t count,
                                                           uint32_t auto_increment_increment,
                                                           uint32_t auto_increment_offset,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << table_id << " | " << count << " | " << auto_increment_increment << " | " << auto_increment_offset;
-  uint64_t source_start_id = 0;
+  int64_t source_start_id = 0;
   butil::Status ret = GetAutoIncrement(table_id, source_start_id);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "cannot find table_id: " << table_id;
@@ -158,7 +158,7 @@ butil::Status AutoIncrementControl::GenerateAutoIncrement(uint64_t table_id, uin
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::DeleteAutoIncrement(uint64_t table_id,
+butil::Status AutoIncrementControl::DeleteAutoIncrement(int64_t table_id,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "table id" << table_id;
   {
@@ -235,28 +235,28 @@ void AutoIncrementControl::SetRaftNode(std::shared_ptr<RaftNode> raft_node) { ra
 
 // on_apply callback
 void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool is_leader,
-                                              uint64_t /*term*/, uint64_t /*index*/,
+                                              int64_t /*term*/, int64_t /*index*/,
                                               google::protobuf::Message* response) {
   BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
   for (int i = 0; i < meta_increment.auto_increment_size(); i++) {
     const auto& auto_increment = meta_increment.auto_increment(i);
-    uint64_t table_id = auto_increment.id();
+    int64_t table_id = auto_increment.id();
     if (auto_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       DINGO_LOG(INFO) << "create auto increment, table id: " << table_id
                       << ", start id: " << auto_increment.increment().start_id();
       auto_increment_map_[table_id] = auto_increment.increment().start_id();
     } else if (auto_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-      uint64_t* start_id_ptr = auto_increment_map_.seek(table_id);
+      int64_t* start_id_ptr = auto_increment_map_.seek(table_id);
       if (start_id_ptr == nullptr) {
         DINGO_LOG(WARNING) << "for update, cannot find table id: " << table_id;
         continue;
       }
 
-      uint64_t source_start_id = *start_id_ptr;
+      int64_t source_start_id = *start_id_ptr;
       if (auto_increment.increment().update_type() ==
           pb::coordinator_internal::AutoIncrementUpdateType::READ_MODIFY_WRITE) {
-        uint64_t end_id = GetGenerateEndId(source_start_id, auto_increment.increment().generate_count(),
-                                           auto_increment.increment().increment(), auto_increment.increment().offset());
+        int64_t end_id = GetGenerateEndId(source_start_id, auto_increment.increment().generate_count(),
+                                          auto_increment.increment().increment(), auto_increment.increment().offset());
         // [source_start_id, end_id) has generated, so next start_id is end_id.
         if (is_leader && response != nullptr) {
           pb::meta::GenerateAutoIncrementResponse* generate_response =
@@ -286,8 +286,7 @@ void AutoIncrementControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncr
   }
 }
 
-uint64_t AutoIncrementControl::GetGenerateEndId(uint64_t start_id, uint32_t count, uint32_t increment,
-                                                uint32_t offset) {
+int64_t AutoIncrementControl::GetGenerateEndId(int64_t start_id, uint32_t count, uint32_t increment, uint32_t offset) {
   if (increment == 0 || increment > kAutoIncrementOffsetMax) {
     DINGO_LOG(WARNING) << "invalid auto_increment_increment: " << increment << ", set to default value 1.";
     increment = 1;
@@ -302,13 +301,13 @@ uint64_t AutoIncrementControl::GetGenerateEndId(uint64_t start_id, uint32_t coun
     return start_id + count;
   }
 
-  uint64_t real_start_id = GetRealStartId(start_id, increment, offset);
+  int64_t real_start_id = GetRealStartId(start_id, increment, offset);
   return real_start_id + count * increment;
 }
 
-uint64_t AutoIncrementControl::GetRealStartId(uint64_t start_id, uint32_t auto_increment_increment,
-                                              uint32_t auto_increment_offset) {
-  uint64_t remainder = start_id % auto_increment_increment;
+int64_t AutoIncrementControl::GetRealStartId(int64_t start_id, uint32_t auto_increment_increment,
+                                             uint32_t auto_increment_offset) {
+  int64_t remainder = start_id % auto_increment_increment;
   if (remainder < auto_increment_offset) {
     return start_id - remainder + auto_increment_offset;
   } else if (remainder > auto_increment_offset) {
@@ -337,14 +336,14 @@ int AutoIncrementControl::SaveAutoIncrement(std::string& auto_increment_data) {
   return 0;
 }
 
-int AutoIncrementControl::GetAppliedTermAndIndex(uint64_t& term, uint64_t& index) {
+int AutoIncrementControl::GetAppliedTermAndIndex(int64_t& term, int64_t& index) {
   term = 0;
   index = 0;
   return 0;
 }
 
 std::shared_ptr<Snapshot> AutoIncrementControl::PrepareRaftSnapshot() {
-  butil::FlatMap<uint64_t, uint64_t>* flatmap_for_snapshot = new butil::FlatMap<uint64_t, uint64_t>();
+  butil::FlatMap<int64_t, int64_t>* flatmap_for_snapshot = new butil::FlatMap<int64_t, int64_t>();
   flatmap_for_snapshot->init(1000);
   {
     BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
@@ -438,7 +437,7 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
   return butil::Status::OK();
 }
 
-butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment) {
+butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(int64_t table_id, int64_t auto_increment) {
   pb::meta::CreateAutoIncrementRequest request;
   pb::meta::CreateAutoIncrementResponse response;
 
@@ -449,7 +448,7 @@ butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(uint64_t
   return Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
 }
 
-void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(uint64_t table_id, uint64_t auto_increment) {
+void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(int64_t table_id, int64_t auto_increment) {
   if (auto_increment == 0 || auto_increment > kAutoIncrementOffsetMax) {
     DINGO_LOG(ERROR) << "table id: " << table_id << ", auto_increment: " << auto_increment;
     return;
@@ -476,7 +475,7 @@ void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(uint64_t table_i
   bth.Run(update_function);
 }
 
-void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(uint64_t table_id) {
+void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(int64_t table_id) {
   auto delete_function = [table_id]() {
     pb::meta::DeleteAutoIncrementRequest request;
     pb::meta::DeleteAutoIncrementResponse response;

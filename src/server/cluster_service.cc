@@ -51,8 +51,8 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   cntl->http_response().set_content_type("text/html");
 
-  uint64_t cluster_id = 0;
-  uint64_t epoch = 0;
+  int64_t cluster_id = 0;
+  int64_t epoch = 0;
   pb::common::Location coordinator_leader_location;
   std::vector<pb::common::Location> locations;
   controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
@@ -94,7 +94,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   }
 
   for (const auto& schema : schemas) {
-    uint64_t const schema_id = schema.id().entity_id();
+    int64_t const schema_id = schema.id().entity_id();
     if (schema_id == 0 || schema.name() != Constant::kDingoSchemaName) {
       continue;
     }
@@ -159,7 +159,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   os.move_to(cntl->response_attachment());
 }
 
-bool ClusterStatImpl::GetRegionInfo(uint64_t region_id, const pb::common::RegionMap& region_map,
+bool ClusterStatImpl::GetRegionInfo(int64_t region_id, const pb::common::RegionMap& region_map,
                                     pb::common::Region& result) {
   bool is_found = false;
   for (const auto& region : region_map.regions()) {
@@ -257,7 +257,7 @@ void ClusterStatImpl::PrintTableRegions(std::ostream& os, const pb::common::Regi
   os << "<li> Regions: ";
   os << "<ul>";
   for (const auto& range_distribution : table_range.range_distribution()) {
-    uint64_t const region_id = range_distribution.id().entity_id();
+    int64_t const region_id = range_distribution.id().entity_id();
     DINGO_LOG(INFO) << "RangeID:" << region_id << "," << range_distribution.ShortDebugString();
     pb::common::Region found_region;
     bool const is_found = GetRegionInfo(region_id, region_map, found_region);
@@ -331,7 +331,7 @@ void ClusterStatImpl::PrintIndexRegions(std::ostream& os, const pb::common::Regi
   os << "<li> Regions: ";
   os << "<ul>";
   for (const auto& range_distribution : index_range.range_distribution()) {
-    uint64_t const region_id = range_distribution.id().entity_id();
+    int64_t const region_id = range_distribution.id().entity_id();
     DINGO_LOG(INFO) << "RangeID:" << region_id << "," << range_distribution.ShortDebugString();
     pb::common::Region found_region;
     bool const is_found = GetRegionInfo(region_id, region_map, found_region);

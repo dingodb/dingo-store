@@ -41,7 +41,7 @@ class RaftControlClosure : public braft::Closure {
 
   void Run() override {
     brpc::Controller* cntl = static_cast<brpc::Controller*>(controller_);
-    uint64_t log_id = 0;
+    int64_t log_id = 0;
     if (cntl->has_log_id()) {
       log_id = cntl->log_id();
     }

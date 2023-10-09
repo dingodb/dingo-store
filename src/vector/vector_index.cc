@@ -34,17 +34,17 @@ namespace dingodb {
 
 DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
-void VectorIndex::SetSnapshotLogId(uint64_t snapshot_log_id) {
+void VectorIndex::SetSnapshotLogId(int64_t snapshot_log_id) {
   this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
 }
 
-uint64_t VectorIndex::ApplyLogId() const { return apply_log_id.load(std::memory_order_relaxed); }
+int64_t VectorIndex::ApplyLogId() const { return apply_log_id.load(std::memory_order_relaxed); }
 
-void VectorIndex::SetApplyLogId(uint64_t apply_log_id) {
+void VectorIndex::SetApplyLogId(int64_t apply_log_id) {
   this->apply_log_id.store(apply_log_id, std::memory_order_relaxed);
 }
 
-uint64_t VectorIndex::SnapshotLogId() const { return snapshot_log_id.load(std::memory_order_relaxed); }
+int64_t VectorIndex::SnapshotLogId() const { return snapshot_log_id.load(std::memory_order_relaxed); }
 
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
@@ -55,15 +55,15 @@ butil::Status VectorIndex::Load(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement load");
 }
 
-butil::Status VectorIndex::GetCount([[maybe_unused]] uint64_t& count) {
+butil::Status VectorIndex::GetCount([[maybe_unused]] int64_t& count) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get count");
 }
 
-butil::Status VectorIndex::GetDeletedCount([[maybe_unused]] uint64_t& deleted_count) {
+butil::Status VectorIndex::GetDeletedCount([[maybe_unused]] int64_t& deleted_count) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get deleted count");
 }
 
-butil::Status VectorIndex::GetMemorySize([[maybe_unused]] uint64_t& memory_size) {
+butil::Status VectorIndex::GetMemorySize([[maybe_unused]] int64_t& memory_size) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get memory size");
 }
 
@@ -75,7 +75,7 @@ VectorIndexWrapper::~VectorIndexWrapper() {
   bthread_mutex_destroy(&vector_index_mutex_);
 }
 
-std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(uint64_t id,
+std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(int64_t id,
                                                             pb::common::VectorIndexParameter index_parameter) {
   auto vector_index_wrapper =
       std::make_shared<VectorIndexWrapper>(id, index_parameter, Constant::kVectorIndexSaveSnapshotThresholdWriteKeyNum);
@@ -138,7 +138,7 @@ bool VectorIndexWrapper::Recover() {
   return true;
 }
 
-static std::string GenMetaKey(uint64_t vector_index_id) {
+static std::string GenMetaKey(int64_t vector_index_id) {
   return fmt::format("{}_{}", Constant::kVectorIndexApplyLogIdPrefix, vector_index_id);
 }
 
@@ -196,19 +196,19 @@ butil::Status VectorIndexWrapper::LoadMeta() {
   return butil::Status();
 }
 
-uint64_t VectorIndexWrapper::ApplyLogId() { return apply_log_id_.load(); }
+int64_t VectorIndexWrapper::ApplyLogId() { return apply_log_id_.load(); }
 
-void VectorIndexWrapper::SetApplyLogId(uint64_t apply_log_id) { apply_log_id_.store(apply_log_id); }
+void VectorIndexWrapper::SetApplyLogId(int64_t apply_log_id) { apply_log_id_.store(apply_log_id); }
 
-void VectorIndexWrapper::SaveApplyLogId(uint64_t apply_log_id) {
+void VectorIndexWrapper::SaveApplyLogId(int64_t apply_log_id) {
   SetApplyLogId(apply_log_id);
   SaveMeta();
 }
 
-uint64_t VectorIndexWrapper::SnapshotLogId() { return snapshot_log_id_.load(); }
+int64_t VectorIndexWrapper::SnapshotLogId() { return snapshot_log_id_.load(); }
 
-void VectorIndexWrapper::SetSnapshotLogId(uint64_t snapshot_log_id) { snapshot_log_id_.store(snapshot_log_id); }
-void VectorIndexWrapper::SaveSnapshotLogId(uint64_t snapshot_log_id) {
+void VectorIndexWrapper::SetSnapshotLogId(int64_t snapshot_log_id) { snapshot_log_id_.store(snapshot_log_id); }
+void VectorIndexWrapper::SaveSnapshotLogId(int64_t snapshot_log_id) {
   SetSnapshotLogId(snapshot_log_id);
   SaveMeta();
 }
@@ -245,8 +245,8 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
     ready_.store(true);
     ++version_;
 
-    uint64_t apply_log_id = ApplyLogId();
-    uint64_t snapshot_log_id = SnapshotLogId();
+    int64_t apply_log_id = ApplyLogId();
+    int64_t snapshot_log_id = SnapshotLogId();
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.wrapper][index_id({})] update vector index, apply_log_id({}/{}) snapshot_log_id({}/{}) "
         "reason({})",
@@ -272,6 +272,7 @@ void VectorIndexWrapper::ClearVectorIndex() {
   ready_.store(false);
   vector_indexs_[0] = nullptr;
   vector_indexs_[1] = nullptr;
+  share_vector_index_ = nullptr;
 }
 
 VectorIndexPtr VectorIndexWrapper::GetOwnVectorIndex() { return vector_indexs_[active_index_.load()]; }
@@ -321,7 +322,7 @@ int32_t VectorIndexWrapper::GetDimension() {
   return vector_index->GetDimension();
 }
 
-butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
+butil::Status VectorIndexWrapper::GetCount(int64_t& count) {
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
@@ -330,7 +331,7 @@ butil::Status VectorIndexWrapper::GetCount(uint64_t& count) {
   return vector_index->GetCount(count);
 }
 
-butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
+butil::Status VectorIndexWrapper::GetDeletedCount(int64_t& deleted_count) {
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
@@ -339,7 +340,7 @@ butil::Status VectorIndexWrapper::GetDeletedCount(uint64_t& deleted_count) {
   return vector_index->GetDeletedCount(deleted_count);
 }
 
-butil::Status VectorIndexWrapper::GetMemorySize(uint64_t& memory_size) {
+butil::Status VectorIndexWrapper::GetMemorySize(int64_t& memory_size) {
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
@@ -374,7 +375,7 @@ bool VectorIndexWrapper::SupportSave() {
   return vector_index->SupportSave();
 }
 
-bool VectorIndexWrapper::NeedToSave(uint64_t last_save_log_behind) {
+bool VectorIndexWrapper::NeedToSave(int64_t last_save_log_behind) {
   if (Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
     return false;
   }
@@ -382,7 +383,7 @@ bool VectorIndexWrapper::NeedToSave(uint64_t last_save_log_behind) {
   if (vector_index == nullptr) {
     return false;
   }
-  uint64_t element_count = 0, deleted_count = 0;
+  int64_t element_count = 0, deleted_count = 0;
   auto status = vector_index->GetCount(element_count);
   if (!status.ok()) {
     return false;
@@ -522,7 +523,7 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
   return status;
 }
 
-butil::Status VectorIndexWrapper::Delete(const std::vector<uint64_t>& delete_ids) {
+butil::Status VectorIndexWrapper::Delete(const std::vector<int64_t>& delete_ids) {
   if (!IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
@@ -566,9 +567,9 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
 
   const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
-    uint64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
-    uint64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
-    max_vector_id = max_vector_id > 0 ? max_vector_id : UINT64_MAX;
+    int64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
+    int64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
+    max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
     if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
       filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
     } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {

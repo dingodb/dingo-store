@@ -94,21 +94,21 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
   //   DINGO_LOG(ERROR) << fmt::format("selection_columns check failed");
   //   return status;
   // }
-   
+
   // build selection column index
   // if (selection_column_indexes_.empty()) {
   //   GetSelectionColumnIndexes();
   // }
   GetOriginalColumnIndexes();
   /**
-   *   6    int      
-   *   1    string   
-   *   0    long     
-   *   7    double   
-   *   2    bool     
-   *   3    double        
-   *   4    bool       
-   *   5    string         
+   *   6    int
+   *   1    string
+   *   0    long
+   *   7    double
+   *   2    bool
+   *   3    double
+   *   4    bool
+   *   5    string
    */
   for (const auto& index : original_column_indexes_) {
     // Use the index variable here
@@ -124,7 +124,8 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
 
   // selection_serial_schemas_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
   // Utils::CreateSerialSchema(original_serial_schemas_, coprocessor_.selection_columns(), &selection_serial_schemas_);
-  // Utils::CreateSelectionSchema(original_serial_schemas_sorted_, selection_column_indexes_, &selection_serial_schemas_);
+  // Utils::CreateSelectionSchema(original_serial_schemas_sorted_, selection_column_indexes_,
+  // &selection_serial_schemas_);
 
   // Utils::DebugSerialSchema(selection_serial_schemas_, "selection_serial_schemas");
   // selection_serial_schemas_sorted_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
@@ -189,7 +190,7 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
 }
 
 butil::Status Coprocessor::Execute(const std::shared_ptr<EngineIterator>& iter, bool key_only, size_t max_fetch_cnt,
-                                   uint64_t max_bytes_rpc, std::vector<pb::common::KeyValue>* kvs) {
+                                   int64_t max_bytes_rpc, std::vector<pb::common::KeyValue>* kvs) {
   DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Execute Enter");
   ScanFilter scan_filter = ScanFilter(key_only, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;
@@ -360,10 +361,10 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
   {
     size_t i = 0;
     for (const auto& aggregation : coprocessor_.aggregation_operators()) {
-      int32_t index_of_column = (aggregation.index_of_column() < 0 ||
-                                 aggregation.index_of_column() >= selection_column_indexes_.size())
-                                    ? 0
-                                    : aggregation.index_of_column();
+      int32_t index_of_column =
+          (aggregation.index_of_column() < 0 || aggregation.index_of_column() >= selection_column_indexes_.size())
+              ? 0
+              : aggregation.index_of_column();
       std::any column =
           Utils::CloneColumn(selection_record[index_of_column], (*group_by_operator_serial_schemas_)[i]->GetType());
       if (!column.has_value()) {
@@ -387,7 +388,7 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
                                        coprocessor_.result_schema().common_id());
     int ret = 0;
     try {
-      // group_by_key_record [0,1,2,3,4,5,6] sort, for group_by_key_serial_schemas_ in vector index no schema index 
+      // group_by_key_record [0,1,2,3,4,5,6] sort, for group_by_key_serial_schemas_ in vector index no schema index
       ret = group_by_key_encoder.EncodeKey(group_by_key_record, group_by_key);
     } catch (const std::exception& my_exception) {
       std::string error_message = fmt::format("serial::EncodeKey failed exception : {}", my_exception.what());
@@ -448,7 +449,7 @@ butil::Status Coprocessor::DoExecuteForSelection(const std::vector<std::any>& se
   return butil::Status();
 }
 
-butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_fetch_cnt, uint64_t max_bytes_rpc,
+butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                                       std::vector<pb::common::KeyValue>* kvs) {
   butil::Status status;
 
@@ -511,7 +512,8 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
           std::string error_message = fmt::format(
               "CloneColumn failed result_aggregation_record  index : {} result_serial_schemas_sorted_ i : {} "
               "result_serial_schemas_sorted_ type : {}",
-              (i - result_key_record.size()), i, BaseSchema::GetTypeString((*result_serial_schemas_sorted_)[i]->GetType()));
+              (i - result_key_record.size()), i,
+              BaseSchema::GetTypeString((*result_serial_schemas_sorted_)[i]->GetType()));
           DINGO_LOG(ERROR) << error_message;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
         }
@@ -622,10 +624,12 @@ butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& cop
     }
 
     // status = Utils::CompareSerialSchemaNonStrict(result_serial_schemas_sorted_, group_by_serial_schemas_,
-    //                                              coprocessor.group_by_columns(), coprocessor.aggregation_operators());
+    //                                              coprocessor.group_by_columns(),
+    //                                              coprocessor.aggregation_operators());
     // if (!status.ok()) {
     //   std::string error_message = fmt::format(
-    //       "CompareSerialSchemaNonStrict failed. compare result_serial_schemas_sorted_ and  selection_serial_schemas_ ");
+    //       "CompareSerialSchemaNonStrict failed. compare result_serial_schemas_sorted_ and  selection_serial_schemas_
+    //       ");
     //   DINGO_LOG(ERROR) << error_message;
     //   return status;
     // }
@@ -655,15 +659,15 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
     // Utils::CreateSerialSchema(selection_serial_schemas_sorted_, coprocessor.group_by_columns(),
     //                           &group_by_key_serial_schemas_);
 
-    Utils::CreateSerialSchema(original_serial_schemas_, coprocessor.group_by_columns(),
-                    selection_column_indexes_, &group_by_key_serial_schemas_);
+    Utils::CreateSerialSchema(original_serial_schemas_, coprocessor.group_by_columns(), selection_column_indexes_,
+                              &group_by_key_serial_schemas_);
 
     // Utils::UpdateSerialSchemaIndex(&group_by_key_serial_schemas_); // [1,2] ==> [0,1]
 
     std::vector<bool> keys;
     keys.resize(coprocessor.group_by_columns().size(), true);
 
-    Utils::UpdateSerialSchemaKey(keys, &group_by_key_serial_schemas_); 
+    Utils::UpdateSerialSchemaKey(keys, &group_by_key_serial_schemas_);
 
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open enable group_by_key");
   }
@@ -686,8 +690,8 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
                                            : aggregation_operator.index_of_column());
     }
     DINGO_LOG(DEBUG) << "CreateSerialSchema########";
-    Utils::CreateSerialSchema(original_serial_schemas_, aggregation_operator_columns,
-                              selection_column_indexes_, &group_by_operator_serial_schemas_);
+    Utils::CreateSerialSchema(original_serial_schemas_, aggregation_operator_columns, selection_column_indexes_,
+                              &group_by_operator_serial_schemas_);
     DINGO_LOG(DEBUG) << "CreateSerialSchema######## end";
     // Utils::UpdateSerialSchemaIndex(&group_by_operator_serial_schemas_);
 
@@ -714,9 +718,9 @@ butil::Status Coprocessor::InitGroupBySerialSchema(const pb::store::Coprocessor&
 
 void Coprocessor::GetOriginalColumnIndexes() {
   original_column_indexes_.resize(original_serial_schemas_->size(), -1);
-  int i = 0 ;
+  int i = 0;
   for (const auto& schema : *original_serial_schemas_) {
-    int index = schema->GetIndex();  
+    int index = schema->GetIndex();
     DINGO_LOG(DEBUG) << index << "," << i;
     original_column_indexes_[index] = i;
     i++;
@@ -730,7 +734,7 @@ void Coprocessor::GetOriginalColumnIndexes() {
 }
 
 void Coprocessor::GetSelectionColumnIndexes() {
-  if(coprocessor_.selection_columns().empty()) {
+  if (coprocessor_.selection_columns().empty()) {
     DINGO_LOG(DEBUG) << "empty()";
     // selection_column_indexes_.resize(original_column_indexes_.size(), -1);
     for (const auto& index : original_column_indexes_) {
@@ -739,10 +743,11 @@ void Coprocessor::GetSelectionColumnIndexes() {
       selection_column_indexes_.push_back(i);
     }
     // sort and unique
-    // std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j; });
+    // std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j;
+    // });
 
     // selection_column_indexes_.erase(std::unique(selection_column_indexes_.begin(), selection_column_indexes_.end()),
-                                    // selection_column_indexes_.end());
+    // selection_column_indexes_.end());
   } else {
     // [0,2,4,6]  => [6,0,2,4]
     // selection_column_indexes_.resize(coprocessor_.selection_columns().size(), -1);
@@ -752,7 +757,8 @@ void Coprocessor::GetSelectionColumnIndexes() {
       selection_column_indexes_.push_back(original_column_indexes_[i]);
     }
     // sort and unique
-    // std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j; });
+    // std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j;
+    // });
 
     // selection_column_indexes_.erase(std::unique(selection_column_indexes_.begin(), selection_column_indexes_.end()),
     //                                 selection_column_indexes_.end());

@@ -34,9 +34,9 @@ class TransformKvAble {
   virtual ~TransformKvAble() = default;
 
   std::string Prefix() { return prefix_; }
-  virtual std::string GenKey(uint64_t id) { return fmt::format("{}_{}", prefix_, id); }
+  virtual std::string GenKey(int64_t id) { return fmt::format("{}_{}", prefix_, id); }
 
-  virtual uint64_t ParseRegionId(const std::string& str) {
+  virtual int64_t ParseRegionId(const std::string& str) {
     if (str.size() <= prefix_.size()) {
       DINGO_LOG(ERROR) << "Parse region id failed, invalid str " << str;
       return 0;
@@ -44,9 +44,9 @@ class TransformKvAble {
 
     std::string s(str.c_str() + prefix_.size() + 1);
     try {
-      return std::stoull(s, nullptr, 10);
+      return std::stoll(s, nullptr, 10);
     } catch (std::invalid_argument& e) {
-      DINGO_LOG(ERROR) << "string to uint64_t failed: " << e.what();
+      DINGO_LOG(ERROR) << "string to int64_t failed: " << e.what();
     }
 
     return 0;

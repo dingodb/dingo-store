@@ -57,8 +57,8 @@ enum ReservedTableIds {
 // Used for transformation to SDK CommonId
 message DingoCommonId {
   EntityType entity_type = 1;
-  uint64 parent_entity_id = 2;  // if the entity is table, this field is its schema_id
-  uint64 entity_id = 3;
+  int64 parent_entity_id = 2;  // if the entity is table, this field is its schema_id
+  int64 entity_id = 3;
 }
 
 /**
@@ -122,8 +122,8 @@ message Schema {
 message TableDefinition {
   string name = 1;
   uint32 version = 2;
-  uint64 ttl = 3;
-  uint64 auto_increment = 4;
+  int64 ttl = 3;
+  int64 auto_increment = 4;
   string create_sql = 5;
   PartitionRule table_partition = 20;
   uint32 replica = 21;
@@ -132,9 +132,9 @@ message TableDefinition {
   map<string, string> properties = 40;
   dingodb.pb.common.IndexParameter index_parameter = 41;  // for index
 
-  uint64 create_timestamp = 50;
-  uint64 update_timestamp = 51;
-  uint64 delete_timestamp = 52;
+  int64 create_timestamp = 50;
+  int64 update_timestamp = 51;
+  int64 delete_timestamp = 52;
 }
 
 // IndexDefinition is for vector/scalar index
@@ -145,7 +145,7 @@ message IndexDefinition {
   uint32 replica = 4;
   dingodb.pb.common.IndexParameter index_parameter = 5;
   bool with_auto_incrment = 6;  // if true, the index create a auto increment
-  uint64 auto_increment = 7;    // auto increment start id
+  int64 auto_increment = 7;     // auto increment start id
 }
 
 message RegionStatus {
@@ -171,9 +171,9 @@ message RegionStatus {
   // for index, the region is index (including vector index and scalar index)
   dingodb.pb.common.RegionType region_type = 5;
   // the create timestamp in ms of region
-  uint64 create_timestamp = 10;
+  int64 create_timestamp = 10;
   // the last update(heartbeat) timestamp in ms of region
-  uint64 last_update_timestamp = 11;
+  int64 last_update_timestamp = 11;
 }
 
 // This Part is mainly equal to the Part in DingoDB 0.5.x
@@ -189,8 +189,8 @@ message RangeDistribution {
   repeated dingodb.pb.common.Location voters = 4;
   // all members of the region that is learners, have no right to vote
   repeated dingodb.pb.common.Location learners = 5;
-  uint64 regionmap_epoch = 6;
-  uint64 storemap_epoch = 7;
+  int64 regionmap_epoch = 6;
+  int64 storemap_epoch = 7;
   // region_epoch is used to check whether the region info is stale
   dingodb.pb.common.RegionEpoch region_epoch = 8;
   // RegionStatus
@@ -208,11 +208,11 @@ message IndexRange {
 
 // Table metrics for optimization of SQL plan
 message TableMetrics {
-  uint64 rows_count = 1;
+  int64 rows_count = 1;
   bytes min_key = 2;
   bytes max_key = 3;
-  uint64 part_count = 4;
-  uint64 table_size = 5;  // approximate table size in bytes
+  int64 part_count = 4;
+  int64 table_size = 5;  // approximate table size in bytes
 }
 
 message TableMetricsWithId {
@@ -222,10 +222,10 @@ message TableMetricsWithId {
 
 // Index metrics for optimization of SQL plan
 message IndexMetrics {
-  uint64 rows_count = 1;
+  int64 rows_count = 1;
   bytes min_key = 2;
   bytes max_key = 3;
-  uint64 part_count = 4;
+  int64 part_count = 4;
 
   // vector index type . reserve to do one of for each different algorithm.
   dingodb.pb.common.VectorIndexType vector_index_type = 20;
@@ -331,7 +331,7 @@ message GetTablesCountRequest {
 
 message GetTablesCountResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 tables_count = 2;
+  int64 tables_count = 2;
 }
 
 message GetIndexesCountRequest {
@@ -340,7 +340,7 @@ message GetIndexesCountRequest {
 
 message GetIndexesCountResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 indexes_count = 2;
+  int64 indexes_count = 2;
 }
 
 message GetTableRequest {
@@ -501,8 +501,8 @@ message DropIndexResponse {
 }
 
 message TableIncrement {
-  uint64 table_id = 1;
-  uint64 start_id = 2;
+  int64 table_id = 1;
+  int64 start_id = 2;
 }
 
 message GetAutoIncrementsRequest {}
@@ -518,12 +518,12 @@ message GetAutoIncrementRequest {
 
 message GetAutoIncrementResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 start_id = 2;
+  int64 start_id = 2;
 }
 
 message CreateAutoIncrementRequest {
   DingoCommonId table_id = 1;
-  uint64 start_id = 2;
+  int64 start_id = 2;
 }
 
 message CreateAutoIncrementResponse {
@@ -532,7 +532,7 @@ message CreateAutoIncrementResponse {
 
 message UpdateAutoIncrementRequest {
   DingoCommonId table_id = 1;
-  uint64 start_id = 2;
+  int64 start_id = 2;
   bool force = 3;
 }
 
@@ -542,15 +542,15 @@ message UpdateAutoIncrementResponse {
 
 message GenerateAutoIncrementRequest {
   DingoCommonId table_id = 1;
-  uint64 count = 2;
+  int64 count = 2;
   uint32 auto_increment_increment = 3;
   uint32 auto_increment_offset = 4;
 }
 
 message GenerateAutoIncrementResponse {
   dingodb.pb.error.Error error = 1;
-  uint64 start_id = 2;
-  uint64 end_id = 3;
+  int64 start_id = 2;
+  int64 end_id = 3;
 }
 
 message DeleteAutoIncrementRequest {

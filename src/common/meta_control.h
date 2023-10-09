@@ -41,7 +41,7 @@ class MetaControl {
   virtual void SetLeaderTerm(int64_t term) = 0;
   virtual void OnLeaderStart(int64_t term) = 0;
   virtual void OnLeaderStop() = 0;
-  virtual int GetAppliedTermAndIndex(uint64_t &term, uint64_t &index) = 0;
+  virtual int GetAppliedTermAndIndex(int64_t &term, int64_t &index) = 0;
 
   // Get raft leader's server location for sdk use
   virtual void GetLeaderLocation(pb::common::Location &leader_server_location) = 0;
@@ -51,8 +51,8 @@ class MetaControl {
   virtual std::shared_ptr<RaftNode> GetRaftNode() = 0;
 
   // on_apply callback
-  virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader,
-                                  uint64_t term, uint64_t index, google::protobuf::Message *response) = 0;
+  virtual void ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment, bool is_leader, int64_t term,
+                                  int64_t index, google::protobuf::Message *response) = 0;
 
   // prepare snapshot for raft snapshot
   // return: Snapshot

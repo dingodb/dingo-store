@@ -73,13 +73,13 @@ class ServerInteraction {
   butil::Status AllSendRequest(const std::string& service_name, const std::string& api_name, const Request& request,
                                Response& response);
 
-  uint64_t GetLatency() const { return latency_; }
+  int64_t GetLatency() const { return latency_; }
 
  private:
   std::atomic<int> leader_index_;
   std::vector<butil::EndPoint> endpoints_;
   std::vector<std::unique_ptr<brpc::Channel> > channels_;
-  uint64_t latency_;
+  int64_t latency_;
 };
 
 using ServerInteractionPtr = std::shared_ptr<ServerInteraction>;
@@ -182,9 +182,9 @@ class InteractionManager {
   void SetStoreInteraction(ServerInteractionPtr interaction);
 
   bool CreateStoreInteraction(std::vector<std::string> addrs);
-  butil::Status CreateStoreInteraction(uint64_t region_id);
+  butil::Status CreateStoreInteraction(int64_t region_id);
 
-  uint64_t GetLatency() const;
+  int64_t GetLatency() const;
 
   template <typename Request, typename Response>
   butil::Status SendRequestWithoutContext(const std::string& service_name, const std::string& api_name,

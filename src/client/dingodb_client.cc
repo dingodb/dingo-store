@@ -315,7 +315,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorBatchSearch") {
       client::SendVectorBatchSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn, FLAGS_batch_count);
     } else if (method == "VectorBatchQuery") {
-      client::SendVectorBatchQuery(FLAGS_region_id, {static_cast<uint64_t>(FLAGS_vector_id)});
+      client::SendVectorBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_vector_id)});
     } else if (method == "VectorScanQuery") {
       client::SendVectorScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
     } else if (method == "VectorGetRegionMetrics") {
@@ -474,25 +474,25 @@ bool GetBrpcChannel(const std::string& location, brpc::Channel& channel) {
   return true;
 }
 
-std::string EncodeUint64(uint64_t value) {
+std::string EncodeUint64(int64_t value) {
   std::string str(reinterpret_cast<const char*>(&value), sizeof(value));
   std::reverse(str.begin(), str.end());
   return str;
 }
 
-uint64_t DecodeUint64(const std::string& str) {
-  if (str.size() != sizeof(uint64_t)) {
-    throw std::invalid_argument("Invalid string size for uint64_t decoding");
+int64_t DecodeUint64(const std::string& str) {
+  if (str.size() != sizeof(int64_t)) {
+    throw std::invalid_argument("Invalid string size for int64_t decoding");
   }
 
   std::string reversed_str(str.rbegin(), str.rend());
-  uint64_t value;
+  int64_t value;
   std::memcpy(&value, reversed_str.data(), sizeof(value));
   return value;
 }
 
 void CoordinatorSendDebug() {
-  uint64_t test1 = 1001;
+  int64_t test1 = 1001;
   auto encode_result = EncodeUint64(test1);
   DINGO_LOG(INFO) << encode_result.size();
   DINGO_LOG(INFO) << dingodb::Helper::StringToHex(encode_result);

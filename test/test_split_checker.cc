@@ -119,7 +119,7 @@ class SplitCheckerTest : public testing::Test {
 
 std::shared_ptr<RawRocksEngine> SplitCheckerTest::engine = nullptr;
 
-static dingodb::store::RegionPtr BuildRegion(uint64_t region_id, const std::string& raft_group_name,
+static dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
                                              std::vector<std::string>& raft_addrs) {  // NOLINT
   dingodb::pb::common::RegionDefinition region_definition;
   region_definition.set_id(region_id);
@@ -169,10 +169,10 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
 
   auto reader = SplitCheckerTest::engine->NewReader(kDefaultCf);
 
-  uint64_t left_count = 0;
+  int64_t left_count = 0;
   reader->KvCount(region->InnerRegion().definition().range().start_key(), split_key, left_count);
 
-  uint64_t right_count = 0;
+  int64_t right_count = 0;
   reader->KvCount(split_key, region->InnerRegion().definition().range().end_key(), right_count);
 
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} right_count: {}",
@@ -208,7 +208,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
 
   auto reader = SplitCheckerTest::engine->NewReader(kDefaultCf);
 
-  uint64_t left_count = 0;
+  int64_t left_count = 0;
   reader->KvCount(region->InnerRegion().definition().range().start_key(), split_key, left_count);
 
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} left_size: {}",
@@ -243,7 +243,7 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
 
   auto reader = SplitCheckerTest::engine->NewReader(kDefaultCf);
 
-  uint64_t left_count = 0;
+  int64_t left_count = 0;
   reader->KvCount(region->InnerRegion().definition().range().start_key(), split_key, left_count);
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {}",
                            region->InnerRegion().definition().range().start_key(),

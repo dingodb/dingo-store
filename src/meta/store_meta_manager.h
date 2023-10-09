@@ -58,17 +58,17 @@ class Region {
   std::string Serialize();
   void DeSerialize(const std::string& data);
 
-  uint64_t Id() const { return inner_region_.id(); }
+  int64_t Id() const { return inner_region_.id(); }
   const std::string& Name() const { return inner_region_.definition().name(); }
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
   pb::common::RegionEpoch Epoch();
-  void SetEpochVersion(uint64_t version);
-  void SetEpochConfVersion(uint64_t version);
-  void SetSnapshotEpochVersion(uint64_t version);
+  void SetEpochVersion(int64_t version);
+  void SetEpochConfVersion(int64_t version);
+  void SetSnapshotEpochVersion(int64_t version);
 
-  uint64_t LeaderId();
-  void SetLeaderId(uint64_t leader_id);
+  int64_t LeaderId();
+  void SetLeaderId(int64_t leader_id);
 
   const pb::common::Range& Range();
   void SetRange(const pb::common::Range& range);
@@ -103,16 +103,16 @@ class Region {
   pb::raft::SplitStrategy SplitStrategy();
   void SetSplitStrategy(pb::raft::SplitStrategy split_strategy);
 
-  uint64_t LastSplitTimestamp();
+  int64_t LastSplitTimestamp();
   void UpdateLastSplitTimestamp();
 
-  uint64_t ParentId();
-  void SetParentId(uint64_t region_id);
+  int64_t ParentId();
+  void SetParentId(int64_t region_id);
 
   std::vector<pb::store_internal::RegionSplitRecord> Childs();
   void AddChild(pb::store_internal::RegionSplitRecord& record);
 
-  uint64_t PartitionId();
+  int64_t PartitionId();
 
   const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
 
@@ -144,24 +144,24 @@ class StoreServerMeta {
 
   bool Init();
 
-  uint64_t GetEpoch() const;
-  StoreServerMeta& SetEpoch(uint64_t epoch);
+  int64_t GetEpoch() const;
+  StoreServerMeta& SetEpoch(int64_t epoch);
 
-  bool IsExist(uint64_t store_id);
+  bool IsExist(int64_t store_id);
 
   void AddStore(std::shared_ptr<pb::common::Store> store);
   void UpdateStore(std::shared_ptr<pb::common::Store> store);
-  void DeleteStore(uint64_t store_id);
-  std::shared_ptr<pb::common::Store> GetStore(uint64_t store_id);
-  std::map<uint64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
+  void DeleteStore(int64_t store_id);
+  std::shared_ptr<pb::common::Store> GetStore(int64_t store_id);
+  std::map<int64_t, std::shared_ptr<pb::common::Store>> GetAllStore();
 
   pb::node::NodeInfo GetNodeInfoByRaftEndPoint(const butil::EndPoint& endpoint);
   pb::node::NodeInfo GetNodeInfoByServerEndPoint(const butil::EndPoint& endpoint);
 
  private:
-  uint64_t epoch_;
+  int64_t epoch_;
   bthread_mutex_t mutex_;
-  std::map<uint64_t, std::shared_ptr<pb::common::Store>> stores_;
+  std::map<int64_t, std::shared_ptr<pb::common::Store>> stores_;
 };
 
 // Manage store server region meta data
@@ -178,36 +178,36 @@ class StoreRegionMeta : public TransformKvAble {
 
   bool Init();
 
-  static uint64_t GetEpoch();
+  static int64_t GetEpoch();
 
   void AddRegion(store::RegionPtr region);
-  void DeleteRegion(uint64_t region_id);
+  void DeleteRegion(int64_t region_id);
   void UpdateRegion(store::RegionPtr region);
 
   void UpdateState(store::RegionPtr region, pb::common::StoreRegionState new_state);
-  void UpdateState(uint64_t region_id, pb::common::StoreRegionState new_state);
+  void UpdateState(int64_t region_id, pb::common::StoreRegionState new_state);
 
-  static void UpdateLeaderId(store::RegionPtr region, uint64_t leader_id);
-  void UpdateLeaderId(uint64_t region_id, uint64_t leader_id);
+  static void UpdateLeaderId(store::RegionPtr region, int64_t leader_id);
+  void UpdateLeaderId(int64_t region_id, int64_t leader_id);
 
   void UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers);
-  void UpdatePeers(uint64_t region_id, std::vector<pb::common::Peer>& peers);
+  void UpdatePeers(int64_t region_id, std::vector<pb::common::Peer>& peers);
 
   void UpdateRange(store::RegionPtr region, const pb::common::Range& range);
-  void UpdateRange(uint64_t region_id, const pb::common::Range& range);
+  void UpdateRange(int64_t region_id, const pb::common::Range& range);
 
-  void UpdateEpochVersion(store::RegionPtr region, uint64_t version);
-  void UpdateEpochVersion(uint64_t region_id, uint64_t version);
-  void UpdateEpochConfVersion(store::RegionPtr region, uint64_t version);
-  void UpdateEpochConfVersion(uint64_t region_id, uint64_t version);
-  void UpdateSnapshotEpochVersion(store::RegionPtr region, uint64_t version);
+  void UpdateEpochVersion(store::RegionPtr region, int64_t version);
+  void UpdateEpochVersion(int64_t region_id, int64_t version);
+  void UpdateEpochConfVersion(store::RegionPtr region, int64_t version);
+  void UpdateEpochConfVersion(int64_t region_id, int64_t version);
+  void UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version);
 
   void UpdateNeedBootstrapDoSnapshot(store::RegionPtr region, bool need_do_snapshot);
   void UpdateDisableChange(store::RegionPtr region, bool disable_change);
   void UpdateTemporaryDisableChange(store::RegionPtr region, bool disable_change);
 
-  bool IsExistRegion(uint64_t region_id);
-  store::RegionPtr GetRegion(uint64_t region_id);
+  bool IsExistRegion(int64_t region_id);
+  store::RegionPtr GetRegion(int64_t region_id);
   std::vector<store::RegionPtr> GetAllRegion();
   std::vector<store::RegionPtr> GetAllAliveRegion();
   std::vector<store::RegionPtr> GetAllMetricsRegion();
@@ -222,7 +222,7 @@ class StoreRegionMeta : public TransformKvAble {
   std::shared_ptr<MetaWriter> meta_writer_;
 
   // Store all region meta data in this server.
-  using RegionMap = DingoSafeMap<uint64_t, store::RegionPtr>;
+  using RegionMap = DingoSafeMap<int64_t, store::RegionPtr>;
   RegionMap regions_;
 };
 
@@ -241,13 +241,13 @@ class StoreRaftMeta : public TransformKvAble {
 
   bool Init();
 
-  static RaftMetaPtr NewRaftMeta(uint64_t region_id);
+  static RaftMetaPtr NewRaftMeta(int64_t region_id);
 
   void AddRaftMeta(RaftMetaPtr raft_meta);
   void UpdateRaftMeta(RaftMetaPtr raft_meta);
-  void SaveRaftMeta(uint64_t region_id);
-  void DeleteRaftMeta(uint64_t region_id);
-  RaftMetaPtr GetRaftMeta(uint64_t region_id);
+  void SaveRaftMeta(int64_t region_id);
+  void DeleteRaftMeta(int64_t region_id);
+  RaftMetaPtr GetRaftMeta(int64_t region_id);
   std::vector<RaftMetaPtr> GetAllRaftMeta();
 
  private:
@@ -261,7 +261,7 @@ class StoreRaftMeta : public TransformKvAble {
 
   bthread_mutex_t mutex_;
 
-  using RaftMetaMap = std::map<uint64_t, RaftMetaPtr>;
+  using RaftMetaMap = std::map<int64_t, RaftMetaPtr>;
   RaftMetaMap raft_metas_;
 };
 

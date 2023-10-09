@@ -59,7 +59,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
   static const pb::common::Range kRange;
   // valid param L2
   {
-    uint64_t id = 1;
+    int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
     index_parameter.mutable_hnsw_parameter()->set_dimension(dimension);

@@ -118,8 +118,7 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
         case BaseSchema::kString: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
           if (ss->IsKey()) {
-            ss->EncodeKey(key_buf,
-                          std::any_cast<std::optional<std::shared_ptr<std::string>>>(record.at(index)));
+            ss->EncodeKey(key_buf, std::any_cast<std::optional<std::shared_ptr<std::string>>>(record.at(index)));
           }
           break;
         }
@@ -191,48 +190,49 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
         case BaseSchema::kBoolList: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>>(bs);
           if (!ss->IsKey()) {
-            ss->EncodeValue(value_buf,
-                            std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(record.at(ss->GetIndex())));
+            ss->EncodeValue(
+                value_buf, std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(record.at(ss->GetIndex())));
           }
           break;
         }
         case BaseSchema::kStringList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
+          auto ss =
+              std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
           if (!ss->IsKey()) {
-            ss->EncodeValue(value_buf,
-                            std::any_cast<std::optional<std::shared_ptr<std::vector<std::string>>>>(record.at(ss->GetIndex())));
+            ss->EncodeValue(value_buf, std::any_cast<std::optional<std::shared_ptr<std::vector<std::string>>>>(
+                                           record.at(ss->GetIndex())));
           }
           break;
         }
         case BaseSchema::kDoubleList: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<double>>>>>(bs);
           if (!ss->IsKey()) {
-            ss->EncodeValue(value_buf,
-                            std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(record.at(ss->GetIndex())));
+            ss->EncodeValue(value_buf, std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(
+                                           record.at(ss->GetIndex())));
           }
           break;
         }
         case BaseSchema::kFloatList: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<float>>>>>(bs);
           if (!ss->IsKey()) {
-            ss->EncodeValue(value_buf,
-                            std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(record.at(ss->GetIndex())));
+            ss->EncodeValue(value_buf, std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(
+                                           record.at(ss->GetIndex())));
           }
           break;
         }
         case BaseSchema::kIntegerList: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs);
           if (!ss->IsKey()) {
-            ss->EncodeValue(value_buf,
-                            std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(record.at(ss->GetIndex())));
+            ss->EncodeValue(value_buf, std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(
+                                           record.at(ss->GetIndex())));
           }
           break;
         }
         case BaseSchema::kLongList: {
           auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs);
           if (!ss->IsKey()) {
-            ss->EncodeValue(value_buf,
-                            std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(record.at(ss->GetIndex())));
+            ss->EncodeValue(value_buf, std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(
+                                           record.at(ss->GetIndex())));
           }
           break;
         }
@@ -321,7 +321,7 @@ int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int colu
 }
 
 int RecordEncoder::EncodeMaxKeyPrefix(std::string& output) const {
-  if (common_id_ == UINT64_MAX) {
+  if (common_id_ == INT64_MAX) {
     // "CommonId reach max! Cannot generate Max Key Prefix"
     return -1;
   }

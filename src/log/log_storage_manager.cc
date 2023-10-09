@@ -18,19 +18,19 @@
 
 namespace dingodb {
 
-void LogStorageManager::AddLogStorage(uint64_t region_id, std::shared_ptr<SegmentLogStorage> log_storage) {
+void LogStorageManager::AddLogStorage(int64_t region_id, std::shared_ptr<SegmentLogStorage> log_storage) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   log_storages_.insert(std::make_pair(region_id, log_storage));
 }
 
-void LogStorageManager::DeleteStorage(uint64_t region_id) {
+void LogStorageManager::DeleteStorage(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   log_storages_.erase(region_id);
 }
 
-std::shared_ptr<SegmentLogStorage> LogStorageManager::GetLogStorage(uint64_t region_id) {
+std::shared_ptr<SegmentLogStorage> LogStorageManager::GetLogStorage(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   auto it = log_storages_.find(region_id);

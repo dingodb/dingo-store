@@ -23,7 +23,7 @@
 
 namespace dingodb {
 
-int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, uint64_t) {
+int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
   if (region == nullptr) {
     return 0;
   }
