@@ -164,17 +164,17 @@ message TxnPrewriteRequest {
   // The primary lock of the transaction is setup by client
   bytes primary_lock = 3;
   // Identifies the transaction being written.
-  uint64 start_ts = 4;
+  int64 start_ts = 4;
   // the lock's ttl is timestamp in milisecond.
-  uint64 lock_ttl = 5;
+  int64 lock_ttl = 5;
   // the number of keys involved in the transaction
-  uint64 txn_size = 6;
+  int64 txn_size = 6;
   // When the transaction involves only one region, it's possible to commit the
   // transaction directly with 1PC protocol.
   bool try_one_pc = 7;
   // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
   // schema change. This field is unused now.
-  uint64 max_commit_ts = 8;
+  int64 max_commit_ts = 8;
 }
 
 message TxnPrewriteResponse {
@@ -194,14 +194,14 @@ message TxnPrewriteResponse {
   // field will be set to the commit ts of the transaction. Otherwise, if dingo-store
   // failed to commit it with 1PC or the transaction is not 1PC, the value will
   // be 0.
-  uint64 one_pc_commit_ts = 4;
+  int64 one_pc_commit_ts = 4;
 }
 
 message TxnCommitRequest {
   // The start_ts of the transaction.
-  uint64 start_ts = 2;
+  int64 start_ts = 2;
   // The commit_ts of transaction. Must be greater than `start_ts`.
-  uint64 commit_ts = 3;
+  int64 commit_ts = 3;
   // All keys in the transaction to be committed.
   repeated bytes keys = 4;
 }
@@ -214,7 +214,7 @@ message TxnCommitResponse {
   // 2. otherwise, txn_result is empty
   dingodb.pb.store.TxnResultInfo txn_result = 2;
   // The commit_ts of the transaction.
-  uint64 commit_ts = 3;
+  int64 commit_ts = 3;
 }
 
 // CheckTxnStatusRequest checks the status of a transaction.
@@ -225,12 +225,12 @@ message TxnCheckTxnStatusRequest {
   // Primary key and lock ts together to locate the primary lock of a transaction.
   bytes primary_key = 2;
   // Starting timestamp of the transaction being checked.
-  uint64 lock_ts = 3;
+  int64 lock_ts = 3;
   // The start timestamp of the transaction which this request is part of.
-  uint64 caller_start_ts = 4;
+  int64 caller_start_ts = 4;
   // The client must specify the current time to dingo-store using this timestamp.
   // It is used to check TTL timeouts. It may be inaccurate.
-  uint64 current_ts = 5;
+  int64 current_ts = 5;
 }
 
 message TxnCheckTxnStatusResponse {
@@ -245,9 +245,9 @@ message TxnCheckTxnStatusResponse {
   //   locked: lock_ttl > 0
   //   committed: commit_ts > 0
   //   rollbacked: lock_ttl = 0 && commit_ts = 0
-  uint64 lock_ttl = 3;
+  int64 lock_ttl = 3;
   // if the transaction of the lock is committed, the commit_ts is returned
-  uint64 commit_ts = 4;
+  int64 commit_ts = 4;
   // The action performed by dingo-store (and why if the action is to rollback).
   dingodb.pb.store.Action action = 5;
   dingodb.pb.store.LockInfo lock_info = 6;
@@ -256,10 +256,10 @@ message TxnCheckTxnStatusResponse {
 // For all keys locked by the transaction identified by `start_ts`, either
 // commit or rollback the transaction and unlock the key.
 message TxnResolveLockRequest {
-  uint64 start_ts = 2;
+  int64 start_ts = 2;
   // `commit_ts == 0` means the transaction was rolled back.
   // `commit_ts > 0` means the transaction was committed at the given timestamp.
-  uint64 commit_ts = 3;
+  int64 commit_ts = 3;
   // Only resolve specified keys.
   repeated bytes keys = 4;
 }
@@ -275,7 +275,7 @@ message TxnResolveLockResponse {
 // the database, unlock locks, and leave a rollback tombstone.
 message TxnBatchRollbackRequest {
   // Identify the transaction to be rolled back.
-  uint64 start_ts = 2;
+  int64 start_ts = 2;
   // The keys to rollback.
   repeated bytes keys = 3;
 }
@@ -292,10 +292,10 @@ message TxnHeartBeatRequest {
   // The key of the lock to update.
   bytes primary_lock = 2;
   // Start timestamp oracle of the large transaction.
-  uint64 start_ts = 3;
+  int64 start_ts = 3;
   // The new TTL the sender would like.
   // The advise_lock_ttl is the timestamp of milisecond.
-  uint64 advise_lock_ttl = 4;
+  int64 advise_lock_ttl = 4;
 }
 
 message TxnHeartBeatResponse {
@@ -307,7 +307,7 @@ message TxnHeartBeatResponse {
   // 3. otherwise, txn_result is empty
   dingodb.pb.store.TxnResultInfo txn_result = 2;
   // The TTL actually set on the requested lock.
-  uint64 lock_ttl = 3;
+  int64 lock_ttl = 3;
 }
 
 // Delete a range of data from dingo-store.

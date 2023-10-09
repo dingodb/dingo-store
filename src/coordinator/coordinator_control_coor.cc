@@ -4717,11 +4717,11 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::UpdateGCSafePoint(uint64_t safe_point, uint64_t& new_safe_point,
+butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point, int64_t& new_safe_point,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "UpdateGCSafePoint safe_point=" << safe_point;
 
-  uint64_t now_safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+  int64_t now_safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
 
   if (now_safe_point >= safe_point) {
     DINGO_LOG(WARNING) << "UpdateGCSafePoint now_safe_point=" << now_safe_point << " >= safe_point=" << safe_point
@@ -4737,7 +4737,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(uint64_t safe_point, uint64_
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::GetGCSafePoint(uint64_t& safe_point) {
+butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point) {
   safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
   return butil::Status::OK();
 }

@@ -71,8 +71,8 @@ butil::Status TxnEngineHelper::GetLockInfo(const std::shared_ptr<RawEngine::Read
   return butil::Status::OK();
 }
 
-butil::Status TxnEngineHelper::ScanLockInfo(const std::shared_ptr<RawEngine> &engine, uint64_t min_lock_ts,
-                                            uint64_t max_lock_ts, const std::string &start_key,
+butil::Status TxnEngineHelper::ScanLockInfo(const std::shared_ptr<RawEngine> &engine, int64_t min_lock_ts,
+                                            int64_t max_lock_ts, const std::string &start_key,
                                             const std::string &end_key, uint32_t limit,
                                             std::vector<pb::store::LockInfo> &lock_infos) {
   IteratorOptions iter_options;
@@ -140,7 +140,7 @@ butil::Status TxnEngineHelper::ScanLockInfo(const std::shared_ptr<RawEngine> &en
 // This function is not saft, MUST be called in raft apply to make sure the lock_info is not changed during rollback
 butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine,
                                         std::vector<std::string> &keys_to_rollback_with_data,
-                                        std::vector<std::string> &keys_to_rollback_without_data, uint64_t start_ts) {
+                                        std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts) {
   DINGO_LOG(INFO) << "[txn]Rollback start_ts: " << start_ts
                   << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
                   << ", keys_count_without_data: " << keys_to_rollback_without_data.size();
@@ -207,7 +207,7 @@ butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine
 // Commit (deprecated and only can be used for table region)
 // This function is not saft, MUST be called in raft apply to make sure the lock_info is not changed during commit
 butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
-                                      std::vector<pb::store::LockInfo> &lock_infos, uint64_t commit_ts) {
+                                      std::vector<pb::store::LockInfo> &lock_infos, int64_t commit_ts) {
   DINGO_LOG(INFO) << "[txn]Commit commit_ts: " << commit_ts << ", keys_count: " << lock_infos.size()
                   << ", first_key: " << Helper::StringToHex(lock_infos[0].key())
                   << ", first_lock_ts: " << lock_infos[0].lock_ts()
@@ -276,7 +276,7 @@ butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
 }
 
 butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine,
-                                        const pb::store::IsolationLevel &isolation_level, uint64_t start_ts,
+                                        const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                                         const std::vector<std::string> &keys, std::vector<pb::common::KeyValue> &kvs,
                                         pb::store::TxnResultInfo &txn_result_info) {
   DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
@@ -345,7 +345,7 @@ butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine
                          << ", write_key is less than 8 bytes: " << iter->Key();
       }
       std::string write_key;
-      uint64_t write_ts;
+      int64_t write_ts;
       Helper::DecodeTxnKey(iter->Key(), write_key, write_ts);
 
       if (write_ts < start_ts) {
@@ -387,7 +387,7 @@ butil::Status TxnEngineHelper::BatchGet(const std::shared_ptr<RawEngine> &engine
 
 butil::Status TxnEngineHelper::ScanGetNextKeyValue(std::shared_ptr<RawEngine::Reader> data_reader,
                                                    std::shared_ptr<Iterator> write_iter,
-                                                   std::shared_ptr<Iterator> lock_iter, uint64_t start_ts,
+                                                   std::shared_ptr<Iterator> lock_iter, int64_t start_ts,
                                                    const std::string &start_iter_key, std::string &last_lock_key,
                                                    std::string &last_write_key,
                                                    pb::store::TxnResultInfo &txn_result_info, std::string &iter_key,
@@ -397,8 +397,8 @@ butil::Status TxnEngineHelper::ScanGetNextKeyValue(std::shared_ptr<RawEngine::Re
                   << ", last_lock_key: " << Helper::StringToHex(last_lock_key)
                   << ", last_write_key: " << Helper::StringToHex(last_write_key);
 
-  uint64_t write_ts = 0;
-  uint64_t lock_ts = 0;
+  int64_t write_ts = 0;
+  int64_t lock_ts = 0;
 
   bool is_last_lock_key_update = false;
   bool is_last_write_key_update = false;
@@ -466,7 +466,7 @@ butil::Status TxnEngineHelper::ScanGetNextKeyValue(std::shared_ptr<RawEngine::Re
     if (last_lock_key == last_write_key) {
       while (write_iter->Valid()) {
         std::string tmp_key;
-        uint64_t tmp_ts;
+        int64_t tmp_ts;
         auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), tmp_key, tmp_ts);
         if (!ret1.ok()) {
           DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
@@ -531,7 +531,7 @@ butil::Status TxnEngineHelper::ScanGetNextKeyValue(std::shared_ptr<RawEngine::Re
 
     while (write_iter->Valid()) {
       std::string tmp_key;
-      uint64_t tmp_ts;
+      int64_t tmp_ts;
       auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), tmp_key, tmp_ts);
       if (!ret1.ok()) {
         DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: " << Helper::StringToHex(write_iter->Key())
@@ -591,8 +591,8 @@ butil::Status TxnEngineHelper::ScanGetNextKeyValue(std::shared_ptr<RawEngine::Re
 }
 
 butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine,
-                                    const pb::store::IsolationLevel &isolation_level, uint64_t start_ts,
-                                    const pb::common::Range &range, uint64_t limit, bool key_only, bool is_reverse,
+                                    const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
+                                    const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
                                     bool disable_coprocessor, const pb::store::Coprocessor &coprocessor,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
                                     bool &has_more, std::string &end_key) {
@@ -720,10 +720,10 @@ butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine,
   return butil::Status::OK();
 }
 
-butil::Status TxnEngineHelper::GetWriteInfo(const std::shared_ptr<RawEngine> &engine, uint64_t min_commit_ts,
-                                            uint64_t max_commit_ts, uint64_t start_ts, const std::string &key,
+butil::Status TxnEngineHelper::GetWriteInfo(const std::shared_ptr<RawEngine> &engine, int64_t min_commit_ts,
+                                            int64_t max_commit_ts, int64_t start_ts, const std::string &key,
                                             bool include_rollback, bool include_delete, bool include_put,
-                                            pb::store::WriteInfo &write_info, uint64_t &commit_ts) {
+                                            pb::store::WriteInfo &write_info, int64_t &commit_ts) {
   IteratorOptions iter_options;
   iter_options.lower_bound = Helper::EncodeTxnKey(key, max_commit_ts);
   iter_options.upper_bound = Helper::EncodeTxnKey(key, min_commit_ts);
@@ -743,7 +743,7 @@ butil::Status TxnEngineHelper::GetWriteInfo(const std::shared_ptr<RawEngine> &en
     }
 
     std::string write_key;
-    uint64_t write_ts;
+    int64_t write_ts;
     Helper::DecodeTxnKey(iter->Key(), write_key, write_ts);
 
     if (write_ts < min_commit_ts) {
@@ -796,9 +796,8 @@ butil::Status TxnEngineHelper::GetWriteInfo(const std::shared_ptr<RawEngine> &en
   return butil::Status::OK();
 }
 
-butil::Status TxnEngineHelper::GetRollbackInfo(const std::shared_ptr<RawEngine::Reader> &write_reader,
-                                               uint64_t start_ts, const std::string &key,
-                                               pb::store::WriteInfo &write_info) {
+butil::Status TxnEngineHelper::GetRollbackInfo(const std::shared_ptr<RawEngine::Reader> &write_reader, int64_t start_ts,
+                                               const std::string &key, pb::store::WriteInfo &write_info) {
   std::string write_value;
   auto ret = write_reader->KvGet(Helper::EncodeTxnKey(key, start_ts), write_value);
   if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {

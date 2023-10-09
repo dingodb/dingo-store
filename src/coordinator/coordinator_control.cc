@@ -627,8 +627,8 @@ int64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpoch
   return value;
 }
 
-uint64_t CoordinatorControl::UpdatePresentId(const pb::coordinator_internal::IdEpochType& key, uint64_t new_id,
-                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
+int64_t CoordinatorControl::UpdatePresentId(const pb::coordinator_internal::IdEpochType& key, int64_t new_id,
+                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
   id_epoch_map_safe_temp_.UpdatePresentId(key, new_id);
 

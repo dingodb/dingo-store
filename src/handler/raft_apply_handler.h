@@ -130,52 +130,51 @@ class TxnHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kTxn; }
   int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-             uint64_t log_id) override;
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+             int64_t log_id) override;
 
   static void HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                std::shared_ptr<RawEngine> engine,
                                                const pb::raft::MultiCfPutAndDeleteRequest &request,
-                                               store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                                               uint64_t log_id);
+                                               store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static void HandleTxnPrewriteRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                        std::shared_ptr<RawEngine> engine, const pb::raft::TxnPrewriteRequest &request,
-                                       store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                       store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static butil::Status DoTxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                    std::shared_ptr<RawEngine> engine,
-                                   const std::vector<pb::store::LockInfo> &lock_infos, uint64_t start_ts,
-                                   uint64_t commit_ts, store::RegionMetricsPtr region_metrics, uint64_t term_id,
-                                   uint64_t log_id);
+                                   const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
+                                   int64_t commit_ts, store::RegionMetricsPtr region_metrics, int64_t term_id,
+                                   int64_t log_id);
 
   static void HandleTxnCommitRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                      std::shared_ptr<RawEngine> engine, const pb::raft::TxnCommitRequest &req,
-                                     store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                     store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static void HandleTxnCheckTxnStatusRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              std::shared_ptr<RawEngine> engine,
                                              const pb::raft::TxnCheckTxnStatusRequest &request,
-                                             store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                             store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static void HandleTxnResolveLockRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                           std::shared_ptr<RawEngine> engine,
                                           const pb::raft::TxnResolveLockRequest &request,
-                                          store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                          store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static void HandleTxnBatchRollbackRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                             std::shared_ptr<RawEngine> engine,
                                             const pb::raft::TxnBatchRollbackRequest &request,
-                                            store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                            store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static void HandleTxnHeartBeatRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                         std::shared_ptr<RawEngine> engine, const pb::raft::TxnHeartBeatRequest &request,
-                                        store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                        store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 
   static void HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                           std::shared_ptr<RawEngine> engine,
                                           const pb::raft::TxnDeleteRangeRequest &request,
-                                          store::RegionMetricsPtr region_metrics, uint64_t term_id, uint64_t log_id);
+                                          store::RegionMetricsPtr region_metrics, int64_t term_id, int64_t log_id);
 };
 
 class RaftApplyHandlerFactory : public HandlerFactory {

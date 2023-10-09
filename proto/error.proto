@@ -196,7 +196,7 @@ enum Errno {
 }
 
 message StoreRegionInfo {
-  uint64 region_id = 1;
+  int64 region_id = 1;
   dingodb.pb.common.RegionEpoch current_region_epoch = 2;
   dingodb.pb.common.Range current_range = 3;
   repeated dingodb.pb.common.Peer peers = 4;
@@ -208,5 +208,5 @@ message Error {
 
   dingodb.pb.common.Location leader_location = 3;
   StoreRegionInfo store_region_info = 4;
-  uint64 store_id = 5;  // along with leader_location
+  int64 store_id = 5;  // along with leader_location
 }
