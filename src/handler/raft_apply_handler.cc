@@ -655,7 +655,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   child_range.set_end_key(request.split_key());
 
   // Create child region
-  pb::common::RegionDefinition definition = parent_region->InnerRegion().definition();
+  pb::common::RegionDefinition definition = parent_region->Definition();
   definition.set_id(child_region_id);
   definition.set_name(fmt::format("{}_{}", definition.name(), child_region_id));
   definition.mutable_epoch()->set_conf_version(1);

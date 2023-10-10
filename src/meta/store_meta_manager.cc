@@ -109,7 +109,7 @@ void Region::SetLeaderId(int64_t leader_id) {
   inner_region_.set_leader_id(leader_id);
 }
 
-const pb::common::Range& Region::Range() {
+pb::common::Range Region::Range() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().range();
 }
@@ -119,7 +119,7 @@ void Region::SetRange(const pb::common::Range& range) {
   *(inner_region_.mutable_definition()->mutable_range()) = range;
 }
 
-const pb::common::Range& Region::RawRange() {
+pb::common::Range Region::RawRange() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().raw_range();
 }
@@ -206,6 +206,11 @@ void Region::SetState(pb::common::StoreRegionState state) {
   }
 }
 
+void Region::AppendHistoryState(pb::common::StoreRegionState state) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.add_history_states(state);
+}
+
 bool Region::NeedBootstrapDoSnapshot() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.need_bootstrap_do_snapshot();
@@ -270,6 +275,21 @@ void Region::AddChild(pb::store_internal::RegionSplitRecord& record) {
 int64_t Region::PartitionId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().part_id();
+}
+
+int64_t Region::SnapshotEpochVersion() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.snapshot_epoch_version();
+}
+
+pb::store_internal::Region Region::InnerRegion() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_;
+}
+
+pb::common::RegionDefinition Region::Definition() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition();
 }
 
 }  // namespace store
@@ -560,7 +580,7 @@ void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, int64_t versio
 
 void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version) {
   assert(region != nullptr);
-  if (version <= region->InnerRegion().snapshot_epoch_version()) {
+  if (version <= region->SnapshotEpochVersion()) {
     return;
   }
 

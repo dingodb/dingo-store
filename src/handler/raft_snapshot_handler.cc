@@ -219,7 +219,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   }
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] update snapshot_epoch_version, from: {} to: {}",
-                                 region->Id(), region->InnerRegion().snapshot_epoch_version(), region_version);
+                                 region->Id(), region->SnapshotEpochVersion(), region_version);
   store_region_meta->UpdateSnapshotEpochVersion(region, region_version);
 
   return true;
