@@ -52,6 +52,9 @@ class RegionControlServiceImpl : public pb::region_control::RegionControlService
                                   pb::region_control::TriggerVectorIndexSnapshotResponse* response,
                                   google::protobuf::Closure* done) override;
 
+  void Compact(google::protobuf::RpcController* controller, const pb::region_control::CompactRequest* request,
+               pb::region_control::CompactResponse* response, google::protobuf::Closure* done) override;
+
   void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::region_control::DebugRequest* request,
              ::dingodb::pb::region_control::DebugResponse* response, ::google::protobuf::Closure* done) override;
 };

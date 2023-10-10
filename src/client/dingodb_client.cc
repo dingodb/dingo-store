@@ -278,10 +278,11 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::BatchSendAddRegion(FLAGS_region_id, FLAGS_region_count, FLAGS_thread_num, FLAGS_raft_group, raft_addrs);
     } else if (method == "SnapshotVectorIndex") {
       client::SendSnapshotVectorIndex(FLAGS_region_id);
-    }
+    } else if (method == "Compact") {
+      client::SendCompact("");
 
-    // Kev/Value operation
-    else if (method == "KvGet") {
+      // Kev/Value operation
+    } else if (method == "KvGet") {
       std::string value;
       client::SendKvGet(FLAGS_region_id, FLAGS_key, value);
     } else if (method == "KvBatchGet") {

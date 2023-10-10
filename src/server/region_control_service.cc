@@ -240,6 +240,35 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   }
 }
 
+void RegionControlServiceImpl::Compact(google::protobuf::RpcController* controller,
+                                       const pb::region_control::CompactRequest* request,
+                                       pb::region_control::CompactResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  auto raw_engine = Server::GetInstance()->GetRawEngine();
+  if (raw_engine == nullptr) {
+    response->mutable_error()->set_errcode(pb::error::ERAW_ENGINE_NOT_FOUND);
+    response->mutable_error()->set_errmsg("Not found raw engine.");
+    return;
+  }
+
+  butil::Status status;
+  if (!request->cf_name().empty()) {
+    status = raw_engine->Compact(request->cf_name());
+  } else {
+    status = raw_engine->Compact(Constant::kStoreDataCF);
+    if (status.ok()) {
+      status = raw_engine->Compact(Constant::kStoreMetaCF);
+    }
+  }
+
+  if (!status.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+    response->mutable_error()->set_errmsg(status.error_str());
+  }
+}
+
 static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   pb::common::RegionMetrics region_metrics;
   region_metrics.set_id(region_id);
