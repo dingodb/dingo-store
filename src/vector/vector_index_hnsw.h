@@ -82,6 +82,8 @@ class VectorIndexHnsw : public VectorIndex {
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 
+  uint32_t WriteOpParallelNum() override { return hnsw_num_threads_; }
+
   // void NormalizeVector(const float* data, float* norm_array) const;
 
  private:

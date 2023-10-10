@@ -198,6 +198,8 @@ class VectorIndex {
   virtual bool IsTrained() { return true; }
   virtual bool SupportSave() { return false; }
 
+  virtual uint32_t WriteOpParallelNum() { return 1; }
+
   int64_t Id() const { return id; }
 
   pb::common::VectorIndexType VectorIndexType() { return vector_index_type; }
