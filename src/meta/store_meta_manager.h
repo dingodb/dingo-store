@@ -70,9 +70,9 @@ class Region {
   int64_t LeaderId();
   void SetLeaderId(int64_t leader_id);
 
-  const pb::common::Range& Range();
+  pb::common::Range Range();
   void SetRange(const pb::common::Range& range);
-  const pb::common::Range& RawRange();
+  pb::common::Range RawRange();
   void SetRawRange(const pb::common::Range& range);
   // Get physics range, it's rocksdb data range.
   // store region raw_range == physics ragne
@@ -89,7 +89,7 @@ class Region {
 
   pb::common::StoreRegionState State() const;
   void SetState(pb::common::StoreRegionState state);
-  void AppendHistoryState(pb::common::StoreRegionState state) { inner_region_.add_history_states(state); }
+  void AppendHistoryState(pb::common::StoreRegionState state);
 
   bool NeedBootstrapDoSnapshot();
   void SetNeedBootstrapDoSnapshot(bool need_do_snapshot);
@@ -114,7 +114,10 @@ class Region {
 
   int64_t PartitionId();
 
-  const pb::store_internal::Region& InnerRegion() const { return inner_region_; }
+  int64_t SnapshotEpochVersion();
+
+  pb::store_internal::Region InnerRegion();
+  pb::common::RegionDefinition Definition();
 
   VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
   void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }
