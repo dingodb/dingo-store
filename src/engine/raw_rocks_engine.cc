@@ -200,23 +200,24 @@ RawRocksEngine::~RawRocksEngine() = default;
 // load rocksdb config from config file
 bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   if (BAIDU_UNLIKELY(!config)) {
-    DINGO_LOG(ERROR) << fmt::format("config empty not support!");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] config empty not support!");
     return false;
   }
 
   std::string store_db_path_value = config->GetString(Constant::kStorePathConfigName) + "/rocksdb";
   if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("can not find : {}", Constant::kStorePathConfigName) + "/rocksdb";
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] can not find: {}/rocksdb", Constant::kStorePathConfigName);
     return false;
   }
 
   db_path_ = store_db_path_value;
 
-  DINGO_LOG(INFO) << fmt::format("rocksdb path : {}", db_path_);
+  DINGO_LOG(INFO) << fmt::format("[rocksdb] db path: {}", db_path_);
 
   std::vector<std::string> column_families = config->GetStringList(Constant::kColumnFamilies);
   if (BAIDU_UNLIKELY(column_families.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("{} : empty. not found any column family", Constant::kColumnFamilies);
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not found any column family failed, {} empty.",
+                                    Constant::kColumnFamilies);
     return false;
   }
 
@@ -229,13 +230,13 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   std::vector<rocksdb::ColumnFamilyHandle*> family_handles;
   bool ret = RocksdbInit(config, db_path_, column_families, family_handles);
   if (BAIDU_UNLIKELY(!ret)) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Open : {} failed", db_path_);
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] open failed, path: {}", db_path_);
     return false;
   }
 
   SetColumnFamilyHandle(column_families, family_handles);
 
-  DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Open : {} success!", db_path_);
+  DINGO_LOG(INFO) << fmt::format("[rocksdb] open success, path: {}", db_path_);
 
   return true;
 }
@@ -259,7 +260,7 @@ butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const
   // Due to delete other region sst file, so need repair db, or rocksdb::DB::Open will fail.
   auto status = rocksdb::RepairDB(path, options, column_families);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("Rocksdb Repair db failed, {}", status.ToString()) << ", path: " << path;
+    DINGO_LOG(WARNING) << fmt::format("[rocksdb] repair db failed, path: {} error: {}", path, status.ToString());
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb Repair db failed, {}", status.ToString()));
   }
 
@@ -268,7 +269,7 @@ butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const
   std::vector<rocksdb::ColumnFamilyHandle*> handles;
   status = rocksdb::DB::OpenForReadOnly(options, path, column_families, &handles, &snapshot_db);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()) << ", path: " << path;
+    DINGO_LOG(WARNING) << fmt::format("[rocksdb] open checkpoint failed, path: {} error: {}", path, status.ToString());
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()));
   }
 
@@ -292,7 +293,7 @@ butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, con
   options.write_global_seqno = false;
   auto status = db_->IngestExternalFile(GetColumnFamily(cf_name)->GetHandle(), files, options);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "IngestExternalFile failed " << status.ToString();
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] ingest external fille failed, error: {}", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
@@ -307,14 +308,14 @@ void RawRocksEngine::Flush(const std::string& cf_name) {
 }
 
 butil::Status RawRocksEngine::Compact(const std::string& cf_name) {
-  DINGO_LOG(INFO) << "Compact column family " << cf_name;
+  DINGO_LOG(INFO) << fmt::format("[rocksdb] compact column family {}", cf_name);
   if (db_ != nullptr) {
     rocksdb::CompactRangeOptions options;
     options.exclusive_manual_compaction = true;
     options.allow_write_stall = true;
     auto status = db_->CompactRange(options, GetColumnFamily(cf_name)->GetHandle(), nullptr, nullptr);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Compact column family {} failed", cf_name);
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] compact failed, column family {}", cf_name);
       return butil::Status(pb::error::EINTERNAL, "Compact column family %s failed", cf_name.c_str());
     }
   }
@@ -390,13 +391,13 @@ void RawRocksEngine::Close() {
     db_ = nullptr;
   }
 
-  DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Close");
+  DINGO_LOG(INFO) << fmt::format("[rocksdb] close db.");
 }
 
 std::shared_ptr<RawRocksEngine::ColumnFamily> RawRocksEngine::GetColumnFamily(const std::string& cf_name) {
   auto iter = column_families_.find(cf_name);
   if (iter == column_families_.end()) {
-    DINGO_LOG(ERROR) << fmt::format("column family {} not found", cf_name);
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not found column family {}", cf_name);
     return nullptr;
   }
 
@@ -448,14 +449,16 @@ void SetCfConfigurationElement(const std::map<std::string, std::string>& cf_conf
       } else if (std::is_same_v<double, std::remove_reference_t<std::remove_cv_t<T>>>) {
         value = std::stod(value_string);
       } else {
-        DINGO_LOG(WARNING) << fmt::format("only support int size_t int64_t");
+        DINGO_LOG(WARNING) << fmt::format("[rocksdb] only support int size_t int64_t");
         value = default_value;
       }
     } catch (const std::invalid_argument& e) {
-      DINGO_LOG(ERROR) << fmt::format("{} trans string to  (int size_t int64_t) failed : {}", value_string, e.what());
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] {} trans string to (int size_t int64_t) failed, error: {}",
+                                      value_string, e.what());
       value = default_value;
     } catch (const std::out_of_range& e) {
-      DINGO_LOG(ERROR) << fmt::format("{} trans string to  (int size_t int64_t) failed : {}", value_string, e.what());
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] {} trans string to (int size_t int64_t) failed, error: {}",
+                                      value_string, e.what());
       value = default_value;
     }
   }
@@ -658,13 +661,13 @@ bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::stri
   db_options.max_background_jobs = GetBackgroundThreadNum(config);
   db_options.max_subcompactions = db_options.max_background_jobs / 4 * 3;
   db_options.stats_dump_period_sec = GetStatsDumpPeriodSec(config);
-  DINGO_LOG(INFO) << fmt::format("rocksdb config max_background_jobs({}) max_subcompactions({})",
+  DINGO_LOG(INFO) << fmt::format("[rocksdb] config max_background_jobs({}) max_subcompactions({})",
                                  db_options.max_background_jobs, db_options.max_subcompactions);
 
   rocksdb::DB* db;
   rocksdb::Status s = rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Open failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] open db failed, error: {}", s.ToString());
     return false;
   }
 
@@ -767,7 +770,7 @@ butil::Status RawRocksEngine::Reader::KvGet(const std::string& key, std::string&
 butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& key,
                                             std::string& value) {
   if (BAIDU_UNLIKELY(key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("key empty not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -778,7 +781,7 @@ butil::Status RawRocksEngine::Reader::KvGet(std::shared_ptr<dingodb::Snapshot> s
     if (s.IsNotFound()) {
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] get key failed, error: {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
@@ -794,12 +797,12 @@ butil::Status RawRocksEngine::Reader::KvScan(const std::string& start_key, const
 butil::Status RawRocksEngine::Reader::KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                              const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key empty  not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty start_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   if (BAIDU_UNLIKELY(end_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("end_key empty  not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty end_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -830,12 +833,12 @@ butil::Status RawRocksEngine::Reader::KvCount(const std::string& start_key, cons
 butil::Status RawRocksEngine::Reader::KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                               const std::string& end_key, int64_t& count) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("start_key empty not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty start_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   if (BAIDU_UNLIKELY(end_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("end_key empty not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty end_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -887,7 +890,7 @@ std::shared_ptr<EngineIterator> RawRocksEngine::Reader::NewIterator(std::shared_
 
 butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
   if (BAIDU_UNLIKELY(kv.key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("key empty  not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -895,7 +898,7 @@ butil::Status RawRocksEngine::Writer::KvPut(const pb::common::KeyValue& kv) {
   rocksdb::Status s =
       db_->Put(write_options, column_family_->GetHandle(), rocksdb::Slice(kv.key()), rocksdb::Slice(kv.value()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal put error");
   }
 
@@ -909,19 +912,19 @@ butil::Status RawRocksEngine::Writer::KvBatchPut(const std::vector<pb::common::K
 butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
                                                           const std::vector<pb::common::KeyValue>& kv_deletes) {
   if (BAIDU_UNLIKELY(kv_puts.empty() && kv_deletes.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("keys empty not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty keys.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   rocksdb::WriteBatch batch;
   for (const auto& kv : kv_puts) {
     if (BAIDU_UNLIKELY(kv.key().empty())) {
-      DINGO_LOG(ERROR) << fmt::format("key empty not support");
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     } else {
       rocksdb::Status s = batch.Put(column_family_->GetHandle(), kv.key(), kv.value());
       if (BAIDU_UNLIKELY(!s.ok())) {
-        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] batch put failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal put error");
       }
     }
@@ -929,12 +932,12 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
 
   for (const auto& kv : kv_deletes) {
     if (BAIDU_UNLIKELY(kv.key().empty())) {
-      DINGO_LOG(ERROR) << fmt::format("key empty not support");
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     } else {
       rocksdb::Status s = batch.Delete(column_family_->GetHandle(), kv.key());
       if (BAIDU_UNLIKELY(!s.ok())) {
-        DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] batch delete failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete error");
       }
     }
@@ -942,7 +945,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutAndDelete(const std::vector<pb::
   rocksdb::WriteOptions write_options;
   rocksdb::Status s = db_->Write(write_options, &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
@@ -963,7 +966,7 @@ butil::Status RawRocksEngine::Writer::KvPutIfAbsent(const pb::common::KeyValue& 
 butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs,
                                                          std::vector<bool>& key_states, bool is_atomic) {
   if (BAIDU_UNLIKELY(kvs.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("empty keys not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty keys");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -975,7 +978,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
   rocksdb::WriteBatch batch;
   for (const auto& kv : kvs) {
     if (BAIDU_UNLIKELY(kv.key().empty())) {
-      DINGO_LOG(ERROR) << fmt::format("empty key not support");
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty keys");
       key_states.clear();
       key_states.resize(kvs.size(), false);
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -988,7 +991,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
       if (!s.IsNotFound()) {
         key_states.clear();
         key_states.resize(kvs.size(), false);
-        DINGO_LOG(INFO) << fmt::format("rocksdb::DB::Get failed or found: {}", s.ToString());
+        DINGO_LOG(INFO) << fmt::format("[rocksdb] get failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal get error");
       }
     } else {
@@ -1006,7 +1009,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
         key_states.clear();
         key_states.resize(kvs.size(), false);
       }
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}.", s.ToString());
       return butil::Status(pb::error::EINTERNAL, "Internal put error");
     }
     key_states[key_index] = true;
@@ -1017,7 +1020,7 @@ butil::Status RawRocksEngine::Writer::KvBatchPutIfAbsent(const std::vector<pb::c
   if (!s.ok()) {
     key_states.clear();
     key_states.resize(kvs.size(), false);
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
@@ -1031,7 +1034,7 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSet(const pb::common::KeyValue
 
 butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
   if (BAIDU_UNLIKELY(key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("key empty  not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -1039,7 +1042,7 @@ butil::Status RawRocksEngine::Writer::KvDelete(const std::string& key) {
   rocksdb::Status const s =
       db_->Delete(write_options, column_family_->GetHandle(), rocksdb::Slice(key.data(), key.size()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal delete error");
   }
 
@@ -1050,12 +1053,13 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
                                                            const std::vector<std::string>& expect_values,
                                                            std::vector<bool>& key_states, bool is_atomic) {
   if (BAIDU_UNLIKELY(kvs.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("empty keys not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   if (BAIDU_UNLIKELY(kvs.size() != expect_values.size())) {
-    DINGO_LOG(ERROR) << fmt::format("kvs {} != expect_values {} size", kvs.size(), expect_values.size());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] size not match, actual({}) expect({})", kvs.size(),
+                                    expect_values.size());
     return butil::Status(pb::error::EKEY_EMPTY, "Key is mismatch");
   }
 
@@ -1067,7 +1071,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
   rocksdb::WriteBatch batch;
   for (const auto& kv : kvs) {
     if (BAIDU_UNLIKELY(kv.key().empty())) {
-      DINGO_LOG(ERROR) << fmt::format("empty key not support");
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
       key_states.clear();
       key_states.resize(kvs.size(), false);
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -1081,7 +1085,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
         if (value_old != expect_values[key_index]) {
           key_states.clear();
           key_states.resize(kvs.size(), false);
-          DINGO_LOG(DEBUG) << fmt::format("compare and set old_value: {} expect_value: {}", value_old,
+          DINGO_LOG(DEBUG) << fmt::format("[rocksdb] compare and set old_value: {} expect_value: {}", value_old,
                                           expect_values[key_index]);
           return butil::Status();
         }
@@ -1089,13 +1093,13 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
         if (!expect_values[key_index].empty()) {
           key_states.clear();
           key_states.resize(kvs.size(), false);
-          DINGO_LOG(ERROR) << fmt::format("NotFound : expect_values[{}] not empty", key_index);
+          DINGO_LOG(ERROR) << fmt::format("[rocksdb] not found and not empty key, expect_values[{}].", key_index);
           return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
         }
       } else {
         key_states.clear();
         key_states.resize(kvs.size(), false);
-        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed key_index :{} {}", key_index, s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] get failed, key_index({}) error: {}.", key_index, s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal get error");
       }
     } else {
@@ -1124,7 +1128,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
           key_states.clear();
           key_states.resize(kvs.size(), false);
         }
-        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed key_index:{} : {}", key_index, s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete failed, key_index({}) error: {}.", key_index, s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete error");
       }
     } else {
@@ -1136,7 +1140,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
           key_states.clear();
           key_states.resize(kvs.size(), false);
         }
-        DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed key_index :{} : {}", key_index, s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, key_index({}) error: {}.", key_index, s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal put error");
       }
     }
@@ -1149,7 +1153,7 @@ butil::Status RawRocksEngine::Writer::KvBatchCompareAndSet(const std::vector<pb:
   if (!s.ok()) {
     key_states.clear();
     key_states.resize(kvs.size(), false);
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
@@ -1179,7 +1183,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteRange(const pb::common::Range& ran
   auto status =
       db_->DeleteRange(rocksdb::WriteOptions(), column_family_->GetHandle(), range.start_key(), range.end_key());
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", status.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", status.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
   }
 
@@ -1200,14 +1204,14 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::c
   for (const auto& range : ranges) {
     rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), range.start_key(), range.start_key());
     if (!s.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::DeleteRange failed : {}", s.ToString());
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
       return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
     }
   }
 
   rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
@@ -1216,7 +1220,7 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::c
 
 butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue& kv) {
   if (BAIDU_UNLIKELY(kv.key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("key empty  not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -1226,15 +1230,15 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
                                rocksdb::Slice(kv.key().data(), kv.key().size()), &old_value);
   if (!s.ok()) {
     if (s.IsNotFound()) {
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate not found key");
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] get failed, not found key.");
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::GetForUpdate failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] get failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
   if (kv.value() != old_value) {
-    DINGO_LOG(WARNING) << fmt::format("rocksdb::DB::Get value is not equal, {} | {}.", kv.value(), old_value);
+    DINGO_LOG(WARNING) << fmt::format("[rocksdb] value is not equal, {} | {}.", kv.value(), old_value);
     return butil::Status(pb::error::EINTERNAL, "Internal compare value error");
   }
 
@@ -1242,7 +1246,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
   s = db_->Delete(rocksdb::WriteOptions(), column_family_->GetHandle(),
                   rocksdb::Slice(kv.key().data(), kv.key().size()));
   if (BAIDU_UNLIKELY(!s.ok())) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Delete failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal delete error");
   }
 
@@ -1252,7 +1256,7 @@ butil::Status RawRocksEngine::Writer::KvDeleteIfEqual(const pb::common::KeyValue
 butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::KeyValue& kv, const std::string& value,
                                                               bool is_key_exist, bool& key_state) {
   if (BAIDU_UNLIKELY(kv.key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("key empty  not support");
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
@@ -1269,16 +1273,16 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
     }
   } else if (s.IsNotFound()) {
     if (is_key_exist || (!is_key_exist && !kv.value().empty())) {
-      DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get not found key");
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] get failed, not found key.");
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
   } else {  // error
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Get failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] get failed, error {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
   if (kv.value() != old_value) {
-    DINGO_LOG(DEBUG) << fmt::format("compare and set old_value: {} expect_value: {}", old_value, kv.value());
+    DINGO_LOG(DEBUG) << fmt::format("[rocksdb] compare and set old_value: {} expect_value: {}", old_value, kv.value());
     return butil::Status();
   }
 
@@ -1286,7 +1290,7 @@ butil::Status RawRocksEngine::Writer::KvCompareAndSetInternal(const pb::common::
   s = db_->Put(rocksdb::WriteOptions(), column_family_->GetHandle(), rocksdb::Slice(kv.key().data(), kv.key().size()),
                rocksdb::Slice(value.data(), value.size()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Put failed : {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal put error");
   }
 
@@ -1370,21 +1374,21 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
   auto status = rocksdb::Checkpoint::Create(db_.get(), &checkpoint);
   if (!status.ok()) {
     delete checkpoint;
-    DINGO_LOG(ERROR) << "Checkpoint create failed " << status.ToString();
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] create checkpoint failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
   status = db_->DisableFileDeletions();
   if (!status.ok()) {
     delete checkpoint;
-    DINGO_LOG(ERROR) << "Disable file deletion failed " << status.ToString();
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] disable file deletion failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
   status = checkpoint->CreateCheckpoint(dirpath);
   if (!status.ok()) {
     db_->EnableFileDeletions(false);
-    DINGO_LOG(ERROR) << "Export column family checkpoint failed " << status.ToString();
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] export column family checkpoint failed, error: {}.", status.ToString());
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
   }
@@ -1393,7 +1397,7 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
 
   status = db_->EnableFileDeletions(false);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "Enable file deletion failed " << status.ToString();
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] enable file deletion failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
@@ -1401,7 +1405,7 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
     for (const auto& file : level.files) {
       std::string filepath = dirpath + file.name;
       if (!Helper::IsExistPath(filepath)) {
-        DINGO_LOG(INFO) << fmt::format("checkpoint not contain sst file: {}", filepath);
+        DINGO_LOG(INFO) << fmt::format("[rocksdb] checkpoint not contain sst file: {}", filepath);
         continue;
       }
 
