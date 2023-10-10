@@ -348,6 +348,7 @@ class RawRocksEngine : public RawEngine {
   butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files);
 
   void Flush(const std::string& cf_name) override;
+  butil::Status Compact(const std::string& cf_name) override;
   void Close();
   void Destroy();
 
@@ -366,8 +367,7 @@ class RawRocksEngine : public RawEngine {
 
   std::shared_ptr<ColumnFamily> GetColumnFamily(const std::string& cf_name);
 
-  std::vector<int64_t> GetApproximateSizes(const std::string& cf_name,
-                                            std::vector<pb::common::Range>& ranges) override;
+  std::vector<int64_t> GetApproximateSizes(const std::string& cf_name, std::vector<pb::common::Range>& ranges) override;
 
  private:
   bool InitCfConfig(const std::vector<std::string>& column_families);

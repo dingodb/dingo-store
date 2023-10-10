@@ -1930,6 +1930,16 @@ void SendSnapshotVectorIndex(int64_t vector_index_id) {
                                                               response);
 }
 
+void SendCompact(const std::string& cf_name) {
+  dingodb::pb::region_control::CompactRequest request;
+  dingodb::pb::region_control::CompactResponse response;
+
+  request.set_cf_name(cf_name);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Compact", request,
+                                                              response);
+}
+
 void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer) {
   dingodb::pb::region_control::TransferLeaderRequest request;
   dingodb::pb::region_control::TransferLeaderResponse response;

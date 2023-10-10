@@ -83,6 +83,14 @@ message TriggerVectorIndexSnapshotResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message CompactRequest {
+  string cf_name = 1;
+}
+
+message CompactResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 enum DebugType {
   NONE = 0;
   STORE_REGION_META_STAT = 1;
@@ -177,6 +185,8 @@ service RegionControlService {
   rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
 
   rpc TriggerVectorIndexSnapshot(TriggerVectorIndexSnapshotRequest) returns (TriggerVectorIndexSnapshotResponse);
+
+  rpc Compact(CompactRequest) returns (CompactResponse);
 
   // debug
   rpc Debug(DebugRequest) returns (DebugResponse);

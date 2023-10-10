@@ -306,6 +306,22 @@ void RawRocksEngine::Flush(const std::string& cf_name) {
   }
 }
 
+butil::Status RawRocksEngine::Compact(const std::string& cf_name) {
+  DINGO_LOG(INFO) << "Compact column family " << cf_name;
+  if (db_ != nullptr) {
+    rocksdb::CompactRangeOptions options;
+    options.exclusive_manual_compaction = true;
+    options.allow_write_stall = true;
+    auto status = db_->CompactRange(options, GetColumnFamily(cf_name)->GetHandle(), nullptr, nullptr);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Compact column family {} failed", cf_name);
+      return butil::Status(pb::error::EINTERNAL, "Compact column family %s failed", cf_name.c_str());
+    }
+  }
+
+  return butil::Status();
+}
+
 void RawRocksEngine::Destroy() { rocksdb::DestroyDB(db_path_, db_options_); }
 
 std::shared_ptr<dingodb::Snapshot> RawRocksEngine::NewSnapshot() {
@@ -642,6 +658,8 @@ bool RawRocksEngine::RocksdbInit(std::shared_ptr<Config> config, const std::stri
   db_options.max_background_jobs = GetBackgroundThreadNum(config);
   db_options.max_subcompactions = db_options.max_background_jobs / 4 * 3;
   db_options.stats_dump_period_sec = GetStatsDumpPeriodSec(config);
+  DINGO_LOG(INFO) << fmt::format("rocksdb config max_background_jobs({}) max_subcompactions({})",
+                                 db_options.max_background_jobs, db_options.max_subcompactions);
 
   rocksdb::DB* db;
   rocksdb::Status s = rocksdb::DB::Open(db_options, db_path, column_families, &family_handles, &db);

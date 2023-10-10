@@ -133,6 +133,7 @@ class RawEngine {
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
 
   virtual void Flush(const std::string& cf_name) = 0;
+  virtual butil::Status Compact(const std::string& cf_name) = 0;
 
   virtual std::shared_ptr<Snapshot> NewSnapshot() = 0;
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;

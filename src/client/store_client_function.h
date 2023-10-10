@@ -137,6 +137,7 @@ void SendSnapshot(int64_t region_id);
 void BatchSendAddRegion(int start_region_id, int region_count, int thread_num, const std::string& raft_group,
                         std::vector<std::string>& raft_addrs);
 void SendSnapshotVectorIndex(int64_t vector_index_id);
+void SendCompact(const std::string& cf_name);
 
 // test
 void TestBatchPut(std::shared_ptr<Context> ctx);
