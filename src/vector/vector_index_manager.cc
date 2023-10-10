@@ -511,16 +511,13 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
-  DINGO_LOG(INFO) << "[vector_index.build] Build vector index, range start_key: "
-                  << Helper::StringToHex(range.start_key()) << " end_key: " << Helper::StringToHex(range.end_key());
-
   std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
   std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.build][index_id({})] Build vector index, range: [{}({})-{}({}))",
-                                 vector_index_id, Helper::StringToHex(start_key),
-                                 VectorCodec::DecodeVectorId(start_key), Helper::StringToHex(end_key),
-                                 VectorCodec::DecodeVectorId(end_key));
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.build][index_id({})] Build vector index, range: [{}({})-{}({})) parallel: {}", vector_index_id,
+      Helper::StringToHex(start_key), VectorCodec::DecodeVectorId(start_key), Helper::StringToHex(end_key),
+      VectorCodec::DecodeVectorId(end_key), vector_index->WriteOpParallelNum());
 
   int64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
@@ -548,6 +545,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   }
 
   int64_t count = 0;
+  int64_t upsert_use_time = 0;
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
@@ -570,19 +568,34 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     ++count;
 
     vectors.push_back(vector);
-    if (count + 1 % Constant::kBuildVectorIndexBatchSize == 0) {
+    if ((count + 1) % Constant::kBuildVectorIndexBatchSize == 0) {
+      int64_t upsert_start_time = Helper::TimestampMs();
+
       vector_index->Upsert(vectors);
+
+      upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
       vectors.clear();
+    }
+
+    // Print build progress
+    if ((count + 1) % (Constant::kBuildVectorIndexBatchSize * 10) == 0) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[vector_index.build][index_id({})] Build vector index progress, parallel({}) count({}) elapsed "
+          "time({}/{}ms)",
+          vector_index_id, vector_index->WriteOpParallelNum(), count, upsert_use_time,
+          Helper::TimestampMs() - start_time);
     }
   }
 
   if (!vectors.empty()) {
+    int64_t upsert_start_time = Helper::TimestampMs();
     vector_index->Upsert(vectors);
+    upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.build][index_id({})] Build vector index finish, count({}) elapsed time({}ms)", vector_index_id,
-      count, Helper::TimestampMs() - start_time);
+      "[vector_index.build][index_id({})] Build vector index finish, parallel({}) count({}) elapsed time({}/{}ms)",
+      vector_index_id, vector_index->WriteOpParallelNum(), count, upsert_use_time, Helper::TimestampMs() - start_time);
 
   return vector_index;
 }
