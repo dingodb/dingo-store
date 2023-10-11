@@ -30,6 +30,7 @@
 #include "common/synchronization.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -41,6 +42,8 @@
 namespace dingodb {
 
 DEFINE_uint64(max_partition_num_of_table, 1024, "max partition num of table");
+DEFINE_uint64(max_table_count, 10000, "max table num of dingo");
+DEFINE_uint64(max_index_count, 10000, "max index num of dingo");
 
 void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                    pb::meta::EntityType entity_type,
@@ -407,6 +410,30 @@ butil::Status CoordinatorControl::RollbackCreateIndex(int64_t schema_id, const s
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::ValidateMaxTableCount() {
+  auto table_count = table_map_.Size();
+  if (table_count > FLAGS_max_table_count) {
+    std::string err_str =
+        fmt::format("table count exceed limit, table_count={}, max_table_count={}", table_count, FLAGS_max_table_count);
+    DINGO_LOG(ERROR) << err_str;
+    return butil::Status(pb::error::Errno::ETABLE_COUNT_EXCEED_LIMIT, err_str);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::ValidateMaxIndexCount() {
+  auto index_count = index_map_.Size();
+  if (index_count > FLAGS_max_index_count) {
+    std::string err_str =
+        fmt::format("index count exceed limit, index_count={}, max_index_count={}", index_count, FLAGS_max_index_count);
+    DINGO_LOG(ERROR) << err_str;
+    return butil::Status(pb::error::Errno::EINDEX_COUNT_EXCEED_LIMIT, err_str);
+  }
+
+  return butil::Status::OK();
+}
+
 // CreateTable
 // in: schema_id, table_definition
 // out: new_table_id, new_regin_ids meta_increment
@@ -414,6 +441,13 @@ butil::Status CoordinatorControl::RollbackCreateIndex(int64_t schema_id, const s
 butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta::TableDefinition& table_definition,
                                               int64_t& new_table_id, std::vector<int64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // check max table limit
+  auto ret1 = ValidateMaxTableCount();
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "create table exceed max table limit, table_definition:" << table_definition.ShortDebugString();
+    return ret1;
+  }
+
   // validate schema
   // root schema cannot create table
   if (schema_id < 0 || schema_id == ::dingodb::pb::meta::ROOT_SCHEMA) {
@@ -1077,6 +1111,13 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta::TableDefinition& table_definition,
                                               int64_t table_id, int64_t& new_index_id, std::vector<int64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // check max index limit
+  auto ret1 = ValidateMaxIndexCount();
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "create index exceed max index limit, index_definition:" << table_definition.ShortDebugString();
+    return ret1;
+  }
+
   // validate schema
   // root schema cannot create index
   if (schema_id < 0 || schema_id == ::dingodb::pb::meta::ROOT_SCHEMA) {

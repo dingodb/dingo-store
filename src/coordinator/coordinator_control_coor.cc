@@ -77,6 +77,8 @@ DEFINE_uint32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 
 DEFINE_uint32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
 
+DEFINE_uint64(max_region_count, 40000, "max region of dingo");
+
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,
                                            std::vector<pb::common::Location>& locations) {
@@ -1537,6 +1539,17 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::ValidateMaxRegionCount() {
+  auto region_count = region_map_.Size();
+  if (region_count > FLAGS_max_region_count) {
+    DINGO_LOG(ERROR) << "ValidateMaxRegionCount region_count=" << region_count
+                     << ", max_region_count=" << FLAGS_max_region_count;
+    return butil::Status(pb::error::Errno::EREGION_COUNT_EXCEED_LIMIT, "region count reach max limit");
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_name, pb::common::RegionType region_type,
                                                      const std::string& resource_tag, int32_t replica_num,
                                                      pb::common::Range region_range, pb::common::Range region_raw_range,
@@ -1556,6 +1569,11 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
   if (Server::GetInstance()->IsReadOnly() || FLAGS_force_cluster_read_only) {
     DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region";
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  }
+
+  auto ret1 = ValidateMaxRegionCount();
+  if (!ret1.ok()) {
+    return ret1;
   }
 
   std::vector<pb::common::Store> selected_stores_for_regions;
@@ -1707,6 +1725,11 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   if (Server::GetInstance()->IsReadOnly() || FLAGS_force_cluster_read_only) {
     DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  }
+
+  auto ret1 = ValidateMaxRegionCount();
+  if (!ret1.ok()) {
+    return ret1;
   }
 
   std::vector<pb::common::Store> selected_stores_for_regions;

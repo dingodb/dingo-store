@@ -310,6 +310,10 @@ class CoordinatorControl : public MetaControl {
   // return: errno
   static butil::Status ValidateIndexDefinition(const pb::meta::TableDefinition &table_definition);
 
+  butil::Status ValidateMaxTableCount();
+  butil::Status ValidateMaxIndexCount();
+  butil::Status ValidateMaxRegionCount();
+
   // create index
   // in: schema_id
   // in: table_definition
