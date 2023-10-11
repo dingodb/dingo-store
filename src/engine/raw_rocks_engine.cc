@@ -1202,7 +1202,7 @@ butil::Status RawRocksEngine::Writer::KvBatchDeleteRange(const std::vector<pb::c
 
   rocksdb::WriteBatch batch;
   for (const auto& range : ranges) {
-    rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), range.start_key(), range.start_key());
+    rocksdb::Status s = batch.DeleteRange(column_family_->GetHandle(), range.start_key(), range.end_key());
     if (!s.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
       return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
