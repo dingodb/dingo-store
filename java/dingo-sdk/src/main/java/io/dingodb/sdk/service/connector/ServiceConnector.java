@@ -22,6 +22,7 @@ import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.common.utils.NoBreakFunctions;
 import io.dingodb.sdk.common.utils.Optional;
+import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.AbstractBlockingStub;
@@ -143,25 +144,26 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 ErrorOuterClass.Error error = response.getError();
                 int errCode = error.getErrcodeValue();
                 if (errCode != 0) {
+                    String authority = Optional.mapOrGet(stub.getChannel(), Channel::authority, () -> "");
                     switch (errChecker.apply(errCode)) {
                         case RETRY:
                             log.warn(
-                                    "Exec {} failed, code: [{}], message: {}, will retry...",
-                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                                    "Exec {} failed, store: [{}], code: [{}], message: {}, will retry...",
+                                    function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
                             );
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
                             continue;
                         case FAILED:
                             log.error(
-                                    "Exec {} error, code: [{}], message: {}.",
-                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                                    "Exec {} error, store: [{}], code: [{}], message: {}.",
+                                    function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
                             );
                             throw new DingoClientException(errCode, error.getErrmsg());
                         case REFRESH:
                             log.warn(
-                                    "Exec {} failed, code: [{}], message: {}, will refresh...",
-                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                                    "Exec {} failed, store: [{}], code: [{}], message: {}, will refresh...",
+                                    function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
                             );
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
@@ -169,8 +171,8 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                         case IGNORE:
                             if (log.isDebugEnabled()) {
                                 log.warn(
-                                    "Exec {} failed, code: [{}], message: {}, ignore it.",
-                                    function.getClass(), response.error.getErrcode(), response.error.getErrmsg()
+                                    "Exec {} failed, store: [{}], code: [{}], message: {}, ignore it.",
+                                    function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
                                 );
                             }
                             return null;
