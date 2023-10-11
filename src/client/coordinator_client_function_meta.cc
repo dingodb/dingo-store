@@ -374,6 +374,9 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   auto status = coordinator_interaction->SendRequest("CreateTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
+  if (response.error().errcode() == 0) {
+    DINGO_LOG(INFO) << "create table success, table_id==" << response.table_id().entity_id();
+  }
 }
 
 void SendDropTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -791,6 +794,9 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG_INFO << response.DebugString();
+  if (response.error().errcode() == 0) {
+    DINGO_LOG(INFO) << "create index success, index_id==" << response.index_id().entity_id();
+  }
 }
 
 void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
