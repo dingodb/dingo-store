@@ -18,22 +18,39 @@
 #include <vector>
 
 #include "butil/compiler_specific.h"
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "engine/write_data.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
+#include "server/server.h"
 #include "vector/vector_index_utils.h"
 namespace dingodb {
 
-Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
+DEFINE_uint32(storage_worker_num, 10, "storage worker num");
 
-Storage::~Storage() = default;
+Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {
+  for (int i = 0; i < FLAGS_storage_worker_num; ++i) {
+    auto worker = std::make_shared<Worker>();
+    if (!worker->Init()) {
+      DINGO_LOG(FATAL) << "Init storage worker failed";
+    }
+    workers_.push_back(worker);
+  }
+}
+
+Storage::~Storage() {
+  for (auto& worker : workers_) {
+    worker->Destroy();
+  }
+};
 
 Snapshot* Storage::GetSnapshot() { return nullptr; }
 
@@ -451,6 +468,10 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
   }
 
   return butil::Status();
+}
+
+bool Storage::Execute(int64_t region_id, TaskRunnablePtr task) {
+  return workers_[region_id % FLAGS_storage_worker_num]->Execute(task);
 }
 
 }  // namespace dingodb

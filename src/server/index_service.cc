@@ -20,6 +20,7 @@
 #include <string_view>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/failpoint.h"
@@ -44,6 +45,11 @@ namespace dingodb {
 
 DEFINE_uint64(vector_max_batch_count, 1024, "vector max batch count in one request");
 DEFINE_uint64(vector_max_request_size, 8388608, "vector max batch count in one request");
+DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
+DEFINE_bool(enable_async_vector_add, true, "enable async vector add");
+DEFINE_bool(enable_async_vector_delete, true, "enable async vector delete");
+
+static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
@@ -208,6 +214,60 @@ butil::Status IndexServiceImpl::ValidateVectorSearchRequest(const dingodb::pb::i
 }
 
 // vector
+class VectorSearchTask : public TaskRunnable {
+ public:
+  VectorSearchTask(std::shared_ptr<Storage> storage, std::shared_ptr<Engine::VectorReader::Context> ctx,
+                   const dingodb::pb::index::VectorSearchRequest* request,
+                   dingodb::pb::index::VectorSearchResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), ctx_(ctx), request_(request), response_(response), done_(done) {}
+  ~VectorSearchTask() override = default;
+
+  std::string Type() override { return "VECTOR_SEARCH"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in index_service, so we can skip validate here
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    auto status = storage_->VectorBatchSearch(ctx_, results);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg("Not leader, please redirect leader.");
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("VectorSearchTask request: {} response: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    for (auto& vector_result : results) {
+      *(response_->add_batch_results()) = vector_result;
+    }
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  std::shared_ptr<Engine::VectorReader::Context> ctx_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::index::VectorSearchRequest* request_;
+  dingodb::pb::index::VectorSearchResponse* response_;
+};
+
 void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
                                     const dingodb::pb::index::VectorSearchRequest* request,
                                     dingodb::pb::index::VectorSearchResponse* response,
@@ -274,23 +334,35 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     }
   }
 
-  std::vector<pb::index::VectorWithDistanceResult> vector_results;
-  status = storage_->VectorBatchSearch(ctx, vector_results);
-  if (!status.ok()) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(status.error_code()));
-    err->set_errmsg(status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
-      ServiceHelper::RedirectLeader(status.error_str(), response);
+  if (FLAGS_enable_async_vector_search) {
+    auto task = std::make_shared<VectorSearchTask>(storage_, ctx, request, response, done_guard.release());
+    auto ret = storage_->Execute(region->Id(), task);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "VectorSearch execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("VectorSearch execute failed");
+      return;
     }
-    DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
-    return;
-  }
+  } else {
+    std::vector<pb::index::VectorWithDistanceResult> vector_results;
+    status = storage_->VectorBatchSearch(ctx, vector_results);
+    if (!status.ok()) {
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg("Not leader, please redirect leader.");
+        ServiceHelper::RedirectLeader(status.error_str(), response);
+      }
+      DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
+      return;
+    }
 
-  for (auto& vector_result : vector_results) {
-    *(response->add_batch_results()) = vector_result;
+    for (auto& vector_result : vector_results) {
+      *(response->add_batch_results()) = vector_result;
+    }
   }
 }
 
@@ -378,6 +450,75 @@ butil::Status IndexServiceImpl::ValidateVectorAddRequest(const dingodb::pb::inde
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
+class VectorAddTask : public TaskRunnable {
+ public:
+  VectorAddTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                const dingodb::pb::index::VectorAddRequest* request, dingodb::pb::index::VectorAddResponse* response,
+                google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~VectorAddTask() override = default;
+
+  std::string Type() override { return "VECTOR_ADD"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in index_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(IndexRpcDone, &cond);
+
+    std::vector<pb::common::VectorWithId> vectors;
+    for (const auto& vector : request_->vectors()) {
+      vectors.push_back(vector);
+    }
+
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+
+    auto status = storage_->VectorAdd(ctx, vectors);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("VectorAdd failed request: {} {} {} {} response: {}",
+                                      request_->context().ShortDebugString(), request_->vectors().size(),
+                                      request_->replace_deleted(), request_->is_update(),
+                                      response_->ShortDebugString());
+    }
+
+    cond.Wait();
+    DINGO_LOG(INFO) << fmt::format(
+        "VectorAddTask executed context: {}, vector_size: {}, replace_del: {}, is_update: {}, error: {}",
+        request_->context().ShortDebugString(), request_->vectors().size(), request_->replace_deleted(),
+        request_->is_update(), response_->error().ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::index::VectorAddRequest* request_;
+  dingodb::pb::index::VectorAddResponse* response_;
+};
+
 void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
                                  const dingodb::pb::index::VectorAddRequest* request,
                                  dingodb::pb::index::VectorAddResponse* response, google::protobuf::Closure* done) {
@@ -428,28 +569,40 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-
-  std::vector<pb::common::VectorWithId> vectors;
-  for (const auto& vector : request->vectors()) {
-    vectors.push_back(vector);
-  }
-
-  status = storage_->VectorAdd(ctx, vectors);
-  if (!status.ok()) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(status.error_code()));
-    err->set_errmsg(status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
+  if (FLAGS_enable_async_vector_add) {
+    auto task = std::make_shared<VectorAddTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->Execute(region->Id(), task);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "VectorAdd execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("VectorAdd execute failed");
+      return;
     }
-    brpc::ClosureGuard done_guard(done);
-    DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} {} {} {} response: {}",
-                                    request->context().ShortDebugString(), request->vectors().size(),
-                                    request->replace_deleted(), request->is_update(), response->ShortDebugString());
+  } else {
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+    ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
+
+    std::vector<pb::common::VectorWithId> vectors;
+    for (const auto& vector : request->vectors()) {
+      vectors.push_back(vector);
+    }
+
+    status = storage_->VectorAdd(ctx, vectors);
+    if (!status.ok()) {
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response);
+      }
+      brpc::ClosureGuard done_guard(done);
+      DINGO_LOG(ERROR) << fmt::format("VectorAdd failed request: {} {} {} {} response: {}",
+                                      request->context().ShortDebugString(), request->vectors().size(),
+                                      request->replace_deleted(), request->is_update(), response->ShortDebugString());
+    }
   }
 }
 
@@ -486,6 +639,67 @@ butil::Status IndexServiceImpl::ValidateVectorDeleteRequest(const dingodb::pb::i
 
   return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->ids()));
 }
+
+class VectorDeleteTask : public TaskRunnable {
+ public:
+  VectorDeleteTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                   const dingodb::pb::index::VectorDeleteRequest* request,
+                   dingodb::pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~VectorDeleteTask() override = default;
+
+  std::string Type() override { return "VECTOR_DELETE"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in index_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(IndexRpcDone, &cond);
+
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+
+    auto status = storage_->VectorDelete(ctx, Helper::PbRepeatedToVector(request_->ids()));
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("VectorDelete failed request: {} response: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+    }
+
+    cond.Wait();
+    DINGO_LOG(INFO) << fmt::format("VectorDeleteTask executed context: {}, ids_size: {}, error: {}",
+                                   request_->context().ShortDebugString(), request_->ids().size(),
+                                   response_->error().ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::index::VectorDeleteRequest* request_;
+  dingodb::pb::index::VectorDeleteResponse* response_;
+};
 
 void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
                                     const dingodb::pb::index::VectorDeleteRequest* request,
@@ -535,22 +749,34 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-
-  status = storage_->VectorDelete(ctx, Helper::PbRepeatedToVector(request->ids()));
-  if (!status.ok()) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(status.error_code()));
-    err->set_errmsg(status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                  Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
+  if (FLAGS_enable_async_vector_delete) {
+    auto task = std::make_shared<VectorDeleteTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->Execute(region->Id(), task);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "VectorDelete execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("VectorDelete execute failed");
+      return;
     }
-    brpc::ClosureGuard done_guard(done);
-    DINGO_LOG(ERROR) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
+  } else {
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), response);
+    ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
+
+    status = storage_->VectorDelete(ctx, Helper::PbRepeatedToVector(request->ids()));
+    if (!status.ok()) {
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), region->Id(), status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response);
+      }
+      brpc::ClosureGuard done_guard(done);
+      DINGO_LOG(ERROR) << fmt::format("VectorDelete failed request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
+    }
   }
 }
 
