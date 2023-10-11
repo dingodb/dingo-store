@@ -96,8 +96,11 @@ class Storage {
 
   butil::Status ValidateLeader(int64_t region_id);
 
+  bool Execute(int64_t region_id, TaskRunnablePtr task);
+
  private:
   std::shared_ptr<Engine> engine_;
+  std::vector<WorkerPtr> workers_;  // this is for long-time request processing, for instance VectorBatchSearch
 };
 
 }  // namespace dingodb
