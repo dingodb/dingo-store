@@ -19,7 +19,7 @@ raft:
   path: $BASE_PATH$/data/raft_data
   log_path: $BASE_PATH$/data/raft_log
   election_timeout_s: 6
-  snapshot_interval_s: 120
+  snapshot_interval_s: 300
   segmentlog_max_segment_size: 33554432 # 32M
 log:
   level: INFO
