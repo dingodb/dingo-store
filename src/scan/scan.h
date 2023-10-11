@@ -70,6 +70,8 @@ class ScanContext {
   // Is it possible to delete this object
   bool IsRecyclable();
 
+  static const char* GetScanState(ScanState state);
+
  protected:
   friend class ScanHandler;
 
@@ -115,6 +117,9 @@ class ScanContext {
     kInitting = 1,
     kInitted = 2,
   };
+
+  static const char* GetSeekState(SeekState state);
+
   // default = kUninit
   volatile SeekState seek_state_;
 

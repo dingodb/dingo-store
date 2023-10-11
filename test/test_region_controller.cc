@@ -32,6 +32,7 @@ class TestTask : public dingodb::TaskRunnable {
   TestTask() = default;
   ~TestTask() override = default;
 
+  std::string Type() override { return ""; }
   void Run() override {
     bthread_usleep(1 * 1000 * 1000);
     std::cout << "TestTask run..." << std::endl;
@@ -45,11 +46,11 @@ TEST_F(RegionControlExecutorTest, Stop) {
 
   std::cout << "here 0001" << std::endl;
 
-  region_executor->Execute(new TestTask());
+  region_executor->Execute(std::make_shared<TestTask>());
 
   std::cout << "here 0002" << std::endl;
 
-  region_executor->Execute(new TestTask());
+  region_executor->Execute(std::make_shared<TestTask>());
   std::cout << "here 0003" << std::endl;
 
   region_executor->Stop();

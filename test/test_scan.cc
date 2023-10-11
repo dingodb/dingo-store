@@ -98,6 +98,24 @@ class ScanTest : public testing::Test {
   inline static std::string scan_id_;                                   // NOLINT
 };
 
+static std::chrono::milliseconds GetCurrentTime() {
+  std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+  std::chrono::nanoseconds nanosec = now.time_since_epoch();
+  std::chrono::milliseconds millisec = std::chrono::duration_cast<std::chrono::milliseconds>(nanosec);
+
+  return millisec;
+}
+
+TEST_F(ScanTest, Time) {
+  std::string t = Helper::NowTime();
+  std::cout << "now : " << t << std::endl;
+
+  auto ms = GetCurrentTime();
+  std::string formate_str;
+  formate_str = Helper::FormatMsTime(ms.count(), "%Y-%m-%d %H:%M:%S");
+  std::cout << "formate_str : " << formate_str << std::endl;
+}
+
 TEST_F(ScanTest, InitRocksdb) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
 

@@ -236,7 +236,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   auto* snapshot_writer = snapshot_storage->create();
   auto gen_snapshot_file_func = std::bind(&dingodb::RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot.get(),
                                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-  EXPECT_EQ(true, raft_snapshot->SaveSnapshot(snapshot_writer, region, gen_snapshot_file_func));
+  EXPECT_EQ(true, raft_snapshot->SaveSnapshot(snapshot_writer, region, gen_snapshot_file_func, 0, 0, 0));
   braft::SnapshotMeta meta;
   meta.set_last_included_index(dingodb::Helper::TimestampMs());
   meta.set_last_included_term(1);

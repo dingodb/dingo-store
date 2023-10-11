@@ -14,6 +14,8 @@
 
 #include "scan/scan.h"
 
+#include <fmt/core.h>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -53,7 +55,7 @@ ScanContext::ScanContext()
       engine_(nullptr),
       iter_(nullptr),
       is_already_call_start_(false),
-      last_time_ms_()
+      last_time_ms_(GetCurrentTime())
 
       ,
       seek_state_(SeekState::kUninit)
@@ -89,9 +91,10 @@ butil::Status ScanContext::Open(const std::string& scan_id, std::shared_ptr<RawE
 
   BAIDU_SCOPED_LOCK(mutex_);
   if (ScanState::kUninit != state_) {
+    std::string s = fmt::format("ScanContext::Open failed : {} {}", static_cast<int>(state_), GetScanState(state_));
+    DINGO_LOG(ERROR) << s;
     state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", static_cast<int>(state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state  -> ScanState::kError : %s", s.c_str());
   }
   state_ = ScanState::kOpening;
   scan_id_ = scan_id;
@@ -218,10 +221,12 @@ void ScanContext::WaitForReady() {
 }
 butil::Status ScanContext::SeekCheck() {
   if (ScanContext::SeekState::kInitted != seek_state_) {
+    std::string s = fmt::format("ScanHandler::ScanContinue failed  state wrong : {} {} seek_state : {} {}",
+                                static_cast<int>(state_), GetScanState(state_), static_cast<int>(seek_state_),
+                                GetSeekState(seek_state_));
+    DINGO_LOG(ERROR) << s;
     state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue failed  state wrong : {}",
-                                    static_cast<int>(seek_state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state  -> ScanState::kError : %s", s.c_str());
   }
   return butil::Status();
 }
@@ -234,6 +239,9 @@ bool ScanContext::IsRecyclable() {
       if (ScanState::kAllowImmediateRecycling == state_ || ScanState::kError == state_ ||
           ScanState::kBegunTimeout == state_ || ScanState::kContinuedTimeout == state_ ||
           ScanState::kReleasedTimeout == state_) {
+        std::string s = fmt::format("Recycle Immediate  state : {} {} now : {}", static_cast<int>(state_),
+                                    GetScanState(state_), Helper::NowTime());
+        DINGO_LOG(INFO) << s;
         ret = true;
         break;
       }
@@ -241,6 +249,12 @@ bool ScanContext::IsRecyclable() {
       std::chrono::milliseconds now = GetCurrentTime();
       std::chrono::duration<int64_t, std::milli> diff = now - last_time_ms_;
       if (diff.count() >= timeout_ms_) {
+        std::string last_time_ms_str;
+        last_time_ms_str = Helper::FormatMsTime(last_time_ms_.count(), "%Y-%m-%d %H:%M:%S");
+        std::string s =
+            fmt::format("Recycle Next Loop  state : {} {} now : {}  last_time : {}", static_cast<int>(state_),
+                        GetScanState(state_), Helper::NowTime(), last_time_ms_str);
+        DINGO_LOG(INFO) << s;
         state_ = ScanState::kAllowImmediateRecycling;
         ret = true;
         break;
@@ -251,6 +265,99 @@ bool ScanContext::IsRecyclable() {
   }
 
   return ret;
+}
+
+const char* ScanContext::GetScanState(ScanState state) {
+  const char* state_str = "Unknow Scan State";
+  switch (state) {
+    case ScanState::kUninit: {
+      state_str = "ScanState::kUninit";
+      break;
+    }
+    case ScanState::kOpening: {
+      state_str = "ScanState::kOpening";
+      break;
+    }
+    case ScanState::kOpened: {
+      state_str = "ScanState::kOpened";
+      break;
+    }
+    case ScanState::kBeginning: {
+      state_str = "ScanState::kBeginning";
+      break;
+    }
+    case ScanState::kBegun: {
+      state_str = "ScanState::kBegun";
+      break;
+    }
+    case ScanState::kContinuing: {
+      state_str = "ScanState::kContinuing";
+      break;
+    }
+    case ScanState::kContinued: {
+      state_str = "ScanState::kContinued";
+      break;
+    }
+    case ScanState::kReleasing: {
+      state_str = "ScanState::kReleasing";
+      break;
+    }
+    case ScanState::kReleased: {
+      state_str = "ScanState::kReleased";
+      break;
+    }
+    case ScanState::kError: {
+      state_str = "ScanState::kError";
+      break;
+    }
+    case ScanState::kBegunTimeout: {
+      state_str = "ScanState::kBegunTimeout";
+      break;
+    }
+    case ScanState::kContinuedTimeout: {
+      state_str = "ScanState::kContinuedTimeout";
+      break;
+    }
+    case ScanState::kReleasedTimeout: {
+      state_str = "ScanState::kReleasedTimeout";
+      break;
+    }
+    case ScanState::kAllowImmediateRecycling: {
+      state_str = "ScanState::kAllowImmediateRecycling";
+      break;
+    }
+    case ScanState::kDestroy: {
+      state_str = "ScanState::kDestroy";
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  return state_str;
+}
+
+const char* ScanContext::GetSeekState(SeekState state) {
+  const char* state_str = "Unknow Seek State";
+  switch (state) {
+    case SeekState::kUninit: {
+      state_str = "SeekState::kUninit";
+      break;
+    }
+    case SeekState::kInitting: {
+      state_str = "SeekState::kInitting";
+      break;
+    }
+    case SeekState::kInitted: {
+      state_str = "SeekState::kInitted";
+      break;
+    }
+    default:
+      break;
+  }
+
+  return state_str;
 }
 
 butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64_t region_id,
@@ -270,9 +377,11 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
 
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kOpened != context->state_) {
+    std::string s = fmt::format("ScanHandler::ScanBegin failed : {} {}", static_cast<int>(context->state_),
+                                context->GetScanState(context->state_));
+    DINGO_LOG(ERROR) << s;
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanBegin failed : {}", static_cast<int>(context->state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state  -> ScanState::kError : %s", s.c_str());
   }
 
   context->state_ = ScanState::kBeginning;
@@ -352,16 +461,19 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
 
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
+    std::string s = fmt::format("ScanHandler::ScanContinue failed : {} {}", static_cast<int>(context->state_),
+                                context->GetScanState(context->state_));
+    DINGO_LOG(ERROR) << s;
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue failed : {}", static_cast<int>(context->state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state  -> ScanState::kError : %s", s.c_str());
   }
 
   butil::Status s = context->SeekCheck();
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {}",
-                                    static_cast<int>(context->seek_state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    std::string str = fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {} {}",
+                                  static_cast<int>(context->seek_state_), context->GetScanState(context->state_));
+    DINGO_LOG(ERROR) << str;
+    return s;
   }
 
   context->max_fetch_cnt_ = max_fetch_cnt;
@@ -392,16 +504,19 @@ butil::Status ScanHandler::ScanRelease(std::shared_ptr<ScanContext> context,
 
   BAIDU_SCOPED_LOCK(context->mutex_);
   if (ScanState::kBegun != context->state_ && ScanState::kContinued != context->state_) {
+    std::string s = fmt::format("ScanHandler::ScanRelease failed : {} {}", static_cast<int>(context->state_),
+                                context->GetScanState(context->state_));
+    DINGO_LOG(ERROR) << s;
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanRelease failed : {}", static_cast<int>(context->state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state  -> ScanState::kError : %s", s.c_str());
   }
 
   butil::Status s = context->SeekCheck();
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {}",
-                                    static_cast<int>(context->seek_state_));
-    return butil::Status(pb::error::EINTERNAL, "Internal error : wrong state");
+    std::string str = fmt::format("ScanHandler::ScanContinue SeekCheck  failed  state wrong : {} {}",
+                                  static_cast<int>(context->seek_state_), context->GetScanState(context->state_));
+    DINGO_LOG(ERROR) << str;
+    return s;
   }
 
   context->state_ = ScanState::kReleasing;
