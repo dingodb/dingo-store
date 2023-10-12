@@ -282,8 +282,7 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
 
   } else if (meta.epoch().version() > region->Epoch().version()) {
     auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-    region->SetRawRange(meta.range());
-    store_region_meta->UpdateEpochVersion(region, meta.epoch().version());
+    store_region_meta->UpdateEpochVersionAndRange(region, meta.epoch().version(), meta.range());
   }
 
   // Delete old region data

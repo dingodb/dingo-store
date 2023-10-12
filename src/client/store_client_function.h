@@ -114,7 +114,8 @@ void SendVectorGetRegionMetrics(int64_t region_id);
 void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, const std::string& metric_type,
                             int32_t left_vector_size, int32_t right_vector_size, bool is_return_normlize);
 
-void SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id);
+int64_t SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id);
+void CountVectorTable(std::shared_ptr<Context> ctx);
 
 // key/value
 void SendKvGet(int64_t region_id, const std::string& key, std::string& value);

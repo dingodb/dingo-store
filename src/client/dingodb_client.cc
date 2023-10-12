@@ -354,6 +354,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorCount") {
       client::SendVectorCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
 
+    } else if (method == "CountVectorTable") {
+      ctx->table_id = FLAGS_table_id;
+      client::CountVectorTable(ctx);
+
       // Test
     } else if (method == "TestBatchPut") {
       ctx->table_id = FLAGS_table_id;

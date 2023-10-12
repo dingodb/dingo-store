@@ -84,9 +84,11 @@ pb::common::RegionEpoch Region::Epoch() {
   return inner_region_.definition().epoch();
 }
 
-void Region::SetEpochVersion(int64_t version) {
+void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
+  *(inner_region_.mutable_definition()->mutable_range()) = range;
+  *(inner_region_.mutable_definition()->mutable_raw_range()) = range;
 }
 
 void Region::SetEpochConfVersion(int64_t version) {
@@ -114,19 +116,9 @@ pb::common::Range Region::Range() {
   return inner_region_.definition().range();
 }
 
-void Region::SetRange(const pb::common::Range& range) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  *(inner_region_.mutable_definition()->mutable_range()) = range;
-}
-
 pb::common::Range Region::RawRange() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().raw_range();
-}
-
-void Region::SetRawRange(const pb::common::Range& range) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  *(inner_region_.mutable_definition()->mutable_raw_range()) = range;
 }
 
 std::vector<pb::common::Range> Region::PhysicsRange() {
@@ -552,29 +544,14 @@ void StoreRegionMeta::UpdatePeers(int64_t region_id, std::vector<pb::common::Pee
   }
 }
 
-void StoreRegionMeta::UpdateRange(store::RegionPtr region, const pb::common::Range& range) {
-  assert(region != nullptr);
-
-  region->SetRawRange(range);
-  region->SetRange(range);
-
-  meta_writer_->Put(TransformToKv(region));
-}
-
-void StoreRegionMeta::UpdateRange(int64_t region_id, const pb::common::Range& range) {
-  auto region = GetRegion(region_id);
-  if (region != nullptr) {
-    UpdateRange(region, range);
-  }
-}
-
-void StoreRegionMeta::UpdateEpochVersion(store::RegionPtr region, int64_t version) {
+void StoreRegionMeta::UpdateEpochVersionAndRange(store::RegionPtr region, int64_t version,
+                                                 const pb::common::Range& range) {
   assert(region != nullptr);
   if (version <= region->Epoch().version()) {
     return;
   }
 
-  region->SetEpochVersion(version);
+  region->SetEpochVersionAndRange(version, range);
   meta_writer_->Put(TransformToKv(region));
 }
 
@@ -588,10 +565,10 @@ void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, int64_
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateEpochVersion(int64_t region_id, int64_t version) {
+void StoreRegionMeta::UpdateEpochVersionAndRange(int64_t region_id, int64_t version, const pb::common::Range& range) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
-    UpdateEpochVersion(region, version);
+    UpdateEpochVersionAndRange(region, version, range);
   }
 }
 
