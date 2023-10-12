@@ -125,6 +125,9 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
     auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(0, task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorCalcDistance execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);

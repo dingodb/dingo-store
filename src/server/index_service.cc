@@ -202,6 +202,9 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
     auto task = std::make_shared<VectorBatchQueryTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorBatchQuery execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -420,6 +423,9 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     auto task = std::make_shared<VectorSearchTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteHash(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorSearch execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -660,6 +666,9 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     auto task = std::make_shared<VectorAddTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteHash(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorAdd execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -843,6 +852,9 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
     auto task = std::make_shared<VectorDeleteTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteHash(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorDelete execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -996,6 +1008,9 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
                                                         region->RawRange());
     auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorGetBorderId execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1176,6 +1191,9 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
     auto task = std::make_shared<VectorScanQueryTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorScanQueryTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1453,6 +1471,9 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
                                           GenCountRange(region, request->vector_id_start(), request->vector_id_end()));
     auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorCount execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1545,6 +1566,9 @@ void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contr
     auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(0, task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "VectorCalcDistance execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
