@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include "bthread/types.h"
+#include "butil/scoped_lock.h"
 #include "common/constant.h"
 #include "engine/raw_engine.h"
 #include "meta/meta_reader.h"
@@ -38,77 +40,156 @@ namespace store {
 class RegionMetrics {
  public:
   RegionMetrics()
-      : last_log_index_(0), need_update_min_key_(true), need_update_max_key_(true), need_update_key_count_(true) {}
-  ~RegionMetrics() = default;
+      : last_log_index_(0), need_update_min_key_(true), need_update_max_key_(true), need_update_key_count_(true) {
+    bthread_mutex_init(&mutex_, nullptr);
+  }
+  ~RegionMetrics() { bthread_mutex_destroy(&mutex_); }
 
   std::string Serialize();
   void DeSerialize(const std::string& data);
 
-  int64_t LastLogIndex() const { return last_log_index_; }
+  int64_t LastLogIndex() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return last_log_index_;
+  }
   void SetLastLogIndex(int64_t last_log_index) { last_log_index_ = last_log_index; }
 
-  bool NeedUpdateMinKey() const { return need_update_min_key_; }
-  void SetNeedUpdateMinKey(bool need_update_min_key) { need_update_min_key_ = need_update_min_key; }
+  bool NeedUpdateMinKey() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return need_update_min_key_;
+  }
+  void SetNeedUpdateMinKey(bool need_update_min_key) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    need_update_min_key_ = need_update_min_key;
+  }
 
-  bool NeedUpdateMaxKey() const { return need_update_max_key_; }
+  bool NeedUpdateMaxKey() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return need_update_max_key_;
+  }
   void SetNeedUpdateMaxKey(bool need_update_max_key) { need_update_max_key_ = need_update_max_key; }
 
-  bool NeedUpdateKeyCount() const { return need_update_key_count_; }
-  void SetNeedUpdateKeyCount(bool need_update_key_count) { need_update_key_count_ = need_update_key_count; }
+  bool NeedUpdateKeyCount() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return need_update_key_count_;
+  }
+  void SetNeedUpdateKeyCount(bool need_update_key_count) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    need_update_key_count_ = need_update_key_count;
+  }
 
-  int64_t Id() const { return inner_region_metrics_.id(); }
-  void SetId(int64_t region_id) { inner_region_metrics_.set_id(region_id); }
+  int64_t Id() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.id();
+  }
+  void SetId(int64_t region_id) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_id(region_id);
+  }
 
-  const std::string& MinKey() const { return inner_region_metrics_.min_key(); }
-  void SetMinKey(const std::string& min_key) { inner_region_metrics_.set_min_key(min_key); }
+  const std::string& MinKey() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.min_key();
+  }
+  void SetMinKey(const std::string& min_key) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_min_key(min_key);
+  }
 
-  const std::string& MaxKey() const { return inner_region_metrics_.max_key(); }
-  void SetMaxKey(const std::string& max_key) { inner_region_metrics_.set_max_key(max_key); }
+  const std::string& MaxKey() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.max_key();
+  }
+  void SetMaxKey(const std::string& max_key) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_max_key(max_key);
+  }
 
-  int64_t RegionSize() const { return inner_region_metrics_.region_size(); }
-  void SetRegionSize(int64_t region_size) { inner_region_metrics_.set_region_size(region_size); }
+  int64_t RegionSize() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.region_size();
+  }
+  void SetRegionSize(int64_t region_size) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_region_size(region_size);
+  }
 
-  int64_t KeyCount() const { return inner_region_metrics_.row_count(); }
-  void SetKeyCount(int64_t key_count) { inner_region_metrics_.set_row_count(key_count); }
+  int64_t KeyCount() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.row_count();
+  }
+  void SetKeyCount(int64_t key_count) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_row_count(key_count);
+  }
 
   // vector index start
-  pb::common::VectorIndexType GetVectorIndexType() const {
+  pb::common::VectorIndexType GetVectorIndexType() {
+    BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_metrics_.vector_index_metrics().vector_index_type();
   }
 
   void SetVectorIndexType(pb::common::VectorIndexType vector_index_type) {
+    BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.mutable_vector_index_metrics()->set_vector_index_type(vector_index_type);
   }
 
-  int64_t GetVectorCurrentCount() const { return inner_region_metrics_.vector_index_metrics().current_count(); }
+  int64_t GetVectorCurrentCount() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.vector_index_metrics().current_count();
+  }
 
   void SetVectorCurrentCount(int64_t current_count) {
+    BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.mutable_vector_index_metrics()->set_current_count(current_count);
   }
 
-  int64_t GetVectorDeletedCount() const { return inner_region_metrics_.vector_index_metrics().deleted_count(); }
+  int64_t GetVectorDeletedCount() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.vector_index_metrics().deleted_count();
+  }
 
   void SetVectorDeletedCount(int64_t deleted_count) {
+    BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.mutable_vector_index_metrics()->set_deleted_count(deleted_count);
   }
 
-  int64_t GetVectorMaxId() const { return inner_region_metrics_.vector_index_metrics().max_id(); }
+  int64_t GetVectorMaxId() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.vector_index_metrics().max_id();
+  }
 
-  void SetVectorMaxId(int64_t max_id) { inner_region_metrics_.mutable_vector_index_metrics()->set_max_id(max_id); }
+  void SetVectorMaxId(int64_t max_id) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.mutable_vector_index_metrics()->set_max_id(max_id);
+  }
 
-  int64_t GetVectorMinId() const { return inner_region_metrics_.vector_index_metrics().min_id(); }
+  int64_t GetVectorMinId() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.vector_index_metrics().min_id();
+  }
 
-  void SetVectorMinId(int64_t min_id) { inner_region_metrics_.mutable_vector_index_metrics()->set_min_id(min_id); }
+  void SetVectorMinId(int64_t min_id) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.mutable_vector_index_metrics()->set_min_id(min_id);
+  }
 
-  int64_t GetVectorMemoryBytes() const { return inner_region_metrics_.vector_index_metrics().memory_bytes(); }
+  int64_t GetVectorMemoryBytes() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.vector_index_metrics().memory_bytes();
+  }
 
   void SetVectorMemoryBytes(int64_t memory_bytes) {
+    BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.mutable_vector_index_metrics()->set_memory_bytes(memory_bytes);
   }
 
   // vector index end
 
-  const pb::common::RegionMetrics& InnerRegionMetrics() { return inner_region_metrics_; }
+  const pb::common::RegionMetrics& InnerRegionMetrics() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_;
+  }
 
   using PbKeyValues = google::protobuf::RepeatedPtrField<pb::common::KeyValue>;
   using PbKeys = google::protobuf::RepeatedPtrField<std::string>;
@@ -130,6 +211,8 @@ class RegionMetrics {
   bool need_update_key_count_;
 
   pb::common::RegionMetrics inner_region_metrics_;
+  // protect inner_region_metrics_
+  bthread_mutex_t mutex_;
 };
 
 using RegionMetricsPtr = std::shared_ptr<RegionMetrics>;

@@ -37,13 +37,18 @@ DEFINE_double(min_system_memory_capacity_free_ratio, 0.10, "Min system memory ca
 
 namespace store {
 
-std::string RegionMetrics::Serialize() { return inner_region_metrics_.SerializeAsString(); }
+std::string RegionMetrics::Serialize() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_metrics_.SerializeAsString();
+}
 
 void RegionMetrics::DeSerialize(const std::string& data) {
+  BAIDU_SCOPED_LOCK(mutex_);
   inner_region_metrics_.ParsePartialFromArray(data.data(), data.size());
 }
 
 void RegionMetrics::UpdateMaxAndMinKey(const PbKeyValues& kvs) {
+  BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
     if (inner_region_metrics_.min_key().empty() || kv.key() < inner_region_metrics_.min_key()) {
       inner_region_metrics_.set_min_key(kv.key());
@@ -54,6 +59,7 @@ void RegionMetrics::UpdateMaxAndMinKey(const PbKeyValues& kvs) {
 }
 
 void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbKeys& keys) {
+  BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& key : keys) {
     if (key == inner_region_metrics_.min_key()) {
       need_update_min_key_ = true;
@@ -64,6 +70,7 @@ void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbKeys& keys) {
 }
 
 void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbRanges& ranges) {
+  BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& range : ranges) {
     if (range.start_key() <= inner_region_metrics_.min_key() && inner_region_metrics_.min_key() < range.end_key()) {
       need_update_min_key_ = true;
@@ -75,6 +82,7 @@ void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbRanges& ranges) {
 }
 
 void RegionMetrics::UpdateMaxAndMinKeyPolicy() {
+  BAIDU_SCOPED_LOCK(mutex_);
   need_update_min_key_ = true;
   need_update_max_key_ = true;
 }
