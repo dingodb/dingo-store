@@ -23,8 +23,8 @@
 
 namespace dingodb {
 
-TaskRunnable::TaskRunnable() { DINGO_LOG(INFO) << "new exec task..."; }
-TaskRunnable::~TaskRunnable() { DINGO_LOG(INFO) << "delete exec task..."; }
+TaskRunnable::TaskRunnable() { DINGO_LOG(DEBUG) << "new exec task..."; }
+TaskRunnable::~TaskRunnable() { DINGO_LOG(DEBUG) << "delete exec task..."; }
 
 int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NOLINT
   for (; iter; ++iter) {
@@ -39,8 +39,8 @@ int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NO
 
     int64_t start_time = Helper::TimestampMs();
     (*iter)->Run();
-    DINGO_LOG(INFO) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
-                                   Helper::TimestampMs() - start_time);
+    DINGO_LOG(DEBUG) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
+                                    Helper::TimestampMs() - start_time);
   }
 
   return 0;
