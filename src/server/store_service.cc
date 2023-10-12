@@ -152,7 +152,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvGetTask>(storage_, cntl, request, response, done_guard.release(), ctx);
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvGetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -281,7 +281,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvBatchGetTask>(storage_, cntl, request, response, done_guard.release(), ctx);
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvBatchGetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -430,9 +430,8 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   }
 
   if (FLAGS_enable_async_store_operation) {
-    DINGO_LOG(ERROR) << "KvPutTask execute start, request: " << request->ShortDebugString();
     auto task = std::make_shared<KvPutTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvPutTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -591,9 +590,8 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   }
 
   if (FLAGS_enable_async_store_operation) {
-    DINGO_LOG(ERROR) << "KvBatchPutTask execute start, request: " << request->ShortDebugString();
     auto task = std::make_shared<KvBatchPutTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvBatchPutTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -738,7 +736,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvPutIfAbsentTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvPutIfAbsentTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -891,7 +889,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvBatchPutIfAbsentTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvBatchPutIfAbsentTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1036,7 +1034,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvBatchDeleteTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvBatchDeleteTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1202,7 +1200,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   if (FLAGS_enable_async_store_operation) {
     auto task =
         std::make_shared<KvDeleteRangeTask>(storage_, cntl, request, response, done_guard.release(), correction_range);
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvDeleteRangeTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1337,7 +1335,7 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvCompareAndSetTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvCompareAndSetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1490,7 +1488,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<KvBatchCompareAndSetTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvBatchCompareAndSetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1666,7 +1664,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   if (FLAGS_enable_async_store_kvscan) {
     auto task = std::make_shared<KvScanBeginTask>(storage_, cntl, request, response, done_guard.release(), ctx,
                                                   correction_range);
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvScanBeginTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1821,7 +1819,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
 
   if (FLAGS_enable_async_store_kvscan) {
     auto task = std::make_shared<KvScanContinueTask>(storage_, cntl, request, response, done_guard.release(), ctx);
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvScanContinueTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1963,7 +1961,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
 
   if (FLAGS_enable_async_store_kvscan) {
     auto task = std::make_shared<KvScanReleaseTask>(storage_, cntl, request, response, done_guard.release(), ctx);
-    auto ret = storage_->Execute(request->context().region_id(), task);
+    auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "KvScanReleaseTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();

@@ -43,6 +43,7 @@ Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {
       DINGO_LOG(FATAL) << "Init storage worker failed";
     }
     workers_.push_back(worker);
+    active_worker_id_ = 0;
   }
 }
 
@@ -468,7 +469,11 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
   return butil::Status();
 }
 
-bool Storage::Execute(int64_t region_id, TaskRunnablePtr task) {
+bool Storage::ExecuteRR(int64_t /*region_id*/, TaskRunnablePtr task) {
+  return workers_[active_worker_id_.fetch_add(1) % FLAGS_storage_worker_num]->Execute(task);
+}
+
+bool Storage::ExecuteHash(int64_t region_id, TaskRunnablePtr task) {
   return workers_[region_id % FLAGS_storage_worker_num]->Execute(task);
 }
 
