@@ -244,6 +244,28 @@ class KvBatchGetTask : public TaskRunnable {
     }
 
     // do operations
+    std::vector<pb::common::KeyValue> kvs;
+    auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request_);
+    auto status = storage_->KvGet(ctx_, Helper::PbRepeatedToVector(mut_request->mutable_keys()), kvs);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("KvBatchGet request: {} response: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    Helper::VectorToPbRepeated(kvs, response_->mutable_kvs());
+
+    DINGO_LOG(DEBUG) << fmt::format("KvBatchGet request: {} response: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
   }
 
  private:
