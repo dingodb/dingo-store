@@ -3724,7 +3724,6 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                       << " new range = [" << region_metrics.region_definition().range().start_key() << ", "
                       << region_metrics.region_definition().range().end_key() << ")";
       if (!leader_has_old_epoch) {
-        // need_update_region_definition = true;
         need_update_region_metrics = true;
       }
 
@@ -3744,7 +3743,6 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                       << " new raw_range = [" << region_metrics.region_definition().raw_range().start_key() << ", "
                       << region_metrics.region_definition().raw_range().end_key() << ")";
       if (!leader_has_old_epoch) {
-        // need_update_region_definition = true;
         need_update_region_metrics = true;
       }
 

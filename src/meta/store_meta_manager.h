@@ -63,7 +63,7 @@ class Region {
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
   pb::common::RegionEpoch Epoch();
-  void SetEpochVersion(int64_t version);
+  void SetEpochVersionAndRange(int64_t version, const pb::common::Range& range);
   void SetEpochConfVersion(int64_t version);
   void SetSnapshotEpochVersion(int64_t version);
 
@@ -71,9 +71,7 @@ class Region {
   void SetLeaderId(int64_t leader_id);
 
   pb::common::Range Range();
-  void SetRange(const pb::common::Range& range);
   pb::common::Range RawRange();
-  void SetRawRange(const pb::common::Range& range);
   // Get physics range, it's rocksdb data range.
   // store region raw_range == physics ragne
   // index region raw_range != physics ragne
@@ -196,11 +194,8 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers);
   void UpdatePeers(int64_t region_id, std::vector<pb::common::Peer>& peers);
 
-  void UpdateRange(store::RegionPtr region, const pb::common::Range& range);
-  void UpdateRange(int64_t region_id, const pb::common::Range& range);
-
-  void UpdateEpochVersion(store::RegionPtr region, int64_t version);
-  void UpdateEpochVersion(int64_t region_id, int64_t version);
+  void UpdateEpochVersionAndRange(store::RegionPtr region, int64_t version, const pb::common::Range& range);
+  void UpdateEpochVersionAndRange(int64_t region_id, int64_t version, const pb::common::Range& range);
   void UpdateEpochConfVersion(store::RegionPtr region, int64_t version);
   void UpdateEpochConfVersion(int64_t region_id, int64_t version);
   void UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version);

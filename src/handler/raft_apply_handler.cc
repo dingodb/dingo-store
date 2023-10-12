@@ -488,19 +488,15 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       Helper::StringToHex(to_region->RawRange().end_key()));
 
   pb::common::Range to_range;
-  // Set child range
-  to_range.set_start_key(to_region->RawRange().start_key());
+  // child range
+  to_range.set_start_key(from_region->RawRange().start_key());
   to_range.set_end_key(request.split_key());
-  if (to_range.start_key().compare(request.split_key()) > 0) {
-    to_range.set_start_key(from_region->RawRange().start_key());
-  }
-  store_region_meta->UpdateRange(to_region, to_range);
 
-  // Set parent range
+  // parent range
   pb::common::Range from_range;
   from_range.set_start_key(request.split_key());
   from_range.set_end_key(from_region->RawRange().end_key());
-  Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->UpdateRange(from_region, from_range);
+
   DINGO_LOG(INFO) << fmt::format(
       "[split.spliting][region({}->{})] post from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
       to_region->Id(), Helper::StringToHex(from_range.start_key()), Helper::StringToHex(from_range.end_key()),
@@ -514,11 +510,13 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   record.set_split_time(Helper::NowTime());
   from_region->AddChild(record);
 
-  // Increase region version and update StoreRegionState to SPLITTING
-  store_region_meta->UpdateEpochVersion(from_region, from_region->Epoch().version() + 1);
-  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
-  store_region_meta->UpdateEpochVersion(to_region, to_region->Epoch().version() + 1);
+  // set child region version/range/state
+  store_region_meta->UpdateEpochVersionAndRange(to_region, to_region->Epoch().version() + 1, to_range);
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
+
+  // set parent region version/range/state
+  store_region_meta->UpdateEpochVersionAndRange(from_region, from_region->Epoch().version() + 1, from_range);
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
                                  to_region->Id());
@@ -674,7 +672,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   pb::common::Range parent_range;
   parent_range.set_start_key(request.split_key());
   parent_range.set_end_key(old_range.end_key());
-  store_region_meta->UpdateRange(parent_region, parent_range);
+
   DINGO_LOG(INFO) << fmt::format(
       "[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]", parent_region_id,
       child_region_id, Helper::StringToHex(parent_range.start_key()), Helper::StringToHex(parent_range.end_key()),
@@ -691,8 +689,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   parent_region->AddChild(record);
 
   // Increase region version
-  store_region_meta->UpdateEpochVersion(parent_region, parent_region->Epoch().version() + 1);
-  store_region_meta->UpdateEpochVersion(child_region, child_region->Epoch().version() + 1);
+  store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range);
+  store_region_meta->UpdateEpochVersionAndRange(parent_region, parent_region->Epoch().version() + 1, parent_range);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", parent_region_id,
                                  child_region_id);

@@ -42,6 +42,7 @@
 #include "proto/store.pb.h"
 #include "serial/buf.h"
 #include "serial/schema/long_schema.h"
+#include "vector/codec.h"
 
 const int kBatchSize = 1000;
 
@@ -1648,17 +1649,43 @@ void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, con
   DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
 }
 
-void SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id) {
+int64_t SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id) {
   ::dingodb::pb::index::VectorCountRequest request;
   ::dingodb::pb::index::VectorCountResponse response;
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
-  request.set_vector_id_start(start_vector_id);
-  request.set_vector_id_end(end_vector_id);
+  if (start_vector_id > 0) {
+    request.set_vector_id_start(start_vector_id);
+  }
+  if (end_vector_id > 0) {
+    request.set_vector_id_end(end_vector_id);
+  }
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCount", request, response);
 
   DINGO_LOG(INFO) << "VectorCount response: " << response.DebugString();
+  return response.error().errcode() != 0 ? 0 : response.count();
+}
+
+void CountVectorTable(std::shared_ptr<Context> ctx) {
+  auto index_range = SendGetIndexRange(ctx->table_id);
+
+  int64_t total_count = 0;
+  std::map<std::string, dingodb::pb::meta::RangeDistribution> region_map;
+  for (const auto& region_range : index_range.range_distribution()) {
+    if (region_range.range().start_key() >= region_range.range().end_key()) {
+      DINGO_LOG(ERROR) << fmt::format("Invalid region {} range [{}-{})", region_range.id().entity_id(),
+                                      dingodb::Helper::StringToHex(region_range.range().start_key()),
+                                      dingodb::Helper::StringToHex(region_range.range().end_key()));
+      continue;
+    }
+
+    int64_t count = SendVectorCount(region_range.id().entity_id(), 0, 0);
+    total_count += count;
+    DINGO_LOG(INFO) << fmt::format("partition_id({}) region({}) count({}) total_count({})",
+                                   region_range.id().parent_entity_id(), region_range.id().entity_id(), count,
+                                   total_count);
+  }
 }
 
 void SendKvGet(int64_t region_id, const std::string& key, std::string& value) {
@@ -1936,8 +1963,7 @@ void SendCompact(const std::string& cf_name) {
 
   request.set_cf_name(cf_name);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Compact", request,
-                                                              response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Compact", request, response);
 }
 
 void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer) {

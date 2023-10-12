@@ -115,7 +115,9 @@ class VectorBatchQueryTask : public TaskRunnable {
       err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
       if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg("Not leader, please redirect leader.");
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
         ServiceHelper::RedirectLeader(status.error_str(), response_);
       }
       DINGO_LOG(ERROR) << fmt::format("VectorBatchQueryTask request: {} response: {}", request_->ShortDebugString(),
@@ -176,7 +178,9 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), request->context().region_id(),
+                                  status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -212,7 +216,9 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
       err->set_errcode(static_cast<Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
       if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg("Not leader, please redirect leader.");
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request->context().region_id(),
+                                    status.error_str()));
         ServiceHelper::RedirectLeader(status.error_str(), response);
       }
       DINGO_LOG(ERROR) << fmt::format("VectorBatchQuery request: {} response: {}", request->ShortDebugString(),
@@ -318,7 +324,9 @@ class VectorSearchTask : public TaskRunnable {
       err->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
       if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg("Not leader, please redirect leader.");
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
         ServiceHelper::RedirectLeader(status.error_str(), response_);
       }
       DINGO_LOG(ERROR) << fmt::format("VectorSearchTask request: {} response: {}", request_->ShortDebugString(),
@@ -379,7 +387,9 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg("Not leader, please redirect leader.");
+      err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                  Server::GetInstance()->ServerAddr(), request->context().region_id(),
+                                  status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     DINGO_LOG(WARNING) << fmt::format("ValidateRequest failed request: {} response: {}", request->ShortDebugString(),
@@ -424,7 +434,9 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
       err->set_errcode(static_cast<Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
       if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg("Not leader, please redirect leader.");
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request->context().region_id(),
+                                    status.error_str()));
         ServiceHelper::RedirectLeader(status.error_str(), response);
       }
       DINGO_LOG(ERROR) << fmt::format("VectorSearch request: {} response: {}", request->ShortDebugString(),
@@ -1305,7 +1317,7 @@ butil::Status IndexServiceImpl::ValidateVectorCountRequest(const dingodb::pb::in
     vector_ids.push_back(request->vector_id_start());
   }
   if (request->vector_id_end() != 0) {
-    vector_ids.push_back(request->vector_id_end());
+    vector_ids.push_back(request->vector_id_end() - 1);
   }
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
