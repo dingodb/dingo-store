@@ -369,9 +369,7 @@ butil::Status Storage::VectorCount(int64_t region_id, const pb::common::Range& r
   return butil::Status();
 }
 
-butil::Status Storage::VectorCalcDistance([[maybe_unused]] std::shared_ptr<Context> ctx,
-                                          [[maybe_unused]] int64_t region_id,
-                                          const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
+butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
                                           std::vector<std::vector<float>>& distances,
                                           std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,
                                           std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors) {
