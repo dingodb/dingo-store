@@ -2103,6 +2103,77 @@ butil::Status ValidateTxnGetRequest(const dingodb::pb::store::TxnGetRequest* req
   return butil::Status();
 }
 
+class TxnGetTask : public TaskRunnable {
+ public:
+  TxnGetTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl, const dingodb::pb::store::TxnGetRequest* request,
+             dingodb::pb::store::TxnGetResponse* response, google::protobuf::Closure* done,
+             std::shared_ptr<Context> ctx)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done), ctx_(ctx) {}
+  ~TxnGetTask() override = default;
+
+  std::string Type() override { return "TXN_GET"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // do operations
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    std::vector<std::string> keys;
+    auto* mut_request = const_cast<dingodb::pb::store::TxnGetRequest*>(request_);
+    keys.emplace_back(std::move(*mut_request->release_key()));
+    pb::store::TxnResultInfo txn_result_info;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status = storage_->TxnBatchGet(ctx, request_->start_ts(), keys, txn_result_info, kvs);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnGet request: {} response: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    if (!kvs.empty()) {
+      response_->set_value(kvs[0].value());
+    }
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnGet request: {} response: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  const dingodb::pb::store::TxnGetRequest* request_;
+  dingodb::pb::store::TxnGetResponse* response_;
+  google::protobuf::Closure* done_;
+  std::shared_ptr<Context> ctx_;
+};
+
 void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
                               pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
@@ -2118,7 +2189,25 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnGetTask>(storage_, cntl, request, response, done_guard.release(),
+                                             std::make_shared<Context>());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnGetTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnGetTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2177,6 +2266,90 @@ butil::Status ValidateTxnScanRequest(store::RegionPtr region, const pb::common::
   return butil::Status();
 }
 
+class TxnScanTask : public TaskRunnable {
+ public:
+  TxnScanTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+              const dingodb::pb::store::TxnScanRequest* request, dingodb::pb::store::TxnScanResponse* response,
+              google::protobuf::Closure* done, std::shared_ptr<Context> ctx, pb::common::Range correction_range)
+      : storage_(storage),
+        cntl_(cntl),
+        request_(request),
+        response_(response),
+        done_(done),
+        ctx_(ctx),
+        correction_range_(correction_range) {}
+  ~TxnScanTask() override = default;
+
+  std::string Type() override { return "TXN_SCAN"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // do operations
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    pb::store::TxnResultInfo txn_result_info;
+    std::vector<pb::common::KeyValue> kvs;
+    bool has_more;
+    std::string end_key;
+
+    auto status = storage_->TxnScan(ctx, request_->start_ts(), correction_range_, request_->limit(),
+                                    request_->key_only(), request_->is_reverse(), request_->disable_coprocessor(),
+                                    request_->coprocessor(), txn_result_info, kvs, has_more, end_key);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnKvScan request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    if (!kvs.empty()) {
+      Helper::VectorToPbRepeated(kvs, response_->mutable_kvs());
+    }
+
+    if (txn_result_info.ByteSizeLong() > 0) {
+      response_->mutable_txn_result()->CopyFrom(txn_result_info);
+    }
+    response_->set_end_key(end_key);
+    response_->set_has_more(has_more);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnKvScan request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  const dingodb::pb::store::TxnScanRequest* request_;
+  dingodb::pb::store::TxnScanResponse* response_;
+  google::protobuf::Closure* done_;
+  std::shared_ptr<Context> ctx_;
+  pb::common::Range correction_range_;
+};
+
 void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
                                pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
@@ -2212,9 +2385,28 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
     }
     return;
   }
+
   auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnScanTask>(storage_, cntl, request, response, done_guard.release(),
+                                              std::make_shared<Context>(), correction_range);
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnScanTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnScanTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2309,6 +2501,98 @@ butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPrewriteRe
   return butil::Status();
 }
 
+class TxnPrewriteTask : public TaskRunnable {
+ public:
+  TxnPrewriteTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                  const dingodb::pb::store::TxnPrewriteRequest* request,
+                  dingodb::pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnPrewriteTask() override = default;
+
+  std::string Type() override { return "TXN_PREWRITE"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnPrewriteTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    std::vector<pb::store::Mutation> mutations;
+    for (const auto& mutation : request_->mutations()) {
+      mutations.emplace_back(mutation);
+    }
+
+    pb::store::TxnResultInfo txn_result_info;
+    std::vector<std::string> already_exists;
+    int64_t one_pc_commit_ts = 0;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status = storage_->TxnPrewrite(ctx, mutations, request_->primary_lock(), request_->start_ts(),
+                                        request_->lock_ttl(), request_->txn_size(), request_->try_one_pc(),
+                                        request_->max_commit_ts(), txn_result_info, already_exists, one_pc_commit_ts);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnPrewrite request: {} response: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    // response_->mutable_txn_result()->CopyFrom(txn_result_info);
+    // response_->set_one_pc_commit_ts(one_pc_commit_ts);
+    // for (const auto& key : already_exists) {
+    //   response_->add_keys_already_exist()->set_key(key);
+    // }
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnPrewrite request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnPrewriteTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnPrewriteTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnPrewriteRequest* request_;
+  dingodb::pb::store::TxnPrewriteResponse* response_;
+};
+
 void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    const pb::store::TxnPrewriteRequest* request,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
@@ -2325,7 +2609,24 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnPrewriteTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnPrewriteTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnPrewriteTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2344,6 +2645,9 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                  request->txn_size(), request->try_one_pc(), request->max_commit_ts(), txn_result_info,
                                  already_exists, one_pc_commit_ts);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -2358,11 +2662,11 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
     return;
   }
 
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
-  response->set_one_pc_commit_ts(one_pc_commit_ts);
-  for (const auto& key : already_exists) {
-    response->add_keys_already_exist()->set_key(key);
-  }
+  // response->mutable_txn_result()->CopyFrom(txn_result_info);
+  // response->set_one_pc_commit_ts(one_pc_commit_ts);
+  // for (const auto& key : already_exists) {
+  //   response->add_keys_already_exist()->set_key(key);
+  // }
 
   DINGO_LOG(DEBUG) << fmt::format("TxnPrewrite request: {} response: {}", request->ShortDebugString(),
                                   response->ShortDebugString());
@@ -2409,6 +2713,93 @@ butil::Status ValidateTxnCommitRequest(const dingodb::pb::store::TxnCommitReques
   return butil::Status();
 }
 
+class TxnCommitTask : public TaskRunnable {
+ public:
+  TxnCommitTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                const dingodb::pb::store::TxnCommitRequest* request, dingodb::pb::store::TxnCommitResponse* response,
+                google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnCommitTask() override = default;
+
+  std::string Type() override { return "TXN_COMMIT"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnCommitTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    std::vector<std::string> keys;
+    for (const auto& key : request_->keys()) {
+      keys.emplace_back(key);
+    }
+
+    pb::store::TxnResultInfo txn_result_info;
+    int64_t commit_ts = 0;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status =
+        storage_->TxnCommit(ctx, request_->start_ts(), request_->commit_ts(), keys, txn_result_info, commit_ts);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnCommit request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+    response_->set_commit_ts(commit_ts);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnCommit request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnCommitTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnCommitTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnCommitRequest* request_;
+  dingodb::pb::store::TxnCommitResponse* response_;
+};
+
 void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
                                  google::protobuf::Closure* done) {
@@ -2425,7 +2816,24 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnCommitTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnCommitTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnCommitTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2441,6 +2849,9 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   std::vector<pb::common::KeyValue> kvs;
   status = storage_->TxnCommit(ctx, request->start_ts(), request->commit_ts(), keys, txn_result_info, commit_ts);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -2497,6 +2908,95 @@ butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::store::TxnChec
   return butil::Status();
 }
 
+class TxnCheckTxnStatusTask : public TaskRunnable {
+ public:
+  TxnCheckTxnStatusTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                        const dingodb::pb::store::TxnCheckTxnStatusRequest* request,
+                        dingodb::pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnCheckTxnStatusTask() override = default;
+
+  std::string Type() override { return "TXN_CHECK"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnCheckTxnStatusTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    pb::store::TxnResultInfo txn_result_info;
+    int64_t lock_ttl = 0;
+    int64_t commit_ts = 0;
+    pb::store::Action action;
+    pb::store::LockInfo lock_info;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status =
+        storage_->TxnCheckTxnStatus(ctx, request_->primary_key(), request_->lock_ts(), request_->caller_start_ts(),
+                                    request_->current_ts(), txn_result_info, lock_ttl, commit_ts, action, lock_info);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnCheckTxnStatus request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    // response_->mutable_txn_result()->CopyFrom(txn_result_info);
+    // response_->set_lock_ttl(lock_ttl);
+    // response_->set_commit_ts(commit_ts);
+    // response_->set_action(action);
+    // response_->mutable_lock_info()->CopyFrom(lock_info);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnCheckTxnStatus request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnCheckTxnStatusTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnCheckTxnStatusTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnCheckTxnStatusRequest* request_;
+  dingodb::pb::store::TxnCheckTxnStatusResponse* response_;
+};
+
 void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* controller,
                                          const pb::store::TxnCheckTxnStatusRequest* request,
                                          pb::store::TxnCheckTxnStatusResponse* response,
@@ -2514,7 +3014,24 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnCheckTxnStatusTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnCheckTxnStatusTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnCheckTxnStatusTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2529,6 +3046,9 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   status = storage_->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
                                        request->current_ts(), txn_result_info, lock_ttl, commit_ts, action, lock_info);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -2543,11 +3063,11 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
     return;
   }
 
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
-  response->set_lock_ttl(lock_ttl);
-  response->set_commit_ts(commit_ts);
-  response->set_action(action);
-  response->mutable_lock_info()->CopyFrom(lock_info);
+  // response->mutable_txn_result()->CopyFrom(txn_result_info);
+  // response->set_lock_ttl(lock_ttl);
+  // response->set_commit_ts(commit_ts);
+  // response->set_action(action);
+  // response->mutable_lock_info()->CopyFrom(lock_info);
 
   DINGO_LOG(DEBUG) << fmt::format("TxnCheckTxnStatus request: {} response: {}", request->ShortDebugString(),
                                   response->ShortDebugString());
@@ -2587,6 +3107,90 @@ butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::TxnResolve
   return butil::Status();
 }
 
+class TxnResolveLockTask : public TaskRunnable {
+ public:
+  TxnResolveLockTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                     const dingodb::pb::store::TxnResolveLockRequest* request,
+                     dingodb::pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnResolveLockTask() override = default;
+
+  std::string Type() override { return "TXN_RESOLVE"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnResolveLockTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    std::vector<std::string> keys;
+    for (const auto& key : request_->keys()) {
+      keys.emplace_back(key);
+    }
+
+    pb::store::TxnResultInfo txn_result_info;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status = storage_->TxnResolveLock(ctx, request_->start_ts(), request_->commit_ts(), keys, txn_result_info);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnResolveLock request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnResolveLock request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnResolveLockTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnResolveLockTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnResolveLockRequest* request_;
+  dingodb::pb::store::TxnResolveLockResponse* response_;
+};
+
 void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controller,
                                       const pb::store::TxnResolveLockRequest* request,
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
@@ -2603,7 +3207,24 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnResolveLockTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnResolveLockTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnResolveLockTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2618,6 +3239,9 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   std::vector<pb::common::KeyValue> kvs;
   status = storage_->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys, txn_result_info);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -2670,6 +3294,80 @@ butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::store::TxnBatchGetRe
   return butil::Status();
 }
 
+class TxnBatchGetTask : public TaskRunnable {
+ public:
+  TxnBatchGetTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                  const dingodb::pb::store::TxnBatchGetRequest* request,
+                  dingodb::pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnBatchGetTask() override = default;
+
+  std::string Type() override { return "TXN_BATCH_GET"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // do operations
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    std::vector<std::string> keys;
+    for (const auto& key : request_->keys()) {
+      keys.emplace_back(key);
+    }
+
+    pb::store::TxnResultInfo txn_result_info;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status = storage_->TxnBatchGet(ctx, request_->start_ts(), keys, txn_result_info, kvs);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnBatchGet request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    if (!kvs.empty()) {
+      for (const auto& kv : kvs) {
+        response_->add_kvs()->CopyFrom(kv);
+      }
+    }
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnBatchGet request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  const dingodb::pb::store::TxnBatchGetRequest* request_;
+  dingodb::pb::store::TxnBatchGetResponse* response_;
+  google::protobuf::Closure* done_;
+};
+
 void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    const pb::store::TxnBatchGetRequest* request,
                                    pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
@@ -2686,7 +3384,24 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnBatchGetTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnBatchGetTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnBatchGetTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2758,6 +3473,90 @@ butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::store::TxnBatch
   return butil::Status();
 }
 
+class TxnBatchRollbackTask : public TaskRunnable {
+ public:
+  TxnBatchRollbackTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                       const dingodb::pb::store::TxnBatchRollbackRequest* request,
+                       dingodb::pb::store::TxnBatchRollbackResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnBatchRollbackTask() override = default;
+
+  std::string Type() override { return "TXN_ROLLBACK"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnBatchRollbackTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    std::vector<std::string> keys;
+    for (const auto& key : request_->keys()) {
+      keys.emplace_back(key);
+    }
+
+    pb::store::TxnResultInfo txn_result_info;
+
+    std::vector<pb::common::KeyValue> kvs;
+    auto status = storage_->TxnBatchRollback(ctx, request_->start_ts(), keys, txn_result_info, kvs);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnBatchRollback request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnBatchRollback request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnBatchRollbackTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnBatchRollbackTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnBatchRollbackRequest* request_;
+  dingodb::pb::store::TxnBatchRollbackResponse* response_;
+};
+
 void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* controller,
                                         const pb::store::TxnBatchRollbackRequest* request,
                                         pb::store::TxnBatchRollbackResponse* response,
@@ -2775,7 +3574,24 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnBatchRollbackTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnBatchRollbackTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnBatchRollbackTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2790,6 +3606,9 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   std::vector<pb::common::KeyValue> kvs;
   status = storage_->TxnBatchRollback(ctx, request->start_ts(), keys, txn_result_info, kvs);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -2855,6 +3674,74 @@ butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnScanLockRe
   return butil::Status();
 }
 
+class TxnScanLockTask : public TaskRunnable {
+ public:
+  TxnScanLockTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                  const dingodb::pb::store::TxnScanLockRequest* request,
+                  dingodb::pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnScanLockTask() override = default;
+
+  std::string Type() override { return "TXN_SCAN_LOCK"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // do operations
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    pb::store::TxnResultInfo txn_result_info;
+    std::vector<pb::store::LockInfo> locks;
+
+    auto status = storage_->TxnScanLock(ctx, request_->max_ts(), request_->start_key(), request_->limit(),
+                                        request_->end_key(), txn_result_info, locks);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnScanLock request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+    for (const auto& lock : locks) {
+      response_->add_locks()->CopyFrom(lock);
+    }
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnScanLock request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  const dingodb::pb::store::TxnScanLockRequest* request_;
+  dingodb::pb::store::TxnScanLockResponse* response_;
+  google::protobuf::Closure* done_;
+};
+
 void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    const pb::store::TxnScanLockRequest* request,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
@@ -2871,7 +3758,24 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnScanLockTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnScanLockTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnScanLockTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2942,6 +3846,87 @@ butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::store::TxnHeartBeat
   return butil::Status();
 }
 
+class TxnHeartBeatTask : public TaskRunnable {
+ public:
+  TxnHeartBeatTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                   const dingodb::pb::store::TxnHeartBeatRequest* request,
+                   dingodb::pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnHeartBeatTask() override = default;
+
+  std::string Type() override { return "TXN_HB"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnHeartBeatTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    pb::store::TxnResultInfo txn_result_info;
+    int64_t lock_ttl = 0;
+
+    auto status = storage_->TxnHeartBeat(ctx, request_->primary_lock(), request_->start_ts(),
+                                         request_->advise_lock_ttl(), txn_result_info, lock_ttl);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnHeartBeat request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    response_->mutable_txn_result()->CopyFrom(txn_result_info);
+    response_->set_lock_ttl(lock_ttl);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnHeartBeat request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnHeartBeatTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnHeartBeatTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnHeartBeatRequest* request_;
+  dingodb::pb::store::TxnHeartBeatResponse* response_;
+};
+
 void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     const pb::store::TxnHeartBeatRequest* request,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
@@ -2958,7 +3943,24 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnHeartBeatTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnHeartBeatTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnHeartBeatTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2969,6 +3971,9 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   status = storage_->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl(),
                                   txn_result_info, lock_ttl);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -3011,6 +4016,84 @@ butil::Status ValidateTxnGcRequest(const dingodb::pb::store::TxnGcRequest* reque
   return butil::Status();
 }
 
+class TxnGcTask : public TaskRunnable {
+ public:
+  TxnGcTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl, const dingodb::pb::store::TxnGcRequest* request,
+            dingodb::pb::store::TxnGcResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnGcTask() override = default;
+
+  std::string Type() override { return "TXN_GC"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnGcTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    pb::store::TxnResultInfo txn_result_info;
+    int64_t lock_ttl = 0;
+
+    auto status = storage_->TxnGc(ctx, request_->safe_point_ts(), txn_result_info);
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnGc request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    // response_->mutable_txn_result()->CopyFrom(txn_result_info);
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnGc request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnGcTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnGcTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnGcRequest* request_;
+  dingodb::pb::store::TxnGcResponse* response_;
+};
+
 void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
@@ -3026,7 +4109,24 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnGcTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnGcTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnGcTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -3036,6 +4136,9 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
 
   status = storage_->TxnGc(ctx, request->safe_point_ts(), txn_result_info);
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -3050,7 +4153,7 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
     return;
   }
 
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  // response->mutable_txn_result()->CopyFrom(txn_result_info);
 
   DINGO_LOG(DEBUG) << fmt::format("TxnGc request: {} response: {}", request->ShortDebugString(),
                                   response->ShortDebugString());
@@ -3089,6 +4192,80 @@ butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::TxnDeleteR
   return butil::Status();
 }
 
+class TxnDeleteRangeTask : public TaskRunnable {
+ public:
+  TxnDeleteRangeTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                     const dingodb::pb::store::TxnDeleteRangeRequest* request,
+                     dingodb::pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnDeleteRangeTask() override = default;
+
+  std::string Type() override { return "TXN_DELETE_RANGE"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "TxnDeleteRangeTask execute start, request: " << request_->ShortDebugString();
+
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // we have validate vector search request in store_service, so we can skip validate here
+    BthreadCond cond(1);
+    auto* closure = brpc::NewCallback(StoreRpcDone, &cond);
+
+    // do operation
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl_, closure, request_, response_);
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    auto status = storage_->TxnDeleteRange(ctx, request_->start_key(), request_->end_key());
+    if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnDeleteRange request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnDeleteRange request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+
+    DINGO_LOG(DEBUG) << "TxnDeleteRangeTask execute end, request: " << request_->ShortDebugString();
+
+    cond.Wait();
+
+    DINGO_LOG(DEBUG) << "TxnDeleteRangeTask execute end cond wait, request: " << request_->ShortDebugString();
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::store::TxnDeleteRangeRequest* request_;
+  dingodb::pb::store::TxnDeleteRangeResponse* response_;
+};
+
 void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controller,
                                       const pb::store::TxnDeleteRangeRequest* request,
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
@@ -3105,13 +4282,33 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnDeleteRangeTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnDeleteRangeTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnDeleteRangeTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
   status = storage_->TxnDeleteRange(ctx, request->start_key(), request->end_key());
   if (!status.ok()) {
+    // if RaftNode commit failed, we must call done->Run
+    brpc::ClosureGuard done_guard(ctx->Done());
+
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
     err->set_errmsg(status.error_str());
@@ -3162,6 +4359,75 @@ butil::Status ValidateTxnDumpRequest(const dingodb::pb::store::TxnDumpRequest* r
   return butil::Status();
 }
 
+class TxnDumpTask : public TaskRunnable {
+ public:
+  TxnDumpTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+              const dingodb::pb::store::TxnDumpRequest* request, dingodb::pb::store::TxnDumpResponse* response,
+              google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~TxnDumpTask() override = default;
+
+  std::string Type() override { return "TXN_DUMP"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    // check if region_epoch is match
+    auto epoch_ret =
+        ServiceHelper::ValidateRegionEpoch(request_->context().region_epoch(), request_->context().region_id());
+    if (!epoch_ret.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<pb::error::Errno>(epoch_ret.error_code()));
+      err->set_errmsg(epoch_ret.error_str());
+      ServiceHelper::GetStoreRegionInfo(request_->context().region_id(), *(err->mutable_store_region_info()));
+      DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request_->ShortDebugString());
+      return;
+    }
+
+    // do operations
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    ctx->SetRegionId(request_->context().region_id()).SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(request_->context().region_epoch());
+    ctx->SetIsolationLevel(request_->context().isolation_level());
+
+    pb::store::TxnResultInfo txn_result_info;
+    std::vector<pb::store::TxnWriteKey> txn_write_keys;
+    std::vector<pb::store::TxnWriteValue> txn_write_values;
+    std::vector<pb::store::TxnLockKey> txn_lock_keys;
+    std::vector<pb::store::TxnLockValue> txn_lock_values;
+    std::vector<pb::store::TxnDataKey> txn_data_keys;
+    std::vector<pb::store::TxnDataValue> txn_data_values;
+
+    auto status = storage_->TxnDump(ctx, request_->start_key(), request_->end_key(), request_->start_ts(),
+                                    request_->end_ts(), txn_result_info, txn_write_keys, txn_write_values,
+                                    txn_lock_keys, txn_lock_values, txn_data_keys, txn_data_values);
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                    Server::GetInstance()->ServerAddr(), request_->context().region_id(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("TxnDump request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    DINGO_LOG(DEBUG) << fmt::format("TxnDump request_: {} response_: {}", request_->ShortDebugString(),
+                                    response_->ShortDebugString());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  const dingodb::pb::store::TxnDumpRequest* request_;
+  dingodb::pb::store::TxnDumpResponse* response_;
+  google::protobuf::Closure* done_;
+};
+
 void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
@@ -3177,7 +4443,24 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  if (FLAGS_enable_async_store_operation) {
+    auto task = std::make_shared<TxnDumpTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->ExecuteHash(request->context().region_id(), task);
+    if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
+      DINGO_LOG(ERROR) << "TxnDumpTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("TxnDumpTask execute failed");
+      return;
+    }
+
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());

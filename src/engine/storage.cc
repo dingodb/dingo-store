@@ -44,8 +44,6 @@ namespace dingodb {
 DEFINE_uint32(storage_worker_num, 10, "storage worker num");
 DEFINE_uint32(max_prewrite_count, 1024, "max prewrite count");
 
-Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
-
 Storage::Storage(std::shared_ptr<Engine> engine)
     : engine_(engine), workers_task_count_("dingo_storage_workers_task_count") {
   for (int i = 0; i < FLAGS_storage_worker_num; ++i) {
