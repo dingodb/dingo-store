@@ -39,6 +39,11 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
+DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
+DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
+
+static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
+
 StoreServiceImpl::StoreServiceImpl() = default;
 
 butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {

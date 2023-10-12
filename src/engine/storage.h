@@ -83,7 +83,7 @@ class Storage {
   butil::Status VectorCount(int64_t region_id, const pb::common::Range& range, int64_t& count);
 
   static butil::Status VectorCalcDistance(
-      std::shared_ptr<Context> ctx, int64_t region_id, const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
+      const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
       std::vector<std::vector<float>>& distances,                            // NOLINT
       std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,    // NOLINT
       std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);  // NOLINT

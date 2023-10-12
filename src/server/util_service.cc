@@ -43,10 +43,63 @@ namespace dingodb {
 
 DECLARE_uint64(vector_max_batch_count);
 DECLARE_uint64(vector_max_request_size);
+DECLARE_bool(enable_async_vector_operation);
 
 UtilServiceImpl::UtilServiceImpl() = default;
 
 void UtilServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
+
+class VectorCalcDistanceTask : public TaskRunnable {
+ public:
+  VectorCalcDistanceTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
+                         const dingodb::pb::index::VectorCalcDistanceRequest* request,
+                         dingodb::pb::index::VectorCalcDistanceResponse* response, google::protobuf::Closure* done)
+      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
+  ~VectorCalcDistanceTask() override = default;
+
+  std::string Type() override { return "VECTOR_COUNT"; }
+
+  void Run() override {
+    brpc::ClosureGuard done_guard(done_);
+
+    std::vector<std::vector<float>> distances;
+    std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
+    std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
+
+    butil::Status status =
+        storage_->VectorCalcDistance(*request_, distances, result_op_left_vectors, result_op_right_vectors);
+
+    if (!status.ok()) {
+      auto* err = response_->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response_);
+      }
+      DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request_: {} response_: {}", request_->ShortDebugString(),
+                                      response_->ShortDebugString());
+      return;
+    }
+
+    for (const auto& distance : distances) {
+      pb::index::VectorDistance dis;
+      dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
+      response_->mutable_distances()->Add(std::move(dis));  // NOLINT
+    }
+
+    response_->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
+    response_->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
+  }
+
+ private:
+  std::shared_ptr<Storage> storage_;
+  brpc::Controller* cntl_;
+  google::protobuf::Closure* done_;
+  const dingodb::pb::index::VectorCalcDistanceRequest* request_;
+  dingodb::pb::index::VectorCalcDistanceResponse* response_;
+};
 
 void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* controller,
                                          const ::dingodb::pb::index::VectorCalcDistanceRequest* request,
@@ -68,38 +121,47 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetCfName(Constant::kStoreDataCF);
+  if (FLAGS_enable_async_vector_operation) {
+    auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
+    auto ret = storage_->Execute(0, task);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "VectorCalcDistance execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("VectorCalcDistance execute failed");
+      return;
+    } else {
+      std::vector<std::vector<float>> distances;
+      std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
+      std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
 
-  std::vector<std::vector<float>> distances;
-  std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
-  std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
+      butil::Status status =
+          storage_->VectorCalcDistance(*request, distances, result_op_left_vectors, result_op_right_vectors);
 
-  butil::Status status =
-      storage_->VectorCalcDistance(ctx, 0, *request, distances, result_op_left_vectors, result_op_right_vectors);
+      if (!status.ok()) {
+        auto* err = response->mutable_error();
+        err->set_errcode(static_cast<Errno>(status.error_code()));
+        err->set_errmsg(status.error_str());
+        if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+          err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).",
+                                      Server::GetInstance()->ServerAddr(), status.error_str()));
+          ServiceHelper::RedirectLeader(status.error_str(), response);
+        }
+        DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
+                                        response->ShortDebugString());
+        return;
+      }
 
-  if (!status.ok()) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(status.error_code()));
-    err->set_errmsg(status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).", Server::GetInstance()->ServerAddr(),
-                                  status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
+      for (const auto& distance : distances) {
+        pb::index::VectorDistance dis;
+        dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
+        response->mutable_distances()->Add(std::move(dis));  // NOLINT
+      }
+
+      response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
+      response->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
     }
-    DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
-    return;
   }
-
-  for (const auto& distance : distances) {
-    pb::index::VectorDistance dis;
-    dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
-    response->mutable_distances()->Add(std::move(dis));  // NOLINT
-  }
-
-  response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
-  response->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
 }
 
 }  // namespace dingodb
