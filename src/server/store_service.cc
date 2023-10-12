@@ -154,6 +154,9 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     auto task = std::make_shared<KvGetTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvGetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -305,6 +308,9 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     auto task = std::make_shared<KvBatchGetTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvBatchGetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -455,6 +461,9 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     auto task = std::make_shared<KvPutTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvPutTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -615,6 +624,9 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     auto task = std::make_shared<KvBatchPutTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvBatchPutTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -760,6 +772,9 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     auto task = std::make_shared<KvPutIfAbsentTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvPutIfAbsentTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -913,6 +928,9 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     auto task = std::make_shared<KvBatchPutIfAbsentTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvBatchPutIfAbsentTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1058,6 +1076,9 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     auto task = std::make_shared<KvBatchDeleteTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvBatchDeleteTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1224,6 +1245,9 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
         std::make_shared<KvDeleteRangeTask>(storage_, cntl, request, response, done_guard.release(), correction_range);
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvDeleteRangeTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1359,6 +1383,9 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
     auto task = std::make_shared<KvCompareAndSetTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvCompareAndSetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1512,6 +1539,9 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     auto task = std::make_shared<KvBatchCompareAndSetTask>(storage_, cntl, request, response, done_guard.release());
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvBatchCompareAndSetTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1688,6 +1718,9 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
                                                   correction_range);
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvScanBeginTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1843,6 +1876,9 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
     auto task = std::make_shared<KvScanContinueTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvScanContinueTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
@@ -1985,6 +2021,9 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
     auto task = std::make_shared<KvScanReleaseTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->ExecuteRR(request->context().region_id(), task);
     if (!ret) {
+      // if Execute is failed, we must call done->Run
+      brpc::ClosureGuard done_guard(done);
+
       DINGO_LOG(ERROR) << "KvScanReleaseTask execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
