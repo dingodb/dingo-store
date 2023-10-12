@@ -198,10 +198,10 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
     auto task = std::make_shared<VectorBatchQueryTask>(storage_, cntl, request, response, done_guard.release(), ctx);
     auto ret = storage_->Execute(region->Id(), task);
     if (!ret) {
-      DINGO_LOG(ERROR) << "VectorCount execute failed, request: " << request->ShortDebugString();
+      DINGO_LOG(ERROR) << "VectorBatchQuery execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
       err->set_errcode(pb::error::EINTERNAL);
-      err->set_errmsg("VectorCount execute failed");
+      err->set_errmsg("VectorBatchQuery execute failed");
       return;
     }
   } else {
@@ -561,6 +561,9 @@ class VectorAddTask : public TaskRunnable {
 
     auto status = storage_->VectorAdd(ctx, vectors);
     if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
       auto* err = response_->mutable_error();
       err->set_errcode(static_cast<Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
@@ -746,6 +749,9 @@ class VectorDeleteTask : public TaskRunnable {
 
     auto status = storage_->VectorDelete(ctx, Helper::PbRepeatedToVector(request_->ids()));
     if (!status.ok()) {
+      // if RaftNode commit failed, we must call done->Run
+      brpc::ClosureGuard done_guard(ctx->Done());
+
       auto* err = response_->mutable_error();
       err->set_errcode(static_cast<Errno>(status.error_code()));
       err->set_errmsg(status.error_str());
