@@ -123,7 +123,7 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
 
   if (FLAGS_enable_async_vector_operation) {
     auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(0, task);
+    auto ret = storage_->ExecuteRR(0, task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorCalcDistance execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();

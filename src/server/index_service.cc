@@ -196,7 +196,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
 
   if (FLAGS_enable_async_vector_operation) {
     auto task = std::make_shared<VectorBatchQueryTask>(storage_, cntl, request, response, done_guard.release(), ctx);
-    auto ret = storage_->Execute(region->Id(), task);
+    auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorBatchQuery execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -408,7 +408,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
 
   if (FLAGS_enable_async_vector_search) {
     auto task = std::make_shared<VectorSearchTask>(storage_, cntl, request, response, done_guard.release(), ctx);
-    auto ret = storage_->Execute(region->Id(), task);
+    auto ret = storage_->ExecuteHash(region->Id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorSearch execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -646,7 +646,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
 
   if (FLAGS_enable_async_vector_add) {
     auto task = std::make_shared<VectorAddTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(region->Id(), task);
+    auto ret = storage_->ExecuteHash(region->Id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorAdd execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -829,7 +829,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
 
   if (FLAGS_enable_async_vector_delete) {
     auto task = std::make_shared<VectorDeleteTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(region->Id(), task);
+    auto ret = storage_->ExecuteHash(region->Id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorDelete execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -982,7 +982,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   if (FLAGS_enable_async_vector_operation) {
     auto task = std::make_shared<VectorGetBorderIdTask>(storage_, cntl, request, response, done_guard.release(),
                                                         region->RawRange());
-    auto ret = storage_->Execute(region->Id(), task);
+    auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorGetBorderId execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1159,6 +1159,19 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   ctx->limit = request->max_scan_count();
   ctx->use_scalar_filter = request->use_scalar_filter();
   ctx->scalar_data_for_filter = request->scalar_for_filter();
+
+  if (FLAGS_enable_async_vector_operation) {
+    auto task = std::make_shared<VectorScanQueryTask>(storage_, cntl, request, response, done_guard.release(), ctx);
+    auto ret = storage_->ExecuteRR(region->Id(), task);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "VectorScanQueryTask execute failed, request: " << request->ShortDebugString();
+      auto* err = response->mutable_error();
+      err->set_errcode(pb::error::EINTERNAL);
+      err->set_errmsg("VectorScanQueryTask execute failed");
+      return;
+    }
+    return;
+  }
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage_->VectorScanQuery(ctx, vector_with_ids);
@@ -1426,7 +1439,7 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
     auto task =
         std::make_shared<VectorCountTask>(storage_, cntl, request, response, done_guard.release(),
                                           GenCountRange(region, request->vector_id_start(), request->vector_id_end()));
-    auto ret = storage_->Execute(region->Id(), task);
+    auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorCount execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();
@@ -1518,7 +1531,7 @@ void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contr
 
   if (FLAGS_enable_async_vector_operation) {
     auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->Execute(0, task);
+    auto ret = storage_->ExecuteRR(0, task);
     if (!ret) {
       DINGO_LOG(ERROR) << "VectorCalcDistance execute failed, request: " << request->ShortDebugString();
       auto* err = response->mutable_error();

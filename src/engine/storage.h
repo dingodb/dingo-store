@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_STORAGE_H_
 #define DINGODB_ENGINE_STORAGE_H_
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -96,10 +97,12 @@ class Storage {
 
   butil::Status ValidateLeader(int64_t region_id);
 
-  bool Execute(int64_t region_id, TaskRunnablePtr task);
+  bool ExecuteRR(int64_t /*region_id*/, TaskRunnablePtr task);
+  bool ExecuteHash(int64_t region_id, TaskRunnablePtr task);
 
  private:
   std::shared_ptr<Engine> engine_;
+  std::atomic<uint64_t> active_worker_id_;
   std::vector<WorkerPtr> workers_;  // this is for long-time request processing, for instance VectorBatchSearch
 };
 
