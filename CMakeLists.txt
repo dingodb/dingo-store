@@ -232,11 +232,15 @@ set(DEPEND_LIBS
     )
 
 if(LINK_TCMALLOC)
+    add_definitions(-DLINK_TCMALLOC=ON)
     message(STATUS "Build DingoDB with tcmalloc")
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+    if(BRPC_ENABLE_CPU_PROFILER)
+        set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+    else()
+        set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_MINIMAL_LIBRARIES})
+    endif()
     set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
 endif()
-
 
 if(WITH_MKL)
     find_package(MKL REQUIRED)

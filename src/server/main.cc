@@ -499,6 +499,15 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+#ifdef LINK_TCMALLOC
+  DINGO_LOG(INFO) << "LINK_TCMALLOC is ON";
+#ifdef BRPC_ENABLE_CPU_PROFILER
+  DINGO_LOG(INFO) << "BRPC_ENABLE_CPU_PROFILER is ON";
+#endif
+#else
+  DINGO_LOG(INFO) << "LINK_TCMALLOC is OFF";
+#endif
+
   // check system env
   auto ret = dingodb::DoSystemCheck();
   if (ret < 0) {
@@ -509,7 +518,7 @@ int main(int argc, char *argv[]) {
   const char *omp_num_threads = "OMP_NUM_THREADS";
   const char *omp_num_threads_value = std::getenv(omp_num_threads);
   if (omp_num_threads_value == nullptr) {
-    DINGO_LOG(ERROR) << "Environment variable " << omp_num_threads << " is not set";
+    DINGO_LOG(INFO) << "Environment variable " << omp_num_threads << " is not set";
   }
   DINGO_LOG(INFO) << "Environment variable " << omp_num_threads << " is set to " << omp_num_threads_value;
 

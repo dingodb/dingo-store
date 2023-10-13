@@ -19,6 +19,17 @@ SET(GPERFTOOLS_BINARY_DIR ${THIRD_PARTY_PATH}/build/gperftools)
 SET(GPERFTOOLS_INSTALL_DIR ${THIRD_PARTY_PATH}/install/gperftools)
 SET(GPERFTOOLS_INCLUDE_DIR "${GPERFTOOLS_INSTALL_DIR}/include" CACHE PATH "gperftools include directory." FORCE)
 SET(GPERFTOOLS_LIBRARIES "${GPERFTOOLS_INSTALL_DIR}/lib/libtcmalloc_and_profiler.a" CACHE FILEPATH "gperftools library." FORCE)
+SET(GPERFTOOLS_MINIMAL_LIBRARIES "${GPERFTOOLS_INSTALL_DIR}/lib/libtcmalloc_minimal.a" CACHE FILEPATH "gperftools library." FORCE)
+
+if(BRPC_ENABLE_CPU_PROFILER)
+    set(CONFIGURE_COMMAND_GPERF sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-libunwind --enable-cpu-profiler --enable-heap-profiler --enable--heap-checker CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g)
+    message(STATUS "gperftools found: BRPC_ENABLE_CPU_PROFILER is enabled, enable all profiler")
+    message(STATUS "${CONFIGURE_COMMAND_GPERF}")
+else()
+    set(CONFIGURE_COMMAND_GPERF sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-minimal CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g)
+    message(STATUS "gperftools found: BRPC_ENABLE_CPU_PROFILER is disable, use --enable-minimal")
+    message(STATUS "${CONFIGURE_COMMAND_GPERF}")
+endif()
 
 FILE(WRITE ${GPERFTOOLS_SOURCES_DIR}/src/copy_repo.sh
         "mkdir -p ${GPERFTOOLS_SOURCES_DIR}/src/extern_gperftools/ && cp -rf ${CMAKE_SOURCE_DIR}/contrib/gperftools/* ${GPERFTOOLS_SOURCES_DIR}/src/extern_gperftools/")
@@ -33,7 +44,8 @@ ExternalProject_Add(
         # BINARY_DIR ${GPERFTOOLS_BINARY_DIR}
         PREFIX ${GPERFTOOLS_INSTALL_DIR}
         BUILD_IN_SOURCE 1
-        CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-libunwind CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g
+        # CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-libunwind CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g
+        CONFIGURE_COMMAND ${CONFIGURE_COMMAND_GPERF}
         BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND $(MAKE) install
 )
