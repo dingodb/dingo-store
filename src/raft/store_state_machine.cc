@@ -216,7 +216,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is STANDBY state, ignore load snapshot.",
                                       region_->Id());
     if (business_meta.log_index() > applied_index_) {
-      DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is STANDBY state, kill self.", region_->Id());
+      DINGO_LOG(ERROR) << fmt::format("[raft.sm][region({})] region is STANDBY state, kill self.", region_->Id());
       return -1;
     }
     return 0;
