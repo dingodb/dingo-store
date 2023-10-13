@@ -42,8 +42,7 @@
 	url = https://github.com/facebook/zstd
 [submodule "contrib/libunwind"]
 	path = contrib/libunwind
-	url = https://github.com/dingodb/libunwind
-	branch = v1.6.2-patched
+	url = https://github.com/libunwind/libunwind
 [submodule "contrib/gperftools"]
 	path = contrib/gperftools
 	url = https://github.com/gperftools/gperftools
