@@ -1135,7 +1135,7 @@ bool Helper::RemoveFileOrDirectory(const std::string& path) {
   std::error_code ec;
   DINGO_LOG(INFO) << fmt::format("Remove file or directory, path: {}", path);
   if (!std::filesystem::remove(path, ec)) {
-    DINGO_LOG(ERROR) << fmt::format("Remove directory failed, error: {} {}", ec.value(), ec.message());
+    DINGO_LOG(ERROR) << fmt::format("Remove directory failed, path: {} error: {} {}", path, ec.value(), ec.message());
     return false;
   }
 
@@ -1147,7 +1147,8 @@ bool Helper::RemoveAllFileOrDirectory(const std::string& path) {
   DINGO_LOG(INFO) << fmt::format("Remove all file or directory, path: {}", path);
   auto num = std::filesystem::remove_all(path, ec);
   if (num == static_cast<std::uintmax_t>(-1)) {
-    DINGO_LOG(ERROR) << fmt::format("Remove all directory failed, error: {} {}", ec.value(), ec.message());
+    DINGO_LOG(ERROR) << fmt::format("Remove all directory failed, path: {} error: {} {}", path, ec.value(),
+                                    ec.message());
     return false;
   }
 
