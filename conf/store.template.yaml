@@ -25,6 +25,7 @@ log:
   path: $BASE_PATH$/log
 store:
   path: $BASE_PATH$/data/db
+  storage_worker_num: 32 # must < server.worker_thread_num
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   stats_dump_period_s: 120

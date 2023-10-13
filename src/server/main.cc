@@ -92,6 +92,10 @@ namespace bthread {
 DECLARE_int32(bthread_concurrency);
 }  // namespace bthread
 
+namespace dingodb {
+DECLARE_uint32(storage_worker_num);
+}
+
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
@@ -395,6 +399,25 @@ int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
   return num;
 }
 
+// Get storage worker thread num used by config
+int GetStorageWorkerNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("store.storage_worker_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING) << "store.storage_worker_num is not set, use dingodb::FLAGS_storage_worker_num";
+  } else {
+    dingodb::FLAGS_storage_worker_num = num;
+    DINGO_LOG(INFO) << "store.storage_worker_num is set to " << num;
+  }
+
+  if (dingodb::FLAGS_storage_worker_num > GetWorkerThreadNum(config)) {
+    DINGO_LOG(ERROR) << "store.storage_worker_num[" << dingodb::FLAGS_storage_worker_num
+                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+    return -1;
+  }
+
+  return dingodb::FLAGS_storage_worker_num;
+}
+
 // setup default conf and coor_list
 bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
   if (FLAGS_conf.empty()) {
@@ -592,7 +615,13 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "h2_settings.max_header_list_size: " << options.h2_settings.max_header_list_size;
 
   options.num_threads = GetWorkerThreadNum(config);
-  DINGO_LOG(INFO) << "num_threads: " << options.num_threads;
+  DINGO_LOG(INFO) << "bthread worker_thread_num: " << options.num_threads;
+
+  auto storage_worker_num = GetStorageWorkerNum(config);
+  if (storage_worker_num < 0) {
+    DINGO_LOG(ERROR) << "GetStorageWorkerNum failed!";
+    return -1;
+  }
 
   if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";
