@@ -24,6 +24,7 @@
 #include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
@@ -85,7 +86,14 @@ void RaftNode::Stop() {
 void RaftNode::Destroy() {
   Stop();
   // Delete file directory
-  Helper::RemoveAllFileOrDirectory(path_);
+  // Braft maybe save raft_meta file after shutdown, so retry remove.
+  for (int i = 0; i < 10; ++i) {
+    if (Helper::RemoveAllFileOrDirectory(path_)) {
+      break;
+    }
+    bthread_usleep(100000);
+  }
+
   DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] delete file directory", node_id_);
 }
 
