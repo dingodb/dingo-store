@@ -43,6 +43,7 @@ Dingo-Store is a hybrid project of C++ and Java, where C++ provides distributed 
 ### Roles of Dingo-Store(C++)
 
 ```shell
+git submodule sync --recursive
 git submodule update --init --recursive
 mkdir build && cd build
 

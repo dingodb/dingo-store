@@ -14,7 +14,7 @@
 
 INCLUDE(ExternalProject)
 
-SET(LIBUNWIND_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/libunwind)
+SET(LIBUNWIND_SOURCES_DIR ${THIRD_PARTY_PATH}/libunwind)
 SET(LIBUNWIND_BINARY_DIR ${THIRD_PARTY_PATH}/build/libunwind)
 SET(LIBUNWIND_INSTALL_DIR ${THIRD_PARTY_PATH}/install/libunwind)
 SET(LIBUNWIND_INCLUDE_DIR "${LIBUNWIND_INSTALL_DIR}/include" CACHE PATH "libunwind include directory." FORCE)
@@ -22,13 +22,18 @@ SET(LIBUNWIND_LIBRARIES "${LIBUNWIND_INSTALL_DIR}/lib/libunwind.a" CACHE FILEPAT
 SET(LIBUNWIND_GENERIC_LIBRARIES "${LIBUNWIND_INSTALL_DIR}/lib/libunwind-generic.a" CACHE FILEPATH "libunwind generic library." FORCE)
 SET(LIBUNWIND_ARCH_LIBRARIES "${LIBUNWIND_INSTALL_DIR}/lib/libunwind-x86_64.a" CACHE FILEPATH "libunwind x86_64 library." FORCE)
 
+FILE(WRITE ${LIBUNWIND_SOURCES_DIR}/src/copy_repo.sh "mkdir -p ${LIBUNWIND_SOURCES_DIR}/src/extern_libunwind/ && cp -rf ${CMAKE_SOURCE_DIR}/contrib/libunwind/* ${LIBUNWIND_SOURCES_DIR}/src/extern_libunwind/")
+
+execute_process(COMMAND sh ${LIBUNWIND_SOURCES_DIR}/src/copy_repo.sh)
+
 ExternalProject_Add(
         extern_libunwind
         ${EXTERNAL_PROJECT_LOG_ARGS}
-        SOURCE_DIR ${LIBUNWIND_SOURCES_DIR}
-        BINARY_DIR ${LIBUNWIND_BINARY_DIR}
+        SOURCE_DIR ${LIBUNWIND_SOURCES_DIR}/src/extern_libunwind/
+        # BINARY_DIR ${LIBUNWIND_BINARY_DIR}
         PREFIX ${LIBUNWIND_INSTALL_DIR}
-        CONFIGURE_COMMAND ${LIBUNWIND_SOURCES_DIR}/configure --prefix ${LIBUNWIND_INSTALL_DIR} --disable-minidebuginfo
+        BUILD_IN_SOURCE 1
+        CONFIGURE_COMMAND autoreconf -i COMMAND ./configure --prefix ${LIBUNWIND_INSTALL_DIR} --disable-minidebuginfo --disable-shared --enable-static --disable-msabi-support
         BUILD_COMMAND $(MAKE)
         INSTALL_COMMAND $(MAKE) install
 )
