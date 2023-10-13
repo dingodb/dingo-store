@@ -28,6 +28,7 @@ execute_process(COMMAND sh ${GPERFTOOLS_SOURCES_DIR}/src/copy_repo.sh)
 ExternalProject_Add(
         extern_gperftools
         ${EXTERNAL_PROJECT_LOG_ARGS}
+        DEPENDS libunwind
         SOURCE_DIR ${GPERFTOOLS_SOURCES_DIR}/src/extern_gperftools/
         # BINARY_DIR ${GPERFTOOLS_BINARY_DIR}
         PREFIX ${GPERFTOOLS_INSTALL_DIR}

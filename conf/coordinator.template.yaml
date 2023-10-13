@@ -5,8 +5,8 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
-  # worker_thread_num: 48 # must >4, worker_thread_num priority worker_thread_ratio
-  worker_thread_ratio: 1.0 # cpu core * ratio
+  worker_thread_num: 64 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 1.0 # cpu core * ratio
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
   push_interval_s: 1
@@ -26,7 +26,7 @@ raft:
   election_timeout_s: 2
   snapshot_policy: checkpoint # scan or checkpoint
   snapshot_interval_s: 300
-  segmentlog_max_segment_size: 33554432 # 32M
+  segmentlog_max_segment_size: 33554432 # 32MB
 log:
   level: INFO
   path: $BASE_PATH$/log

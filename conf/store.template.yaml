@@ -7,10 +7,10 @@ server:
   port: $SERVER_PORT$
   heartbeat_interval_s: 10
   metrics_collect_interval_s: 300
-  # worker_thread_num: 10 # must >4, worker_thread_num priority worker_thread_ratio
-  worker_thread_ratio: 1 # cpu core * ratio
+  worker_thread_num: 64 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 1 # cpu core * ratio
 region:
-  region_max_size: 134217728 # 128M
+  region_max_size: 268435456 # 256MB
   enable_auto_split: true
 raft:
   host: $RAFT_HOST$
@@ -18,8 +18,8 @@ raft:
   path: $BASE_PATH$/data/raft_data
   log_path: $BASE_PATH$/data/raft_log
   election_timeout_s: 6
-  snapshot_interval_s: 600
-  segmentlog_max_segment_size: 33554432 # 32M
+  snapshot_interval_s: 1800
+  segmentlog_max_segment_size: 33554432 # 32MB
 log:
   level: INFO
   path: $BASE_PATH$/log
