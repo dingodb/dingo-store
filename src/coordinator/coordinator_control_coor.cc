@@ -1164,7 +1164,12 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
     store_ids.push_back(peer.store_id());
   }
 
-  split_from_region.mutable_definition()->set_name(split_from_region.definition().name() + "_split");
+  std::string new_region_name = split_from_region.definition().name();
+  auto pos = split_from_region.definition().name().rfind('[');
+  if (pos != std::string::npos) {
+    new_region_name = split_from_region.definition().name().substr(0, pos);
+  }
+  split_from_region.mutable_definition()->set_name(new_region_name);
 
   std::string max_start_key = Helper::GenMaxStartKey();
 
@@ -1660,7 +1665,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
   // create region definition begin
   auto* region_definition = new_region.mutable_definition();
   region_definition->set_id(create_region_id);
-  region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
+  region_definition->set_name(region_name + std::string("[") + std::to_string(create_region_id) + std::string("]"));
   region_definition->mutable_epoch()->set_conf_version(1);
   region_definition->mutable_epoch()->set_version(1);
   region_definition->set_schema_id(schema_id);
@@ -1807,7 +1812,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   // create region definition begin
   auto* region_definition = new_region.mutable_definition();
   region_definition->set_id(create_region_id);
-  region_definition->set_name(region_name + std::string("_") + std::to_string(create_region_id));
+  region_definition->set_name(region_name + std::string("[") + std::to_string(create_region_id) + std::string("]"));
   region_definition->mutable_epoch()->set_conf_version(1);
   region_definition->mutable_epoch()->set_version(1);
   region_definition->set_schema_id(schema_id);
