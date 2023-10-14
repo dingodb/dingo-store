@@ -38,7 +38,7 @@
 DEFINE_bool(log_each_request, false, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_uint32(thread_num, 1, "Number of threads sending requests");
-DEFINE_uint64(timeout_ms, 500, "Timeout for each request");
+DEFINE_uint64(timeout_ms, 5000, "Timeout for each request");
 DEFINE_uint32(req_num, 1, "Number of requests");
 DEFINE_string(method, "", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");

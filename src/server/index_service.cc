@@ -1536,9 +1536,7 @@ class VectorCalcDistanceTask : public TaskRunnable {
     }
 
     for (const auto& distance : distances) {
-      pb::index::VectorDistance dis;
-      dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
-      response_->mutable_distances()->Add(std::move(dis));  // NOLINT
+      response_->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
     }
 
     response_->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
@@ -1561,6 +1559,16 @@ void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contr
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "VectorCalcDistance request: " << request->ShortDebugString();
+
+  if (request->op_left_vectors_size() * request->op_right_vectors_size() > FLAGS_vector_max_batch_count ||
+      request->op_left_vectors_size() == 0 || request->op_right_vectors_size() == 0) {
+    auto* err = response->mutable_error();
+    err->set_errcode(static_cast<Errno>(pb::error::EILLEGAL_PARAMTETERS));
+    err->set_errmsg("op_left_vectors_size or op_right_vectors_size exceed max limit");
+    DINGO_LOG(ERROR) << fmt::format("VectorCalcDistance request: {} response: {}", request->ShortDebugString(),
+                                    response->ShortDebugString());
+    return;
+  }
 
   if (FLAGS_enable_async_vector_operation) {
     auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
@@ -1598,9 +1606,7 @@ void IndexServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contr
     }
 
     for (const auto& distance : distances) {
-      pb::index::VectorDistance dis;
-      dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
-      response->mutable_distances()->Add(std::move(dis));  // NOLINT
+      response->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
     }
 
     response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());

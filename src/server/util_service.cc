@@ -84,9 +84,7 @@ class VectorCalcDistanceTask : public TaskRunnable {
     }
 
     for (const auto& distance : distances) {
-      pb::index::VectorDistance dis;
-      dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
-      response_->mutable_distances()->Add(std::move(dis));  // NOLINT
+      response_->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
     }
 
     response_->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
@@ -110,9 +108,8 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
 
   DINGO_LOG(DEBUG) << "VectorCalcDistance request: " << request->ShortDebugString();
 
-  if (request->op_left_vectors_size() > FLAGS_vector_max_batch_count ||
-      request->op_right_vectors_size() > FLAGS_vector_max_batch_count || request->op_left_vectors_size() == 0 ||
-      request->op_right_vectors_size() == 0) {
+  if (request->op_left_vectors_size() * request->op_right_vectors_size() > FLAGS_vector_max_batch_count ||
+      request->op_left_vectors_size() == 0 || request->op_right_vectors_size() == 0) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(pb::error::EILLEGAL_PARAMTETERS));
     err->set_errmsg("op_left_vectors_size or op_right_vectors_size exceed max limit");
@@ -133,37 +130,35 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
       err->set_errcode(pb::error::EINTERNAL);
       err->set_errmsg("VectorCalcDistance execute failed");
       return;
-    } else {
-      std::vector<std::vector<float>> distances;
-      std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
-      std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
-
-      butil::Status status =
-          storage_->VectorCalcDistance(*request, distances, result_op_left_vectors, result_op_right_vectors);
-
-      if (!status.ok()) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(status.error_code()));
-        err->set_errmsg(status.error_str());
-        if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-          err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).",
-                                      Server::GetInstance()->ServerAddr(), status.error_str()));
-          ServiceHelper::RedirectLeader(status.error_str(), response);
-        }
-        DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
-                                        response->ShortDebugString());
-        return;
-      }
-
-      for (const auto& distance : distances) {
-        pb::index::VectorDistance dis;
-        dis.mutable_internal_distances()->Add(distance.begin(), distance.end());
-        response->mutable_distances()->Add(std::move(dis));  // NOLINT
-      }
-
-      response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
-      response->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
     }
+  } else {
+    std::vector<std::vector<float>> distances;
+    std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
+    std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
+
+    butil::Status status =
+        storage_->VectorCalcDistance(*request, distances, result_op_left_vectors, result_op_right_vectors);
+
+    if (!status.ok()) {
+      auto* err = response->mutable_error();
+      err->set_errcode(static_cast<Errno>(status.error_code()));
+      err->set_errmsg(status.error_str());
+      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+        err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).", Server::GetInstance()->ServerAddr(),
+                                    status.error_str()));
+        ServiceHelper::RedirectLeader(status.error_str(), response);
+      }
+      DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
+                                      response->ShortDebugString());
+      return;
+    }
+
+    for (const auto& distance : distances) {
+      response->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
+    }
+
+    response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
+    response->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
   }
 }
 

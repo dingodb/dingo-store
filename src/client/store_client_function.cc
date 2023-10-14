@@ -1646,7 +1646,11 @@ void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, con
 
   InteractionManager::GetInstance().SendRequestWithoutContext("UtilService", "VectorCalcDistance", request, response);
 
-  DINGO_LOG(INFO) << "SendVectorCalcDistance response: " << response.DebugString();
+  for (const auto& distance : response.distances()) {
+    DINGO_LOG(INFO) << "distance: " << distance.ShortDebugString();
+  }
+  DINGO_LOG(INFO) << "SendVectorCalcDistance error: " << response.error().ShortDebugString();
+  DINGO_LOG(INFO) << "distance size: " << response.distances_size();
 }
 
 int64_t SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id) {
