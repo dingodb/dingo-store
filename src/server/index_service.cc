@@ -93,6 +93,7 @@ class VectorBatchQueryTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_QUERY"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -305,6 +306,7 @@ class VectorSearchTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_SEARCH"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -551,6 +553,7 @@ class VectorAddTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_ADD"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -747,6 +750,7 @@ class VectorDeleteTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_DELETE"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -908,6 +912,7 @@ class VectorGetBorderIdTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_GETBORDER"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -1079,6 +1084,7 @@ class VectorScanQueryTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_SCAN"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -1375,6 +1381,7 @@ class VectorCountTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_COUNT"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     // check if region_epoch is match
@@ -1512,6 +1519,7 @@ class VectorCalcDistanceTask : public TaskRunnable {
   std::string Type() override { return "VECTOR_CALC"; }
 
   void Run() override {
+    ON_SCOPE_EXIT([this]() { storage_->DecTaskCount(); });
     brpc::ClosureGuard done_guard(done_);
 
     std::vector<std::vector<float>> distances;
