@@ -33,6 +33,8 @@
 #include "raft/store_state_machine.h"
 #include "server/server.h"
 
+DEFINE_uint32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
+
 namespace dingodb {
 
 RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
@@ -85,6 +87,12 @@ void RaftNode::Stop() {
 
 void RaftNode::Destroy() {
   Stop();
+
+  // Wait braft node finish.
+  if (FLAGS_node_destroy_wait_time_ms > 0) {
+    bthread_usleep(FLAGS_node_destroy_wait_time_ms * 1000);
+  }
+
   // Delete file directory
   // Braft maybe save raft_meta file after shutdown, so retry remove.
   for (int i = 0; i < 10; ++i) {
