@@ -36,7 +36,8 @@ namespace dingodb {
 
 DEFINE_uint32(storage_worker_num, 10, "storage worker num");
 
-Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {
+Storage::Storage(std::shared_ptr<Engine> engine)
+    : engine_(engine), workers_task_count_("dingo_storage_workers_task_count") {
   for (int i = 0; i < FLAGS_storage_worker_num; ++i) {
     auto worker = std::make_shared<Worker>();
     if (!worker->Init()) {
@@ -470,11 +471,25 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
 }
 
 bool Storage::ExecuteRR(int64_t /*region_id*/, TaskRunnablePtr task) {
-  return workers_[active_worker_id_.fetch_add(1) % FLAGS_storage_worker_num]->Execute(task);
+  auto ret = workers_[active_worker_id_.fetch_add(1) % FLAGS_storage_worker_num]->Execute(task);
+  if (ret) {
+    IncTaskCount();
+  }
+  return ret;
 }
 
 bool Storage::ExecuteHash(int64_t region_id, TaskRunnablePtr task) {
-  return workers_[region_id % FLAGS_storage_worker_num]->Execute(task);
+  auto ret = workers_[region_id % FLAGS_storage_worker_num]->Execute(task);
+  if (ret) {
+    IncTaskCount();
+  }
+  return ret;
 }
+
+// increase task count
+void Storage::IncTaskCount() { this->workers_task_count_ << 1; }
+
+// decrease task count
+void Storage::DecTaskCount() { this->workers_task_count_ << -1; }
 
 }  // namespace dingodb
