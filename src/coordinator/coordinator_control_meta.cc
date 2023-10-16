@@ -723,7 +723,7 @@ butil::Status CoordinatorControl::DropTable(int64_t schema_id, int64_t table_id,
     // table_to_delete->set_schema_id(schema_id);
 
     auto* table_to_delete_table = table_to_delete->mutable_table();
-    *table_to_delete_table = table_internal;
+    table_to_delete_table->set_id(table_id);
   }
 
   // add deleted_table
@@ -1548,7 +1548,7 @@ butil::Status CoordinatorControl::DropIndex(int64_t schema_id, int64_t index_id,
     // index_to_delete->set_schema_id(schema_id);
 
     auto* index_to_delete_index = index_to_delete->mutable_table();
-    *index_to_delete_index = table_internal;
+    index_to_delete_index->set_id(index_id);
   }
 
   // addd deleted_index
@@ -2865,6 +2865,7 @@ butil::Status CoordinatorControl::GetDeletedIndex(
 butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
   pb::coordinator_internal::MetaIncrement meta_increment;
 
+  uint32_t i = 0;
   if (table_id == 0) {
     butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
     temp_table_map.init(1000);
@@ -2878,7 +2879,17 @@ butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
       delete_table->set_id(deleted_table.first);
       delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* delete_table_internal = delete_table->mutable_table();
-      *delete_table_internal = deleted_table.second;
+      delete_table_internal->set_id(deleted_table.first);
+
+      if (i++ > 1000) {
+        auto ret1 = SubmitMetaIncrementSync(meta_increment);
+        if (!ret1.ok()) {
+          DINGO_LOG(ERROR) << "submit meta increment failed, table_id: " << table_id << ", error: " << ret1;
+          return ret1;
+        }
+        i = 0;
+        meta_increment.Clear();
+      }
     }
   } else {
     pb::coordinator_internal::TableInternal table_internal;
@@ -2891,7 +2902,17 @@ butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
     delete_table->set_id(table_id);
     delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
     auto* delete_table_internal = delete_table->mutable_table();
-    *delete_table_internal = table_internal;
+    delete_table_internal->set_id(table_id);
+
+    if (i++ > 1000) {
+      auto ret1 = SubmitMetaIncrementSync(meta_increment);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "submit meta increment failed, table_id: " << table_id << ", error: " << ret1;
+        return ret1;
+      }
+      i = 0;
+      meta_increment.Clear();
+    }
   }
 
   if (meta_increment.ByteSizeLong() > 0) {
@@ -2903,6 +2924,7 @@ butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
 
 butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
   pb::coordinator_internal::MetaIncrement meta_increment;
+  uint32_t i = 0;
 
   if (index_id == 0) {
     butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
@@ -2917,7 +2939,17 @@ butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
       delete_table->set_id(deleted_table.first);
       delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* delete_table_internal = delete_table->mutable_table();
-      *delete_table_internal = deleted_table.second;
+      delete_table_internal->set_id(deleted_table.first);
+
+      if (i++ > 1000) {
+        auto ret1 = SubmitMetaIncrementSync(meta_increment);
+        if (!ret1.ok()) {
+          DINGO_LOG(ERROR) << "submit meta increment failed, index_id: " << index_id << ", error: " << ret1;
+          return ret1;
+        }
+        i = 0;
+        meta_increment.Clear();
+      }
     }
   } else {
     pb::coordinator_internal::TableInternal table_internal;
@@ -2930,7 +2962,17 @@ butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
     delete_table->set_id(index_id);
     delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
     auto* delete_table_internal = delete_table->mutable_table();
-    *delete_table_internal = table_internal;
+    delete_table_internal->set_id(index_id);
+
+    if (i++ > 1000) {
+      auto ret1 = SubmitMetaIncrementSync(meta_increment);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "submit meta increment failed, index_id: " << index_id << ", error: " << ret1;
+        return ret1;
+      }
+      i = 0;
+      meta_increment.Clear();
+    }
   }
 
   if (meta_increment.ByteSizeLong() > 0) {

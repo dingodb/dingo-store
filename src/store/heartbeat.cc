@@ -45,7 +45,7 @@ namespace dingodb {
 DEFINE_int32(executor_heartbeat_timeout, 30, "executor heartbeat timeout in seconds");
 DEFINE_int32(store_heartbeat_timeout, 30, "store heartbeat timeout in seconds");
 DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds");
-DEFINE_int32(region_delete_after_deleted_time, 604800, "delete region after deleted time in seconds");
+DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after deleted time in seconds");
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
                                        std::vector<int64_t> region_ids, bool is_update_epoch_version) {

@@ -39,6 +39,7 @@ DECLARE_uint32(max_hnsw_nlinks_of_region);
 DECLARE_uint64(max_partition_num_of_table);
 
 DEFINE_uint32(max_check_region_state_count, 600, "max check region state count");
+DEFINE_uint32(max_table_definition_count_in_create_tables, 100, "max table definition count in create tables");
 DEFINE_bool(async_create_table, false, "async create table");
 
 static void MetaServiceDone(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }
@@ -1423,6 +1424,14 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
     DINGO_LOG(ERROR) << request->has_schema_id() << " | " << request->table_definition_with_ids_size();
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
     response->mutable_error()->set_errmsg("schema id or definition size.");
+    return;
+  }
+
+  if (request->table_definition_with_ids_size() > FLAGS_max_table_definition_count_in_create_tables) {
+    DINGO_LOG(ERROR) << "table_definition_with_ids_size is too big, size=" << request->table_definition_with_ids_size()
+                     << ", max=" << FLAGS_max_table_definition_count_in_create_tables;
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("table_definition_with_ids_size is too big");
     return;
   }
 
