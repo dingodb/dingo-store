@@ -55,8 +55,8 @@ DECLARE_int32(region_delete_after_deleted_time);
 
 DECLARE_bool(ip2hostname);
 
-DEFINE_uint32(table_delete_after_deleted_time, 604800, "delete table after deleted time in seconds");
-DEFINE_uint32(index_delete_after_deleted_time, 604800, "delete index after deleted time in seconds");
+DEFINE_uint32(table_delete_after_deleted_time, 86400, "delete table after deleted time in seconds");
+DEFINE_uint32(index_delete_after_deleted_time, 86400, "delete index after deleted time in seconds");
 
 DEFINE_uint32(vector_regon_range_key_min_len, 8, "vector regon range key min len");
 DEFINE_uint32(vector_regon_range_key_max_len, 16, "vector regon range key max len");
@@ -840,6 +840,7 @@ butil::Status CoordinatorControl::AddDeletedRegionMap(int64_t region_id, bool fo
 }
 
 butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
+  uint32_t i = 0;
   if (region_id == 0) {
     butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> deleted_regions;
     deleted_regions.init(30000);
@@ -858,9 +859,22 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
 
       auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
       deleted_region_increment_region->set_id(element.second.id());
+
+      if (i++ > 1000) {
+        auto ret1 = SubmitMetaIncrementSync(meta_increment);
+        if (!ret1.ok()) {
+          DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id
+                           << " SubmitMetaIncrementSync failed, ret: " << ret1;
+          return ret1;
+        }
+        i = 0;
+        meta_increment.Clear();
+      }
     }
 
-    SubmitMetaIncrementSync(meta_increment);
+    if (meta_increment.ByteSizeLong() > 0) {
+      SubmitMetaIncrementSync(meta_increment);
+    }
 
     return butil::Status::OK();
   } else {
@@ -879,7 +893,25 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
     auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
     deleted_region_increment_region->set_id(region_id);
 
-    SubmitMetaIncrementSync(meta_increment);
+    if (i++ > 1000) {
+      auto ret1 = SubmitMetaIncrementSync(meta_increment);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id
+                         << " SubmitMetaIncrementSync failed, ret: " << ret1;
+        return ret1;
+      }
+      i = 0;
+      meta_increment.Clear();
+    }
+
+    if (meta_increment.ByteSizeLong() > 0) {
+      auto ret1 = SubmitMetaIncrementSync(meta_increment);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id
+                         << " SubmitMetaIncrementSync failed, ret: " << ret1;
+        return ret1;
+      }
+    }
 
     return butil::Status::OK();
   }
