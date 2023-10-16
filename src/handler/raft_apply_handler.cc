@@ -854,8 +854,10 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
                                        vector_with_ids.size(), diff);
 
         if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL) {
-          DINGO_LOG(INFO) << fmt::format("vector index {} is full", vector_index_id);
+          DINGO_LOG(WARNING) << fmt::format("vector index {} is full", vector_index_id);
           status = butil::Status(pb::error::EVECTOR_INDEX_FULL, "Vector index %lu is full", vector_index_id);
+        } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
+          DINGO_LOG(WARNING) << fmt::format("vector index {} is not found.", vector_index_id);
         } else if (!ret.ok()) {
           DINGO_LOG(ERROR) << fmt::format("vector index {} upsert failed, vector_count={}, err={}", vector_index_id,
                                           vector_with_ids.size(), ret.error_str());
@@ -1018,6 +1020,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
         if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
           DINGO_LOG(ERROR) << fmt::format("vector not found at vector index {}, vector_count={}, err={}",
                                           vector_index_id, delete_ids.size(), ret.error_str());
+        } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
+          DINGO_LOG(WARNING) << fmt::format("vector index {} is not found.", vector_index_id);
         } else if (!ret.ok()) {
           DINGO_LOG(ERROR) << fmt::format("vector index {} delete failed, vector_count={}, err={}", vector_index_id,
                                           delete_ids.size(), ret.error_str());
