@@ -33,6 +33,7 @@ DECLARE_string(id);
 DECLARE_string(name);
 DECLARE_uint64(schema_id);
 DECLARE_uint64(table_id);
+DECLARE_uint64(index_id);
 DECLARE_uint64(replica);
 DECLARE_uint32(max_elements);
 DECLARE_uint32(dimension);
@@ -44,6 +45,9 @@ DECLARE_bool(auto_split);
 DECLARE_uint32(part_count);
 DECLARE_uint32(ncentroids);
 DECLARE_string(metrics_type);
+DECLARE_int64(def_version);
+
+DEFINE_bool(is_updating_index, false, "is index");
 
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
@@ -1168,4 +1172,251 @@ void SendCleanDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   auto status = coordinator_interaction->SendRequest("CleanDeletedIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendUpdateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  bool with_increment = false;
+
+  dingodb::pb::meta::UpdateTablesRequest request;
+  dingodb::pb::meta::UpdateTablesResponse response;
+
+  if (FLAGS_table_id == 0) {
+    DINGO_LOG(WARNING) << "table_id is empty";
+    return;
+  }
+
+  if (FLAGS_def_version == 0) {
+    DINGO_LOG(WARNING) << "version is empty";
+    return;
+  }
+
+  if (FLAGS_part_count == 0) {
+    FLAGS_part_count = 1;
+  }
+  uint32_t part_count = FLAGS_part_count;
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = 0;
+    int ret = GetCreateTableId(coordinator_interaction, new_part_id);
+    if (ret != 0) {
+      DINGO_LOG(WARNING) << "GetCreateTableId failed";
+      return;
+    }
+    part_ids.push_back(new_part_id);
+  }
+
+  auto* definition_with_id = request.mutable_table_definition_with_id();
+  auto* table_id = definition_with_id->mutable_table_id();
+  if (!FLAGS_is_updating_index) {
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  } else {
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  }
+  table_id->set_entity_id(FLAGS_table_id);
+
+  // string name = 1;
+  auto* table_definition = definition_with_id->mutable_table_definition();
+  table_definition->set_name(FLAGS_name);
+
+  if (FLAGS_replica > 0) {
+    table_definition->set_replica(FLAGS_replica);
+  }
+
+  // repeated ColumnDefinition columns = 2;
+  for (int i = 0; i < 3; i++) {
+    auto* column = table_definition->add_columns();
+    std::string column_name("test_columen_");
+    column_name.append(std::to_string(i));
+    column->set_name(column_name);
+    column->set_sql_type("BIGINT");
+    column->set_element_type("BIGINT");
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(7);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+
+    if (with_increment && i == 0) {
+      column->set_is_auto_increment(true);
+    }
+  }
+  if (with_increment) {
+    table_definition->set_auto_increment(100);
+  }
+
+  // map<string, Index> indexes = 3;
+  // uint32 version = 4;
+  table_definition->set_version(FLAGS_def_version);
+  // uint64 ttl = 5;
+  table_definition->set_ttl(0);
+  // PartitionRule table_partition = 6;
+  // Engine engine = 7;
+  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  // map<string, string> properties = 8;
+  auto* prop = table_definition->mutable_properties();
+  (*prop)["test property"] = "test_property_value";
+
+  // add partition_rule
+  // repeated string columns = 1;
+  // PartitionStrategy strategy = 2;
+  auto* partition_rule = table_definition->mutable_table_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(FLAGS_table_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
+  }
+
+  auto status = coordinator_interaction->SendRequest("UpdateTables", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendAddIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  bool with_increment = false;
+
+  dingodb::pb::meta::AddIndexOnTableRequest request;
+  dingodb::pb::meta::AddIndexOnTableResponse response;
+
+  if (FLAGS_table_id == 0) {
+    DINGO_LOG(WARNING) << "table_id is empty";
+    return;
+  }
+
+  if (FLAGS_index_id == 0) {
+    DINGO_LOG(WARNING) << "index_id is empty";
+    return;
+  }
+
+  if (FLAGS_def_version == 0) {
+    DINGO_LOG(WARNING) << "version is empty";
+    return;
+  }
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  if (FLAGS_part_count == 0) {
+    FLAGS_part_count = 1;
+  }
+  uint32_t part_count = FLAGS_part_count;
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = 0;
+    int ret = GetCreateTableId(coordinator_interaction, new_part_id);
+    if (ret != 0) {
+      DINGO_LOG(WARNING) << "GetCreateTableId failed";
+      return;
+    }
+    part_ids.push_back(new_part_id);
+  }
+
+  request.mutable_table_id()->set_entity_id(FLAGS_table_id);
+  request.mutable_table_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+
+  auto* definition_with_id = request.mutable_table_definition_with_id();
+  auto* index_id = definition_with_id->mutable_table_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_entity_id(FLAGS_index_id);
+
+  // string name = 1;
+  auto* table_definition = definition_with_id->mutable_table_definition();
+  table_definition->set_name(FLAGS_name);
+
+  if (FLAGS_replica > 0) {
+    table_definition->set_replica(FLAGS_replica);
+  }
+
+  // repeated ColumnDefinition columns = 2;
+  for (int i = 0; i < 3; i++) {
+    auto* column = table_definition->add_columns();
+    std::string column_name("test_columen_");
+    column_name.append(std::to_string(i));
+    column->set_name(column_name);
+    column->set_sql_type("BIGINT");
+    column->set_element_type("BIGINT");
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(7);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+
+    if (with_increment && i == 0) {
+      column->set_is_auto_increment(true);
+    }
+  }
+  if (with_increment) {
+    table_definition->set_auto_increment(100);
+  }
+
+  // map<string, Index> indexes = 3;
+  // uint32 version = 4;
+  table_definition->set_version(FLAGS_def_version);
+  // uint64 ttl = 5;
+  table_definition->set_ttl(0);
+  // PartitionRule table_partition = 6;
+  // Engine engine = 7;
+  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  // map<string, string> properties = 8;
+  auto* prop = table_definition->mutable_properties();
+  (*prop)["test property"] = "test_property_value";
+
+  // add index_parameter
+  auto* index_parameter = table_definition->mutable_index_parameter();
+  index_parameter->set_index_type(::dingodb::pb::common::IndexType::INDEX_TYPE_SCALAR);
+  index_parameter->mutable_scalar_index_parameter()->set_scalar_index_type(
+      ::dingodb::pb::common::ScalarIndexType::SCALAR_INDEX_TYPE_LSM);
+
+  // add partition_rule
+  // repeated string columns = 1;
+  // PartitionStrategy strategy = 2;
+  auto* partition_rule = table_definition->mutable_table_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(FLAGS_table_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
+  }
+
+  auto status = coordinator_interaction->SendRequest("AddIndexOnTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
+}
+
+void SendDropIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  bool with_increment = false;
+
+  dingodb::pb::meta::DropIndexOnTableRequest request;
+  dingodb::pb::meta::DropIndexOnTableResponse response;
+
+  if (FLAGS_table_id == 0) {
+    DINGO_LOG(WARNING) << "table_id is empty";
+    return;
+  }
+
+  if (FLAGS_index_id == 0) {
+    DINGO_LOG(WARNING) << "index_id is empty";
+    return;
+  }
+
+  request.mutable_table_id()->set_entity_id(FLAGS_table_id);
+  request.mutable_table_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  request.mutable_index_id()->set_entity_id(FLAGS_index_id);
+  request.mutable_index_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+
+  auto status = coordinator_interaction->SendRequest("DropIndexOnTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG_INFO << response.DebugString();
 }
