@@ -1720,6 +1720,165 @@ void MetaServiceImpl::DropTables(google::protobuf::RpcController *controller,
   DINGO_LOG(INFO) << "DropTables Success.";
 }
 
+void MetaServiceImpl::UpdateTables(google::protobuf::RpcController *controller,
+                                   const pb::meta::UpdateTablesRequest *request,
+                                   pb::meta::UpdateTablesResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  int64_t start_ms = butil::gettimeofday_ms();
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  if (!request->has_table_definition_with_id() || !request->table_definition_with_id().has_table_id()) {
+    DINGO_LOG(ERROR) << "table_definition_with_id or table_id not found.";
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("table_definition_with_id or table_id not found.");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  // process table type
+  const auto &table_id = request->table_definition_with_id().table_id();
+  if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
+    auto table_id_to_update = table_id.entity_id();
+    const auto &definition = request->table_definition_with_id().table_definition();
+
+    auto ret = coordinator_control_->UpdateTableDefinition(table_id_to_update, false, definition, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "UpdateTableDefinition failed in meta_service, error code=" << ret;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  } else if (table_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+    auto index_id_to_update = table_id.entity_id();
+    const auto &definition = request->table_definition_with_id().table_definition();
+
+    auto ret = coordinator_control_->UpdateTableDefinition(index_id_to_update, true, definition, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "UpdateIndexDefinition failed in meta_service, error code=" << ret;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  } else {
+    DINGO_LOG(ERROR) << "entity type is illegal, entity_type=" << table_id.entity_type();
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("entity type is illegal");
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::UpdateTablesRequest, pb::meta::UpdateTablesResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::UpdateTablesRequest, pb::meta::UpdateTablesResponse>(request, response,
+                                                                                            done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void MetaServiceImpl::AddIndexOnTable(google::protobuf::RpcController *controller,
+                                      const pb::meta::AddIndexOnTableRequest *request,
+                                      pb::meta::AddIndexOnTableResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  int64_t start_ms = butil::gettimeofday_ms();
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  if (!request->has_table_id() || !request->has_table_definition_with_id() || request->table_id().entity_id() == 0 ||
+      request->table_definition_with_id().table_id().entity_id() == 0) {
+    DINGO_LOG(ERROR) << "table_id, index_id or index_definition not found.";
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("table_id, index_id or index_definition not found.");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret = coordinator_control_->AddIndexOnTable(
+      request->table_id().entity_id(), request->table_definition_with_id().table_id().entity_id(),
+      request->table_definition_with_id().table_definition(), meta_increment);
+
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "AddIndexOnTable failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::AddIndexOnTableRequest, pb::meta::AddIndexOnTableResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::AddIndexOnTableRequest, pb::meta::AddIndexOnTableResponse>(request, response,
+                                                                                                  done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
+void MetaServiceImpl::DropIndexOnTable(google::protobuf::RpcController *controller,
+                                       const pb::meta::DropIndexOnTableRequest *request,
+                                       pb::meta::DropIndexOnTableResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  int64_t start_ms = butil::gettimeofday_ms();
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  if (request->table_id().entity_id() == 0 || request->index_id().entity_id() == 0) {
+    DINGO_LOG(ERROR) << "table_id or index_id not found.";
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("table_id or index_id not found.");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret = coordinator_control_->DropIndexOnTable(request->table_id().entity_id(), request->index_id().entity_id(),
+                                                    meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "DropIndexOnTable failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::DropIndexOnTableRequest, pb::meta::DropIndexOnTableResponse> *meta_put_closure =
+      new CoordinatorClosure<pb::meta::DropIndexOnTableRequest, pb::meta::DropIndexOnTableResponse>(
+          request, response, done_guard.release());
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
+
+  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+
+  // this is a async operation will be block by closure
+  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+}
+
 void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controller,
                                       const ::dingodb::pb::meta::SwitchAutoSplitRequest *request,
                                       pb::meta::SwitchAutoSplitResponse *response, google::protobuf::Closure *done) {

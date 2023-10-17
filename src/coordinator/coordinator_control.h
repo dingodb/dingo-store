@@ -298,6 +298,16 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateTable(int64_t schema_id, const pb::meta::TableDefinition &table_definition, int64_t &new_table_id,
                             std::vector<int64_t> &region_ids, pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  butil::Status UpdateTableDefinition(int64_t table_id, bool is_index,
+                                      const pb::meta::TableDefinition &table_definition,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status AddIndexOnTable(int64_t table_id, int64_t index_id, const pb::meta::TableDefinition &table_definition,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status DropIndexOnTable(int64_t table_id, int64_t index_id,
+                                 pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create index_id
   // in: schema_id
   // out: new index_id

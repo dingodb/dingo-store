@@ -152,6 +152,8 @@ DEFINE_string(db_path, "", "rocksdb path");
 
 DEFINE_bool(show_vector, false, "show vector data");
 DEFINE_string(metrics_type, "L2", "metrics type");
+DEFINE_uint64(safe_point, 0, "gc safe point");
+DEFINE_int64(def_version, 0, "version");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -716,6 +718,12 @@ int CoordinatorSender() {
     SendGenerateTableIds(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateTables") {
     SendCreateTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "UpdateTables") {
+    SendUpdateTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "AddIndexOnTable") {
+    SendAddIndexOnTable(coordinator_interaction_meta);
+  } else if (FLAGS_method == "DropIndexOnTable") {
+    SendDropIndexOnTable(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetTables") {
     SendGetTables(coordinator_interaction_meta);
   } else if (FLAGS_method == "DropTables") {

@@ -583,6 +583,32 @@ message CreateTablesResponse {
   repeated DingoCommonId table_ids = 2;
 }
 
+message UpdateTablesRequest {
+  TableDefinitionWithId table_definition_with_id = 2;
+}
+
+message UpdateTablesResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message AddIndexOnTableRequest {
+  DingoCommonId table_id = 1;                          // this is the table_id to add index
+  TableDefinitionWithId table_definition_with_id = 2;  // this is the index to be added
+}
+
+message AddIndexOnTableResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message DropIndexOnTableRequest {
+  DingoCommonId table_id = 1;  // this is the table_id to drop index
+  DingoCommonId index_id = 2;  // this is the index_id to be dropped
+}
+
+message DropIndexOnTableResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 // get assigned table definition, including vector index and scalar index
 message GetTablesRequest {
   DingoCommonId table_id = 1;
@@ -747,6 +773,13 @@ service MetaService {
   // in: schema_id List<TableDefinitionWithId>
   // out: List<DingoCommonId>
   rpc CreateTables(CreateTablesRequest) returns (CreateTablesResponse);
+
+  // UpdateTables
+  // in: schema_id List<TableDefinitionWithId>
+  rpc UpdateTables(UpdateTablesRequest) returns (UpdateTablesResponse);
+
+  rpc AddIndexOnTable(AddIndexOnTableRequest) returns (AddIndexOnTableResponse);
+  rpc DropIndexOnTable(DropIndexOnTableRequest) returns (DropIndexOnTableResponse);
 
   // GetTables
   // in: schema_id table_id

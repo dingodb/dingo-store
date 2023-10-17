@@ -135,6 +135,12 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  pb::meta::GetTablesResponse* response, google::protobuf::Closure* done) override;
   void DropTables(google::protobuf::RpcController* controller, const pb::meta::DropTablesRequest* request,
                   pb::meta::DropTablesResponse* response, google::protobuf::Closure* done) override;
+  void UpdateTables(google::protobuf::RpcController* controller, const pb::meta::UpdateTablesRequest* request,
+                    pb::meta::UpdateTablesResponse* response, google::protobuf::Closure* done) override;
+  void AddIndexOnTable(google::protobuf::RpcController* controller, const pb::meta::AddIndexOnTableRequest* request,
+                       pb::meta::AddIndexOnTableResponse* response, google::protobuf::Closure* done) override;
+  void DropIndexOnTable(google::protobuf::RpcController* controller, const pb::meta::DropIndexOnTableRequest* request,
+                        pb::meta::DropIndexOnTableResponse* response, google::protobuf::Closure* done) override;
 
   void GetAutoIncrements(google::protobuf::RpcController* controller, const pb::meta::GetAutoIncrementsRequest* request,
                          pb::meta::GetAutoIncrementsResponse* response, google::protobuf::Closure* done) override;
