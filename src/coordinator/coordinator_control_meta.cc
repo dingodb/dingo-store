@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -2978,6 +2979,193 @@ butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
   if (meta_increment.ByteSizeLong() > 0) {
     return SubmitMetaIncrementSync(meta_increment);
   }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::UpdateTableDefinition(int64_t table_id, bool is_index,
+                                                        const pb::meta::TableDefinition& table_definition,
+                                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
+  pb::coordinator_internal::TableInternal table_internal;
+
+  if (!is_index) {
+    int ret = table_map_.Get(table_id, table_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
+    }
+  } else {
+    int ret = index_map_.Get(table_id, table_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << table_id;
+      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "index_id not found");
+    }
+  }
+
+  // check if table_definition is legal
+  if (table_internal.definition().name() != table_definition.name()) {
+    DINGO_LOG(ERROR) << "ERRROR: table name cannot be changed" << table_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table name cannot be changed");
+  }
+
+  if (table_internal.definition().table_partition().partitions_size() !=
+      table_definition.table_partition().partitions_size()) {
+    DINGO_LOG(ERROR) << "ERRROR: table partition count cannot be changed" << table_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table partition count cannot be changed");
+  }
+
+  if (table_internal.definition().engine() != table_definition.engine()) {
+    DINGO_LOG(ERROR) << "ERRROR: table engine cannot be changed" << table_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table engine cannot be changed");
+  }
+
+  if (table_internal.definition().table_partition().strategy() != table_definition.table_partition().strategy()) {
+    DINGO_LOG(ERROR) << "ERRROR: table partition type cannot be changed" << table_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table partition type cannot be changed");
+  }
+
+  std::set<int64_t> old_ids;
+  std::set<int64_t> new_ids;
+  for (const auto& part_id : table_internal.definition().table_partition().partitions()) {
+    old_ids.insert(part_id.id().entity_id());
+  }
+  for (const auto& part_id : table_definition.table_partition().partitions()) {
+    new_ids.insert(part_id.id().entity_id());
+  }
+  for (const auto& part_id : old_ids) {
+    if (new_ids.find(part_id) == new_ids.end()) {
+      DINGO_LOG(ERROR) << "ERRROR: table partition id cannot be changed" << table_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table partition id cannot be changed");
+    }
+  }
+
+  // update table definition, we do not support change partitions, so we just update other fields
+  pb::coordinator_internal::TableInternal table_internal_new;
+  *(table_internal_new.mutable_definition()) = table_definition;
+  table_internal_new.set_id(table_internal.id());
+  table_internal_new.set_table_id(table_internal.table_id());
+  table_internal_new.set_schema_id(table_internal.schema_id());
+
+  if (!is_index) {
+    auto* table_increment = meta_increment.add_tables();
+    table_increment->set_id(table_id);
+    table_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    *(table_increment->mutable_table()) = table_internal_new;
+  } else {
+    auto* index_increment = meta_increment.add_indexes();
+    index_increment->set_id(table_id);
+    index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    *(index_increment->mutable_table()) = table_internal_new;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::AddIndexOnTable(int64_t table_id, int64_t index_id,
+                                                  const pb::meta::TableDefinition& table_definition,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+  pb::coordinator_internal::TableInternal table_internal;
+  int ret = table_map_.Get(table_id, table_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
+  }
+
+  // check if index_id is already exist
+  pb::coordinator_internal::TableInternal index_internal;
+  ret = index_map_.Get(index_id, index_internal);
+  if (ret > 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index_id already exist" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_EXISTS, "index_id already exist");
+  }
+
+  // check if table_id exeist in table_index_map_
+  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  ret = table_index_map_.Get(table_id, table_index_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: table_id not found in table_index_map_" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found in table_index_map_");
+  }
+
+  // call CreateIndex to create index
+  std::vector<int64_t> region_ids;
+  auto status =
+      CreateIndex(table_internal.schema_id(), table_definition, table_id, index_id, region_ids, meta_increment);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: CreateIndex failed, table_id=" << table_id << " index_id=" << index_id;
+    return status;
+  }
+
+  // add index to table_index_map_
+  auto* new_index_id = table_index_internal.add_table_ids();
+  new_index_id->set_entity_id(index_id);
+  new_index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  new_index_id->set_parent_entity_id(table_internal.schema_id());
+  auto* table_index_increment = meta_increment.add_table_indexes();
+  table_index_increment->set_id(table_id);
+  table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  *(table_index_increment->mutable_table_indexes()) = table_index_internal;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::DropIndexOnTable(int64_t table_id, int64_t index_id,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  pb::coordinator_internal::TableInternal table_internal;
+  int ret = table_map_.Get(table_id, table_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
+  }
+
+  // check if index_id is exist
+  pb::coordinator_internal::TableInternal index_internal;
+  ret = index_map_.Get(index_id, index_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+  }
+
+  // check if table_id exeist in table_index_map_
+  pb::coordinator_internal::TableIndexInternal table_index_internal;
+  ret = table_index_map_.Get(table_id, table_index_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: table_id not found in table_index_map_" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found in table_index_map_");
+  }
+  bool found = false;
+  for (const auto& id : table_index_internal.table_ids()) {
+    if (id.entity_id() == index_id) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    DINGO_LOG(ERROR) << "ERRROR: index_id not found in table_index_map_" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found in table_index_map_");
+  }
+
+  // call DropIndex to drop index
+  auto status = DropIndex(table_internal.schema_id(), index_id, false, meta_increment);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: DropIndex failed, table_id=" << table_id << " index_id=" << index_id;
+    return status;
+  }
+
+  // del index from table_index_map_
+  pb::coordinator_internal::TableIndexInternal table_index_internal_new;
+  table_index_internal_new.set_id(table_index_internal.id());
+  for (const auto& id : table_index_internal.table_ids()) {
+    if (id.entity_id() != index_id) {
+      auto* new_index_id = table_index_internal_new.add_table_ids();
+      *new_index_id = id;
+    }
+  }
+
+  auto* table_index_increment = meta_increment.add_table_indexes();
+  table_index_increment->set_id(table_id);
+  table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  *(table_index_increment->mutable_table_indexes()) = table_index_internal_new;
 
   return butil::Status::OK();
 }
