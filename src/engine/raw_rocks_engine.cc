@@ -45,6 +45,7 @@
 #include "proto/error.pb.h"
 #include "rocksdb/advanced_options.h"
 #include "rocksdb/cache.h"
+#include "rocksdb/db.h"
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/iterator.h"
 #include "rocksdb/table.h"
@@ -247,13 +248,31 @@ std::shared_ptr<Snapshot> RawRocksEngine::GetSnapshot() {
   return std::make_shared<RocksSnapshot>(db_->GetSnapshot(), db_);
 }
 
-butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const pb::common::Range& range,
-                                                  std::string& merge_sst_path) {
+butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
+                                                   const std::vector<std::string>& cf_names,
+                                                   std::vector<std::string>& merge_sst_paths) {
   rocksdb::Options options;
   options.create_if_missing = false;
 
-  std::vector<rocksdb::ColumnFamilyDescriptor> column_families = {
-      rocksdb::ColumnFamilyDescriptor(Constant::kStoreDataCF, rocksdb::ColumnFamilyOptions())};
+  if (cf_names.size() != merge_sst_paths.size()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[rocksdb] merge checkpoint files failed, cf_names size: {}, merge_sst_paths size: {}", cf_names.size(),
+        merge_sst_paths.size());
+    return butil::Status(pb::error::EINTERNAL,
+                         fmt::format("merge checkpoint files failed, cf_names size: {}, merge_sst_paths size: {}",
+                                     cf_names.size(), merge_sst_paths.size()));
+  }
+
+  if (cf_names.empty()) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, cf_names empty");
+    return butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, cf_names empty");
+  }
+
+  std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
+  column_families.reserve(cf_names.size());
+  for (const auto& cf_name : cf_names) {
+    column_families.push_back(rocksdb::ColumnFamilyDescriptor(cf_name, rocksdb::ColumnFamilyOptions()));
+  }
 
   // Due to delete other region sst file, so need repair db, or rocksdb::DB::Open will fail.
   auto status = rocksdb::RepairDB(path, options, column_families);
@@ -262,28 +281,79 @@ butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb Repair db failed, {}", status.ToString()));
   }
 
-  // Open snapshot db.
-  rocksdb::DB* snapshot_db = nullptr;
-  std::vector<rocksdb::ColumnFamilyHandle*> handles;
-  status = rocksdb::DB::OpenForReadOnly(options, path, column_families, &handles, &snapshot_db);
-  if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[rocksdb] open checkpoint failed, path: {} error: {}", path, status.ToString());
-    return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()));
+  auto default_cf_desc = rocksdb::ColumnFamilyDescriptor(Constant::kStoreDataCF, rocksdb::ColumnFamilyOptions());
+
+  for (int i = 0; i < cf_names.size(); i++) {
+    std::vector<rocksdb::ColumnFamilyDescriptor> cf_descs;
+    cf_descs.push_back(default_cf_desc);
+    if (cf_names[i] != Constant::kStoreDataCF) {
+      cf_descs.push_back(rocksdb::ColumnFamilyDescriptor(cf_names[i], rocksdb::ColumnFamilyOptions()));
+    }
+
+    // Open snapshot db.
+    rocksdb::DB* snapshot_db = nullptr;
+    std::vector<rocksdb::ColumnFamilyHandle*> handles;
+    status = rocksdb::DB::OpenForReadOnly(options, path, cf_descs, &handles, &snapshot_db);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] open checkpoint failed, path: {} error: {}", path, status.ToString());
+      // return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}",
+      // status.ToString()));
+      merge_sst_paths[i] = "";
+      continue;
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[rocksdb] open checkpoint success, path: {} cf_name: {}", path, cf_names[i]);
+
+    // Create iterator
+    IteratorOptions iter_options;
+    iter_options.upper_bound = range.end_key();
+
+    rocksdb::ReadOptions read_options;
+    read_options.auto_prefix_mode = true;
+
+    auto& merge_sst_path = merge_sst_paths[i];
+    auto* handle = handles[0];
+    if (handles.size() > 1) {
+      handle = handles[1];
+    }
+
+    {
+      auto iter =
+          std::make_shared<RawRocksEngine::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handle));
+      if (iter == nullptr) {
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, create iterator failed");
+        return butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, create iterator failed");
+      }
+      iter->Seek(range.start_key());
+      auto ret = NewSstFileWriter()->SaveFile(iter, merge_sst_path);
+      if (ret.error_code() == pb::error::Errno::ENO_ENTRIES) {
+        DINGO_LOG(WARNING) << "[rocksdb] merge checkpoint files no entries, file_name=" << merge_sst_path;
+        merge_sst_paths[i] = "";
+      } else if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, save file failed")
+                         << ", error: " << ret.error_str();
+        return butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, save file failed");
+      }
+
+      DINGO_LOG(INFO) << fmt::format("[rocksdb] merge checkpoint files success, path: {} cf_name: {}", path,
+                                     cf_names[i]);
+    }
+
+    // Close snapshot db.
+    try {
+      CancelAllBackgroundWork(snapshot_db, true);
+      snapshot_db->DropColumnFamilies(handles);
+      for (auto& handle : handles) {
+        snapshot_db->DestroyColumnFamilyHandle(handle);
+      }
+      snapshot_db->Close();
+      delete snapshot_db;
+    } catch (std::exception& e) {
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] close snapshot db failed, path: {} error: {}", path, e.what());
+    }
   }
 
-  // Create iterator
-  IteratorOptions iter_options;
-  iter_options.upper_bound = range.end_key();
-
-  rocksdb::ReadOptions read_options;
-  read_options.auto_prefix_mode = true;
-
-  auto iter =
-      std::make_shared<RawRocksEngine::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handles[0]));
-  iter->Seek(range.start_key());
-
-  // Create sst writer
-  return NewSstFileWriter()->SaveFile(iter, merge_sst_path);
+  return butil::Status::OK();
 }
 
 butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
@@ -1478,7 +1548,7 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath) {
 }
 
 butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
-                                                 std::shared_ptr<ColumnFamily> column_family,
+                                                 std::vector<std::shared_ptr<ColumnFamily>> column_families,
                                                  std::vector<pb::store_internal::SstFileInfo>& sst_files) {
   rocksdb::Checkpoint* checkpoint = nullptr;
   auto status = rocksdb::Checkpoint::Create(db_.get(), &checkpoint);
@@ -1502,8 +1572,14 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
   }
-  rocksdb::ColumnFamilyMetaData meta_data;
-  db_->GetColumnFamilyMetaData(column_family->GetHandle(), &meta_data);
+
+  std::vector<rocksdb::ColumnFamilyMetaData> meta_datas;
+
+  for (const auto& column_family : column_families) {
+    rocksdb::ColumnFamilyMetaData meta_data;
+    db_->GetColumnFamilyMetaData(column_family->GetHandle(), &meta_data);
+    meta_datas.push_back(meta_data);
+  }
 
   status = db_->EnableFileDeletions(false);
   if (!status.ok()) {
@@ -1511,21 +1587,36 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
     return butil::Status(status.code(), status.ToString());
   }
 
-  for (auto& level : meta_data.levels) {
-    for (const auto& file : level.files) {
-      std::string filepath = dirpath + file.name;
-      if (!Helper::IsExistPath(filepath)) {
-        DINGO_LOG(INFO) << fmt::format("[rocksdb] checkpoint not contain sst file: {}", filepath);
-        continue;
-      }
+  if (column_families.size() != meta_datas.size()) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] column_families.size() != meta_datas.size()") << column_families.size()
+                     << " != " << meta_datas.size();
+    return butil::Status(pb::error::EINTERNAL, "Internal error");
+  }
 
-      pb::store_internal::SstFileInfo sst_file;
-      sst_file.set_level(level.level);
-      sst_file.set_name(file.name);
-      sst_file.set_path(filepath);
-      sst_file.set_start_key(file.smallestkey);
-      sst_file.set_end_key(file.largestkey);
-      sst_files.emplace_back(std::move(sst_file));
+  for (int i = 0; i < column_families.size(); i++) {
+    auto& meta_data = meta_datas[i];
+    auto& column_family = column_families[i];
+
+    for (auto& level : meta_data.levels) {
+      for (const auto& file : level.files) {
+        std::string filepath = dirpath + file.name;
+        if (!Helper::IsExistPath(filepath)) {
+          DINGO_LOG(INFO) << fmt::format("[rocksdb] checkpoint not contain sst file: {}", filepath);
+          continue;
+        }
+
+        pb::store_internal::SstFileInfo sst_file;
+        sst_file.set_level(level.level);
+        sst_file.set_name(file.name);
+        sst_file.set_path(filepath);
+        sst_file.set_start_key(file.smallestkey);
+        sst_file.set_end_key(file.largestkey);
+        sst_file.set_cf_name(column_family->Name());
+
+        DINGO_LOG(ERROR) << "checkpoint add sst_file: " << sst_file.ShortDebugString();
+
+        sst_files.emplace_back(std::move(sst_file));
+      }
     }
   }
 

@@ -852,15 +852,15 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     return butil::Status(pb::error::EINTERNAL, "get snapshot failed");
   }
 
-  auto data_reader = engine_->NewReader(Constant::kStoreTxnDataCF);
+  auto data_reader = engine_->NewReader(Constant::kTxnDataCF);
   if (data_reader == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "get data_reader failed");
   }
-  auto lock_reader = engine_->NewReader(Constant::kStoreTxnLockCF);
+  auto lock_reader = engine_->NewReader(Constant::kTxnLockCF);
   if (lock_reader == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "get lock_reader failed");
   }
-  auto write_reader = engine_->NewReader(Constant::kStoreTxnWriteCF);
+  auto write_reader = engine_->NewReader(Constant::kTxnWriteCF);
   if (write_reader == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "get write_reader failed");
   }

@@ -511,8 +511,10 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
-  std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
-  std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
+  // std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
+  // std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
+  const std::string& start_key = range.start_key();
+  const std::string& end_key = range.end_key();
 
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.build][index_id({})] Build vector index, range: [{}({})-{}({})) parallel: {}", vector_index_id,

@@ -31,10 +31,21 @@ namespace dingodb {
 // Vector reader
 class VectorReader {
  public:
-  VectorReader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
+  // VectorReader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
+  VectorReader(std::shared_ptr<RawEngine::Reader> vector_data_reader,
+               std::shared_ptr<RawEngine::Reader> vector_scalar_reader,
+               std::shared_ptr<RawEngine::Reader> vector_table_reader)
+      : vector_data_reader_(vector_data_reader),
+        vector_scalar_reader_(vector_scalar_reader),
+        vector_table_reader_(vector_table_reader) {}
 
-  static std::shared_ptr<VectorReader> New(std::shared_ptr<RawEngine::Reader> reader) {
-    return std::make_shared<VectorReader>(reader);
+  // static std::shared_ptr<VectorReader> New(std::shared_ptr<RawEngine::Reader> reader) {
+  //   return std::make_shared<VectorReader>(reader);
+  // }
+  static std::shared_ptr<VectorReader> New(std::shared_ptr<RawEngine::Reader> vector_data_reader,
+                                           std::shared_ptr<RawEngine::Reader> vector_scalar_reader,
+                                           std::shared_ptr<RawEngine::Reader> vector_table_reader) {
+    return std::make_shared<VectorReader>(vector_data_reader, vector_scalar_reader, vector_table_reader);
   }
 
   butil::Status VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
@@ -124,7 +135,11 @@ class VectorReader {
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
       int64_t& search_time_us);  // NOLINT
-  std::shared_ptr<RawEngine::Reader> reader_;
+
+  // std::shared_ptr<RawEngine::Reader> reader_;
+  std::shared_ptr<RawEngine::Reader> vector_data_reader_;
+  std::shared_ptr<RawEngine::Reader> vector_scalar_reader_;
+  std::shared_ptr<RawEngine::Reader> vector_table_reader_;
 };
 
 }  // namespace dingodb

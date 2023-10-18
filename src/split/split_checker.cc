@@ -182,9 +182,10 @@ void SplitCheckTask::SplitCheck() {
       need_split = false;
       break;
     }
-    if (region_->Type() == pb::common::INDEX_REGION) {
-      split_key = VectorCodec::RemoveVectorPrefix(split_key);
-    }
+    // we use multi cf now, so not need remove prefix
+    // if (region_->Type() == pb::common::INDEX_REGION) {
+    //   split_key = VectorCodec::RemoveVectorPrefix(split_key);
+    // }
     if (region_->Epoch().version() != epoch.version()) {
       reason = "region version change";
       need_split = false;
