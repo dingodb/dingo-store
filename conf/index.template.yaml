@@ -52,3 +52,5 @@ store:
     - data
     - lock
     - write
+    - vector_scalar
+    - vector_table

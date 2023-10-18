@@ -63,9 +63,10 @@
 
 namespace dingodb {
 
-const std::map<std::string, uint32_t> kTxnCf2Id = {{Constant::kTxnDataCF, Constant::kTxnDataCfId},
-                                                   {Constant::kTxnLockCF, Constant::kTxnLockCfId},
-                                                   {Constant::kTxnWriteCF, Constant::kTxnWriteCfId}};
+const std::map<std::string, uint32_t> kTxnCf2Id = {
+    {Constant::kStoreDataCF, Constant::kStoreDataCfId},     {Constant::kVectorScalarCF, Constant::kVectorScalarCfId},
+    {Constant::kVectorTableCF, Constant::kVectorTableCfId}, {Constant::kTxnDataCF, Constant::kTxnDataCfId},
+    {Constant::kTxnLockCF, Constant::kTxnLockCfId},         {Constant::kTxnWriteCF, Constant::kTxnWriteCfId}};
 
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;
@@ -742,6 +743,9 @@ std::vector<std::string> Helper::GenMvccCfVector() {
   std::vector<std::string> cfs;
 
   // the order of the cf is important, and can not be changed
+  cfs.push_back(Constant::kStoreDataCF);
+  cfs.push_back(Constant::kVectorScalarCF);
+  cfs.push_back(Constant::kVectorTableCF);
   cfs.push_back(Constant::kTxnDataCF);
   cfs.push_back(Constant::kTxnLockCF);
   cfs.push_back(Constant::kTxnWriteCF);

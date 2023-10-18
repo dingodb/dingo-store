@@ -94,21 +94,22 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
 
 // Filter sst file by range
 std::vector<pb::store_internal::SstFileInfo> FilterSstFile(  // NOLINT
-    std::vector<pb::store_internal::SstFileInfo>& sst_files, const std::vector<pb::common::Range>& ranges) {
+    std::vector<pb::store_internal::SstFileInfo>& sst_files, const pb::common::Range& range) {
   std::vector<pb::store_internal::SstFileInfo> filter_sst_files;
   for (auto& sst_file : sst_files) {
     if (sst_file.level() == -1) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot] sst file level is -1, add sst file info: {}",
+                                     sst_file.ShortDebugString());
       filter_sst_files.push_back(sst_file);
       continue;
     }
 
-    for (const auto& range : ranges) {
-      if (sst_file.start_key() < range.end_key() && range.start_key() < sst_file.end_key()) {
-        filter_sst_files.push_back(sst_file);
-        break;
-      }
+    if (sst_file.start_key() < range.end_key() && range.start_key() < sst_file.end_key()) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot] add sst file info: {}", sst_file.ShortDebugString());
+      filter_sst_files.push_back(sst_file);
     }
   }
+
   return filter_sst_files;
 }
 
@@ -119,7 +120,14 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
 
   std::vector<pb::store_internal::SstFileInfo> tmp_sst_files;
   auto checkpoint = raw_engine->NewCheckpoint();
-  auto status = checkpoint->Create(checkpoint_path, raw_engine->GetColumnFamily(Constant::kStoreDataCF), tmp_sst_files);
+  std::vector<std::shared_ptr<RawRocksEngine::ColumnFamily>> column_families;
+  auto cf_names = Helper::GenMvccCfVector();
+  column_families.reserve(cf_names.size());
+  for (const auto& cf_name : cf_names) {
+    column_families.push_back(raw_engine->GetColumnFamily(cf_name));
+  }
+
+  auto status = checkpoint->Create(checkpoint_path, column_families, tmp_sst_files);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Create checkpoint failed, path: {} error: {} {}",
                                     region->Id(), checkpoint_path, status.error_code(), status.error_str());
@@ -127,7 +135,7 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
   }
 
   // Get region actual range
-  sst_files = FilterSstFile(tmp_sst_files, region->PhysicsRange());
+  sst_files = FilterSstFile(tmp_sst_files, region->RawRange());
   for (const auto& sst_file : sst_files) {
     DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file info: {}", region->Id(),
                                    sst_file.ShortDebugString());
@@ -225,42 +233,6 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   return true;
 }
 
-// Merge multiple sst file to one sst
-static butil::Status MergeCheckpointFile(std::string path, std::string merge_file_path,
-                                         const pb::common::Range& range) {
-  // Already exist merge.sst file, remove it.
-  if (std::filesystem::exists(merge_file_path)) {
-    Helper::RemoveFileOrDirectory(merge_file_path);
-  }
-
-  // Merge multiple file to one sst.
-  // Origin checkpoint sst file cant't ingest rocksdb,
-  // Just use rocksdb::SstFileWriter generate sst file can ingest rocksdb.
-  auto status = RawRocksEngine::MergeCheckpointFile(path, range, merge_file_path);
-  if (!status.ok()) {
-    // Clean temp file
-    if (std::filesystem::exists(merge_file_path)) {
-      Helper::RemoveFileOrDirectory(merge_file_path);
-    }
-
-    if (status.error_code() == pb::error::ENO_ENTRIES) {
-      DINGO_LOG(INFO) << fmt::format(
-          "[raft.snapshot][region()] Merge checkpoint file success with ENO_ENTRIES, error: {} {} path: {} "
-          "merge_file_path: {}",
-          pb::error::Errno_Name(status.error_code()), status.error_str(), path, merge_file_path);
-
-      return butil::Status(pb::error::ENO_ENTRIES, "Merge checkpoint file success with ENO_ENTRIES");
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region()] Merge checkpoint file failed, error: {} {}",
-                                      pb::error::Errno_Name(status.error_code()), status.error_str())
-                       << ", path: " << path << ", merge_file_path: " << merge_file_path;
-      return status;
-    }
-  }
-
-  return butil::Status::OK();
-}
-
 // Check snapshot region meta, especially region version.
 butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store::RegionPtr region) {
   pb::store_internal::RaftSnapshotRegionMeta meta;
@@ -274,7 +246,6 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] current region version({}) snapshot region version({})",
                                  region->Id(), region->Epoch().version(), meta.epoch().version());
 
-  std::vector<pb::common::Range> physics_ranges = region->PhysicsRange();
   if (meta.epoch().version() < region->Epoch().version()) {
     DINGO_LOG(WARNING) << fmt::format("[raft.snapshot][region({})] snapshot version abnormal, abandon load snapshot",
                                       region->Id());
@@ -286,8 +257,23 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   }
 
   // Delete old region data
-  status = engine_->NewWriter(Constant::kStoreDataCF)->KvBatchDeleteRange(region->PhysicsRange());
+  auto cf_names = Helper::GenMvccCfVector();
+  auto writer = engine_->NewMultiCfWriter(cf_names);
+
+  std::map<uint32_t, std::vector<pb::common::Range>> ranges_with_cf;
+  for (const auto& cf_name : cf_names) {
+    if (kTxnCf2Id.count(cf_name) > 0) {
+      ranges_with_cf.insert_or_assign(kTxnCf2Id.at(cf_name), std::vector<pb::common::Range>{region->RawRange()});
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] invalid cf name: {}", region->Id(), cf_name);
+      return butil::Status(pb::error::EINTERNAL, fmt::format("invalid cf name: {}", cf_name));
+    }
+  }
+
+  status = writer->KvBatchDeleteRange(ranges_with_cf);
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data failed, error: {}",
+                                    region->Id(), status.error_str());
     return status;
   }
 
@@ -326,29 +312,49 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
   std::vector<std::string> sst_files;
   std::string current_path = reader->get_path() + "/" + "CURRENT";
+
+  auto cf_names = Helper::GenMvccCfVector();
+
   // The snapshot is generated by use checkpoint.
   if (Helper::IsExistPath(current_path)) {
     int count = 0;
-    for (auto& range : region->PhysicsRange()) {
-      std::string merge_sst_path = fmt::format("{}/merge_{}.sst", reader->get_path(), ++count);
 
-      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] merge sst file: {}", region->Id(), merge_sst_path);
+    std::vector<std::string> merge_sst_file_paths;
 
-      auto ret = MergeCheckpointFile(reader->get_path(), merge_sst_path, range);
+    for (const auto& cf_name : cf_names) {
+      std::string merge_sst_path = fmt::format("{}/merge_{}.sst", reader->get_path(), cf_name);
+      merge_sst_file_paths.push_back(merge_sst_path);
+    }
 
-      if (ret.ok()) {
-        sst_files.push_back(merge_sst_path);
-      } else if (ret.error_code() == pb::error::ENO_ENTRIES) {
-        DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] merge sst file success with ENO_ENTRIES, error: {}",
-                                       region->Id(), ret.error_str())
-                        << ", path: " << reader->get_path() << ", merge_sst_path: " << merge_sst_path;
-      } else {
-        DINGO_LOG(ERROR) << "[raft.snapshot][region(" << region->Id()
-                         << ")] merge sst file failed, merge_sst_path: " << merge_sst_path;
-        return false;
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] merge sst file paths: {}", region->Id(),
+                                   merge_sst_file_paths.size());
+
+    auto status =
+        RawRocksEngine::MergeCheckpointFiles(reader->get_path(), region->RawRange(), cf_names, merge_sst_file_paths);
+    if (!status.ok()) {
+      // Clean temp file
+      for (const auto& merge_file_path : merge_sst_file_paths) {
+        if (std::filesystem::exists(merge_file_path)) {
+          Helper::RemoveFileOrDirectory(merge_file_path);
+        }
       }
+
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] merge checkpoint file failed, error: {} {}",
+                                      region->Id(), status.error_code(), status.error_str())
+                       << ", path: " << reader->get_path();
+
+      return false;
+    }
+
+    for (const auto& merge_file_path : merge_sst_file_paths) {
+      sst_files.push_back(merge_file_path);
     }
   } else {  // The snapshot is generated by use scan.
+    DINGO_LOG(ERROR) << fmt::format(
+        "[raft.snapshot][region({})] snapshot not include CURRENT file, snapshot by scan is not support now",
+        region->Id());
+    return false;
+
     for (auto& file : files) {
       if (file == Constant::kRaftSnapshotRegionMetaFileName) {
         continue;
@@ -360,29 +366,36 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
 
   FAIL_POINT("load_snapshot_suspend");
 
-  if (!sst_files.empty()) {
-    auto status = raw_engine->IngestExternalFile(Constant::kStoreDataCF, sst_files);
-    for (auto& sst_file : sst_files) {
-      if (sst_file.find("merge") != std::string::npos) {
-        // Clean merge temp file
-        Helper::RemoveFileOrDirectory(sst_file);
-      }
+  for (int i = 0; i < cf_names.size(); i++) {
+    const auto& cf_name = cf_names[i];
+    const auto& sst_path = sst_files[i];
+
+    if (sst_path.empty()) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file is empty, skip ingest, cf_name: {}",
+                                     region->Id(), cf_name);
+      continue;
     }
 
-    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] ingest sst file: {}", region->Id(), sst_files.size());
+    std::vector<std::string> sst_files_to_ingest{sst_path};
 
+    auto status = raw_engine->IngestExternalFile(cf_name, sst_files_to_ingest);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] ingest sst file failed, error: {} {}", region->Id(),
                                       status.error_code(), status.error_str())
-                       << ", sst files count: " << sst_files.size();
-      for (const auto& file : sst_files) {
-        DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] ingest sst error files: {}", region->Id(), file);
-      }
+                       << ", sst file: " << sst_path;
       return false;
     }
-  } else {
-    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] no sst file need to ingest, sst_files_count: {}",
-                                   region->Id(), sst_files.size());
+
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] successfully ingest sst file: {}", region->Id(),
+                                   sst_path);
+  }
+
+  for (const auto& sst_file : sst_files) {
+    // Clean merge temp file
+    if (sst_file.empty()) {
+      continue;
+    }
+    Helper::RemoveFileOrDirectory(sst_file);
   }
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot success", region->Id());

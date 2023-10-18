@@ -27,6 +27,7 @@ message SstFileInfo {
   string path = 3;
   bytes start_key = 4;
   bytes end_key = 5;
+  string cf_name = 6;
 }
 
 message RaftMeta {

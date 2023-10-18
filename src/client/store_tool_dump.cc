@@ -303,7 +303,7 @@ void PrintValues(const dingodb::pb::meta::TableDefinition& table_definition,
       std::cout << " | ";
     }
   }
-  std::cout << std::endl;
+  std::cout << '\n';
 }
 
 std::shared_ptr<std::vector<std::shared_ptr<dingodb::BaseSchema>>> GenSerialSchema(
@@ -414,7 +414,7 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
       data.ParseFromString(value);
       std::cout << fmt::format("[vector data] vector_id({}) value: dimension({}) {}",
                                dingodb::VectorCodec::DecodeVectorId(key), data.dimension(), FormatVector(data, 10))
-                << std::endl;
+                << '\n';
     }
   };
 
@@ -424,7 +424,7 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
       data.ParseFromString(value);
       std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::DecodeVectorId(key),
                                data.ShortDebugString())
-                << std::endl;
+                << '\n';
     }
   };
 
@@ -436,7 +436,7 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
                                dingodb::VectorCodec::DecodeVectorId(key),
                                dingodb::Helper::StringToHex(data.table_key()),
                                dingodb::Helper::StringToHex(data.table_value()))
-                << std::endl;
+                << '\n';
     }
   };
 
@@ -452,26 +452,28 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
 
     {
       std::string begin_key, end_key;
-      dingodb::VectorCodec::EncodeVectorData(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorData(partition_id, INT64_MAX, end_key);
+      // dingodb::VectorCodec::EncodeVectorData(partition_id, 0, begin_key);
+      // dingodb::VectorCodec::EncodeVectorData(partition_id, INT64_MAX, end_key);
+      dingodb::VectorCodec::EncodeVectorKey(partition_id, 0, begin_key);
+      dingodb::VectorCodec::EncodeVectorKey(partition_id, INT64_MAX, end_key);
       db->Scan(begin_key, end_key, ctx->offset, ctx->limit, vector_data_handler);
     }
 
-    {
-      std::string begin_key, end_key;
-      dingodb::VectorCodec::EncodeVectorScalar(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorScalar(partition_id, INT64_MAX, end_key);
+    // {
+    //   std::string begin_key, end_key;
+    //   dingodb::VectorCodec::EncodeVectorScalar(partition_id, 0, begin_key);
+    //   dingodb::VectorCodec::EncodeVectorScalar(partition_id, INT64_MAX, end_key);
 
-      db->Scan(begin_key, end_key, ctx->offset, ctx->limit, scalar_data_handler);
-    }
+    //   db->Scan(begin_key, end_key, ctx->offset, ctx->limit, scalar_data_handler);
+    // }
 
-    {
-      std::string begin_key, end_key;
-      dingodb::VectorCodec::EncodeVectorTable(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorTable(partition_id, INT64_MAX, end_key);
+    // {
+    //   std::string begin_key, end_key;
+    //   dingodb::VectorCodec::EncodeVectorTable(partition_id, 0, begin_key);
+    //   dingodb::VectorCodec::EncodeVectorTable(partition_id, INT64_MAX, end_key);
 
-      db->Scan(begin_key, end_key, ctx->offset, ctx->limit, table_data_handler);
-    }
+    //   db->Scan(begin_key, end_key, ctx->offset, ctx->limit, table_data_handler);
+    // }
   }
 }
 

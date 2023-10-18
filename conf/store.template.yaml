@@ -46,6 +46,8 @@ store:
     - data
     - lock
     - write
+    - vector_scalar
+    - vector_table
   scan:
     scan_interval_s: 30
     timeout_s: 60

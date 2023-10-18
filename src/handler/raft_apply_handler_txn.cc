@@ -99,9 +99,12 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
     uint32_t cf_id = kTxnCf2Id.at(puts.cf_name());
 
+    std::vector<pb::common::KeyValue> kv_puts;
     for (const auto &kv : puts.kvs()) {
-      kv_puts_with_cf[cf_id].push_back(kv);
+      kv_puts.push_back(kv);
     }
+
+    kv_puts_with_cf.insert_or_assign(cf_id, kv_puts);
   }
 
   for (const auto &dels : request.deletes_with_cf()) {
@@ -114,9 +117,13 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
     uint32_t cf_id = kTxnCf2Id.at(dels.cf_name());
 
+    std::vector<std::string> kv_deletes;
+
     for (const auto &key : dels.keys()) {
-      kv_deletes_with_cf[cf_id].push_back(key);
+      kv_deletes.push_back(key);
     }
+
+    kv_deletes_with_cf.insert_or_assign(cf_id, kv_deletes);
   }
 
   status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);

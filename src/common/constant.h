@@ -42,13 +42,27 @@ class Constant {
   static const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
 
   // Define Store data column family.
+  // table and vector_index's vector use "default"
   inline static const std::string kStoreDataCF = "default";
   // Define Store meta column family.
   inline static const std::string kStoreMetaCF = "meta";
-  // Txn column families.
-  inline static const std::string kStoreTxnDataCF = "data";
-  inline static const std::string kStoreTxnLockCF = "lock";
-  inline static const std::string kStoreTxnWriteCF = "lock";
+  // transaction cf names
+  inline static const std::string kTxnDataCF = "data";
+  inline static const std::string kTxnLockCF = "lock";
+  inline static const std::string kTxnWriteCF = "write";
+
+  // vector cf names
+  inline static const std::string kVectorScalarCF = "vector_scalar";
+  inline static const std::string kVectorTableCF = "vector_table";
+
+  // cf seq id
+  static constexpr uint32_t kStoreDataCfId = 0;
+  static constexpr uint32_t kVectorScalarCfId = 1;
+  static constexpr uint32_t kVectorTableCfId = 2;
+  static constexpr uint32_t kTxnDataCfId = 3;
+  static constexpr uint32_t kTxnLockCfId = 4;
+  static constexpr uint32_t kTxnWriteCfId = 5;
+
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
   // Define store raft prefix.
@@ -145,14 +159,6 @@ class Constant {
   static constexpr float kSplitKeysRatioDefaultValue = 0.5;
 
   static const int32_t kRaftLogFallBehindThreshold = 1000;
-
-  // transaction cf names
-  inline static const std::string kTxnDataCF = "data";
-  inline static const std::string kTxnLockCF = "lock";
-  inline static const std::string kTxnWriteCF = "write";
-  static constexpr uint32_t kTxnDataCfId = 0;
-  static constexpr uint32_t kTxnLockCfId = 1;
-  static constexpr uint32_t kTxnWriteCfId = 2;
 
   static constexpr uint64_t kLockVer = INT64_MAX;
   static constexpr uint64_t kMaxVer = INT64_MAX;

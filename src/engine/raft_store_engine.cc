@@ -390,25 +390,25 @@ std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(const std::string& cf
 
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
     std::shared_ptr<VectorReader::Context> ctx, std::vector<pb::index::VectorWithDistanceResult>& results) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorBatchSearch(ctx, results);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
                                                               std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorBatchQuery(ctx, vector_with_ids);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
                                                                int64_t& vector_id) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                                              std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorScanQuery(ctx, vector_with_ids);
 }
 
@@ -416,12 +416,12 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(int64_t regi
                                                                     const pb::common::Range& region_range,
                                                                     VectorIndexWrapperPtr vector_index,
                                                                     pb::common::VectorIndexMetrics& region_metrics) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorCount(range, count);
 }
 
@@ -429,13 +429,16 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
     std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
     std::vector<pb::index::VectorWithDistanceResult>& results, int64_t& deserialization_id_time_us,
     int64_t& scan_scalar_time_us, int64_t& search_time_us) {
-  auto vector_reader = dingodb::VectorReader::New(reader_);
+  auto vector_reader = dingodb::VectorReader::New(vector_data_reader_, vector_scalar_reader_, vector_table_reader_);
   return vector_reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us,
                                                search_time_us);
 }
 
-std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& cf_name) {
-  return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
+std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& /*cf_name*/) {
+  // return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
+  return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(Constant::kStoreDataCF),
+                                                         engine_->NewReader(Constant::kVectorScalarCF),
+                                                         engine_->NewReader(Constant::kVectorTableCF));
 }
 
 std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader() {

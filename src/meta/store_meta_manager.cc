@@ -125,30 +125,32 @@ std::vector<pb::common::Range> Region::PhysicsRange() {
   auto region_range = RawRange();
 
   std::vector<pb::common::Range> ranges;
-  if (Type() == pb::common::INDEX_REGION) {
-    {
-      pb::common::Range range;
-      range.set_start_key(VectorCodec::FillVectorDataPrefix(region_range.start_key()));
-      range.set_end_key(VectorCodec::FillVectorDataPrefix(region_range.end_key()));
-      ranges.push_back(range);
-    }
+  // if (Type() == pb::common::INDEX_REGION) {
+  //   {
+  //     pb::common::Range range;
+  //     range.set_start_key(VectorCodec::FillVectorDataPrefix(region_range.start_key()));
+  //     range.set_end_key(VectorCodec::FillVectorDataPrefix(region_range.end_key()));
+  //     ranges.push_back(range);
+  //   }
 
-    {
-      pb::common::Range range;
-      range.set_start_key(VectorCodec::FillVectorScalarPrefix(region_range.start_key()));
-      range.set_end_key(VectorCodec::FillVectorScalarPrefix(region_range.end_key()));
-      ranges.push_back(range);
-    }
+  //   {
+  //     pb::common::Range range;
+  //     range.set_start_key(VectorCodec::FillVectorScalarPrefix(region_range.start_key()));
+  //     range.set_end_key(VectorCodec::FillVectorScalarPrefix(region_range.end_key()));
+  //     ranges.push_back(range);
+  //   }
 
-    {
-      pb::common::Range range;
-      range.set_start_key(VectorCodec::FillVectorTablePrefix(region_range.start_key()));
-      range.set_end_key(VectorCodec::FillVectorTablePrefix(region_range.end_key()));
-      ranges.push_back(range);
-    }
-  } else {
-    ranges.push_back(region_range);
-  }
+  //   {
+  //     pb::common::Range range;
+  //     range.set_start_key(VectorCodec::FillVectorTablePrefix(region_range.start_key()));
+  //     range.set_end_key(VectorCodec::FillVectorTablePrefix(region_range.end_key()));
+  //     ranges.push_back(range);
+  //   }
+  // } else {
+  //   ranges.push_back(region_range);
+  // }
+
+  ranges.push_back(region_range);
 
   return ranges;
 }

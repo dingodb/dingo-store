@@ -343,7 +343,7 @@ class RawRocksEngine : public RawEngine {
     Checkpoint& operator=(Checkpoint&& rhs) = delete;
 
     butil::Status Create(const std::string& dirpath);
-    butil::Status Create(const std::string& dirpath, std::shared_ptr<ColumnFamily> column_family,
+    butil::Status Create(const std::string& dirpath, std::vector<std::shared_ptr<ColumnFamily>> column_families,
                          std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
    private:
@@ -360,8 +360,10 @@ class RawRocksEngine : public RawEngine {
 
   std::shared_ptr<Snapshot> GetSnapshot() override;
 
-  static butil::Status MergeCheckpointFile(const std::string& path, const pb::common::Range& range,
-                                           std::string& merge_sst_path);
+  static butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
+                                            const std::vector<std::string>& cf_names,
+                                            std::vector<std::string>& merge_sst_paths);
+
   butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files);
 
   void Flush(const std::string& cf_name) override;

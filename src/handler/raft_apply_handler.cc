@@ -23,6 +23,7 @@
 
 #include "bthread/bthread.h"
 #include "butil/status.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
@@ -786,36 +787,49 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
 
   // Transform vector to kv
-  std::vector<pb::common::KeyValue> kvs;
+  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+
+  std::vector<pb::common::KeyValue> kvs_default;  // for vector data
+  std::vector<pb::common::KeyValue> kvs_scalar;   // for vector scalar data
+  std::vector<pb::common::KeyValue> kvs_table;    // for vector table data
+
   for (const auto &vector : request.vectors()) {
     // vector data
     {
       pb::common::KeyValue kv;
       std::string key;
-      VectorCodec::EncodeVectorData(region->PartitionId(), vector.id(), key);
+      // VectorCodec::EncodeVectorData(region->PartitionId(), vector.id(), key);
+      VectorCodec::EncodeVectorKey(region->PartitionId(), vector.id(), key);
+
       kv.mutable_key()->swap(key);
       kv.set_value(vector.vector().SerializeAsString());
-      kvs.push_back(kv);
+      kvs_default.push_back(kv);
     }
     // vector scalar data
     {
       pb::common::KeyValue kv;
       std::string key;
-      VectorCodec::EncodeVectorScalar(region->PartitionId(), vector.id(), key);
+      // VectorCodec::EncodeVectorScalar(region->PartitionId(), vector.id(), key);
+      VectorCodec::EncodeVectorKey(region->PartitionId(), vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.scalar_data().SerializeAsString());
-      kvs.push_back(kv);
+      kvs_scalar.push_back(kv);
     }
     // vector table data
     {
       pb::common::KeyValue kv;
       std::string key;
-      VectorCodec::EncodeVectorTable(region->PartitionId(), vector.id(), key);
+      // VectorCodec::EncodeVectorTable(region->PartitionId(), vector.id(), key);
+      VectorCodec::EncodeVectorKey(region->PartitionId(), vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.table_data().SerializeAsString());
-      kvs.push_back(kv);
+      kvs_table.push_back(kv);
     }
   }
+  kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCfId, kvs_default);
+  kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCfId, kvs_scalar);
+  kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCfId, kvs_table);
 
   // build vector_with_ids
   std::vector<pb::common::VectorWithId> vector_with_ids;
@@ -878,16 +892,18 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
 
   // Store vector
-  if (!kvs.empty() && status.ok()) {
-    auto writer = engine->NewWriter(request.cf_name());
+  if (!kv_puts_with_cf.empty() && status.ok()) {
+    // auto writer = engine->NewWriter(request.cf_name());
+    auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
     if (!writer) {
       DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
                        << ")] NewWriter failed";
     }
-    status = writer->KvBatchPut(kvs);
+    // status = writer->KvBatchPut(kvs);
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
-                       << ")] VectorAdd->KvBatchPut failed, error: " << status.error_str();
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id()
+                       << ")] VectorAdd->KvBatchPutAndDelete failed, error: " << status.error_str();
     }
 
     if (is_ready) {
@@ -961,44 +977,36 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   // Transform vector to kv
+  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+
+  std::vector<std::string> kv_deletes_default;
+
   std::vector<bool> key_states(request.ids_size(), false);
-  std::vector<std::string> keys;
+  // std::vector<std::string> keys;
   std::vector<int64_t> delete_ids;
 
   for (int i = 0; i < request.ids_size(); i++) {
     // set key_states
     std::string key;
-    VectorCodec::EncodeVectorData(region->PartitionId(), request.ids(i), key);
+    VectorCodec::EncodeVectorKey(region->PartitionId(), request.ids(i), key);
 
     std::string value;
     auto ret = reader->KvGet(snapshot, key, value);
     if (ret.ok()) {
-      // delete vector data
-      {
-        std::string key;
-        VectorCodec::EncodeVectorData(region->PartitionId(), request.ids(i), key);
-        keys.push_back(key);
-      }
-
-      // delete scalar data
-      {
-        std::string key;
-        VectorCodec::EncodeVectorScalar(region->PartitionId(), request.ids(i), key);
-        keys.push_back(key);
-      }
-
-      // delete table data
-      {
-        std::string key;
-        VectorCodec::EncodeVectorTable(region->PartitionId(), request.ids(i), key);
-        keys.push_back(key);
-      }
+      kv_deletes_default.push_back(key);
 
       key_states[i] = true;
       delete_ids.push_back(request.ids(i));
 
       DINGO_LOG(DEBUG) << fmt::format("vector_delete id={}, region_id={}", request.ids(i), region->Id());
     }
+  }
+
+  if (!kv_deletes_default.empty()) {
+    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCfId, kv_deletes_default);
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCfId, kv_deletes_default);
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCfId, kv_deletes_default);
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -1042,15 +1050,16 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   // Delete vector and write wal
-  if (!keys.empty() && status.ok()) {
-    auto writer = engine->NewWriter(request.cf_name());
+  if (!kv_deletes_with_cf.empty() && status.ok()) {
+    // auto writer = engine->NewWriter(request.cf_name());
+    auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
     if (!writer) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
-                       << ")] NewWriter failed";
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
     }
-    status = writer->KvBatchDelete(keys);
+    // status = writer->KvBatchDelete(keys);
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
+      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id()
                        << ")] VectorDelete->KvBatchDelete failed, error: " << status.error_str();
     }
 
