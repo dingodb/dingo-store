@@ -113,18 +113,22 @@ uint64_t Worker::PendingTaskCount() { return pending_task_count_.load(std::memor
 void Worker::IncPendingTaskCount() { pending_task_count_.fetch_add(1, std::memory_order_relaxed); }
 void Worker::DecPendingTaskCount() { pending_task_count_.fetch_sub(1, std::memory_order_relaxed); }
 
-void Worker::Nodify(EventType type) { notify_func_(type); }
+void Worker::Nodify(EventType type) {
+  if (notify_func_ != nullptr) {
+    notify_func_(type);
+  }
+}
 
 WorkerSet::WorkerSet(std::string name, uint32_t worker_num)
     : name_(name),
       worker_num_(worker_num),
       active_worker_id_(0),
-      total_task_count_(fmt::format("dingo_{}_total_task_count")),
-      pending_task_count_(fmt::format("dingo_{}_pending_task_count")) {}
+      total_task_count_(fmt::format("dingo_{}_total_task_count", name)),
+      pending_task_count_(fmt::format("dingo_{}_pending_task_count", name)) {}
 
 bool WorkerSet::Init() {
   for (int i = 0; i < worker_num_; ++i) {
-    auto worker = Worker::New();
+    auto worker = Worker::New([this](Worker::EventType type) { WatchWorker(type); });
     if (!worker->Init()) {
       return false;
     }
@@ -150,7 +154,7 @@ bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
   return ret;
 }
 
-bool WorkerSet::ExecuteHashByRegion(int64_t region_id, TaskRunnablePtr task) {
+bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   auto ret = workers_[region_id % worker_num_]->Execute(task);
   if (ret) {
     IncPendingTaskCount();

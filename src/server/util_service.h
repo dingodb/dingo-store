@@ -24,18 +24,25 @@ namespace dingodb {
 
 class UtilServiceImpl : public pb::util::UtilService {
  public:
-  UtilServiceImpl();
+  UtilServiceImpl() = default;
 
   void VectorCalcDistance(google::protobuf::RpcController* controller,
                           const ::dingodb::pb::index::VectorCalcDistanceRequest* request,
                           ::dingodb::pb::index::VectorCalcDistanceResponse* response,
                           ::google::protobuf::Closure* done) override;
 
-  void SetStorage(std::shared_ptr<Storage> storage);
+  void SetStorage(StoragePtr storage) { storage_ = storage; }
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:
   std::shared_ptr<Storage> storage_;
+  // Run service request.
+  WorkerSetPtr worker_set_;
 };
+
+void DoVectorCalcDistance(StoragePtr storage, google::protobuf::RpcController* controller,
+                          const pb::index::VectorCalcDistanceRequest* request,
+                          pb::index::VectorCalcDistanceResponse* response, google::protobuf::Closure* done);
 
 }  // namespace dingodb
 

@@ -293,7 +293,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "KvBatchGet") {
       client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
-      client::SendKvPut(FLAGS_region_id, FLAGS_key);
+      client::SendKvPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key));
     } else if (method == "KvBatchPut") {
       client::SendKvBatchPut(FLAGS_region_id, FLAGS_prefix, 100);
     } else if (method == "KvPutIfAbsent") {

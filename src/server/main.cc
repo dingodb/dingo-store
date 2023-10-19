@@ -73,6 +73,7 @@ DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
 DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
 
 DEFINE_uint32(omp_num_threads, 0, "omp num threads");
+DEFINE_uint32(service_worker_num, 10, "service worker num");
 
 extern "C" {
 extern void omp_set_dynamic(int dynamic_threads) noexcept;  // NOLINT
@@ -91,10 +92,6 @@ DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
 namespace bthread {
 DECLARE_int32(bthread_concurrency);
 }  // namespace bthread
-
-namespace dingodb {
-DECLARE_uint32(storage_worker_num);
-}
 
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
@@ -399,23 +396,23 @@ int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
   return num;
 }
 
-// Get storage worker thread num used by config
-int GetStorageWorkerNum(std::shared_ptr<dingodb::Config> config) {
-  int num = config->GetInt("store.storage_worker_num");
+// Get service worker thread num used by config
+int GetServiceWorkerNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("server.service_worker_num");
   if (num <= 0) {
-    DINGO_LOG(WARNING) << "store.storage_worker_num is not set, use dingodb::FLAGS_storage_worker_num";
+    DINGO_LOG(WARNING) << "server.service_worker_num is not set, use dingodb::FLAGS_service_worker_num";
   } else {
-    dingodb::FLAGS_storage_worker_num = num;
-    DINGO_LOG(INFO) << "store.storage_worker_num is set to " << num;
+    FLAGS_service_worker_num = num;
+    DINGO_LOG(INFO) << "server.service_worker_num is set to " << num;
   }
 
-  if (dingodb::FLAGS_storage_worker_num > GetWorkerThreadNum(config)) {
-    DINGO_LOG(ERROR) << "store.storage_worker_num[" << dingodb::FLAGS_storage_worker_num
+  if (FLAGS_service_worker_num > GetWorkerThreadNum(config)) {
+    DINGO_LOG(ERROR) << "server.service_worker_num[" << FLAGS_service_worker_num
                      << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
     return -1;
   }
 
-  return dingodb::FLAGS_storage_worker_num;
+  return FLAGS_service_worker_num;
 }
 
 // setup default conf and coor_list
@@ -595,6 +592,15 @@ int main(int argc, char *argv[]) {
   dingodb::ClusterStatImpl cluster_stat_service;
   dingodb::FileServiceImpl file_service;
 
+  dingodb::WorkerSetPtr worker_set = dingodb::WorkerSet::New("ServiceWorkerSet", FLAGS_service_worker_num);
+  if (!worker_set->Init()) {
+    DINGO_LOG(ERROR) << "Init WorkerSet failed!";
+    return -1;
+  }
+  store_service.SetWorkSet(worker_set);
+  index_service.SetWorkSet(worker_set);
+  util_service.SetWorkSet(worker_set);
+
   node_service.SetServer(dingo_server);
 
   brpc::Server brpc_server;
@@ -617,9 +623,9 @@ int main(int argc, char *argv[]) {
   options.num_threads = GetWorkerThreadNum(config);
   DINGO_LOG(INFO) << "bthread worker_thread_num: " << options.num_threads;
 
-  auto storage_worker_num = GetStorageWorkerNum(config);
-  if (storage_worker_num < 0) {
-    DINGO_LOG(ERROR) << "GetStorageWorkerNum failed!";
+  auto service_worker_num = GetServiceWorkerNum(config);
+  if (service_worker_num < 0) {
+    DINGO_LOG(ERROR) << "GetServiceWorkerNum failed!";
     return -1;
   }
 
@@ -902,6 +908,7 @@ int main(int argc, char *argv[]) {
   brpc_server.Join();
 
   dingo_server->Destroy();
+  worker_set->Destroy();
 
   return 0;
 }

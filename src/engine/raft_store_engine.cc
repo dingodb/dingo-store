@@ -339,12 +339,12 @@ butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
-  auto s = node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
-  if (!s.ok()) {
-    return s;
+  auto status = node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
+  if (!status.ok()) {
+    return status;
   }
 
-  ctx->EnableSyncMode();
+  ctx->CreateCond();
   ctx->Cond()->IncreaseWait();
 
   if (!ctx->Status().ok()) {

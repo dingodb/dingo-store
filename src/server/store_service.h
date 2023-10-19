@@ -71,8 +71,6 @@ class StoreServiceImpl : public pb::store::StoreService {
                      const ::dingodb::pb::store::KvScanReleaseRequest* request,
                      ::dingodb::pb::store::KvScanReleaseResponse* response, ::google::protobuf::Closure* done) override;
 
-  void SetStorage(std::shared_ptr<Storage> storage);
-
   // txn api
   void TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
               pb::store::TxnGetResponse* response, google::protobuf::Closure* done) override;
@@ -102,8 +100,13 @@ class StoreServiceImpl : public pb::store::StoreService {
   void TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) override;
 
+  void SetStorage(StoragePtr storage) { storage_ = storage; }
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
+
  private:
-  std::shared_ptr<Storage> storage_;
+  StoragePtr storage_;
+  // Run service request.
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb
