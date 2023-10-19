@@ -14,6 +14,8 @@
 
 #include "common/runnable.h"
 
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -26,7 +28,9 @@ namespace dingodb {
 TaskRunnable::TaskRunnable() { DINGO_LOG(DEBUG) << "new exec task..."; }
 TaskRunnable::~TaskRunnable() { DINGO_LOG(DEBUG) << "delete exec task..."; }
 
-int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NOLINT
+int ExecuteRoutine(void* meta, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NOLINT
+  Worker* worker = static_cast<Worker*>(meta);
+
   for (; iter; ++iter) {
     if (iter.is_queue_stopped()) {
       DINGO_LOG(INFO) << fmt::format("[execqueue][type({})] task is stopped.", (*iter)->Type());
@@ -41,6 +45,11 @@ int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NO
     (*iter)->Run();
     DINGO_LOG(DEBUG) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
                                     Helper::TimestampMs() - start_time);
+
+    if (worker != nullptr) {
+      worker->DecPendingTaskCount();
+      worker->Nodify(Worker::EventType::kFinishTask);
+    }
   }
 
   return 0;
@@ -50,7 +59,7 @@ bool Worker::Init() {
   bthread::ExecutionQueueOptions options;
   options.bthread_attr = BTHREAD_ATTR_NORMAL;
 
-  if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, nullptr) != 0) {
+  if (bthread::execution_queue_start(&queue_id_, &options, ExecuteRoutine, this) != 0) {
     DINGO_LOG(ERROR) << "[execqueue] start worker execution queue failed";
     return false;
   }
@@ -89,7 +98,82 @@ bool Worker::Execute(TaskRunnablePtr task) {
     return false;
   }
 
+  IncPendingTaskCount();
+  IncTotalTaskCount();
+
+  Nodify(EventType::kAddTask);
+
   return true;
 }
+
+uint64_t Worker::TotalTaskCount() { return total_task_count_.load(std::memory_order_relaxed); }
+void Worker::IncTotalTaskCount() { total_task_count_.fetch_add(1, std::memory_order_relaxed); }
+
+uint64_t Worker::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
+void Worker::IncPendingTaskCount() { pending_task_count_.fetch_add(1, std::memory_order_relaxed); }
+void Worker::DecPendingTaskCount() { pending_task_count_.fetch_sub(1, std::memory_order_relaxed); }
+
+void Worker::Nodify(EventType type) { notify_func_(type); }
+
+WorkerSet::WorkerSet(std::string name, uint32_t worker_num)
+    : name_(name),
+      worker_num_(worker_num),
+      active_worker_id_(0),
+      total_task_count_(fmt::format("dingo_{}_total_task_count")),
+      pending_task_count_(fmt::format("dingo_{}_pending_task_count")) {}
+
+bool WorkerSet::Init() {
+  for (int i = 0; i < worker_num_; ++i) {
+    auto worker = Worker::New();
+    if (!worker->Init()) {
+      return false;
+    }
+    workers_.push_back(worker);
+  }
+
+  return true;
+}
+
+void WorkerSet::Destroy() {
+  for (const auto& worker : workers_) {
+    worker->Destroy();
+  }
+}
+
+bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
+  auto ret = workers_[active_worker_id_.fetch_add(1) % worker_num_]->Execute(task);
+  if (ret) {
+    IncPendingTaskCount();
+    IncTotalTaskCount();
+  }
+
+  return ret;
+}
+
+bool WorkerSet::ExecuteHashByRegion(int64_t region_id, TaskRunnablePtr task) {
+  auto ret = workers_[region_id % worker_num_]->Execute(task);
+  if (ret) {
+    IncPendingTaskCount();
+    IncTotalTaskCount();
+  }
+
+  return ret;
+}
+
+void WorkerSet::WatchWorker(Worker::EventType type) {
+  if (type == Worker::EventType::kFinishTask) {
+    DecPendingTaskCount();
+  }
+}
+
+uint64_t WorkerSet::TotalTaskCount() { return total_task_count_.get_value(); }
+
+void WorkerSet::IncTotalTaskCount() { total_task_count_ << 1; }
+
+uint64_t WorkerSet::PendingTaskCount() { return pending_task_count_.get_value(); }
+
+void WorkerSet::IncPendingTaskCount() { pending_task_count_ << 1; }
+
+void WorkerSet::DecPendingTaskCount() { pending_task_count_ << -1; }
 
 }  // namespace dingodb
