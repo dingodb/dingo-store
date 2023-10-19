@@ -15,6 +15,7 @@
 #include "engine/storage.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -39,28 +40,10 @@
 #include "serial/buf.h"
 #include "server/server.h"
 #include "vector/vector_index_utils.h"
+
 namespace dingodb {
 
-DEFINE_uint32(storage_worker_num, 10, "storage worker num");
-DEFINE_uint32(max_prewrite_count, 1024, "max prewrite count");
-
-Storage::Storage(std::shared_ptr<Engine> engine)
-    : engine_(engine), workers_task_count_("dingo_storage_workers_task_count") {
-  for (int i = 0; i < FLAGS_storage_worker_num; ++i) {
-    auto worker = std::make_shared<Worker>();
-    if (!worker->Init()) {
-      DINGO_LOG(FATAL) << "Init storage worker failed";
-    }
-    workers_.push_back(worker);
-    active_worker_id_ = 0;
-  }
-}
-
-Storage::~Storage() {
-  for (auto& worker : workers_) {
-    worker->Destroy();
-  }
-};
+Storage::Storage(std::shared_ptr<Engine> engine) : engine_(engine) {}
 
 Snapshot* Storage::GetSnapshot() { return nullptr; }
 
@@ -110,6 +93,10 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
 }
 
 butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs));
+  }
+
   return engine_->AsyncWrite(
       ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs), [](std::shared_ptr<Context> ctx, butil::Status status) {
         if (!status.ok()) {
@@ -124,6 +111,10 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
 
 butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                      bool is_atomic) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -138,6 +129,10 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
 }
 
 butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys));
+  }
+
   return engine_->AsyncWrite(
       ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys), [](std::shared_ptr<Context> ctx, butil::Status status) {
         if (!status.ok()) {
@@ -151,6 +146,10 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
 }
 
 butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
+  }
+
   return engine_->AsyncWrite(
       ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range), [](std::shared_ptr<Context> ctx, butil::Status status) {
         if (!status.ok()) {
@@ -165,6 +164,10 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
 
 butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                        const std::vector<std::string>& expect_values, bool is_atomic) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, expect_values, is_atomic));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, expect_values, is_atomic),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -256,6 +259,10 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
 }
 
 butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -265,6 +272,10 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector
 }
 
 butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<int64_t>& ids) {
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -478,28 +489,6 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
   return butil::Status();
 }
 
-bool Storage::ExecuteRR(int64_t /*region_id*/, TaskRunnablePtr task) {
-  auto ret = workers_[active_worker_id_.fetch_add(1) % FLAGS_storage_worker_num]->Execute(task);
-  if (ret) {
-    IncTaskCount();
-  }
-  return ret;
-}
-
-bool Storage::ExecuteHash(int64_t region_id, TaskRunnablePtr task) {
-  auto ret = workers_[region_id % FLAGS_storage_worker_num]->Execute(task);
-  if (ret) {
-    IncTaskCount();
-  }
-  return ret;
-}
-
-// increase task count
-void Storage::IncTaskCount() { this->workers_task_count_ << 1; }
-
-// decrease task count
-void Storage::DecTaskCount() { this->workers_task_count_ << -1; }
-
 // txn
 
 butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,
@@ -585,6 +574,10 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
   prewrite_request->set_try_one_pc(try_one_pc);
   prewrite_request->set_max_commit_ts(max_commit_ts);
 
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -620,6 +613,10 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
   prewrite_request->set_try_one_pc(try_one_pc);
   prewrite_request->set_max_commit_ts(max_commit_ts);
 
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -647,6 +644,10 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts,
   }
   commit_request->set_start_ts(start_ts);
   commit_request->set_commit_ts(commit_ts);
+
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
 
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
@@ -679,6 +680,10 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
   check_txn_status_request->set_caller_start_ts(caller_start_ts);
   check_txn_status_request->set_current_ts(current_ts);
 
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -705,6 +710,10 @@ butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t star
   resolve_lock_request->set_start_ts(start_ts);
   resolve_lock_request->set_commit_ts(commit_ts);
 
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -730,6 +739,10 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
     rollback_request->add_keys(key);
   }
   rollback_request->set_start_ts(start_ts);
+
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
 
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
@@ -783,6 +796,10 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
   heartbeat_request->set_start_ts(start_ts);
   heartbeat_request->set_advise_lock_ttl(advise_lock_ttl);
 
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
+
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
@@ -817,6 +834,10 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
   auto* delete_range_request = txn_raft_request.mutable_mvcc_delete_range();
   delete_range_request->set_start_key(start_key);
   delete_range_request->set_end_key(end_key);
+
+  if (ctx->IsSyncMode()) {
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  }
 
   return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {

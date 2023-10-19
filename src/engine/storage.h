@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,7 +35,7 @@ namespace dingodb {
 class Storage {
  public:
   Storage(std::shared_ptr<Engine> engine);
-  ~Storage();
+  ~Storage() = default;
 
   static Snapshot* GetSnapshot();
   void ReleaseSnapshot();
@@ -142,20 +143,11 @@ class Storage {
 
   butil::Status ValidateLeader(int64_t region_id);
 
-  bool ExecuteRR(int64_t /*region_id*/, TaskRunnablePtr task);
-  bool ExecuteHash(int64_t region_id, TaskRunnablePtr task);
-
-  // increase the number of tasks in workers_
-  void IncTaskCount();
-  // decrease the number of tasks in workers_
-  void DecTaskCount();
-
  private:
   std::shared_ptr<Engine> engine_;
-  std::atomic<uint64_t> active_worker_id_;
-  std::vector<WorkerPtr> workers_;           // this is for long-time request processing, for instance VectorBatchSearch
-  bvar::Adder<int64_t> workers_task_count_;  // this is used to monitor the number of tasks in workers_
 };
+
+using StoragePtr = std::shared_ptr<Storage>;
 
 }  // namespace dingodb
 

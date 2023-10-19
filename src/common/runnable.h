@@ -90,11 +90,15 @@ class WorkerSet {
   WorkerSet(std::string name, uint32_t worker_num);
   ~WorkerSet() = default;
 
+  static std::shared_ptr<WorkerSet> New(std::string name, uint32_t worker_num) {
+    return std::make_shared<WorkerSet>(name, worker_num);
+  }
+
   bool Init();
   void Destroy();
 
   bool ExecuteRR(TaskRunnablePtr task);
-  bool ExecuteHashByRegion(int64_t region_id, TaskRunnablePtr task);
+  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task);
 
   void WatchWorker(Worker::EventType type);
 

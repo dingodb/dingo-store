@@ -28,6 +28,13 @@
 
 namespace dingodb {
 
+void ServiceHelper::SetError(pb::error::Error* error, int errcode, const std::string& errmsg) {
+  error->set_errcode(static_cast<pb::error::Errno>(errcode));
+  error->set_errmsg(errmsg);
+}
+
+void ServiceHelper::SetError(pb::error::Error* error, const std::string& errmsg) { error->set_errmsg(errmsg); }
+
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, int64_t region_id) {
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
@@ -47,25 +54,39 @@ butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& 
   return butil::Status::OK();
 }
 
-butil::Status ServiceHelper::GetStoreRegionInfo(int64_t region_id, pb::error::StoreRegionInfo& store_region_info) {
+butil::Status ServiceHelper::GetStoreRegionInfo(int64_t region_id, pb::error::Error* error) {
+  if (error == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Error is nullptr");
+  }
+  if (error->errcode() != pb::error::EREGION_VERSION) {
+    return butil::Status(pb::error::EINTERNAL, "Not need set store region info");
+  }
+
   auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
   }
-  return GetStoreRegionInfo(region, store_region_info);
+  return GetStoreRegionInfo(region, error);
 }
 
-butil::Status ServiceHelper::GetStoreRegionInfo(store::RegionPtr region,
-                                                pb::error::StoreRegionInfo& store_region_info) {
+butil::Status ServiceHelper::GetStoreRegionInfo(store::RegionPtr region, pb::error::Error* error) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
+  if (error == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Error is nullptr");
+  }
 
-  store_region_info.set_region_id(region->Id());
-  *(store_region_info.mutable_current_region_epoch()) = region->Epoch();
-  *(store_region_info.mutable_current_range()) = region->Range();
+  if (error->errcode() != pb::error::EREGION_VERSION) {
+    return butil::Status(pb::error::EINTERNAL, "Not need set store region info");
+  }
+
+  auto* store_region_info = error->mutable_store_region_info();
+  store_region_info->set_region_id(region->Id());
+  *(store_region_info->mutable_current_region_epoch()) = region->Epoch();
+  *(store_region_info->mutable_current_range()) = region->Range();
   for (const auto& peer : region->Peers()) {
-    *(store_region_info.add_peers()) = peer;
+    *(store_region_info->add_peers()) = peer;
   }
 
   return butil::Status::OK();

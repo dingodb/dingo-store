@@ -678,7 +678,6 @@ service IndexService {
   rpc VectorGetBorderId(VectorGetBorderIdRequest) returns (VectorGetBorderIdResponse);
   rpc VectorScanQuery(VectorScanQueryRequest) returns (VectorScanQueryResponse);
   rpc VectorGetRegionMetrics(VectorGetRegionMetricsRequest) returns (VectorGetRegionMetricsResponse);
-  rpc VectorCalcDistance(VectorCalcDistanceRequest) returns (VectorCalcDistanceResponse);
   rpc VectorCount(VectorCountRequest) returns (VectorCountResponse);
 
   // debug

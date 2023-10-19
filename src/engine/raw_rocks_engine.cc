@@ -1620,7 +1620,7 @@ butil::Status RawRocksEngine::Checkpoint::Create(const std::string& dirpath,
         sst_file.set_end_key(file.largestkey);
         sst_file.set_cf_name(column_family->Name());
 
-        DINGO_LOG(ERROR) << "checkpoint add sst_file: " << sst_file.ShortDebugString();
+        DINGO_LOG(DEBUG) << "checkpoint add sst_file: " << sst_file.ShortDebugString();
 
         sst_files.emplace_back(std::move(sst_file));
       }

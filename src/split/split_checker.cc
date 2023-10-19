@@ -251,7 +251,7 @@ void SplitCheckTask::SplitCheck() {
 
 bool SplitCheckWorkers::Init(uint32_t num) {
   for (int i = 0; i < num; ++i) {
-    auto worker = std::make_shared<Worker>();
+    auto worker = Worker::New();
     if (!worker->Init()) {
       return false;
     }

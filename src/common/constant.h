@@ -197,6 +197,8 @@ class Constant {
   static constexpr int32_t kVectorIndexSaveTaskRunningNumMaxValue = 5;
 
   static constexpr int32_t kVectorIndexRebuildTaskRunningNumMaxValue = 5;
+
+  static constexpr uint32_t kLogPrintMaxLength = 256;
 };
 
 }  // namespace dingodb

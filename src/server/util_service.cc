@@ -37,128 +37,75 @@
 #include "server/server.h"
 #include "server/service_helper.h"
 
-using dingodb::pb::error::Errno;
-
 namespace dingodb {
 
 DECLARE_uint64(vector_max_batch_count);
 DECLARE_uint64(vector_max_request_size);
 DECLARE_bool(enable_async_vector_operation);
 
-UtilServiceImpl::UtilServiceImpl() = default;
-
-void UtilServiceImpl::SetStorage(std::shared_ptr<Storage> storage) { storage_ = storage; }
-
-class VectorCalcDistanceTask : public TaskRunnable {
- public:
-  VectorCalcDistanceTask(std::shared_ptr<Storage> storage, brpc::Controller* cntl,
-                         const dingodb::pb::index::VectorCalcDistanceRequest* request,
-                         dingodb::pb::index::VectorCalcDistanceResponse* response, google::protobuf::Closure* done)
-      : storage_(storage), cntl_(cntl), request_(request), response_(response), done_(done) {}
-  ~VectorCalcDistanceTask() override = default;
-
-  std::string Type() override { return "VECTOR_COUNT"; }
-
-  void Run() override {
-    brpc::ClosureGuard done_guard(done_);
-
-    std::vector<std::vector<float>> distances;
-    std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
-    std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
-
-    butil::Status status =
-        storage_->VectorCalcDistance(*request_, distances, result_op_left_vectors, result_op_right_vectors);
-
-    if (!status.ok()) {
-      auto* err = response_->mutable_error();
-      err->set_errcode(static_cast<Errno>(status.error_code()));
-      err->set_errmsg(status.error_str());
-      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).", Server::GetInstance()->ServerAddr(),
-                                    status.error_str()));
-        ServiceHelper::RedirectLeader(status.error_str(), response_);
-      }
-      DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request_: {} response_: {}", request_->ShortDebugString(),
-                                      response_->ShortDebugString());
-      return;
-    }
-
-    for (const auto& distance : distances) {
-      response_->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
-    }
-
-    response_->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
-    response_->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
+static butil::Status ValidateVectorCalcDistance(const pb::index::VectorCalcDistanceRequest* request) {
+  if (request->op_left_vectors_size() * request->op_right_vectors_size() > FLAGS_vector_max_batch_count ||
+      request->op_left_vectors_size() == 0 || request->op_right_vectors_size() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         "op_left_vectors_size or op_right_vectors_size exceed max limit");
   }
 
- private:
-  std::shared_ptr<Storage> storage_;
-  brpc::Controller* cntl_;
-  google::protobuf::Closure* done_;
-  const dingodb::pb::index::VectorCalcDistanceRequest* request_;
-  dingodb::pb::index::VectorCalcDistanceResponse* response_;
-};
+  return butil::Status();
+}
+
+void DoVectorCalcDistance(StoragePtr storage, google::protobuf::RpcController* controller,
+                          const pb::index::VectorCalcDistanceRequest* request,
+                          pb::index::VectorCalcDistanceResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  butil::Status status = ValidateVectorCalcDistance(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  std::vector<std::vector<float>> distances;
+  std::vector<pb::common::Vector> result_op_left_vectors;
+  std::vector<pb::common::Vector> result_op_right_vectors;
+
+  status = storage->VectorCalcDistance(*request, distances, result_op_left_vectors, result_op_right_vectors);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      response->mutable_error()->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).",
+                                                        Server::GetInstance()->ServerAddr(), status.error_str()));
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    return;
+  }
+
+  for (const auto& distance : distances) {
+    response->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
+  }
+
+  response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
+  response->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
+}
 
 void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* controller,
                                          const ::dingodb::pb::index::VectorCalcDistanceRequest* request,
                                          ::dingodb::pb::index::VectorCalcDistanceResponse* response,
                                          ::google::protobuf::Closure* done) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new ServiceClosure("VectorCalcDistance", done, request, response);
 
-  DINGO_LOG(DEBUG) << "VectorCalcDistance request: " << request->ShortDebugString();
-
-  if (request->op_left_vectors_size() * request->op_right_vectors_size() > FLAGS_vector_max_batch_count ||
-      request->op_left_vectors_size() == 0 || request->op_right_vectors_size() == 0) {
-    auto* err = response->mutable_error();
-    err->set_errcode(static_cast<Errno>(pb::error::EILLEGAL_PARAMTETERS));
-    err->set_errmsg("op_left_vectors_size or op_right_vectors_size exceed max limit");
-    DINGO_LOG(ERROR) << fmt::format("VectorCalcDistance request: {} response: {}", request->ShortDebugString(),
-                                    response->ShortDebugString());
-    return;
+  if (!FLAGS_enable_async_vector_operation) {
+    return DoVectorCalcDistance(storage_, controller, request, response, svr_done);
   }
 
-  if (FLAGS_enable_async_vector_operation) {
-    auto task = std::make_shared<VectorCalcDistanceTask>(storage_, cntl, request, response, done_guard.release());
-    auto ret = storage_->ExecuteRR(0, task);
-    if (!ret) {
-      // if Execute is failed, we must call done->Run
-      brpc::ClosureGuard done_guard(done);
-
-      DINGO_LOG(ERROR) << "VectorCalcDistance execute failed, request: " << request->ShortDebugString();
-      auto* err = response->mutable_error();
-      err->set_errcode(pb::error::EINTERNAL);
-      err->set_errmsg("VectorCalcDistance execute failed");
-      return;
-    }
-  } else {
-    std::vector<std::vector<float>> distances;
-    std::vector<::dingodb::pb::common::Vector> result_op_left_vectors;
-    std::vector<::dingodb::pb::common::Vector> result_op_right_vectors;
-
-    butil::Status status =
-        storage_->VectorCalcDistance(*request, distances, result_op_left_vectors, result_op_right_vectors);
-
-    if (!status.ok()) {
-      auto* err = response->mutable_error();
-      err->set_errcode(static_cast<Errno>(status.error_code()));
-      err->set_errmsg(status.error_str());
-      if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-        err->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).", Server::GetInstance()->ServerAddr(),
-                                    status.error_str()));
-        ServiceHelper::RedirectLeader(status.error_str(), response);
-      }
-      DINGO_LOG(ERROR) << fmt::format("VectorScanQuery request: {} response: {}", request->ShortDebugString(),
-                                      response->ShortDebugString());
-      return;
-    }
-
-    for (const auto& distance : distances) {
-      response->add_distances()->mutable_internal_distances()->Add(distance.begin(), distance.end());
-    }
-
-    response->mutable_op_left_vectors()->Add(result_op_left_vectors.begin(), result_op_left_vectors.end());
-    response->mutable_op_right_vectors()->Add(result_op_right_vectors.begin(), result_op_right_vectors.end());
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoVectorCalcDistance(storage, controller, request, response, svr_done); });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
   }
 }
 

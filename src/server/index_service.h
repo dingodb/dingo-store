@@ -45,20 +45,13 @@ class IndexServiceImpl : public pb::index::IndexService {
                               pb::index::VectorGetRegionMetricsResponse* response,
                               google::protobuf::Closure* done) override;
 
-  void VectorCalcDistance(google::protobuf::RpcController* controller,
-                          const ::dingodb::pb::index::VectorCalcDistanceRequest* request,
-                          ::dingodb::pb::index::VectorCalcDistanceResponse* response,
-                          ::google::protobuf::Closure* done) override;
-
-  void VectorCount(google::protobuf::RpcController* controller, const ::dingodb::pb::index::VectorCountRequest* request,
-                   ::dingodb::pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) override;
+  void VectorCount(google::protobuf::RpcController* controller, const pb::index::VectorCountRequest* request,
+                   pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) override;
 
   // for debug
   void VectorSearchDebug(google::protobuf::RpcController* controller,
                          const pb::index::VectorSearchDebugRequest* request,
                          pb::index::VectorSearchDebugResponse* response, google::protobuf::Closure* done) override;
-
-  void SetStorage(std::shared_ptr<Storage> storage);
 
   // txn api
   void TxnGet(google::protobuf::RpcController* controller, const pb::index::TxnGetRequest* request,
@@ -89,41 +82,13 @@ class IndexServiceImpl : public pb::index::IndexService {
   void TxnDump(google::protobuf::RpcController* controller, const pb::index::TxnDumpRequest* request,
                pb::index::TxnDumpResponse* response, google::protobuf::Closure* done) override;
 
+  void SetStorage(StoragePtr storage) { storage_ = storage; }
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
+
  private:
-  butil::Status ValidateVectorBatchQueryRequest(const dingodb::pb::index::VectorBatchQueryRequest* request,
-                                                store::RegionPtr region);
-  butil::Status ValidateVectorSearchRequest(const dingodb::pb::index::VectorSearchRequest* request,
-                                            store::RegionPtr region);
-  butil::Status ValidateVectorAddRequest(const dingodb::pb::index::VectorAddRequest* request, store::RegionPtr region);
-  butil::Status ValidateVectorDeleteRequest(const dingodb::pb::index::VectorDeleteRequest* request,
-                                            store::RegionPtr region);
-  butil::Status ValidateVectorGetBorderIdRequest(const dingodb::pb::index::VectorGetBorderIdRequest* request,
-                                                 store::RegionPtr region);
-  butil::Status ValidateVectorScanQueryRequest(const dingodb::pb::index::VectorScanQueryRequest* request,
-                                               store::RegionPtr region);
-  butil::Status ValidateVectorGetRegionMetricsRequest(const dingodb::pb::index::VectorGetRegionMetricsRequest* request,
-                                                      store::RegionPtr region);
-  butil::Status ValidateVectorCountRequest(const dingodb::pb::index::VectorCountRequest* request,
-                                           store::RegionPtr region);
-
-  // This function is for testing only
-  butil::Status ValidateVectorSearchDebugRequest(const dingodb::pb::index::VectorSearchDebugRequest* request,
-                                                 store::RegionPtr region);
-  butil::Status ValidateTxnGetRequest(const dingodb::pb::index::TxnGetRequest* request);
-  butil::Status ValidateTxnScanRequestIndex(store::RegionPtr region, const pb::common::Range& req_range);
-  butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::index::TxnPrewriteRequest* request);
-  butil::Status ValidateTxnCommitRequest(const dingodb::pb::index::TxnCommitRequest* request);
-  butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::index::TxnCheckTxnStatusRequest* request);
-  butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::index::TxnResolveLockRequest* request);
-  butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::index::TxnBatchGetRequest* request);
-  butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::index::TxnBatchRollbackRequest* request);
-  butil::Status ValidateTxnScanLockRequest(const dingodb::pb::index::TxnScanLockRequest* request);
-  butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::index::TxnHeartBeatRequest* request);
-  butil::Status ValidateTxnGcRequest(const dingodb::pb::index::TxnGcRequest* request);
-  butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::index::TxnDeleteRangeRequest* request);
-  butil::Status ValidateTxnDumpRequest(const dingodb::pb::index::TxnDumpRequest* request);
-
-  std::shared_ptr<Storage> storage_;
+  StoragePtr storage_;
+  // Run service request.
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb

@@ -2004,7 +2004,7 @@ struct BatchPutGetParam {
 void BatchPut(std::shared_ptr<Context> ctx) {
   std::vector<int64_t> latencys;
   for (int i = 0; i < ctx->req_num; ++i) {
-    std::string key = ctx->prefix + Helper::GenRandomStringV2(32);
+    std::string key = dingodb::Helper::HexToString(ctx->prefix) + Helper::GenRandomStringV2(32);
     std::string value = Helper::GenRandomString(256);
     SendKvPut(ctx->region_id, key, value);
     latencys.push_back(InteractionManager::GetInstance().GetLatency());

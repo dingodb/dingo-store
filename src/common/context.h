@@ -15,6 +15,7 @@
 #ifndef DINGODB_COMMON_CONTEXT_H_
 #define DINGODB_COMMON_CONTEXT_H_
 
+#include <atomic>
 #include <memory>
 #include <string>
 
@@ -121,17 +122,12 @@ class Context {
   bool Flush() const { return flush_; }
   void SetFlush(bool flush) { flush_ = flush; }
 
-  // pb::common::ClusterRole ClusterRole() { return role_; }
-  // void SetClusterRole(pb::common::ClusterRole role) { role_ = role; }
+  void EnableSyncMode() { enable_sync_.store(true, std::memory_order_relaxed); }
+  bool IsSyncMode() const { return enable_sync_.load(std::memory_order_relaxed); }
 
-  void EnableSyncMode() {
-    enable_sync_ = true;
-    cond_ = std::make_shared<BthreadCond>();
-  }
-
-  bool IsSyncMode() const { return enable_sync_; }
-
+  void CreateCond() { cond_ = std::make_shared<BthreadCond>(); }
   std::shared_ptr<BthreadCond> Cond() { return cond_; }
+
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
   void SetStatus(butil::Status&& status) { status_ = status; }  // NOLINT
@@ -157,7 +153,7 @@ class Context {
   // pb::common::ClusterRole role_;
 
   // For sync mode
-  bool enable_sync_;
+  std::atomic<bool> enable_sync_;
   butil::Status status_;
   std::shared_ptr<BthreadCond> cond_;
 
@@ -166,6 +162,8 @@ class Context {
 
   WriteCbFunc write_cb_;
 };
+
+using ContextPtr = std::shared_ptr<Context>;
 
 }  // namespace dingodb
 

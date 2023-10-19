@@ -30,6 +30,60 @@
 
 namespace dingodb {
 
+// Handle service request in execute queue.
+class ServiceTask : public TaskRunnable {
+ public:
+  using Handler = std::function<void(void)>;
+  ServiceTask(Handler handle) : handle_(handle) {}
+  ~ServiceTask() override = default;
+
+  std::string Type() override { return "SERVICE_TASK"; }
+
+  void Run() override { handle_(); }
+
+ private:
+  Handler handle_;
+};
+
+// Wrapper brpc service closure for log.
+template <typename T, typename U>
+class ServiceClosure : public google::protobuf::Closure {
+ public:
+  ServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request, U* response)
+      : method_name_(method_name), done_(done), request_(request), response_(response) {
+    start_time_ = Helper::TimestampMs();
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  }
+  ~ServiceClosure() override = default;
+
+  void Run() override {
+    std::unique_ptr<ServiceClosure<T, U>> self_guard(this);
+    brpc::ClosureGuard done_guard(done_);
+
+    uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+    if (response_->error().errcode() != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}",
+                                      method_name_, elapsed_time,
+                                      response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                      request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    } else {
+      DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}",
+                                      method_name_, elapsed_time,
+                                      response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                      request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    }
+  }
+
+ private:
+  std::string method_name_;
+  uint64_t start_time_;
+
+  google::protobuf::Closure* done_;
+  const T* request_;
+  U* response_;
+};
+
 class ServiceHelper {
  public:
   template <typename T>
@@ -38,10 +92,13 @@ class ServiceHelper {
   template <typename T>
   static pb::node::NodeInfo RedirectLeader(std::string addr);
 
+  static void SetError(pb::error::Error* error, int errcode, const std::string& errmsg);
+  static void SetError(pb::error::Error* error, const std::string& errmsg);
+
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, int64_t region_id);
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region);
-  static butil::Status GetStoreRegionInfo(int64_t region_id, pb::error::StoreRegionInfo& store_region_info);
-  static butil::Status GetStoreRegionInfo(store::RegionPtr region, pb::error::StoreRegionInfo& store_region_info);
+  static butil::Status GetStoreRegionInfo(int64_t region_id, pb::error::Error* error);
+  static butil::Status GetStoreRegionInfo(store::RegionPtr region, pb::error::Error* error);
   static butil::Status ValidateRegionState(store::RegionPtr region);
   static butil::Status ValidateRange(const pb::common::Range& range);
   static butil::Status ValidateKeyInRange(const pb::common::Range& range, const std::vector<std::string_view>& keys);
