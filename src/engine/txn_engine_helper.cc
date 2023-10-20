@@ -190,7 +190,7 @@ butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine
   kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
   kv_deletes_with_cf.insert_or_assign(Constant::kTxnDataCfId, kv_deletes_data);
 
-  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
     DINGO_LOG(FATAL) << "[txn]Rollback NewMultiCfWriter failed, start_ts: " << start_ts;
   }
@@ -261,7 +261,7 @@ butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
   kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
   kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
 
-  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
     DINGO_LOG(FATAL) << "[txn]Commit NewMultiCfWriter failed, commit_ts: " << commit_ts;
   }

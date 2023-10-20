@@ -41,7 +41,9 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
+        enable_sync_(false) {
+    bthread_mutex_init(&cond_mutex_, nullptr);
+  }
   Context(brpc::Controller* cntl, google::protobuf::Closure* done)
       : cntl_(cntl),
         done_(done),
@@ -51,7 +53,9 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
+        enable_sync_(false) {
+    bthread_mutex_init(&cond_mutex_, nullptr);
+  }
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
       : cntl_(cntl),
         done_(done),
@@ -61,7 +65,9 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
+        enable_sync_(false) {
+    bthread_mutex_init(&cond_mutex_, nullptr);
+  }
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, const google::protobuf::Message* request,
           google::protobuf::Message* response)
       : cntl_(cntl),
@@ -72,8 +78,10 @@ class Context {
         delete_files_in_range_(false),
         flush_(false),
         // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {}
-  ~Context() = default;
+        enable_sync_(false) {
+    bthread_mutex_init(&cond_mutex_, nullptr);
+  }
+  ~Context() { bthread_mutex_destroy(&cond_mutex_); }
 
   brpc::Controller* Cntl() { return cntl_; }
   Context& SetCntl(brpc::Controller* cntl) {
@@ -125,8 +133,14 @@ class Context {
   void EnableSyncMode() { enable_sync_.store(true, std::memory_order_relaxed); }
   bool IsSyncMode() const { return enable_sync_.load(std::memory_order_relaxed); }
 
-  void CreateCond() { cond_ = std::make_shared<BthreadCond>(); }
-  std::shared_ptr<BthreadCond> Cond() { return cond_; }
+  void CreateCond() {
+    BAIDU_SCOPED_LOCK(cond_mutex_);
+    cond_ = std::make_shared<BthreadCond>();
+  }
+  BthreadCondPtr Cond() {
+    BAIDU_SCOPED_LOCK(cond_mutex_);
+    return cond_;
+  }
 
   butil::Status Status() { return status_; }
   void SetStatus(butil::Status& status) { status_ = status; }
@@ -154,8 +168,9 @@ class Context {
 
   // For sync mode
   std::atomic<bool> enable_sync_;
+  BthreadCondPtr cond_;
+  bthread_mutex_t cond_mutex_;
   butil::Status status_;
-  std::shared_ptr<BthreadCond> cond_;
 
   pb::common::RegionEpoch region_epoch_;
   pb::store::IsolationLevel isolation_level_;

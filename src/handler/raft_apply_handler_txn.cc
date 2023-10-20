@@ -79,7 +79,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     }
   }
 
-  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                     region->Id(), term_id, log_id)
@@ -383,7 +383,7 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
   kv_puts_with_cf.insert_or_assign(Constant::kTxnDataCfId, kv_puts_data);
   kv_puts_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_puts_lock);
 
-  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                     region->Id(), term_id, log_id)
@@ -606,7 +606,7 @@ butil::Status TxnHandler::DoTxnCommit(std::shared_ptr<Context> ctx, store::Regio
   kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
   kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
 
-  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                     region->Id(), term_id, log_id)
@@ -1132,7 +1132,7 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
 
-  auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnDeleteRange, term: {} apply_log_id: {}", region->Id(),
                                     term_id, log_id)
