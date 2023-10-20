@@ -143,7 +143,7 @@ static std::string GenMetaKey(int64_t vector_index_id) {
 }
 
 butil::Status VectorIndexWrapper::SaveMeta() {
-  auto meta_writer = Server::GetInstance()->GetMetaWriter();
+  auto meta_writer = Server::GetInstance().GetMetaWriter();
   if (meta_writer == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "meta writer is nullptr.");
   }
@@ -167,7 +167,7 @@ butil::Status VectorIndexWrapper::SaveMeta() {
 }
 
 butil::Status VectorIndexWrapper::LoadMeta() {
-  auto meta_reader = Server::GetInstance()->GetMetaReader();
+  auto meta_reader = Server::GetInstance().GetMetaReader();
   if (meta_reader == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "meta reader is nullptr.");
   }

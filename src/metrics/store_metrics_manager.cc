@@ -94,15 +94,15 @@ bool StoreMetrics::Init() { return CollectMetrics(); }
 bool StoreMetrics::CollectMetrics() {
   std::map<std::string, int64_t> output;
 
-  auto role = Server::GetInstance()->GetRole();
-  auto config = ConfigManager::GetInstance()->GetConfig(role);
+  auto role = Server::GetInstance().GetRole();
+  auto config = ConfigManager::GetInstance().GetConfig(role);
 
   // system disk capacity
   if (!Helper::GetSystemDiskCapacity(config->GetString("store.path"), output)) {
     return false;
   }
 
-  metrics_->mutable_store_own_metrics()->set_id(Server::GetInstance()->Id());
+  metrics_->mutable_store_own_metrics()->set_id(Server::GetInstance().Id());
   metrics_->mutable_store_own_metrics()->set_system_total_capacity(output["system_total_capacity"]);
   metrics_->mutable_store_own_metrics()->set_system_free_capacity(output["system_free_capacity"]);
 
@@ -281,8 +281,8 @@ std::vector<std::vector<store::RegionPtr>> GenBatchRegion(std::vector<store::Reg
 }
 
 bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
   std::vector<store::RegionPtr> need_collect_regions;
@@ -329,8 +329,8 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
 }
 
 bool StoreRegionMetrics::CollectMetrics() {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
   std::vector<store::RegionPtr> need_collect_regions;

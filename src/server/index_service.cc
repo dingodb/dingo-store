@@ -64,7 +64,7 @@ static butil::Status ValidateVectorBatchQueryRequest(const pb::index::VectorBatc
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -97,7 +97,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorBatchQueryRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -120,7 +120,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -158,7 +158,7 @@ static butil::Status ValidateVectorSearchRequest(const pb::index::VectorSearchRe
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -224,7 +224,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorSearchRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -256,7 +256,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -292,7 +292,7 @@ static butil::Status ValidateVectorAddRequest(const pb::index::VectorAddRequest*
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -385,7 +385,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto status = ValidateVectorAddRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -407,7 +407,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -441,7 +441,7 @@ static butil::Status ValidateVectorDeleteRequest(const pb::index::VectorDeleteRe
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -484,7 +484,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto status = ValidateVectorDeleteRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -501,7 +501,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -535,7 +535,7 @@ static butil::Status ValidateVectorGetBorderIdRequest(const pb::index::VectorGet
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -558,7 +558,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorGetBorderIdRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -572,7 +572,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -608,7 +608,7 @@ static butil::Status ValidateVectorScanQueryRequest(const pb::index::VectorScanQ
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -646,7 +646,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorScanQueryRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -675,7 +675,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -712,7 +712,7 @@ static butil::Status ValidateVectorGetRegionMetricsRequest(const pb::index::Vect
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -745,7 +745,7 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorGetRegionMetricsRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -759,7 +759,7 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -794,7 +794,7 @@ static butil::Status ValidateVectorCountRequest(const pb::index::VectorCountRequ
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -851,7 +851,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorCountRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -866,7 +866,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -900,7 +900,7 @@ static butil::Status ValidateVectorSearchDebugRequest(const pb::index::VectorSea
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -976,7 +976,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   butil::Status status = ValidateVectorSearchDebugRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1010,7 +1010,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1099,7 +1099,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1155,7 +1155,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::index::TxnScanRequest
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
-        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance()->Id()));
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
   }
 
   // check if limit is valid
@@ -1198,7 +1198,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequestIndex(request, region, uniform_range);
   if (!status.ok()) {
@@ -1228,7 +1228,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1330,7 +1330,7 @@ static butil::Status ValidateTxnPrewriteRequest(const pb::index::TxnPrewriteRequ
   }
 
   // Validate region exist.
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
@@ -1453,7 +1453,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1553,7 +1553,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1656,7 +1656,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1753,7 +1753,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1850,7 +1850,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1964,7 +1964,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2071,7 +2071,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2165,7 +2165,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2242,7 +2242,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, co
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2326,7 +2326,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2422,7 +2422,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }

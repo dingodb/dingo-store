@@ -63,7 +63,10 @@ DEFINE_uint32(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
 void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
 
-Server* Server::GetInstance() { return Singleton<Server>::get(); }
+Server& Server::GetInstance() {
+  static Server instance;
+  return instance;
+}
 
 bool Server::InitConfig(const std::string& filename) {
   std::shared_ptr<Config> const config = std::make_shared<YamlConfig>();
@@ -71,7 +74,7 @@ bool Server::InitConfig(const std::string& filename) {
     return false;
   }
 
-  ConfigManager::GetInstance()->Register(role_, config);
+  ConfigManager::GetInstance().Register(role_, config);
 
   // init ip2hostname_cache
   ip2hostname_cache_.Init(256);
@@ -99,7 +102,7 @@ pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> con
 }
 
 bool Server::InitLog() {
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   dingodb::pb::node::LogLevel const log_level = GetDingoLogLevel(config);
 
@@ -116,14 +119,14 @@ bool Server::InitLog() {
 }
 
 bool Server::InitServerID() {
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
   id_ = config->GetInt("cluster.instance_id");
   keyring_ = config->GetString("cluster.keyring");
   return id_ != 0 && (!keyring_.empty());
 }
 
 bool Server::InitDirectory() {
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   // db path
   auto db_path = config->GetString("store.path");
@@ -179,7 +182,7 @@ bool Server::InitDirectory() {
 }
 
 bool Server::InitRawEngine() {
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   raw_engine_ = std::make_shared<RawRocksEngine>();
   if (!raw_engine_->Init(config)) {
@@ -194,7 +197,7 @@ bool Server::InitRawEngine() {
 }
 
 bool Server::InitEngine() {
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   // cooridnator
   if (role_ == pb::common::ClusterRole::COORDINATOR) {
@@ -284,7 +287,7 @@ butil::Status Server::StartTsoRegion(const std::shared_ptr<Config>& config, std:
 bool Server::InitCoordinatorInteraction() {
   coordinator_interaction_ = std::make_shared<CoordinatorInteraction>();
 
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   if (!FLAGS_coor_url.empty()) {
     return coordinator_interaction_->InitByNameService(FLAGS_coor_url,
@@ -298,7 +301,7 @@ bool Server::InitCoordinatorInteraction() {
 bool Server::InitCoordinatorInteractionForAutoIncrement() {
   coordinator_interaction_incr_ = std::make_shared<CoordinatorInteraction>();
 
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   if (!FLAGS_coor_url.empty()) {
     return coordinator_interaction_incr_->InitByNameService(
@@ -334,7 +337,7 @@ static int32_t GetInterval(std::shared_ptr<Config> config, const std::string& co
 
 bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
-  auto config = ConfigManager::GetInstance()->GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
 
   // Add heartbeat crontab
   crontab_configs_.push_back({
@@ -351,7 +354,7 @@ bool Server::InitCrontabManager() {
       {pb::common::STORE, pb::common::INDEX},
       GetInterval(config, "server.metrics_collect_interval_s", Constant::kRegionMetricsCollectIntervalS) * 1000,
       true,
-      [](void*) { Server::GetInstance()->GetStoreMetricsManager()->CollectStoreRegionMetrics(); },
+      [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreRegionMetrics(); },
   });
 
   // Add store metrics crontab
@@ -360,7 +363,7 @@ bool Server::InitCrontabManager() {
       {pb::common::STORE, pb::common::INDEX},
       GetInterval(config, "server.store_metrics_collect_interval_s", Constant::kStoreMetricsCollectIntervalS) * 1000,
       true,
-      [](void*) { Server::GetInstance()->GetStoreMetricsManager()->CollectStoreMetrics(); },
+      [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreMetrics(); },
   });
 
   // Add store approximate size metrics crontab
@@ -371,18 +374,18 @@ bool Server::InitCrontabManager() {
                   Constant::kApproximateSizeMetricsCollectIntervalS) *
           1000,
       true,
-      [](void*) { Server::GetInstance()->GetStoreMetricsManager()->CollectApproximateSizeMetrics(); },
+      [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectApproximateSizeMetrics(); },
   });
 
   // Add scan crontab
   if (role_ == pb::common::STORE) {
-    ScanManager::GetInstance()->Init(config);
+    ScanManager::GetInstance().Init(config);
     crontab_configs_.push_back({
         "SCAN",
         {pb::common::STORE},
         GetInterval(config, "scan.scan_interval_s", Constant::kScanIntervalS) * 1000,
         false,
-        [](void*) { ScanManager::RegularCleaningHandler(ScanManager::GetInstance()); },
+        [](void*) { ScanManager::RegularCleaningHandler(nullptr); },
     });
   }
 
@@ -515,7 +518,7 @@ bool Server::InitVectorIndexManager() { return VectorIndexManager::Init(GetAllAl
 
 bool Server::InitPreSplitChecker() {
   pre_split_checker_ = std::make_shared<PreSplitChecker>();
-  auto config = GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig(role_);
   int split_check_concurrency = config->GetInt("region.split_check_concurrency");
   split_check_concurrency =
       split_check_concurrency > 0 ? split_check_concurrency : Constant::kDefaultSplitCheckConcurrency;

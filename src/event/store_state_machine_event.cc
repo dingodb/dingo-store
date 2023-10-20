@@ -80,7 +80,7 @@ int SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
 
 // Launch save raft snapshot
 static void LaunchSaveRaftSnapshot(int64_t region_id) {
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   if (engine != nullptr) {
     auto ctx = std::make_shared<Context>();
     ctx->SetRegionId(region_id);
@@ -98,7 +98,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
   auto region = the_event->region;
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   auto node = raft_store_engine->GetNode(region->Id());
   if (node != nullptr) {
     uint32_t election_timeout_ms = ConfigHelper::GetElectionTimeout() * 1000;
@@ -107,7 +107,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
     }
   }
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
@@ -123,7 +123,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
 
   // Update region meta
   if (store_region_meta != nullptr) {
-    store_region_meta->UpdateLeaderId(region, Server::GetInstance()->Id());
+    store_region_meta->UpdateLeaderId(region, Server::GetInstance().Id());
   }
 
   // trigger heartbeat
@@ -154,7 +154,7 @@ int SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event)
   auto the_event = std::dynamic_pointer_cast<SmConfigurationCommittedEvent>(event);
 
   // Update region definition peers
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   if (store_region_meta == nullptr) {
     return 0;
   }
@@ -209,7 +209,7 @@ int SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmStartFollowingEvent>(event);
   auto region = the_event->region;
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   auto node = raft_store_engine->GetNode(region->Id());
   if (node != nullptr) {
     uint32_t election_timeout_ms = ConfigHelper::GetElectionTimeout() * 1000;
@@ -218,7 +218,7 @@ int SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
     }
   }
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);

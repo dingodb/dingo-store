@@ -128,7 +128,7 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 static bool CheckLeaderAndFollowerStatus(int64_t region_id) {
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get engine failed.", region_id);
     return false;
@@ -234,7 +234,7 @@ void SplitCheckTask::SplitCheck() {
   }
 
   // Invoke coordinator SplitRegion api.
-  auto coordinator_interaction = Server::GetInstance()->GetCoordinatorInteraction();
+  auto coordinator_interaction = Server::GetInstance().GetCoordinatorInteraction();
   pb::coordinator::SplitRegionRequest request;
   request.mutable_split_request()->set_split_from_region_id(region_->Id());
   request.mutable_split_request()->set_split_watershed_key(split_key);
@@ -325,9 +325,9 @@ void PreSplitCheckTask::PreSplitCheck() {
     return;
   }
 
-  auto raw_engine = Server::GetInstance()->GetRawEngine();
-  auto metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
-  auto regions = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
+  auto raw_engine = Server::GetInstance().GetRawEngine();
+  auto metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
+  auto regions = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
   uint32_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
   for (auto& region : regions) {
     auto region_metric = metrics->GetMetrics(region->Id());
@@ -424,8 +424,8 @@ bool PreSplitChecker::Execute(TaskRunnablePtr task) { return worker_->Execute(ta
 
 void PreSplitChecker::TriggerPreSplitCheck(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<PreSplitCheckTask>(Server::GetInstance()->GetPreSplitChecker()->GetSplitCheckWorkers());
-  Server::GetInstance()->GetPreSplitChecker()->Execute(task);
+  auto task = std::make_shared<PreSplitCheckTask>(Server::GetInstance().GetPreSplitChecker()->GetSplitCheckWorkers());
+  Server::GetInstance().GetPreSplitChecker()->Execute(task);
 }
 
 }  // namespace dingodb

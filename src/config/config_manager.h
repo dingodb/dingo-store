@@ -25,15 +25,12 @@
 #include "config/yaml_config.h"
 #include "proto/common.pb.h"
 
-template <typename T>
-struct DefaultSingletonTraits;
-
 namespace dingodb {
 
 // Manage all config
 class ConfigManager {
  public:
-  static ConfigManager *GetInstance();
+  static ConfigManager &GetInstance();
 
   bool IsExist(pb::common::ClusterRole role);
   void Register(pb::common::ClusterRole role, std::shared_ptr<Config> config);
@@ -46,8 +43,6 @@ class ConfigManager {
  private:
   ConfigManager();
   ~ConfigManager();
-
-  friend struct DefaultSingletonTraits<ConfigManager>;
 
   bthread_mutex_t mutex_;
   std::map<std::string, std::shared_ptr<Config> > configs_;

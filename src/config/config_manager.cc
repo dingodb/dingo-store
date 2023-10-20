@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "butil/memory/singleton.h"
 #include "butil/scoped_lock.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -26,7 +25,10 @@ namespace dingodb {
 ConfigManager::ConfigManager() { bthread_mutex_init(&mutex_, nullptr); }
 ConfigManager::~ConfigManager() { bthread_mutex_destroy(&mutex_); }
 
-ConfigManager *ConfigManager::GetInstance() { return Singleton<ConfigManager>::get(); }
+ConfigManager& ConfigManager::GetInstance() {
+  static ConfigManager instance;
+  return instance;
+}
 
 bool ConfigManager::IsExist(pb::common::ClusterRole role) {
   BAIDU_SCOPED_LOCK(mutex_);

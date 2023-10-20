@@ -188,7 +188,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   }
 
   std::string region_checkpoint_path =
-      fmt::format("{}/{}_{}", Server::GetInstance()->GetCheckpointPath(), region->Id(), Helper::TimestampNs());
+      fmt::format("{}/{}_{}", Server::GetInstance().GetCheckpointPath(), region->Id(), Helper::TimestampNs());
 
   std::vector<pb::store_internal::SstFileInfo> sst_files;
   auto status = func(region_checkpoint_path, region, sst_files);
@@ -220,7 +220,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
 
   // update snapshot epoch to store meta
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   if (!store_region_meta) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] get store region meta failed", region->Id());
     return false;
@@ -252,7 +252,7 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
     return butil::Status(pb::error::EREGION_VERSION, "snapshot version abnormal, abandon load snapshot");
 
   } else if (meta.epoch().version() > region->Epoch().version()) {
-    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     store_region_meta->UpdateEpochVersionAndRange(region, meta.epoch().version(), meta.range());
   }
 
@@ -469,7 +469,7 @@ std::string GetSnapshotPolicy(std::shared_ptr<dingodb::Config> config) {
 
 int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, int64_t term,
                                     int64_t log_index, braft::SnapshotWriter* writer, braft::Closure* done) {
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   std::string policy = GetSnapshotPolicy(config);
   if (policy == "checkpoint") {
     SaveSnapshotByCheckpoint(region, engine, term, log_index, writer, done);

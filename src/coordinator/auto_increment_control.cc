@@ -209,7 +209,7 @@ void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location
   Helper::GetServerLocation(raft_location, server_location);
 
   // transform ip to hostname
-  Server::GetInstance()->Ip2Hostname(*server_location.mutable_host());
+  Server::GetInstance().Ip2Hostname(*server_location.mutable_host());
 
   // add to cache if get server_location
   if (server_location.host().length() > 0 && server_location.port() > 0) {
@@ -445,7 +445,7 @@ butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(int64_t 
   table_id_ptr->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id_ptr->set_entity_id(table_id);
   request.set_start_id(auto_increment);
-  return Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
+  return Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
 }
 
 void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(int64_t table_id, int64_t auto_increment) {
@@ -465,7 +465,7 @@ void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(int64_t table_id
     request.set_force(true);
 
     butil::Status status =
-        Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("UpdateAutoIncrement", request, response);
+        Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest("UpdateAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
       LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }
@@ -485,7 +485,7 @@ void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(int64_t table_id
     table_id_ptr->set_entity_id(table_id);
 
     butil::Status status =
-        Server::GetInstance()->GetCoordinatorInteractionIncr()->SendRequest("DeleteAutoIncrement", request, response);
+        Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest("DeleteAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
       LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }

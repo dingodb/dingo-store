@@ -51,7 +51,7 @@ void RegionControlServiceImpl::AddRegion(google::protobuf::RpcController* contro
 
   DINGO_LOG(DEBUG) << "AddRegion request: " << request->ShortDebugString();
 
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
@@ -76,7 +76,7 @@ void RegionControlServiceImpl::ChangeRegion(google::protobuf::RpcController* con
 
   DINGO_LOG(DEBUG) << "ChangeRegion request: " << request->ShortDebugString();
 
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
@@ -101,7 +101,7 @@ void RegionControlServiceImpl::DestroyRegion(google::protobuf::RpcController* co
 
   DINGO_LOG(DEBUG) << "DestroyRegion request: " << request->ShortDebugString();
 
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
@@ -126,7 +126,7 @@ void RegionControlServiceImpl::Snapshot(google::protobuf::RpcController* control
 
   DINGO_LOG(DEBUG) << "Snapshot request: " << request->ShortDebugString();
 
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
@@ -150,7 +150,7 @@ void RegionControlServiceImpl::TransferLeader(google::protobuf::RpcController* c
 
   DINGO_LOG(DEBUG) << "TransferLeader request: " << request->ShortDebugString();
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     auto status = raft_store_engine->TransferLeader(request->region_id(), request->peer());
     if (!status.ok()) {
@@ -170,7 +170,7 @@ void RegionControlServiceImpl::SnapshotVectorIndex(google::protobuf::RpcControll
 
   DINGO_LOG(DEBUG) << "SnapshotVectorIndex request: " << request->ShortDebugString();
 
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
@@ -197,7 +197,7 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   butil::EndPoint endpoint;
   butil::str2endpoint(request->location().host().c_str(), request->location().port(), &endpoint);
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
     auto* error = response->mutable_error();
@@ -246,7 +246,7 @@ void RegionControlServiceImpl::Compact(google::protobuf::RpcController* controll
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  auto raw_engine = Server::GetInstance()->GetRawEngine();
+  auto raw_engine = Server::GetInstance().GetRawEngine();
   if (raw_engine == nullptr) {
     response->mutable_error()->set_errcode(pb::error::ERAW_ENGINE_NOT_FOUND);
     response->mutable_error()->set_errmsg("Not found raw engine.");
@@ -272,12 +272,12 @@ void RegionControlServiceImpl::Compact(google::protobuf::RpcController* controll
 static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   pb::common::RegionMetrics region_metrics;
   region_metrics.set_id(region_id);
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return region_metrics;
   }
 
-  auto raw_engine = Server::GetInstance()->GetRawEngine();
+  auto raw_engine = Server::GetInstance().GetRawEngine();
 
   int64_t size = 0;
   int32_t key_count = 0;
@@ -319,7 +319,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
   DINGO_LOG(DEBUG) << "Debug request: " << request->ShortDebugString();
 
   if (request->type() == pb::region_control::DebugType::STORE_REGION_META_STAT) {
-    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     auto regions = store_region_meta->GetAllRegion();
 
     std::map<std::string, int32_t> state_counts;
@@ -336,7 +336,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_META_DETAILS) {
-    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     std::vector<store::RegionPtr> regions;
     if (request->region_ids().empty()) {
       regions = store_region_meta->GetAllRegion();
@@ -356,10 +356,10 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_CONTROL_COMMAND) {
     std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
     if (request->region_ids().empty()) {
-      commands = Server::GetInstance()->GetRegionCommandManager()->GetAllCommand();
+      commands = Server::GetInstance().GetRegionCommandManager()->GetAllCommand();
     } else {
       for (auto region_id : request->region_ids()) {
-        auto region_commands = Server::GetInstance()->GetRegionCommandManager()->GetCommands(region_id);
+        auto region_commands = Server::GetInstance().GetRegionCommandManager()->GetCommands(region_id);
         if (!region_commands.empty()) {
           commands.insert(commands.end(), region_commands.begin(), region_commands.end());
         }
@@ -371,7 +371,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_RAFT_META) {
-    auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+    auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
 
     std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
     if (request->region_ids().empty()) {
@@ -390,14 +390,14 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_EXECUTOR) {
-    auto region_ids = Server::GetInstance()->GetRegionController()->GetAllRegion();
+    auto region_ids = Server::GetInstance().GetRegionController()->GetAllRegion();
 
     for (auto region_id : region_ids) {
       response->mutable_region_executor()->add_region_ids(region_id);
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_REGION_METRICS) {
-    auto store_region_metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
+    auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
 
     std::vector<store::RegionMetricsPtr> region_metricses;
     if (request->region_ids().empty()) {
@@ -427,7 +427,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
 
   } else if (request->type() == pb::region_control::DebugType::STORE_METRICS) {
-    auto store_metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
+    auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
     if (store_metrics_manager == nullptr) {
       return;
     }
@@ -438,7 +438,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     *(response->mutable_store_metrics()->mutable_metrics()) = (*store_metrics);
 
   } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
-    auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+    auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     if (store_region_meta == nullptr) {
       return;
     }

@@ -87,10 +87,10 @@ static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_path, 
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftStoreEngine::Recover() {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
-  auto store_raft_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
-  auto store_region_metrics = Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics();
-  auto config = Server::GetInstance()->GetConfig();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
+  auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
+  auto config = ConfigManager::GetInstance().GetConfig();
   auto regions = store_region_meta->GetAllRegion();
 
   int count = 0;
@@ -112,9 +112,9 @@ bool RaftStoreEngine::Recover() {
       }
 
       RaftControlAble::AddNodeParameter parameter;
-      parameter.role = Server::GetInstance()->GetRole();
+      parameter.role = Server::GetInstance().GetRole();
       parameter.is_restart = true;
-      parameter.raft_endpoint = Server::GetInstance()->RaftEndpoint();
+      parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
       parameter.raft_path = config->GetString("raft.path");
       parameter.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
@@ -179,7 +179,7 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
   int64_t max_segment_size =
       parameter.log_max_segment_size > 0 ? parameter.log_max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
   auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(), max_segment_size);
-  Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
+  Server::GetInstance().GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
 
   // Build RaftNode
   auto node = std::make_shared<RaftNode>(region->Id(), region->Name(), braft::PeerId(parameter.raft_endpoint),
@@ -212,16 +212,16 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   auto state_machine = std::make_shared<MetaStateMachine>(meta_control, is_volatile);
 
   // Build log storage
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->id());
   int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
   auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->id(), max_segment_size);
-  Server::GetInstance()->GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
+  Server::GetInstance().GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
 
   std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
   auto const node = std::make_shared<RaftNode>(
-      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance()->RaftEndpoint()), state_machine, log_storage);
+      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance().RaftEndpoint()), state_machine, log_storage);
 
   // Build RaftNode
   if (node->Init(Helper::FormatPeers(Helper::ExtractLocations(region->peers())), config->GetString("raft.path"),

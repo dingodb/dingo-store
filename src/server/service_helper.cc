@@ -36,7 +36,7 @@ void ServiceHelper::SetError(pb::error::Error* error, int errcode, const std::st
 void ServiceHelper::SetError(pb::error::Error* error, const std::string& errmsg) { error->set_errmsg(errmsg); }
 
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, int64_t region_id) {
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
   }
@@ -62,7 +62,7 @@ butil::Status ServiceHelper::GetStoreRegionInfo(int64_t region_id, pb::error::Er
     return butil::Status(pb::error::EINTERNAL, "Not need set store region info");
   }
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
   }
@@ -185,7 +185,7 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
 }
 
 butil::Status ServiceHelper::ValidateRegion(int64_t region_id, const std::vector<std::string_view>& keys) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
   auto status = ValidateRegionState(region);
@@ -229,7 +229,7 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
 // if one store is set to read-only, all stores are set to read-only
 // this flag is set by coordinator and send to all stores using store heartbeat
 butil::Status ServiceHelper::ValidateClusterReadOnly() {
-  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  auto is_read_only = Server::GetInstance().IsReadOnly();
   if (is_read_only) {
     DINGO_LOG(WARNING) << "cluster is set to read-only from coordinator.";
     return butil::Status(pb::error::ESYSTEM_CLUSTER_READ_ONLY,

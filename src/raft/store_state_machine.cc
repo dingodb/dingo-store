@@ -143,7 +143,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
   // If operation is idempotent, it's ok.
   // If not, must be stored with the data.
   if (applied_index_ % kSaveAppliedIndexStep == 0) {
-    Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+    Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
   }
 }
 
@@ -167,7 +167,7 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
   DispatchEvent(EventType::kSmSnapshotSave, event);
 
   if (raft_meta_ != nullptr) {
-    Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+    Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
   }
 
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_save done", region_->Id());
@@ -240,7 +240,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     if (raft_meta_ != nullptr) {
       raft_meta_->set_term(meta.last_included_term());
       raft_meta_->set_applied_index(meta.last_included_index());
-      Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
   }
 

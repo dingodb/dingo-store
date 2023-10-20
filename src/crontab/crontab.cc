@@ -54,7 +54,7 @@ void CrontabManager::AddCrontab(std::vector<CrontabConfig>& crontab_configs) {
     // Check whether should add crontab.
     bool should_add_crontab = false;
     for (auto role : crontab_config.roles) {
-      if (role == Server::GetInstance()->GetRole()) {
+      if (role == Server::GetInstance().GetRole()) {
         should_add_crontab = true;
       }
     }

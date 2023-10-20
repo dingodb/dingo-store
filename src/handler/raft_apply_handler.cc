@@ -374,7 +374,7 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
 
 // Launch rebuild vector index through raft state machine
 static void LaunchRebuildVectorIndex(int64_t region_id) {
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   if (engine != nullptr) {
     auto ctx = std::make_shared<Context>();
     ctx->SetRegionId(region_id);
@@ -389,12 +389,12 @@ static void LaunchRebuildVectorIndex(int64_t region_id) {
 
 // Launch do snapshot
 static void LaunchDoSnapshot(store::RegionPtr region) {  // NOLINT
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   store_region_meta->UpdateNeedBootstrapDoSnapshot(region, true);
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetDone(new SplitHandler::SplitClosure(region));
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   bool is_success = false;
   for (int i = 0; i < Constant::kSplitDoSnapshotRetryTimes; ++i) {
     auto ret = engine->DoSnapshot(ctx, region->Id());
@@ -426,7 +426,7 @@ void SplitHandler::SplitClosure::Run() {
     DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] finish snapshot success", region_->Id());
   }
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
   if (region_->Type() == pb::common::STORE_REGION) {
     store_region_meta->UpdateTemporaryDisableChange(region_, false);
@@ -438,7 +438,7 @@ void SplitHandler::SplitClosure::Run() {
 // Pre create region split
 bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr from_region, int64_t term_id,
                                 int64_t log_id) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
   if (request.epoch().version() != from_region->Epoch().version()) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -561,7 +561,7 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
 
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Not found raft store engine.", parent_region_id,
                                     region->Id());
@@ -576,13 +576,13 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
   }
 
   auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
-  Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
-  auto config = Server::GetInstance()->GetConfig();
+  Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
+  auto config = ConfigManager::GetInstance().GetConfig();
 
   RaftControlAble::AddNodeParameter parameter;
-  parameter.role = Server::GetInstance()->GetRole();
+  parameter.role = Server::GetInstance().GetRole();
   parameter.is_restart = false;
-  parameter.raft_endpoint = Server::GetInstance()->RaftEndpoint();
+  parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
   parameter.raft_path = config->GetString("raft.path");
   parameter.election_timeout_ms = parent_node->IsLeader() ? 200 : 10 * 1000;
@@ -602,9 +602,9 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
     return nullptr;
   }
 
-  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
-  Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->AddRegion(region);
-  Server::GetInstance()->GetRegionController()->RegisterExecutor(region->Id());
+  Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+  Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->AddRegion(region);
+  Server::GetInstance().GetRegionController()->RegisterExecutor(region->Id());
 
   return region;
 }
@@ -612,7 +612,7 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
 // Post create region split
 bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr parent_region, int64_t term_id,
                                  int64_t log_id) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   int64_t parent_region_id = request.from_region_id();
   int64_t child_region_id = request.to_region_id();
 
@@ -724,7 +724,7 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
     }
   }
 
-  auto store_raft_meata = Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta();
+  auto store_raft_meata = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   if (store_raft_meata != nullptr) {
     store_raft_meata->SaveRaftMeta(from_region->Id());
   }
@@ -742,7 +742,7 @@ int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr r
                                     int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] save snapshot, term({}) log_id({})",
                                  region->ParentId(), region->Id(), term_id, log_id);
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
   to_ctx->SetDone(new SplitHandler::SplitClosure(region));
   auto status = engine->DoSnapshot(to_ctx, region->Id());

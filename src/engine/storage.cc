@@ -191,13 +191,13 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
     return status;
   }
 
-  ScanManager* manager = ScanManager::GetInstance();
-  std::shared_ptr<ScanContext> scan = manager->CreateScan(scan_id);
+  ScanManager& manager = ScanManager::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager.CreateScan(scan_id);
 
   status = scan->Open(*scan_id, engine_->GetRawEngine(), cf_name);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", *scan_id);
-    manager->DeleteScan(*scan_id);
+    manager.DeleteScan(*scan_id);
     *scan_id = "";
     return status;
   }
@@ -206,7 +206,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
                                   disable_coprocessor, coprocessor, kvs);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed: {}", *scan_id);
-    manager->DeleteScan(*scan_id);
+    manager.DeleteScan(*scan_id);
     *scan_id = "";
     kvs->clear();
     return status;
@@ -217,8 +217,8 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
 
 butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::string& scan_id, int64_t max_fetch_cnt,
                                       std::vector<pb::common::KeyValue>* kvs) {
-  ScanManager* manager = ScanManager::GetInstance();
-  std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
+  ScanManager& manager = ScanManager::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
   if (!scan) {
     DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
@@ -227,7 +227,7 @@ butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::strin
 
   status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs);
   if (!status.ok()) {
-    manager->DeleteScan(scan_id);
+    manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,
                                     max_fetch_cnt);
     return status;
@@ -237,8 +237,8 @@ butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::strin
 }
 
 butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string& scan_id) {
-  ScanManager* manager = ScanManager::GetInstance();
-  std::shared_ptr<ScanContext> scan = manager->FindScan(scan_id);
+  ScanManager& manager = ScanManager::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
   if (!scan) {
     DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
@@ -247,13 +247,13 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
 
   status = ScanHandler::ScanRelease(scan, scan_id);
   if (!status.ok()) {
-    manager->DeleteScan(scan_id);
+    manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanRelease failed : {}", scan_id);
     return status;
   }
 
   // if set auto release. directly delete
-  manager->TryDeleteScan(scan_id);
+  manager.TryDeleteScan(scan_id);
 
   return status;
 }
