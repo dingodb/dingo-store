@@ -46,7 +46,7 @@ void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
 
   // call HandleStoreHeartbeatResponse
   const auto& heartbeat_response = request->heartbeat_response();
-  auto store_meta = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta = Server::GetInstance().GetStoreMetaManager();
   HeartbeatTask::HandleStoreHeartbeatResponse(store_meta, heartbeat_response);
 }
 
@@ -58,9 +58,9 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   brpc::ClosureGuard const done_guard(done);
   DINGO_LOG(DEBUG) << "[push.store] request: " << request->ShortDebugString();
 
-  if (request->store_operation().id() != Server::GetInstance()->Id()) {
+  if (request->store_operation().id() != Server::GetInstance().Id()) {
     DINGO_LOG(ERROR) << fmt::format("[push.store] store id not match, req/local store id({} / {})",
-                                    request->store_operation().id(), Server::GetInstance()->Id());
+                                    request->store_operation().id(), Server::GetInstance().Id());
     return;
   }
 
@@ -82,10 +82,10 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     }
   };
 
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
   for (const auto& command : request->store_operation().region_cmds()) {
     butil::Status status;
-    auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+    auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
     auto validate_func = RegionController::GetValidater(command.region_cmd_type());
     status = (validate_func != nullptr) ? validate_func(command)

@@ -19,14 +19,13 @@
 #include <memory>
 #include <string>
 
-#include "butil/memory/singleton.h"
 #include "scan/scan.h"
 
 namespace dingodb {
 
 class ScanManager {
  public:
-  static ScanManager* GetInstance();
+  static ScanManager& GetInstance();
 
   ScanManager(const ScanManager& rhs) = delete;
   ScanManager& operator=(const ScanManager& rhs) = delete;
@@ -51,7 +50,6 @@ class ScanManager {
  private:
   ScanManager();
   ~ScanManager();
-  friend struct DefaultSingletonTraits<ScanManager>;
 
   std::map<std::string, std::shared_ptr<ScanContext>> alive_scans_;
   std::map<std::string, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;

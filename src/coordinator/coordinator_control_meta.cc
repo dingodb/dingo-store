@@ -2019,19 +2019,19 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
         *leader_location = part_peer.server_location();
 
         // transform ip to hostname
-        Server::GetInstance()->Ip2Hostname(*leader_location->mutable_host());
+        Server::GetInstance().Ip2Hostname(*leader_location->mutable_host());
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
         auto* voter_location = range_distribution->add_voters();
         *voter_location = part_peer.server_location();
         // transform ip to hostname
-        Server::GetInstance()->Ip2Hostname(*voter_location->mutable_host());
+        Server::GetInstance().Ip2Hostname(*voter_location->mutable_host());
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
         auto* learner_location = range_distribution->add_learners();
         *learner_location = part_peer.server_location();
         // transform ip to hostname
-        Server::GetInstance()->Ip2Hostname(*learner_location->mutable_host());
+        Server::GetInstance().Ip2Hostname(*learner_location->mutable_host());
       }
     }
 
@@ -2044,7 +2044,7 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
       *leader_location = part_region.definition().peers(random_int).server_location();
 
       // transform ip to hostname
-      Server::GetInstance()->Ip2Hostname(*leader_location->mutable_host());
+      Server::GetInstance().Ip2Hostname(*leader_location->mutable_host());
 
       DINGO_LOG(WARNING) << fmt::format("leader_location is null, set up a default value, table_id={} region_id={}",
                                         table_id, region_id)
@@ -2160,19 +2160,19 @@ butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index
       if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
         // transform ip to hostname
-        Server::GetInstance()->Ip2Hostname(*leader_location->mutable_host());
+        Server::GetInstance().Ip2Hostname(*leader_location->mutable_host());
       }
 
       if (part_peer.role() == ::dingodb::pb::common::PeerRole::VOTER) {
         auto* voter_location = range_distribution->add_voters();
         *voter_location = part_peer.server_location();
         // transform ip to hostname
-        Server::GetInstance()->Ip2Hostname(*voter_location->mutable_host());
+        Server::GetInstance().Ip2Hostname(*voter_location->mutable_host());
       } else if (part_peer.role() == ::dingodb::pb::common::PeerRole::LEARNER) {
         auto* learner_location = range_distribution->add_learners();
         *learner_location = part_peer.server_location();
         // transform ip to hostname
-        Server::GetInstance()->Ip2Hostname(*learner_location->mutable_host());
+        Server::GetInstance().Ip2Hostname(*learner_location->mutable_host());
       }
     }
 

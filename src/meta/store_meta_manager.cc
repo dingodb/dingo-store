@@ -283,28 +283,28 @@ pb::common::RegionDefinition Region::Definition() {
 }  // namespace store
 
 bool StoreServerMeta::Init() {
-  auto* server = Server::GetInstance();
+  auto& server = Server::GetInstance();
 
   std::shared_ptr<pb::common::Store> store = std::make_shared<pb::common::Store>();
-  store->set_id(server->Id());
-  store->mutable_keyring()->assign(server->Keyring());
+  store->set_id(server.Id());
+  store->mutable_keyring()->assign(server.Keyring());
   store->set_epoch(0);
   store->set_state(pb::common::STORE_NORMAL);
 
-  if (server->GetRole() == pb::common::ClusterRole::STORE) {
+  if (server.GetRole() == pb::common::ClusterRole::STORE) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_STORE);
-  } else if (server->GetRole() == pb::common::ClusterRole::INDEX) {
+  } else if (server.GetRole() == pb::common::ClusterRole::INDEX) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_INDEX);
   } else {
-    DINGO_LOG(FATAL) << "unknown server role: " << server->GetRole();
+    DINGO_LOG(FATAL) << "unknown server role: " << server.GetRole();
   }
 
   auto* server_location = store->mutable_server_location();
-  server_location->set_host(butil::ip2str(server->ServerEndpoint().ip).c_str());
-  server_location->set_port(server->ServerEndpoint().port);
+  server_location->set_host(butil::ip2str(server.ServerEndpoint().ip).c_str());
+  server_location->set_port(server.ServerEndpoint().port);
   auto* raf_location = store->mutable_raft_location();
-  raf_location->set_host(butil::ip2str(server->RaftEndpoint().ip).c_str());
-  raf_location->set_port(server->RaftEndpoint().port);
+  raf_location->set_host(butil::ip2str(server.RaftEndpoint().ip).c_str());
+  raf_location->set_port(server.RaftEndpoint().port);
 
   DINGO_LOG(INFO) << "store server meta: " << store->ShortDebugString();
   AddStore(store);

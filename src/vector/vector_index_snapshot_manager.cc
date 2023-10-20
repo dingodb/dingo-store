@@ -142,7 +142,7 @@ butil::Status VectorIndexSnapshotManager::GetSnapshotList(int64_t vector_index_i
 }
 
 std::string VectorIndexSnapshotManager::GetSnapshotParentPath(int64_t vector_index_id) {
-  return fmt::format("{}/{}", Server::GetInstance()->GetIndexPath(), vector_index_id);
+  return fmt::format("{}/{}", Server::GetInstance().GetIndexPath(), vector_index_id);
 }
 
 std::string VectorIndexSnapshotManager::GetSnapshotTmpPath(int64_t vector_index_id) {
@@ -164,7 +164,7 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
   // Get uri
   auto reader = std::make_shared<FileReaderWrapper>(snapshot);
   int64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   auto host = config->GetString("server.host");
   int port = config->GetInt("server.port");
   if (host.empty() || port == 0) {
@@ -197,7 +197,7 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
 butil::Status VectorIndexSnapshotManager::HandleInstallSnapshot(std::shared_ptr<Context>, const std::string& uri,
                                                                 const pb::node::VectorIndexSnapshotMeta& meta,
                                                                 vector_index::SnapshotMetaSetPtr snapshot_set) {
-  // auto vector_index = Server::GetInstance()->GetVectorIndexManager()->GetVectorIndex(meta.vector_index_id());
+  // auto vector_index = Server::GetInstance().GetVectorIndexManager()->GetVectorIndex(meta.vector_index_id());
   // if (vector_index != nullptr) {
   //   return butil::Status(pb::error::EVECTOR_NOT_NEED_SNAPSHOT, "Not need snapshot, follower own vector index.");
   // }
@@ -237,7 +237,7 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_inde
   assert(snapshot != nullptr);
 
   int64_t start_time = Helper::TimestampMs();
-  auto raft_raft_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_raft_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_raft_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
   }
@@ -292,7 +292,7 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(std::shared_ptr<Con
   }
 
   // Build response uri
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   auto host = config->GetString("server.host");
   int port = config->GetInt("server.port");
   if (host.empty() || port == 0) {
@@ -313,7 +313,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   assert(snapshot_set != nullptr);
 
   int64_t start_time = Helper::TimestampMs();
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
     return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
   }
@@ -776,7 +776,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   }
 
   // Set truncate wal log index.
-  auto log_storage = Server::GetInstance()->GetLogStorageManager()->GetLogStorage(vector_index_id);
+  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(vector_index_id);
   if (log_storage != nullptr) {
     log_storage->TruncateVectorIndexPrefix(apply_log_index);
   }

@@ -50,25 +50,25 @@ DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after delet
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
                                        std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   auto start_time = Helper::TimestampMs();
-  auto engine = Server::GetInstance()->GetEngine();
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto engine = Server::GetInstance().GetEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
 
   pb::coordinator::StoreHeartbeatRequest request;
 
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   request.set_self_storemap_epoch(store_meta_manager->GetStoreServerMeta()->GetEpoch());
   // request.set_self_regionmap_epoch(store_meta_manager->GetStoreRegionMeta()->GetEpoch());
 
   // store
-  *(request.mutable_store()) = (*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance()->Id()));
+  *(request.mutable_store()) = (*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance().Id()));
 
   // store_metrics
-  auto metrics_manager = Server::GetInstance()->GetStoreMetricsManager();
+  auto metrics_manager = Server::GetInstance().GetStoreMetricsManager();
   auto* mut_store_metrics = request.mutable_store_metrics();
   *mut_store_metrics = (*metrics_manager->GetStoreMetrics()->Metrics());
   // setup id for store_metrics here, coordinator need this id to update store_metrics
-  mut_store_metrics->set_id(Server::GetInstance()->Id());
+  mut_store_metrics->set_id(Server::GetInstance().Id());
   mut_store_metrics->set_is_update_epoch_version(is_update_epoch_version);
 
   auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
@@ -223,9 +223,9 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   }
 
   // set up read-only
-  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  auto is_read_only = Server::GetInstance().IsReadOnly();
   if (is_read_only != response.cluster_state().cluster_is_read_only()) {
-    Server::GetInstance()->SetReadOnly(response.cluster_state().cluster_is_read_only());
+    Server::GetInstance().SetReadOnly(response.cluster_state().cluster_is_read_only());
     DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] cluster set read-only to {}", is_read_only);
   }
 }
@@ -734,57 +734,57 @@ bool Heartbeat::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
 
 void Heartbeat::TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<HeartbeatTask>(Server::GetInstance()->GetCoordinatorInteraction(), region_ids,
+  auto task = std::make_shared<HeartbeatTask>(Server::GetInstance().GetCoordinatorInteraction(), region_ids,
                                               is_update_epoch_version);
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorPushToStore(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CoordinatorPushTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<CoordinatorPushTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorUpdateState(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CoordinatorUpdateStateTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<CoordinatorUpdateStateTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorTaskListProcess(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CoordinatorTaskListProcessTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<CoordinatorTaskListProcessTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CoordinatorRecycleOrphanTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<CoordinatorRecycleOrphanTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCalculateTableMetrics(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CalculateTableMetricsTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<CalculateTableMetricsTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerLeaseTask(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<LeaseTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<LeaseTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCompactionTask(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CompactionTask>(Server::GetInstance()->GetCoordinatorControl());
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  auto task = std::make_shared<CompactionTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerScrubVectorIndex(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<VectorIndexScrubTask>();
-  Server::GetInstance()->GetHeartbeat()->Execute(task);
+  Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 butil::Status Heartbeat::RpcSendPushStoreOperation(const pb::common::Location& location,

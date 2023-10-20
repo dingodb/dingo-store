@@ -74,7 +74,7 @@ void DoVectorCalcDistance(StoragePtr storage, google::protobuf::RpcController* c
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), status.error_str()));
+                                                        Server::GetInstance().ServerAddr(), status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
     return;

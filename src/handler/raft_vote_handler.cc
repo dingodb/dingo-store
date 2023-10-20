@@ -41,7 +41,7 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
 }
 
 int VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status) {
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   if (config == nullptr) {
     return 0;
   }
@@ -63,7 +63,7 @@ int VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status)
 }
 
 int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   if (config == nullptr) {
     return 0;
   }
@@ -92,7 +92,7 @@ int VectorIndexFollowerStopHandler::Handle(store::RegionPtr /*region*/, const br
 
 std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
+  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStartHandler>());
   }
 
@@ -101,7 +101,7 @@ std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
 
 std::shared_ptr<HandlerCollection> LeaderStopHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
+  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStopHandler>());
   }
 
@@ -110,7 +110,7 @@ std::shared_ptr<HandlerCollection> LeaderStopHandlerFactory::Build() {
 
 std::shared_ptr<HandlerCollection> FollowerStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
+  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexFollowerStartHandler>());
   }
 
@@ -119,7 +119,7 @@ std::shared_ptr<HandlerCollection> FollowerStartHandlerFactory::Build() {
 
 std::shared_ptr<HandlerCollection> FollowerStopHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance()->GetRole() == pb::common::INDEX) {
+  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexFollowerStopHandler>());
   }
 

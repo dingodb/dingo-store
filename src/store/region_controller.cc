@@ -45,7 +45,7 @@
 namespace dingodb {
 
 butil::Status CreateRegionTask::PreValidateCreateRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidateCreateRegion(store_meta_manager, command.region_id());
 }
@@ -62,7 +62,7 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
 
 butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition& definition, int64_t parent_region_id) {
   auto region = store::Region::New(definition);
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, region: {}", region->Id(),
                                  region->InnerRegion().ShortDebugString());
 
@@ -84,17 +84,17 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
 
   // Add raft node
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] create region, add raft node", region->Id());
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
   }
 
   RaftControlAble::AddNodeParameter parameter;
-  parameter.role = Server::GetInstance()->GetRole();
+  parameter.role = Server::GetInstance().GetRole();
   parameter.is_restart = false;
-  parameter.raft_endpoint = Server::GetInstance()->RaftEndpoint();
+  parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   parameter.raft_path = config->GetString("raft.path");
   parameter.election_timeout_ms = 200;
   parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
@@ -112,8 +112,8 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
     return status;
   }
 
-  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
-  Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
+  Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+  Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
 
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, update region state NORMAL",
                                  region->Id());
@@ -135,7 +135,7 @@ void CreateRegionTask::Run() {
                                     region_definition.id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 
@@ -146,7 +146,7 @@ void CreateRegionTask::Run() {
 }
 
 butil::Status DeleteRegionTask::PreValidateDeleteRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   return ValidateDeleteRegion(store_meta_manager,
                               store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
 }
@@ -170,7 +170,7 @@ butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaMa
 }
 
 butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64_t region_id) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
@@ -186,12 +186,12 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   store_region_meta->UpdateState(region, pb::common::StoreRegionState::DELETING);
 
   // Raft kv engine
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete raft node", region_id);
     raft_store_engine->DestroyNode(ctx, region_id);
-    Server::GetInstance()->GetLogStorageManager()->DeleteStorage(region_id);
+    Server::GetInstance().GetLogStorageManager()->DeleteStorage(region_id);
   }
 
   // Update state
@@ -200,7 +200,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete metrics
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete region metrics", region_id);
-  Server::GetInstance()->GetStoreMetricsManager()->GetStoreRegionMetrics()->DeleteMetrics(region_id);
+  Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->DeleteMetrics(region_id);
   StoreBvarMetrics::GetInstance().DeleteMetrics(std::to_string(region_id));
 
   // Delete raft meta
@@ -208,7 +208,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
   status = writer->KvBatchDeleteRange(region->PhysicsRange());
   if (!status.ok()) {
@@ -216,7 +216,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   }
 
   // Index region
-  if (Server::GetInstance()->GetRole() == pb::common::ClusterRole::INDEX) {
+  if (Server::GetInstance().GetRole() == pb::common::ClusterRole::INDEX) {
     auto vector_index_wrapper = region->VectorIndexWrapper();
     if (vector_index_wrapper != nullptr) {
       vector_index_wrapper->Destroy();
@@ -224,7 +224,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   }
 
   // Delete region executor
-  auto region_controller = Server::GetInstance()->GetRegionController();
+  auto region_controller = Server::GetInstance().GetRegionController();
 
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
@@ -255,7 +255,7 @@ void DeleteRegionTask::Run() {
                                     region_cmd_->delete_request().region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 
@@ -266,7 +266,7 @@ void DeleteRegionTask::Run() {
 }
 
 butil::Status SplitRegionTask::PreValidateSplitRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request());
 }
@@ -316,7 +316,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::EREGION_STATE, "Parent region state is NORMAL, not allow split.");
   }
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
   }
@@ -368,7 +368,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
 }
 
 butil::Status SplitRegionTask::SplitRegion() {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
   auto status = ValidateSplitRegion(store_region_meta, region_cmd_->split_request());
   if (!status.ok()) {
@@ -382,7 +382,7 @@ butil::Status SplitRegionTask::SplitRegion() {
 
   // Commit raft log
   ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
-  return Server::GetInstance()->GetEngine()->AsyncWrite(
+  return Server::GetInstance().GetEngine()->AsyncWrite(
       ctx_, WriteDataBuilder::BuildWrite(region_cmd_->split_request(), parent_region->Epoch()),
       [](std::shared_ptr<Context>, butil::Status status) {
         if (!status.ok()) {
@@ -399,7 +399,7 @@ void SplitRegionTask::Run() {
                                     region_cmd_->split_request().split_to_region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 
@@ -410,14 +410,14 @@ void SplitRegionTask::Run() {
 }
 
 butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidateChangeRegion(store_meta_manager, command.change_peer_request().region_definition());
 }
 
 // Check region leader
 static butil::Status CheckLeader(int64_t region_id) {
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
   }
@@ -458,7 +458,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 
 butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
                                              const pb::common::RegionDefinition& region_definition) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] change region, region definition: {}",
                                  region_definition.id(), region_definition.ShortDebugString());
 
@@ -478,7 +478,7 @@ butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
     return peers;
   };
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     return raft_store_engine->ChangeNode(ctx, region_definition.id(), filter_peers_by_role(pb::common::VOTER));
   }
@@ -493,7 +493,7 @@ void ChangeRegionTask::Run() {
                                     region_cmd_->change_peer_request().region_definition().id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 
@@ -504,7 +504,7 @@ void ChangeRegionTask::Run() {
 }
 
 butil::Status TransferLeaderTask::PreValidateTransferLeader(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidateTransferLeader(store_meta_manager, command.region_id(), command.transfer_leader_request().peer());
 }
@@ -520,7 +520,7 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow transfer leader.");
   }
 
-  if (peer.store_id() == Server::GetInstance()->Id()) {
+  if (peer.store_id() == Server::GetInstance().Id()) {
     return butil::Status(pb::error::ERAFT_TRANSFER_LEADER, "The peer is already leader, not need transfer.");
   }
 
@@ -533,7 +533,7 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
 
 butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, int64_t region_id,
                                                  const pb::common::Peer& peer) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] transfer leader, peer: {}", region_id,
                                   peer.ShortDebugString());
 
@@ -542,7 +542,7 @@ butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, int64
     return status;
   }
 
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     return raft_store_engine->TransferLeader(region_id, peer);
   }
@@ -557,7 +557,7 @@ void TransferLeaderTask::Run() {
                                     region_cmd_->change_peer_request().region_definition().id(), status.error_cstr());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 
@@ -568,7 +568,7 @@ void TransferLeaderTask::Run() {
 }
 
 butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   return engine->DoSnapshot(ctx, region_id);
 }
 
@@ -579,13 +579,13 @@ void SnapshotRegionTask::Run() {
                                     region_cmd_->region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status PurgeRegionTask::PreValidatePurgeRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidatePurgeRegion(store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
 }
@@ -603,7 +603,7 @@ butil::Status PurgeRegionTask::ValidatePurgeRegion(store::RegionPtr region) {
 
 butil::Status PurgeRegionTask::PurgeRegion(std::shared_ptr<Context>, int64_t region_id) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] purge region.", region_id);
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   store_region_meta->DeleteRegion(region_id);
 
@@ -617,7 +617,7 @@ void PurgeRegionTask::Run() {
                                     region_cmd_->purge_request().region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 
@@ -628,7 +628,7 @@ void PurgeRegionTask::Run() {
 }
 
 butil::Status StopRegionTask::PreValidateStopRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidateStopRegion(store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
 }
@@ -645,7 +645,7 @@ butil::Status StopRegionTask::ValidateStopRegion(store::RegionPtr region) {
 }
 
 butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, int64_t region_id) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
 
@@ -657,7 +657,7 @@ butil::Status StopRegionTask::StopRegion(std::shared_ptr<Context> ctx, int64_t r
   }
 
   // Shutdown raft node
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     // Delete raft
     DINGO_LOG(INFO) << fmt::format("[control.region][region({})] delete peer delete raft node.", region_id);
@@ -674,13 +674,13 @@ void StopRegionTask::Run() {
                                       region_cmd_->stop_request().region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status DestroyRegionExecutorTask::DestroyRegionExecutor(std::shared_ptr<Context>, int64_t region_id) {
-  auto regoin_controller = Server::GetInstance()->GetRegionController();
+  auto regoin_controller = Server::GetInstance().GetRegionController();
   if (regoin_controller == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] region controller is nullptr.", region_id);
     return butil::Status(pb::error::EINTERNAL, "Region controller is nullptr");
@@ -698,14 +698,14 @@ void DestroyRegionExecutorTask::Run() {
                                     region_cmd_->destroy_executor_request().region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*ctx*/, int64_t vector_index_id) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] save snapshot.", vector_index_id);
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
 
   auto region = store_region_meta->GetRegion(vector_index_id);
@@ -733,13 +733,13 @@ void SnapshotVectorIndexTask::Run() {
                                     region_cmd_->snapshot_vector_index_request().vector_index_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status UpdateDefinitionTask::PreValidateUpdateDefinition(const pb::coordinator::RegionCmd& command) {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   return ValidateUpdateDefinition(store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
 }
@@ -764,7 +764,7 @@ void UpdateDefinitionTask::Run() {
                                       region_cmd_->region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
@@ -772,7 +772,7 @@ void UpdateDefinitionTask::Run() {
 butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*ctx*/, int64_t region_id,
                                                      const pb::common::RegionDefinition& new_definition) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] update definition.", region_id);
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
 
   auto region = store_region_meta->GetRegion(region_id);
@@ -839,7 +839,7 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
 }
 
 butil::Status SwitchSplitTask::PreValidateSwitchSplit(const pb::coordinator::RegionCmd& command) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
   auto region = store_region_meta->GetRegion(command.switch_split_request().region_id());
   if (region == nullptr) {
@@ -858,14 +858,14 @@ void SwitchSplitTask::Run() {
                                     region_cmd_->switch_split_request().region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
 butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, int64_t region_id, bool disable_split) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] switch split.", region_id);
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
@@ -882,14 +882,14 @@ butil::Status HoldVectorIndexTask::PreValidateHoldVectorIndex(const pb::coordina
 }
 
 butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
   }
 
   // Validate is follower
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     auto node = raft_store_engine->GetNode(region_id);
     if (node == nullptr) {
@@ -901,7 +901,7 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
 }
 
 butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/, int64_t region_id, bool is_hold) {
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
@@ -943,7 +943,7 @@ void HoldVectorIndexTask::Run() {
                                       region_cmd_->switch_split_request().region_id(), status.error_str());
   }
 
-  Server::GetInstance()->GetRegionCommandManager()->UpdateCommandStatus(
+  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
@@ -1080,7 +1080,7 @@ void RegionCommandManager::TransformFromKv(const std::vector<pb::common::KeyValu
 // bool RegionController::InitVectorAppliedLogId(int64_t region_id) {
 //   int64_t max_log_id = 0;
 
-//   auto engine = Server::GetInstance()->GetEngine();
+//   auto engine = Server::GetInstance().GetEngine();
 //   DINGO_LOG(INFO) << fmt::format("Build vector index for region {} ", region_id);
 //   auto reader = engine->GetRawEngine()->NewReader(Constant::kStoreDataCF);
 
@@ -1100,7 +1100,7 @@ bool RegionController::Init() {
     return false;
   }
 
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
   for (auto& region : regions) {
     if (!RegisterExecutor(region->Id())) {
@@ -1115,7 +1115,7 @@ bool RegionController::Init() {
 
 bool RegionController::Recover() {
   auto commands =
-      Server::GetInstance()->GetRegionCommandManager()->GetCommands(pb::coordinator::RegionCmdStatus::STATUS_NONE);
+      Server::GetInstance().GetRegionCommandManager()->GetCommands(pb::coordinator::RegionCmdStatus::STATUS_NONE);
 
   for (auto& command : commands) {
     auto ctx = std::make_shared<Context>();
@@ -1233,7 +1233,7 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
 butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
                                                              std::shared_ptr<pb::coordinator::RegionCmd> command) {
   // Check repeat region command
-  auto region_command_manager = Server::GetInstance()->GetRegionCommandManager();
+  auto region_command_manager = Server::GetInstance().GetRegionCommandManager();
   if (region_command_manager->IsExist(command->id())) {
     return butil::Status(pb::error::EREGION_REPEAT_COMMAND, "Repeat region control command");
   }

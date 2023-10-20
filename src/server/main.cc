@@ -239,9 +239,9 @@ static void SignalHandler(int signo) {
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
     // clean temp directory
-    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
+    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
     DINGO_LOG(ERROR) << "graceful shutdown, clean up checkpoint dir: "
-                     << dingodb::Server::GetInstance()->GetCheckpointPath();
+                     << dingodb::Server::GetInstance().GetCheckpointPath();
     exit(0);
   } else {
     // call abort() to generate core dump
@@ -312,9 +312,9 @@ static void SignalHandlerWithoutLineno(int signo) {
   if (signo == SIGTERM) {
     // TODO: graceful shutdown
     // clean temp directory
-    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance()->GetCheckpointPath());
+    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
     DINGO_LOG(ERROR) << "graceful shutdown, clean up checkpoint dir: "
-                     << dingodb::Server::GetInstance()->GetCheckpointPath();
+                     << dingodb::Server::GetInstance().GetCheckpointPath();
     exit(0);
   } else {
     // call abort() to generate core dump
@@ -496,25 +496,25 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  auto *dingo_server = dingodb::Server::GetInstance();
-  dingo_server->SetRole(role);
-  if (!dingo_server->InitConfig(FLAGS_conf)) {
+  auto &dingo_server = dingodb::Server::GetInstance();
+  dingo_server.SetRole(role);
+  if (!dingo_server.InitConfig(FLAGS_conf)) {
     DINGO_LOG(ERROR) << "InitConfig failed!";
     return -1;
   }
 
-  auto const config = dingodb::ConfigManager::GetInstance()->GetConfig(role);
-  auto placeholder = dingo_server->InitLog();
+  auto const config = dingodb::ConfigManager::GetInstance().GetConfig(role);
+  auto placeholder = dingo_server.InitLog();
   if (!placeholder) {
     DINGO_LOG(ERROR) << "InitLog failed!";
     return -1;
   }
-  if (!dingo_server->InitServerID()) {
+  if (!dingo_server.InitServerID()) {
     DINGO_LOG(ERROR) << "InitServerID failed!";
     return -1;
   }
 
-  if (!dingo_server->InitDirectory()) {
+  if (!dingo_server.InitDirectory()) {
     DINGO_LOG(ERROR) << "InitDirectory failed!";
     return -1;
   }
@@ -564,18 +564,18 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "omp_get_dynamic: " << omp_get_dynamic();
   DINGO_LOG(INFO) << "omp_get_num_procs: " << omp_get_num_procs();
 
-  dingo_server->SetServerEndpoint(GetServerEndPoint(config));
-  dingo_server->SetRaftEndpoint(GetRaftEndPoint(config));
+  dingo_server.SetServerEndpoint(GetServerEndPoint(config));
+  dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
 
-  if (!dingo_server->InitRawEngine()) {
+  if (!dingo_server.InitRawEngine()) {
     DINGO_LOG(ERROR) << "InitRawEngine failed!";
     return -1;
   }
-  if (!dingo_server->InitEngine()) {
+  if (!dingo_server.InitEngine()) {
     DINGO_LOG(ERROR) << "InitEngine failed!";
     return -1;
   }
-  if (!dingo_server->InitLogStorageManager()) {
+  if (!dingo_server.InitLogStorageManager()) {
     DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
     return -1;
   }
@@ -600,8 +600,6 @@ int main(int argc, char *argv[]) {
   store_service.SetWorkSet(worker_set);
   index_service.SetWorkSet(worker_set);
   util_service.SetWorkSet(worker_set);
-
-  node_service.SetServer(dingo_server);
 
   brpc::Server brpc_server;
   brpc::Server raft_server;
@@ -645,23 +643,23 @@ int main(int argc, char *argv[]) {
   }
 
   if (is_coordinator) {
-    if (!dingo_server->InitCoordinatorInteractionForAutoIncrement()) {
+    if (!dingo_server.InitCoordinatorInteractionForAutoIncrement()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteractionForAutoIncrement failed!";
       return -1;
     }
 
-    dingo_server->SetEndpoints(GetEndpoints(config, "coordinator.peers"));
+    dingo_server.SetEndpoints(GetEndpoints(config, "coordinator.peers"));
 
-    coordinator_service.SetControl(dingo_server->GetCoordinatorControl());
-    coordinator_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
-    coordinator_service.SetTsoControl(dingo_server->GetTsoControl());
-    meta_service.SetControl(dingo_server->GetCoordinatorControl());
-    meta_service.SetAutoIncrementControl(dingo_server->GetAutoIncrementControlReference());
-    meta_service.SetTsoControl(dingo_server->GetTsoControl());
-    version_service.SetControl(dingo_server->GetCoordinatorControl());
+    coordinator_service.SetControl(dingo_server.GetCoordinatorControl());
+    coordinator_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControlReference());
+    coordinator_service.SetTsoControl(dingo_server.GetTsoControl());
+    meta_service.SetControl(dingo_server.GetCoordinatorControl());
+    meta_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControlReference());
+    meta_service.SetTsoControl(dingo_server.GetTsoControl());
+    version_service.SetControl(dingo_server.GetCoordinatorControl());
 
     // the Engine should be init success
-    auto engine = dingo_server->GetEngine();
+    auto engine = dingo_server.GetEngine();
     coordinator_service.SetKvEngine(engine);
     meta_service.SetKvEngine(engine);
     version_service.SetKvEngine(engine);
@@ -676,40 +674,40 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
+    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 
     // Add Cluster Stat Service to get meta information from dingodb cluster
-    cluster_stat_service.SetControl(dingo_server->GetCoordinatorControl());
+    cluster_stat_service.SetControl(dingo_server.GetCoordinatorControl());
     if (0 != brpc_server.AddService(&cluster_stat_service, brpc::SERVER_OWNS_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add cluster stat service";
       return -1;
     }
 
-    if (raft_server.Start(dingo_server->RaftEndpoint(), &options) != 0) {
+    if (raft_server.Start(dingo_server.RaftEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
 
     // start meta region
-    butil::Status status = dingo_server->StartMetaRegion(config, engine);
+    butil::Status status = dingo_server.StartMetaRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Meta RaftNode and StateMachine Failed:" << status;
       return -1;
     }
     DINGO_LOG(INFO) << "Meta region start";
 
-    status = dingo_server->StartAutoIncrementRegion(config, engine);
+    status = dingo_server.StartAutoIncrementRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Auto Increment RaftNode and StateMachine Failed:" << status;
       return -1;
     }
     DINGO_LOG(INFO) << "Auto Increment region start";
 
-    status = dingo_server->StartTsoRegion(config, engine);
+    status = dingo_server.StartTsoRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Tso RaftNode and StateMachine Failed:" << status;
       return -1;
@@ -719,44 +717,44 @@ int main(int argc, char *argv[]) {
     // build in-memory meta cache
     // TODO: load data from kv engine into maps
   } else if (is_store) {
-    if (!dingo_server->InitCoordinatorInteraction()) {
+    if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
-    if (!dingo_server->ValiateCoordinator()) {
+    if (!dingo_server.ValiateCoordinator()) {
       DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
       return -1;
     }
-    if (!dingo_server->InitStorage()) {
+    if (!dingo_server.InitStorage()) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreMetaManager()) {
+    if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreMetricsManager()) {
+    if (!dingo_server.InitStoreMetricsManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreController()) {
+    if (!dingo_server.InitStoreController()) {
       DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;
     }
-    if (!dingo_server->InitRegionCommandManager()) {
+    if (!dingo_server.InitRegionCommandManager()) {
       DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
       return -1;
     }
-    if (!dingo_server->InitRegionController()) {
+    if (!dingo_server.InitRegionController()) {
       DINGO_LOG(ERROR) << "InitRegionController failed!";
       return -1;
     }
-    if (!dingo_server->InitPreSplitChecker()) {
+    if (!dingo_server.InitPreSplitChecker()) {
       DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
       return -1;
     }
 
-    store_service.SetStorage(dingo_server->GetStorage());
+    store_service.SetStorage(dingo_server.GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add store service!";
       return -1;
@@ -780,65 +778,65 @@ int main(int argc, char *argv[]) {
     }
 
     // raft server
-    if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
+    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 
-    if (raft_server.Start(dingo_server->RaftEndpoint(), &options) != 0) {
+    if (raft_server.Start(dingo_server.RaftEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   } else if (is_index) {
-    if (!dingo_server->InitCoordinatorInteraction()) {
+    if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
-    if (!dingo_server->ValiateCoordinator()) {
+    if (!dingo_server.ValiateCoordinator()) {
       DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
       return -1;
     }
-    if (!dingo_server->InitStorage()) {
+    if (!dingo_server.InitStorage()) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreMetaManager()) {
+    if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreMetricsManager()) {
+    if (!dingo_server.InitStoreMetricsManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
       return -1;
     }
-    if (!dingo_server->InitVectorIndexManager()) {
+    if (!dingo_server.InitVectorIndexManager()) {
       DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
       return -1;
     }
-    if (!dingo_server->InitStoreController()) {
+    if (!dingo_server.InitStoreController()) {
       DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;
     }
-    if (!dingo_server->InitRegionCommandManager()) {
+    if (!dingo_server.InitRegionCommandManager()) {
       DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
       return -1;
     }
-    if (!dingo_server->InitRegionController()) {
+    if (!dingo_server.InitRegionController()) {
       DINGO_LOG(ERROR) << "InitRegionController failed!";
       return -1;
     }
-    if (!dingo_server->InitPreSplitChecker()) {
+    if (!dingo_server.InitPreSplitChecker()) {
       DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
       return -1;
     }
 
-    index_service.SetStorage(dingo_server->GetStorage());
+    index_service.SetStorage(dingo_server.GetStorage());
     if (brpc_server.AddService(&index_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add index service!";
       return -1;
     }
 
-    util_service.SetStorage(dingo_server->GetStorage());
+    util_service.SetStorage(dingo_server.GetStorage());
     if (brpc_server.AddService(&util_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add util service!";
       return -1;
@@ -862,35 +860,35 @@ int main(int argc, char *argv[]) {
     }
 
     // raft server
-    if (braft::add_service(&raft_server, dingo_server->RaftEndpoint()) != 0) {
+    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 
-    if (raft_server.Start(dingo_server->RaftEndpoint(), &options) != 0) {
+    if (raft_server.Start(dingo_server.RaftEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   }
 
-  if (!dingo_server->Recover()) {
+  if (!dingo_server.Recover()) {
     DINGO_LOG(ERROR) << "Recover failed!";
     return -1;
   }
 
-  if (!dingo_server->InitHeartbeat()) {
+  if (!dingo_server.InitHeartbeat()) {
     DINGO_LOG(ERROR) << "InitHeartbeat failed!";
     return -1;
   }
 
-  if (!dingo_server->InitCrontabManager()) {
+  if (!dingo_server.InitCrontabManager()) {
     DINGO_LOG(ERROR) << "InitCrontabManager failed!";
     return -1;
   }
 
   // Start server after raft server started.
-  if (brpc_server.Start(dingo_server->ServerEndpoint(), &options) != 0) {
+  if (brpc_server.Start(dingo_server.ServerEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;
   }
@@ -907,7 +905,7 @@ int main(int argc, char *argv[]) {
   raft_server.Join();
   brpc_server.Join();
 
-  dingo_server->Destroy();
+  dingo_server.Destroy();
   worker_set->Destroy();
 
   return 0;

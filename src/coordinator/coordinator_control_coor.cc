@@ -639,9 +639,9 @@ void CoordinatorControl::UpdateClusterReadOnly() {
     }
   }
 
-  if (Server::GetInstance()->IsReadOnly() != cluster_is_read_only) {
+  if (Server::GetInstance().IsReadOnly() != cluster_is_read_only) {
     DINGO_LOG(WARNING) << "UpdateClusterReadOnly... cluster_is_read_only=" << cluster_is_read_only;
-    Server::GetInstance()->SetReadOnly(cluster_is_read_only);
+    Server::GetInstance().SetReadOnly(cluster_is_read_only);
   }
 }
 
@@ -1595,7 +1595,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
                   << ", part_id=" << part_id << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
 
-  if (Server::GetInstance()->IsReadOnly() || FLAGS_force_cluster_read_only) {
+  if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
     DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region";
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
   }
@@ -1746,7 +1746,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
                   << ", part_id=" << part_id << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
 
-  if (Server::GetInstance()->IsReadOnly() || FLAGS_force_cluster_read_only) {
+  if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
     DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
   }

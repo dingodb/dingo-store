@@ -38,7 +38,10 @@ ScanManager::~ScanManager() {
   bthread_mutex_destroy(&mutex_);
 }
 
-ScanManager* ScanManager::GetInstance() { return Singleton<ScanManager>::get(); }
+ScanManager& ScanManager::GetInstance() {
+  static ScanManager instance;
+  return instance;
+}
 
 bool ScanManager::Init(std::shared_ptr<Config> config) {
   BAIDU_SCOPED_LOCK(mutex_);
@@ -130,19 +133,19 @@ void ScanManager::TryDeleteScan(const std::string& scan_id) {
   }
 }
 
-void ScanManager::RegularCleaningHandler(void* arg) {
-  ScanManager* manager = static_cast<ScanManager*>(arg);
+void ScanManager::RegularCleaningHandler(void*) {
+  ScanManager& manager = ScanManager::GetInstance();
 
-  BAIDU_SCOPED_LOCK(manager->mutex_);
-  for (auto iter = manager->alive_scans_.begin(); iter != manager->alive_scans_.end();) {
+  BAIDU_SCOPED_LOCK(manager.mutex_);
+  for (auto iter = manager.alive_scans_.begin(); iter != manager.alive_scans_.end();) {
     if (iter->second->IsRecyclable()) {
-      manager->waiting_destroyed_scans_[iter->first] = iter->second;
-      manager->alive_scans_.erase(iter++);
+      manager.waiting_destroyed_scans_[iter->first] = iter->second;
+      manager.alive_scans_.erase(iter++);
     } else {
       iter++;
     }
   }
-  manager->waiting_destroyed_scans_.clear();
+  manager.waiting_destroyed_scans_.clear();
 }
 
 }  // namespace dingodb

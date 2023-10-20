@@ -41,14 +41,11 @@
 #include "store/store_controller.h"
 #include "vector/vector_index_manager.h"
 
-template <typename T>
-struct DefaultSingletonTraits;
-
 namespace dingodb {
 
 class Server {
  public:
-  static Server* GetInstance();
+  static Server& GetInstance();
 
   void SetRole(pb::common::ClusterRole role);
   pb::common::ClusterRole GetRole() { return this->role_; };
@@ -175,27 +172,25 @@ class Server {
 
   std::shared_ptr<Heartbeat> GetHeartbeat() { return heartbeat_; }
 
-  std::shared_ptr<Config> GetConfig() { return ConfigManager::GetInstance()->GetConfig(role_); }
-
   std::string GetCheckpointPath() { return checkpoint_path_; }
 
   std::string GetStorePath() {
-    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetConfig(role_);
     return config == nullptr ? "" : config->GetString("store.path");
   }
 
   std::string GetRaftPath() {
-    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetConfig(role_);
     return config == nullptr ? "" : config->GetString("raft.path");
   }
 
   std::string GetRaftLogPath() {
-    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetConfig(role_);
     return config == nullptr ? "" : config->GetString("raft.log_path");
   }
 
   std::string GetIndexPath() {
-    auto config = ConfigManager::GetInstance()->GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetConfig(role_);
     return config == nullptr ? "" : config->GetString("vector.index_path");
   }
 
@@ -215,8 +210,6 @@ class Server {
                                                                         int64_t region_id,
                                                                         const std::string& region_name
                                                                         /*std::shared_ptr<Context>& ctx*/);
-
-  friend struct DefaultSingletonTraits<Server>;
 
   // This is server instance id, every store server has one id, it's unique,
   // represent store's identity, provided by coordinator.

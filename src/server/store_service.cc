@@ -98,7 +98,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -179,7 +179,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -264,7 +264,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -348,7 +348,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
 
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -433,7 +433,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -517,7 +517,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -602,7 +602,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -638,7 +638,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
 static butil::Status ValidateKvDeleteRangeRequest(const pb::store::KvDeleteRangeRequest* request,
                                                   store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance()->Id());
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance().Id());
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -673,7 +673,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvDeleteRangeRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -694,7 +694,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -769,7 +769,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -857,7 +857,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -894,7 +894,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
 static butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request,
                                                 store::RegionPtr region, const pb::common::Range& req_range) {
   if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance()->Id());
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance().Id());
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -928,7 +928,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -954,7 +954,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -997,10 +997,10 @@ static butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvS
   }
 
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
+  if (!Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
           request->context().region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
-                         request->context().region_id(), Server::GetInstance()->Id());
+                         request->context().region_id(), Server::GetInstance().Id());
   }
 
   if (request->scan_id().empty()) {
@@ -1039,7 +1039,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1081,10 +1081,10 @@ static butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvSc
   }
 
   // Check is exist region.
-  if (!Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
+  if (!Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
           request->context().region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
-                         request->context().region_id(), Server::GetInstance()->Id());
+                         request->context().region_id(), Server::GetInstance().Id());
   }
 
   if (request->scan_id().empty()) {
@@ -1117,7 +1117,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1199,7 +1199,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1267,7 +1267,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -1297,7 +1297,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1423,7 +1423,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1527,7 +1527,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1629,7 +1629,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1727,7 +1727,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1823,7 +1823,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -1923,7 +1923,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2029,7 +2029,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2127,7 +2127,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2209,7 +2209,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2295,7 +2295,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }
@@ -2390,7 +2390,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
       response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance()->ServerAddr(), region_id,
+                                                        Server::GetInstance().ServerAddr(), region_id,
                                                         status.error_str()));
       ServiceHelper::RedirectLeader(status.error_str(), response);
     }

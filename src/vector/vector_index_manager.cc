@@ -108,9 +108,9 @@ void RebuildVectorIndexTask::Run() {
       vector_index_wrapper_->ClearVectorIndex();
     }
 
-    auto region = Server::GetInstance()->GetRegion(vector_index_wrapper_->Id());
+    auto region = Server::GetInstance().GetRegion(vector_index_wrapper_->Id());
     if (region != nullptr) {
-      auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+      auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
       store_region_meta->UpdateTemporaryDisableChange(region, false);
     }
   }
@@ -187,7 +187,7 @@ void LoadOrBuildVectorIndexTask::Run() {
   // Pull snapshot from peers.
   // New region don't pull snapshot, directly build.
   auto raft_meta =
-      Server::GetInstance()->GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(vector_index_wrapper_->Id());
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(vector_index_wrapper_->Id());
   if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
     DINGO_LOG(INFO) << fmt::format("[raft.loadorbuild][region({})] pull last snapshot from peers.",
                                    vector_index_wrapper_->Id());
@@ -218,14 +218,14 @@ bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) { return tr
 
 // Check whether need hold vector index
 bool VectorIndexManager::NeedHoldVectorIndex(int64_t region_id) {
-  auto config = Server::GetInstance()->GetConfig();
+  auto config = ConfigManager::GetInstance().GetConfig();
   if (config == nullptr) {
     return true;
   }
 
   if (!config->GetBool("vector.enable_follower_hold_index")) {
     // If follower, delete vector index.
-    auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+    auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
     if (raft_store_engine != nullptr) {
       auto node = raft_store_engine->GetNode(region_id);
       if (node == nullptr) {
@@ -390,7 +390,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
                                  start_log_id, end_log_id);
 
   int64_t start_time = Helper::TimestampMs();
-  auto engine = Server::GetInstance()->GetEngine();
+  auto engine = Server::GetInstance().GetEngine();
   if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
     return butil::Status(pb::error::Errno::EINTERNAL, "Engine is not raft store.");
   }
@@ -400,7 +400,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::ERAFT_NOT_FOUND, fmt::format("Not found node {}", vector_index->Id()));
   }
 
-  auto log_stroage = Server::GetInstance()->GetLogStorageManager()->GetLogStorage(vector_index->Id());
+  auto log_stroage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(vector_index->Id());
   if (log_stroage == nullptr) {
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
@@ -486,7 +486,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   assert(vector_index_wrapper != nullptr);
   int64_t vector_index_id = vector_index_wrapper->Id();
 
-  auto region = Server::GetInstance()->GetRegion(vector_index_id);
+  auto region = Server::GetInstance().GetRegion(vector_index_id);
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found region.", vector_index_id);
     return nullptr;
@@ -500,7 +500,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   }
 
   // Get last applied log id
-  auto raft_store_engine = Server::GetInstance()->GetRaftStoreEngine();
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     auto raft_node = raft_store_engine->GetNode(vector_index_id);
     if (raft_node != nullptr) {
@@ -526,7 +526,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   IteratorOptions options;
   options.upper_bound = end_key;
 
-  auto raw_engine = Server::GetInstance()->GetRawEngine();
+  auto raw_engine = Server::GetInstance().GetRawEngine();
   auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
 
   // Note: This is iterated 2 times for the following reasons:
@@ -790,7 +790,7 @@ void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_inde
 }
 
 butil::Status VectorIndexManager::ScrubVectorIndex() {
-  auto store_meta_manager = Server::GetInstance()->GetStoreMetaManager();
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   if (store_meta_manager == nullptr) {
     return butil::Status(pb::error::Errno::EINTERNAL, "Get store meta manager failed");
   }

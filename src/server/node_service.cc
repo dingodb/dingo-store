@@ -39,12 +39,12 @@ using pb::error::Errno;
 using pb::node::LogDetail;
 using pb::node::LogLevel;
 
-void NodeServiceImpl::SetServer(dingodb::Server* server) { this->server_ = server; }
-
 void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetNodeInfoRequest* request, pb::node::GetNodeInfoResponse* response,
                                   google::protobuf::Closure* done) {
   brpc::ClosureGuard const done_guard(done);
+
+  auto& server = Server::GetInstance();
 
   if (request->cluster_id() < 0) {
     auto* error = response->mutable_error();
@@ -53,22 +53,22 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
 
   auto* node_info = response->mutable_node_info();
 
-  node_info->set_id(server_->Id());
-  node_info->set_role(server_->GetRole());
+  node_info->set_id(server.Id());
+  node_info->set_role(server.GetRole());
 
   // parse server location
   auto* server_location = node_info->mutable_server_location();
   auto* server_host = server_location->mutable_host();
-  auto host_str = butil::ip2str(server_->ServerEndpoint().ip);
+  auto host_str = butil::ip2str(server.ServerEndpoint().ip);
   server_host->assign(std::string(host_str.c_str()));
-  server_location->set_port(server_->ServerEndpoint().port);
+  server_location->set_port(server.ServerEndpoint().port);
 
   // parse raft location
   auto* raft_location = node_info->mutable_raft_location();
   auto* raft_host = raft_location->mutable_host();
-  auto raft_host_str = butil::ip2str(server_->RaftEndpoint().ip);
+  auto raft_host_str = butil::ip2str(server.RaftEndpoint().ip);
   raft_host->assign(std::string(host_str.c_str()));
-  raft_location->set_port(server_->RaftEndpoint().port);
+  raft_location->set_port(server.RaftEndpoint().port);
 }
 
 void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*/,
@@ -369,7 +369,7 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
   }
 
   int64_t vector_index_id = request->meta().vector_index_id();
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(vector_index_id);
   if (region == nullptr) {
     auto* error = response->mutable_error();
@@ -405,7 +405,7 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
   brpc::ClosureGuard done_guard(done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
     auto* error = response->mutable_error();
@@ -445,7 +445,7 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* controll
   brpc::ClosureGuard done_guard(done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
-  auto store_region_meta = Server::GetInstance()->GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
     auto* error = response->mutable_error();

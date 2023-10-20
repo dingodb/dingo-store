@@ -118,7 +118,7 @@ pb::node::NodeInfo ServiceHelper::RedirectLeader(std::string addr) {
 
   // From local store map query.
   auto node_info =
-      Server::GetInstance()->GetStoreMetaManager()->GetStoreServerMeta()->GetNodeInfoByRaftEndPoint(raft_endpoint);
+      Server::GetInstance().GetStoreMetaManager()->GetStoreServerMeta()->GetNodeInfoByRaftEndPoint(raft_endpoint);
   if (node_info.id() == 0) {
     // From remote node query.
     Helper::GetNodeInfoByRaftLocation(Helper::EndPointToLocation(raft_endpoint), node_info);
@@ -126,7 +126,7 @@ pb::node::NodeInfo ServiceHelper::RedirectLeader(std::string addr) {
 
   if (!node_info.server_location().host().empty()) {
     // transform ip to hostname
-    Server::GetInstance()->Ip2Hostname(*node_info.mutable_server_location()->mutable_host());
+    Server::GetInstance().Ip2Hostname(*node_info.mutable_server_location()->mutable_host());
   }
 
   DINGO_LOG(INFO) << fmt::format("[redirect][addr({})] redirect leader, node_info: {}", addr,
@@ -141,7 +141,7 @@ void ServiceHelper::RedirectLeader(std::string addr, T* response) {
   if (node_info.id() != 0) {
     Helper::SetPbMessageErrorLeader(node_info, response);
   } else {
-    response->mutable_error()->set_store_id(Server::GetInstance()->Id());
+    response->mutable_error()->set_store_id(Server::GetInstance().Id());
   }
 }
 

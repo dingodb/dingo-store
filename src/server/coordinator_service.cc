@@ -62,7 +62,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
   }
 
   // response cluster state
-  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  auto is_read_only = Server::GetInstance().IsReadOnly();
   if (is_read_only || FLAGS_force_cluster_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
   }
@@ -563,12 +563,12 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
     // update is_read_only
     auto is_read_only_from_store = request->store_metrics().store_own_metrics().is_ready_only();
     if (is_read_only_from_store) {
-      Server::GetInstance()->SetReadOnly(true);
+      Server::GetInstance().SetReadOnly(true);
     }
   }
 
   // response cluster state
-  auto is_read_only = Server::GetInstance()->IsReadOnly();
+  auto is_read_only = Server::GetInstance().IsReadOnly();
   if (is_read_only || FLAGS_force_cluster_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
   }
