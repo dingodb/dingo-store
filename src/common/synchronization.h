@@ -15,6 +15,8 @@
 #ifndef DINGODB_COMMON_SYNCHRONIZATION_H_
 #define DINGODB_COMMON_SYNCHRONIZATION_H_
 
+#include <memory>
+
 #include "bthread/bthread.h"
 #include "bthread/butex.h"
 #include "common/logging.h"
@@ -124,6 +126,8 @@ class BthreadCond {
   bthread_cond_t cond_;
   bthread_mutex_t mutex_;
 };
+
+using BthreadCondPtr = std::shared_ptr<BthreadCond>;
 
 // wrapper bthread functions for c++ style
 class Bthread {

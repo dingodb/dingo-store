@@ -739,7 +739,7 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   return ret == 0;
 }
 
-std::vector<std::string> Helper::GenMvccCfVector() {
+std::vector<std::string> Helper::GetColumnFamilyNames() {
   std::vector<std::string> cfs;
 
   // the order of the cf is important, and can not be changed

@@ -227,14 +227,18 @@ int64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
 
 std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximateSize(
     std::vector<store::RegionPtr> regions) {
-  std::vector<store::RegionPtr> valid_regions;
   std::vector<pb::common::Range> ranges;
+  std::vector<store::RegionPtr> valid_regions;
+  std::vector<std::pair<int64_t, int64_t>> region_sizes;
   ranges.reserve(regions.size());
+  valid_regions.reserve(regions.size());
+  region_sizes.reserve(regions.size());
   for (const auto& region : regions) {
     auto tmp_ranges = region->PhysicsRange();
     if (!tmp_ranges.empty() && tmp_ranges[0].start_key() < tmp_ranges[0].end_key()) {
       ranges.insert(ranges.end(), tmp_ranges.begin(), tmp_ranges.end());
       valid_regions.push_back(region);
+      region_sizes.push_back(std::make_pair(region->Id(), 0));
     } else {
       DINGO_LOG(ERROR) << fmt::format(
           "[metrics.region][region({})] get region approximate size failed, invalid range [{}-{})", region->Id(),
@@ -242,22 +246,12 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
     }
   }
 
-  std::vector<std::pair<int64_t, int64_t>> region_sizes;
-  auto sizes = raw_engine_->GetApproximateSizes(Constant::kStoreDataCF, ranges);
-  int i = 0;
-  for (const auto& region : valid_regions) {
-    int64_t size = 0;
-    if (region->Type() == pb::common::INDEX_REGION) {
-      for (int j = 0; j < Constant::kVectorDataCategoryNum; ++j) {
-        size += sizes[i + j];
-      }
-      i += Constant::kVectorDataCategoryNum;
-    } else {
-      size = sizes[i];
-      i += 1;
+  auto column_family_names = Helper::GetColumnFamilyNames();
+  for (const auto& name : column_family_names) {
+    auto sizes = raw_engine_->GetApproximateSizes(name, ranges);
+    for (int i = 0; i < sizes.size(); ++i) {
+      region_sizes[i].second += sizes[i];
     }
-
-    region_sizes.push_back(std::make_pair(region->Id(), size));
   }
 
   return region_sizes;

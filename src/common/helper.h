@@ -187,8 +187,8 @@ class Helper {
   // Gen coordinator new_table_check_name
   static std::string GenNewTableCheckName(int64_t schema_id, const std::string& table_name);
 
-  // Gen mvcc cf vector for transaction
-  static std::vector<std::string> GenMvccCfVector();
+  // Get column family names except meta.
+  static std::vector<std::string> GetColumnFamilyNames();
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);

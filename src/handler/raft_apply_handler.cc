@@ -890,7 +890,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   // Store vector
   if (!kv_puts_with_cf.empty() && status.ok()) {
     // auto writer = engine->NewWriter(request.cf_name());
-    auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+    auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
     if (!writer) {
       DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
                        << ")] NewWriter failed";
@@ -1048,7 +1048,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   // Delete vector and write wal
   if (!kv_deletes_with_cf.empty() && status.ok()) {
     // auto writer = engine->NewWriter(request.cf_name());
-    auto writer = engine->NewMultiCfWriter(Helper::GenMvccCfVector());
+    auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
     if (!writer) {
       DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
     }
