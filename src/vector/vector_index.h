@@ -322,7 +322,10 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsHoldVectorIndex() const;
   void SetIsHoldVectorIndex(bool need);
 
-  vector_index::SnapshotMetaSetPtr SnapshotSet() { return snapshot_set_; }
+  vector_index::SnapshotMetaSetPtr SnapshotSet() {
+    BAIDU_SCOPED_LOCK(vector_index_mutex_);
+    return snapshot_set_;
+  }
 
   void UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& reason);
   void ClearVectorIndex();
