@@ -90,14 +90,14 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
 
   for (const auto &puts : request.puts_with_cf()) {
-    if (!kTxnCf2Id.count(puts.cf_name())) {
+    if (!kCf2Id.count(puts.cf_name())) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                       region->Id(), term_id, log_id)
                        << ", cf_name: " << puts.cf_name() << " not supported, request: " << request.ShortDebugString();
       continue;
     }
 
-    uint32_t cf_id = kTxnCf2Id.at(puts.cf_name());
+    uint32_t cf_id = kCf2Id.at(puts.cf_name());
 
     std::vector<pb::common::KeyValue> kv_puts;
     for (const auto &kv : puts.kvs()) {
@@ -108,14 +108,14 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   }
 
   for (const auto &dels : request.deletes_with_cf()) {
-    if (!kTxnCf2Id.count(dels.cf_name())) {
+    if (!kCf2Id.count(dels.cf_name())) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                       region->Id(), term_id, log_id)
                        << ", cf_name: " << dels.cf_name() << " not supported, request: " << request.ShortDebugString();
       continue;
     }
 
-    uint32_t cf_id = kTxnCf2Id.at(dels.cf_name());
+    uint32_t cf_id = kCf2Id.at(dels.cf_name());
 
     std::vector<std::string> kv_deletes;
 

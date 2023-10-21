@@ -25,6 +25,7 @@
 #include "common/context.h"
 #include "config/config.h"
 #include "log/segment_log_storage.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
@@ -38,7 +39,7 @@ class RaftNode {
            std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage);
   ~RaftNode() = default;
 
-  int Init(const std::string& init_conf, const std::string& raft_path, int election_timeout_ms,
+  int Init(store::RegionPtr region, const std::string& init_conf, const std::string& raft_path, int election_timeout_ms,
            int snapshot_interval_s);
   void Stop();
   void Destroy();
@@ -71,6 +72,8 @@ class RaftNode {
   void Snapshot(braft::Closure* done);
 
   std::shared_ptr<pb::common::BRaftStatus> GetStatus();
+
+  std::shared_ptr<braft::StateMachine> GetStateMachine();
 
  private:
   std::string path_;

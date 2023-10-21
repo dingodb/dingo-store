@@ -31,7 +31,7 @@
 
 namespace dingodb {
 
-extern const std::map<std::string, uint32_t> kTxnCf2Id;
+extern const std::map<std::string, uint32_t> kCf2Id;
 
 class Helper {
   using Errno = pb::error::Errno;
@@ -255,6 +255,7 @@ class Helper {
   static bool RemoveAllFileOrDirectory(const std::string& path);
   static butil::Status Rename(const std::string& src_path, const std::string& dst_path, bool is_force = true);
   static bool IsExistPath(const std::string& path);
+  static int64_t GetFileSize(const std::string& path);
 
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);

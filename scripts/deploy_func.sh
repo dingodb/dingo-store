@@ -65,7 +65,8 @@ function deploy_store() {
   fi
   if [ "${FLAGS_clean_all}" == "0" ]; then
     rm -rf $dstpath/data/*
-    echo "CLEAN ALL $dstpath/data/*"
+    rm -rf $dstpath/log/*
+    echo "CLEAN ALL $dstpath/data/* $dstpath/log/*"
   fi
 }
 

@@ -22,6 +22,6 @@ option cc_generic_services = true;
 message ClusterStatRequest {};
 message ClusterStatResponse {};
 
-service ClusterStat {
+service dingo {
   rpc default_method(ClusterStatRequest) returns (ClusterStatResponse);
 }
