@@ -54,7 +54,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     for (const auto &puts : request.puts_with_cf()) {
       for (const auto &kv : puts.kvs()) {
         if (range.end_key().compare(kv.key()) <= 0) {

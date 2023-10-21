@@ -172,8 +172,8 @@ butil::Status ServiceHelper::ValidateRegion(int64_t region_id, const std::vector
     return status;
   }
 
-  // for table region, Range is always equal to RawRange, so here we can use Range to validate
-  status = ValidateKeyInRange(region->RawRange(), keys);
+  // for table region, Range is always equal to Range, so here we can use Range to validate
+  status = ValidateKeyInRange(region->Range(), keys);
   if (!status.ok()) {
     return status;
   }
@@ -187,7 +187,7 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
     return status;
   }
 
-  const auto& range = region->RawRange();
+  const auto& range = region->Range();
   int64_t min_vector_id = VectorCodec::DecodeVectorId(range.start_key());
   int64_t max_vector_id = VectorCodec::DecodeVectorId(range.end_key());
   if (max_vector_id == 0) {

@@ -47,7 +47,7 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   const auto &request = req.put();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -92,7 +92,7 @@ int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   const auto &request = req.put_if_absent();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -159,7 +159,7 @@ int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   const auto &request = req.compare_and_set();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     for (const auto &kv : request.kvs()) {
       if (range.end_key().compare(kv.key()) <= 0) {
         if (ctx) {
@@ -244,7 +244,7 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   const auto &request = req.delete_range();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     for (const auto &delete_range : request.ranges()) {
       if (range.end_key().compare(delete_range.end_key()) <= 0) {
         if (ctx) {
@@ -313,7 +313,7 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   const auto &request = req.delete_batch();
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     for (const auto &key : request.keys()) {
       if (range.end_key().compare(key) <= 0) {
         if (ctx) {
@@ -459,20 +459,17 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                       from_region->Id(), to_region->Id());
     return false;
   }
-  if (from_region->RawRange().start_key() >= from_region->RawRange().end_key()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] from region invalid range [{}-{})",
-                                    from_region->Id(), to_region->Id(),
-                                    Helper::StringToHex(from_region->RawRange().start_key()),
-                                    Helper::StringToHex(from_region->RawRange().end_key()));
+  if (from_region->Range().start_key() >= from_region->Range().end_key()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[split.spliting][region({}->{})] from region invalid range [{}-{})", from_region->Id(), to_region->Id(),
+        Helper::StringToHex(from_region->Range().start_key()), Helper::StringToHex(from_region->Range().end_key()));
     return false;
   }
-  if (request.split_key() < from_region->RawRange().start_key() ||
-      request.split_key() > from_region->RawRange().end_key()) {
+  if (request.split_key() < from_region->Range().start_key() || request.split_key() > from_region->Range().end_key()) {
     DINGO_LOG(ERROR) << fmt::format(
         "[split.spliting][region({}->{})] from region invalid split key {} region range: [{}-{})", from_region->Id(),
         to_region->Id(), Helper::StringToHex(request.split_key()),
-        Helper::StringToHex(from_region->RawRange().start_key()),
-        Helper::StringToHex(from_region->RawRange().end_key()));
+        Helper::StringToHex(from_region->Range().start_key()), Helper::StringToHex(from_region->Range().end_key()));
     return false;
   }
 
@@ -485,19 +482,19 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.spliting][region({}->{})] pre from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
-      to_region->Id(), Helper::StringToHex(from_region->RawRange().start_key()),
-      Helper::StringToHex(from_region->RawRange().end_key()), Helper::StringToHex(to_region->RawRange().start_key()),
-      Helper::StringToHex(to_region->RawRange().end_key()));
+      to_region->Id(), Helper::StringToHex(from_region->Range().start_key()),
+      Helper::StringToHex(from_region->Range().end_key()), Helper::StringToHex(to_region->Range().start_key()),
+      Helper::StringToHex(to_region->Range().end_key()));
 
   pb::common::Range to_range;
   // child range
-  to_range.set_start_key(from_region->RawRange().start_key());
+  to_range.set_start_key(from_region->Range().start_key());
   to_range.set_end_key(request.split_key());
 
   // parent range
   pb::common::Range from_range;
   from_range.set_start_key(request.split_key());
-  from_range.set_end_key(from_region->RawRange().end_key());
+  from_range.set_end_key(from_region->Range().end_key());
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.spliting][region({}->{})] post from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
@@ -626,7 +623,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     return false;
   }
 
-  auto old_range = parent_region->RawRange();
+  auto old_range = parent_region->Range();
 
   if (old_range.start_key() >= old_range.end_key()) {
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] from region invalid range [{}-{})",
@@ -661,7 +658,6 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   definition.mutable_epoch()->set_conf_version(1);
   definition.mutable_epoch()->set_version(1);
   *(definition.mutable_range()) = child_range;
-  *(definition.mutable_raw_range()) = child_range;
 
   auto child_region = CreateNewRegion(definition, parent_region->Id());
   if (child_region == nullptr) {
@@ -772,7 +768,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     int64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
     int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
     for (const auto &vector : request.vectors()) {
@@ -944,7 +940,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
   // region is spliting, check key out range
   if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->RawRange();
+    const auto &range = region->Range();
     int64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
     int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
     for (auto vector_id : request.ids()) {

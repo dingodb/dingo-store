@@ -492,7 +492,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     return nullptr;
   }
 
-  auto range = region->RawRange();
+  auto range = region->Range();
   auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), range);
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] New vector index failed.", vector_index_id);

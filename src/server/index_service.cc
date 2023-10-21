@@ -411,7 +411,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
-  ctx->region_range = region->RawRange();
+  ctx->region_range = region->Range();
   ctx->parameter = request->parameter();
 
   if (request->vector_with_ids_size() <= 0) {
@@ -1014,7 +1014,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
 
   if (FLAGS_enable_async_vector_operation) {
     auto task = std::make_shared<VectorGetBorderIdTask>(storage_, cntl, request, response, done_guard.release(),
-                                                        region->RawRange());
+                                                        region->Range());
     auto ret = storage_->ExecuteRR(region->Id(), task);
     if (!ret) {
       // if Execute is failed, we must call done->Run
@@ -1028,7 +1028,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
     }
   } else {
     int64_t vector_id = 0;
-    status = storage_->VectorGetBorderId(region->Id(), region->RawRange(), request->get_min(), vector_id);
+    status = storage_->VectorGetBorderId(region->Id(), region->Range(), request->get_min(), vector_id);
     if (!status.ok()) {
       auto* err = response->mutable_error();
       err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -1185,7 +1185,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->RawRange();
+  ctx->region_range = region->Range();
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
   ctx->with_scalar_data = !request->without_scalar_data();
@@ -1307,7 +1307,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   }
 
   pb::common::VectorIndexMetrics metrics;
-  status = storage_->VectorGetRegionMetrics(region->Id(), region->RawRange(), region->VectorIndexWrapper(), metrics);
+  status = storage_->VectorGetRegionMetrics(region->Id(), region->Range(), region->VectorIndexWrapper(), metrics);
   if (!status.ok()) {
     auto* err = response->mutable_error();
     err->set_errcode(static_cast<Errno>(status.error_code()));
@@ -1355,7 +1355,7 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
   pb::common::Range range;
 
   if (start_vector_id == 0) {
-    range.set_start_key(region->RawRange().start_key());
+    range.set_start_key(region->Range().start_key());
   } else {
     std::string key;
     VectorCodec::EncodeVectorKey(region->PartitionId(), start_vector_id, key);
@@ -1363,7 +1363,7 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
   }
 
   if (end_vector_id == 0) {
-    range.set_end_key(region->RawRange().end_key());
+    range.set_end_key(region->Range().end_key());
   } else {
     std::string key;
     VectorCodec::EncodeVectorKey(region->PartitionId(), end_vector_id, key);
@@ -1746,7 +1746,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
-  ctx->region_range = region->RawRange();
+  ctx->region_range = region->Range();
   ctx->parameter = request->parameter();
 
   if (request->vector_with_ids_size() <= 0) {
@@ -2004,7 +2004,7 @@ butil::Status IndexServiceImpl::ValidateTxnScanRequestIndex(store::RegionPtr reg
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->RawRange(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -2171,7 +2171,7 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
     }
     return;
   }
-  auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<TxnScanTask>(storage_, cntl, request, response, done_guard.release(),

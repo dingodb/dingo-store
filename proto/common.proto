@@ -290,8 +290,7 @@ message RegionDefinition {
   RegionEpoch epoch = 2;
   string name = 3;
   repeated Peer peers = 4;
-  Range range = 5;      // this range is provide by user, such as sdk
-  Range raw_range = 6;  // this range is for internal use, such as store/index
+  Range range = 5;  // this range is provide by user, such as sdk
 
   // meta info
   int64 schema_id = 11;

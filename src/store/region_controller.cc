@@ -300,7 +300,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   const auto& split_key = split_request.split_watershed_key();
-  auto range = parent_region->RawRange();
+  auto range = parent_region->Range();
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
     return butil::Status(
         pb::error::EKEY_INVALID,

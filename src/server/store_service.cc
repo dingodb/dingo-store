@@ -1132,7 +1132,7 @@ butil::Status ValidateKvDeleteRangeRequest(store::RegionPtr region, const pb::co
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->RawRange(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1253,7 +1253,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
     return;
   }
 
-  auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
   if (FLAGS_enable_async_store_operation) {
     auto task =
@@ -1601,7 +1601,7 @@ butil::Status ValidateKvScanBeginRequest(store::RegionPtr region, const pb::comm
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->RawRange(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1727,7 +1727,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
     }
     return;
   }
-  auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
@@ -2254,7 +2254,7 @@ butil::Status ValidateTxnScanRequest(store::RegionPtr region, const pb::common::
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->RawRange(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -2388,7 +2388,7 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
     return;
   }
 
-  auto correction_range = Helper::IntersectRange(region->RawRange(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
   if (FLAGS_enable_async_store_operation) {
     auto task = std::make_shared<TxnScanTask>(storage_, cntl, request, response, done_guard.release(),

@@ -71,10 +71,9 @@ class Region {
   void SetLeaderId(int64_t leader_id);
 
   pb::common::Range Range();
-  pb::common::Range RawRange();
   // Get physics range, it's rocksdb data range.
-  // store region raw_range == physics ragne
-  // index region raw_range != physics ragne
+  // store region range == physics ragne
+  // index region range != physics ragne
   std::vector<pb::common::Range> PhysicsRange();
 
   std::string RangeToString();

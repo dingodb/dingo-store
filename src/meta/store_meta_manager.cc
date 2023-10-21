@@ -88,7 +88,6 @@ void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& r
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
   *(inner_region_.mutable_definition()->mutable_range()) = range;
-  *(inner_region_.mutable_definition()->mutable_raw_range()) = range;
 }
 
 void Region::SetEpochConfVersion(int64_t version) {
@@ -116,13 +115,8 @@ pb::common::Range Region::Range() {
   return inner_region_.definition().range();
 }
 
-pb::common::Range Region::RawRange() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.definition().raw_range();
-}
-
 std::vector<pb::common::Range> Region::PhysicsRange() {
-  auto region_range = RawRange();
+  auto region_range = Range();
 
   std::vector<pb::common::Range> ranges;
   // if (Type() == pb::common::INDEX_REGION) {
@@ -156,13 +150,13 @@ std::vector<pb::common::Range> Region::PhysicsRange() {
 }
 
 std::string Region::RangeToString() {
-  auto region_range = RawRange();
+  auto region_range = Range();
   return fmt::format("[{}-{})", Helper::StringToHex(region_range.start_key()),
                      Helper::StringToHex(region_range.end_key()));
 }
 
 bool Region::CheckKeyInRange(const std::string& key) {
-  auto region_range = RawRange();
+  auto region_range = Range();
   return key >= region_range.start_key() && key < region_range.end_key();
 }
 
