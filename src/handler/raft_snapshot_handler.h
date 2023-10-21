@@ -57,6 +57,7 @@ class RaftSnapshot {
                     int64_t region_version, int64_t term, int64_t log_index);
 
   bool LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr region);
+  bool LoadSnapshotDingo(braft::SnapshotReader* reader, store::RegionPtr region);
 
   butil::Status HandleRaftSnapshotRegionMeta(braft::SnapshotReader* reader, store::RegionPtr region);
 

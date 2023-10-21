@@ -25,7 +25,7 @@
 
 namespace dingodb {
 
-class ClusterStatImpl : public pb::cluster::ClusterStat, public brpc::Tabbed {
+class ClusterStatImpl : public pb::cluster::dingo, public brpc::Tabbed {
  public:
   ClusterStatImpl() = default;
   void default_method(::google::protobuf::RpcController* controller, const pb::cluster::ClusterStatRequest* request,

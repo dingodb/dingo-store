@@ -72,6 +72,9 @@ class StoreStateMachine : public braft::StateMachine {
   void on_start_following(const braft::LeaderChangeContext& ctx) override;
   void on_stop_following(const braft::LeaderChangeContext& ctx) override;
 
+  void UpdateAppliedIndex(int64_t applied_index);
+  int64_t GetAppliedIndex() const;
+
  private:
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 

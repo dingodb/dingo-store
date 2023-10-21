@@ -23,11 +23,13 @@
 #include <string>
 #include <vector>
 
+#include "braft/file_system_adaptor.h"
 #include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "common/constant.h"
 #include "common/safe_map.h"
 #include "engine/engine.h"
+#include "engine/raw_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "meta/transform_kv_able.h"
@@ -44,8 +46,14 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() : split_strategy_(pb::raft::PRE_CREATE_REGION) { bthread_mutex_init(&mutex_, nullptr); };
-  ~Region() { bthread_mutex_destroy(&mutex_); }
+  Region() {
+    bthread_mutex_init(&mutex_, nullptr);
+    bthread_mutex_init(&raft_mutex_, nullptr);
+  };
+  ~Region() {
+    bthread_mutex_destroy(&raft_mutex_);
+    bthread_mutex_destroy(&mutex_);
+  }
 
   Region(const Region&) = delete;
   void operator=(const Region&) = delete;
@@ -62,15 +70,20 @@ class Region {
   const std::string& Name() const { return inner_region_.definition().name(); }
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
-  pb::common::RegionEpoch Epoch();
+  pb::common::RegionEpoch Epoch(bool has_lock = false);
   void SetEpochVersionAndRange(int64_t version, const pb::common::Range& range);
   void SetEpochConfVersion(int64_t version);
   void SetSnapshotEpochVersion(int64_t version);
+  void LockRegionMeta();
+  void UnlockRegionMeta();
+
+  void LockRegionRaft();
+  void UnlockRegionRaft();
 
   int64_t LeaderId();
   void SetLeaderId(int64_t leader_id);
 
-  pb::common::Range Range();
+  pb::common::Range Range(bool has_lock = false);
 
   std::string RangeToString();
   bool CheckKeyInRange(const std::string& key);
@@ -111,18 +124,30 @@ class Region {
 
   pb::store_internal::Region InnerRegion();
   pb::common::RegionDefinition Definition();
+  pb::common::RawEngine GetRawEngineType();
+  std::shared_ptr<RawEngine> GetRawEngine();
 
   VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
   void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }
 
+  void SetAppliedTerm(int64_t term) { applied_term_.store(term); }
+  void SetAppliedIndex(int64_t index) { applied_index_.store(index); }
+  int64_t GetAppliedTerm() { return applied_term_.load(); }
+  int64_t GetAppliedIndex() { return applied_index_.load(); }
+
+  scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor = nullptr;
+
  private:
   bthread_mutex_t mutex_;
+  bthread_mutex_t raft_mutex_;  // this mutex is used to stop store_state_machine on_apply
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
+  std::atomic<int64_t> applied_term_{0};
+  std::atomic<int64_t> applied_index_{0};
 
-  pb::raft::SplitStrategy split_strategy_;  // NOLINT
+  pb::raft::SplitStrategy split_strategy_{};
 
-  VectorIndexWrapperPtr vector_index_wapper_;
+  VectorIndexWrapperPtr vector_index_wapper_{nullptr};
 };
 
 using RegionPtr = std::shared_ptr<Region>;
@@ -241,6 +266,7 @@ class StoreRaftMeta : public TransformKvAble {
   void SaveRaftMeta(int64_t region_id);
   void DeleteRaftMeta(int64_t region_id);
   RaftMetaPtr GetRaftMeta(int64_t region_id);
+  pb::store_internal::RaftMeta GetRaftMetaValue(int64_t region_id);
   std::vector<RaftMetaPtr> GetAllRaftMeta();
 
  private:

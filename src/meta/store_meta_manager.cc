@@ -21,10 +21,13 @@
 #include <cstdint>
 #include <memory>
 
+#include "bthread/mutex.h"
+#include "bthread/types.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
+#include "raft/dingo_filesystem_adaptor.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
@@ -51,6 +54,7 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
   }
   *(region->inner_region_.mutable_definition()) = definition;
   region->SetState(pb::common::StoreRegionState::NEW);
+
   return region;
 }
 
@@ -79,10 +83,22 @@ void Region::DeSerialize(const std::string& data) {
   state_.store(inner_region_.state());
 }
 
-pb::common::RegionEpoch Region::Epoch() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.definition().epoch();
+pb::common::RegionEpoch Region::Epoch(bool has_lock) {
+  if (has_lock) {
+    return inner_region_.definition().epoch();
+  } else {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_.definition().epoch();
+  }
 }
+
+void Region::LockRegionMeta() { bthread_mutex_lock(&mutex_); }
+
+void Region::UnlockRegionMeta() { bthread_mutex_unlock(&mutex_); }
+
+void Region::LockRegionRaft() { bthread_mutex_lock(&raft_mutex_); }
+
+void Region::UnlockRegionRaft() { bthread_mutex_unlock(&raft_mutex_); }
 
 void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
@@ -110,9 +126,13 @@ void Region::SetLeaderId(int64_t leader_id) {
   inner_region_.set_leader_id(leader_id);
 }
 
-pb::common::Range Region::Range() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.definition().range();
+pb::common::Range Region::Range(bool has_lock) {
+  if (has_lock) {
+    return inner_region_.definition().range();
+  } else {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_.definition().range();
+  }
 }
 
 std::string Region::RangeToString() {
@@ -244,6 +264,24 @@ pb::store_internal::Region Region::InnerRegion() {
 pb::common::RegionDefinition Region::Definition() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition();
+}
+
+pb::common::RawEngine Region::GetRawEngineType() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition().raw_engine();
+}
+
+std::shared_ptr<RawEngine> Region::GetRawEngine() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  auto raw_engine_type = inner_region_.definition().raw_engine();
+  if (raw_engine_type == pb::common::RawEngine::RAW_ENG_ROCKSDB) {
+    return Server::GetInstance().GetRawEngine();
+  } else if (raw_engine_type == pb::common::RawEngine::RAW_ENG_BDB) {
+    return Server::GetInstance().GetRawEngine();
+  } else {
+    DINGO_LOG(ERROR) << "Unknown raw engine type: " << pb::common::RawEngine_Name(raw_engine_type);
+    return nullptr;
+  }
 }
 
 }  // namespace store
@@ -640,6 +678,12 @@ void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& k
     auto region = store::Region::New();
     region->DeSerialize(kv.value());
     region->Recover();
+
+    auto raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(region_id);
+    if (raft_meta != nullptr) {
+      region->SetAppliedTerm(raft_meta->term());
+      region->SetAppliedIndex(raft_meta->applied_index());
+    }
     regions_.Put(region_id, region);
   }
 }
@@ -717,6 +761,19 @@ StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(int64_t region_id) {
   return it->second;
 }
 
+pb::store_internal::RaftMeta StoreRaftMeta::GetRaftMetaValue(int64_t region_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  pb::store_internal::RaftMeta raft_meta;
+  auto it = raft_metas_.find(region_id);
+  if (it == raft_metas_.end()) {
+    DINGO_LOG(WARNING) << fmt::format("raft meta {} not exist!", region_id);
+    return raft_meta;
+  }
+
+  raft_meta = *it->second;
+  return raft_meta;
+}
+
 std::vector<StoreRaftMeta::RaftMetaPtr> StoreRaftMeta::GetAllRaftMeta() {
   BAIDU_SCOPED_LOCK(mutex_);
   std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
@@ -752,13 +809,13 @@ bool StoreMetaManager::Init() {
     return false;
   }
 
-  if (!region_meta_->Init()) {
-    DINGO_LOG(ERROR) << "Init store region meta failed!";
+  if (!raft_meta_->Init()) {
+    DINGO_LOG(ERROR) << "Init store raft meta failed!";
     return false;
   }
 
-  if (!raft_meta_->Init()) {
-    DINGO_LOG(ERROR) << "Init store raft meta failed!";
+  if (!region_meta_->Init()) {
+    DINGO_LOG(ERROR) << "Init store region meta failed!";
     return false;
   }
 

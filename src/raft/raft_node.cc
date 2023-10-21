@@ -14,12 +14,14 @@
 
 #include "raft/raft_node.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "bthread/bthread.h"
+#include "butil/memory/ref_counted.h"
 #include "butil/status.h"
 #include "common/failpoint.h"
 #include "common/helper.h"
@@ -30,6 +32,7 @@
 #include "log/segment_log_storage.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
+#include "raft/dingo_filesystem_adaptor.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
 
@@ -47,8 +50,8 @@ RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::P
       log_storage_(log_storage) {}
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, int election_timeout_ms,
-                   int snapshot_interval_s) {
+int RaftNode::Init(store::RegionPtr region, const std::string& init_conf, const std::string& raft_path,
+                   int election_timeout_ms, int snapshot_interval_s) {
   DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] raft init init_conf: {}", node_id_, init_conf);
   election_timeout_ms_ = election_timeout_ms;
 
@@ -69,6 +72,13 @@ int RaftNode::Init(const std::string& init_conf, const std::string& raft_path, i
 
   node_options.log_storage = new SegmentLogStorageWrapper(log_storage_);
   node_options.node_owns_log_storage = true;
+
+  // coordinator's region does not have store_region_meta, so coordinator will pass nullptr to call AddNode.
+  // only store/index's region has store_region_meta, its region != nullptr, we used our own snapshot adaptor.
+  if (region != nullptr) {
+    region->snapshot_adaptor = new DingoFileSystemAdaptor(region->Id());
+    node_options.snapshot_file_system_adaptor = &region->snapshot_adaptor;
+  }
 
   if (node_->init(node_options) != 0) {
     DINGO_LOG(ERROR) << fmt::format("[raft.node][node_id({})] init raft node failed.", node_id_);
@@ -233,5 +243,7 @@ std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
 
   return braft_status;
 }
+
+std::shared_ptr<braft::StateMachine> RaftNode::GetStateMachine() { return fsm_; }
 
 }  // namespace dingodb

@@ -38,6 +38,7 @@ enum Engine {
 
 enum RawEngine {
   RAW_ENG_ROCKSDB = 0;
+  RAW_ENG_BDB = 1;
 };
 
 message Location {
@@ -290,7 +291,8 @@ message RegionDefinition {
   RegionEpoch epoch = 2;
   string name = 3;
   repeated Peer peers = 4;
-  Range range = 5;  // this range is provide by user, such as sdk
+  Range range = 5;           // this range is provide by user, such as sdk
+  RawEngine raw_engine = 6;  // this is the raw engine of the region
 
   // meta info
   int64 schema_id = 11;

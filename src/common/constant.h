@@ -193,6 +193,7 @@ class Constant {
 
   // raft snapshot
   inline static const std::string kRaftSnapshotRegionMetaFileName = "region_meta";
+  inline static const std::string kRaftSnapshotRegionDateFileNameSuffix = ".dingo_sst";
 
   static constexpr uint32_t kCollectApproximateSizeBatchSize = 1024;
   static constexpr int64_t kVectorIndexSnapshotCatchupMargin = 4000;

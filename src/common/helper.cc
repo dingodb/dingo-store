@@ -63,7 +63,7 @@
 
 namespace dingodb {
 
-const std::map<std::string, uint32_t> kTxnCf2Id = {
+const std::map<std::string, uint32_t> kCf2Id = {
     {Constant::kStoreDataCF, Constant::kStoreDataCfId},     {Constant::kVectorScalarCF, Constant::kVectorScalarCfId},
     {Constant::kVectorTableCF, Constant::kVectorTableCfId}, {Constant::kTxnDataCF, Constant::kTxnDataCfId},
     {Constant::kTxnLockCF, Constant::kTxnLockCfId},         {Constant::kTxnWriteCF, Constant::kTxnWriteCfId}};
@@ -1236,6 +1236,17 @@ butil::Status Helper::Rename(const std::string& src_path, const std::string& dst
 }
 
 bool Helper::IsExistPath(const std::string& path) { return std::filesystem::exists(path); }
+
+int64_t Helper::GetFileSize(const std::string& path) {
+  try {
+    std::uintmax_t size = std::filesystem::file_size(path);
+    DINGO_LOG(INFO) << fmt::format("File size: {} bytes", size);
+    return size;
+  } catch (const std::filesystem::filesystem_error& ex) {
+    DINGO_LOG(ERROR) << fmt::format("Get file size failed, path: {}, error: {}", path, ex.what());
+    return -1;
+  }
+}
 
 bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2) {
   if (value1.field_type() != value2.field_type()) {

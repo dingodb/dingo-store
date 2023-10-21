@@ -22,6 +22,7 @@
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #include "meta/meta_writer.h"
@@ -88,9 +89,20 @@ int StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard done_guard(iter.done());
+
+    region_->LockRegionRaft();
+
+    ON_SCOPE_EXIT([&]() { region_->UnlockRegionRaft(); });
+
     if (iter.index() <= applied_index_) {
       continue;
     }
+
+    applied_term_ = iter.term();
+    applied_index_ = iter.index();
+
+    region_->SetAppliedTerm(applied_term_);
+    region_->SetAppliedIndex(applied_index_);
 
     // region is STANDBY state, don't apply.
     while (region_->State() == pb::common::StoreRegionState::STANDBY) {
@@ -129,21 +141,17 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
     DispatchEvent(EventType::kSmApply, event);
 
-    applied_term_ = iter.term();
-    applied_index_ = iter.index();
-
-    raft_meta_->set_term(iter.term());
-    raft_meta_->set_applied_index(iter.index());
-
     // bvar metrics
     StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
-  }
 
-  // Persistence applied index
-  // If operation is idempotent, it's ok.
-  // If not, must be stored with the data.
-  if (applied_index_ % kSaveAppliedIndexStep == 0) {
-    Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+    // Persistence applied index
+    // If operation is idempotent, it's ok.
+    // If not, must be stored with the data.
+    if (applied_index_ % kSaveAppliedIndexStep == 0) {
+      raft_meta_->set_term(applied_term_);
+      raft_meta_->set_applied_index(applied_index_);
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+    }
   }
 }
 
@@ -315,5 +323,9 @@ void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx)
 
   DispatchEvent(EventType::kSmStopFollowing, event);
 }
+
+void StoreStateMachine::UpdateAppliedIndex(int64_t applied_index) { applied_index_ = applied_index; }
+
+int64_t StoreStateMachine::GetAppliedIndex() const { return applied_index_; }
 
 }  // namespace dingodb

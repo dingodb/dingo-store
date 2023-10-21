@@ -32,11 +32,14 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
+#include "raft/store_state_machine.h"
 #include "server/server.h"
 #include "store/region_controller.h"
 #include "vector/codec.h"
 
 namespace dingodb {
+
+DEFINE_string(raft_snapshot_policy, "dingo", "raft snapshot policy, checkpoint or scan");
 
 struct SaveRaftSnapshotArg {
   store::RegionPtr region;
@@ -262,8 +265,8 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
 
   std::map<uint32_t, std::vector<pb::common::Range>> ranges_with_cf;
   for (const auto& cf_name : cf_names) {
-    if (kTxnCf2Id.count(cf_name) > 0) {
-      ranges_with_cf.insert_or_assign(kTxnCf2Id.at(cf_name), std::vector<pb::common::Range>{region->Range()});
+    if (kCf2Id.count(cf_name) > 0) {
+      ranges_with_cf.insert_or_assign(kCf2Id.at(cf_name), std::vector<pb::common::Range>{region->Range()});
     } else {
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] invalid cf name: {}", region->Id(), cf_name);
       return butil::Status(pb::error::EINTERNAL, fmt::format("invalid cf name: {}", cf_name));
@@ -276,6 +279,29 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
                                     region->Id(), status.error_str());
     return status;
   }
+
+  // update store_state_machine's applied_index from snapshot meta.
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] raft store engine is null", region->Id());
+    return butil::Status(pb::error::EINTERNAL, "raft store engine is null");
+  }
+  auto raft_node = raft_store_engine->GetNode(region->Id());
+  if (raft_node == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] raft node is null", region->Id());
+    return butil::Status(pb::error::EINTERNAL, "raft node is null");
+  }
+  auto fsm = raft_node->GetStateMachine();
+  if (fsm == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] raft node's fsm is null", region->Id());
+    return butil::Status(pb::error::EINTERNAL, "raft node's fsm is null");
+  }
+  auto store_state_machine = std::dynamic_pointer_cast<StoreStateMachine>(fsm);
+  auto old_index = store_state_machine->GetAppliedIndex();
+  store_state_machine->UpdateAppliedIndex(meta.log_index());
+
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] update applied index from snapshot meta, from: {} to: {}",
+                                 region->Id(), old_index, meta.log_index());
 
   return butil::Status();
 }
@@ -403,6 +429,99 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
   return true;
 }
 
+bool RaftSnapshot::LoadSnapshotDingo(braft::SnapshotReader* reader, store::RegionPtr region) {
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot...", region->Id());
+  std::vector<std::string> files;
+  reader->list_files(&files);
+  if (files.empty()) {
+    DINGO_LOG(WARNING) << fmt::format("[raft.snapshot][region({})] snapshot not include file", region->Id());
+  }
+
+  auto status = HandleRaftSnapshotRegionMeta(reader, region);
+  if (!status.ok()) {
+    if (status.error_code() == pb::error::EREGION_VERSION) {
+      return true;
+    }
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] handle region meta failed, error: {}", region->Id(),
+                                    status.error_str());
+    return false;
+  }
+
+  // Ingest sst to region
+  if (files.empty()) {
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] snapshot not include file", region->Id());
+    return true;
+  }
+
+  for (const auto& file : files) {
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] snapshot file: {}", region->Id(), file);
+  }
+
+  auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
+  std::vector<std::string> sst_files;
+  auto cf_names = Helper::GetColumnFamilyNames();
+
+  for (auto& cf_name : cf_names) {
+    std::string filepath = reader->get_path() + "/" + cf_name + ".sst";
+    sst_files.push_back(filepath);
+  }
+
+  FAIL_POINT("load_snapshot_suspend");
+
+  for (int i = 0; i < cf_names.size(); i++) {
+    const auto& cf_name = cf_names[i];
+    const auto& sst_path = sst_files[i];
+
+    if (sst_path.empty()) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file is empty, skip ingest, cf_name: {}",
+                                     region->Id(), cf_name);
+      continue;
+    }
+
+    if (!Helper::IsExistPath(sst_path)) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file is not exist, skip ingest, cf_name: {}",
+                                     region->Id(), cf_name);
+      continue;
+    }
+
+    auto file_size = Helper::GetFileSize(sst_path);
+    if (file_size == 0) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file is empty, skip ingest, cf_name: {}",
+                                     region->Id(), cf_name);
+      continue;
+    } else if (file_size < 0) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] sst file is invalid, skip ingest, cf_name: {}",
+                                      region->Id(), cf_name);
+      return false;
+    }
+
+    std::vector<std::string> sst_files_to_ingest{sst_path};
+
+    auto status = raw_engine->IngestExternalFile(cf_name, sst_files_to_ingest);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] ingest sst file failed, error: {} {}", region->Id(),
+                                      status.error_code(), status.error_str())
+                       << ", sst file: " << sst_path;
+      return false;
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] successfully ingest sst file: {}", region->Id(),
+                                   sst_path);
+  }
+
+  for (const auto& sst_file : sst_files) {
+    // Clean merge temp file
+    if (sst_file.empty()) {
+      continue;
+    }
+    Helper::RemoveFileOrDirectory(sst_file);
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot success", region->Id());
+
+  return true;
+}
+
 // Use scan async save snapshot.
 void AsyncSaveSnapshotByScan(store::RegionPtr region, std::shared_ptr<RawEngine> engine, int64_t term,
                              int64_t log_index, braft::SnapshotWriter* writer, braft::Closure* done) {
@@ -462,19 +581,37 @@ void SaveSnapshotByCheckpoint(store::RegionPtr region, std::shared_ptr<RawEngine
   }
 }
 
-std::string GetSnapshotPolicy(std::shared_ptr<dingodb::Config> config) {
-  std::string policy = config->GetString("raft.snapshot_policy");
-  return policy = policy.empty() ? Constant::kDefaultRaftSnapshotPolicy : policy;
+void SaveSnapshotByDingo(store::RegionPtr /*region*/, std::shared_ptr<RawEngine> /*engine*/, int64_t /*term*/,
+                         int64_t /*log_index*/, braft::SnapshotWriter* writer, braft::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  // this is a fake snapshot only used to trim raft log.
+  // so here we add 7 file names to the snapshot writer:
+  // snapshot_region.meta, default.sst, vector_scalar.sst, vector_table.sst, data.sst, lock.sst, write.sst
+  writer->add_file(Constant::kRaftSnapshotRegionMetaFileName);
+
+  auto cf_names = Helper::GetColumnFamilyNames();
+  for (const auto& cf_name : cf_names) {
+    writer->add_file(cf_name + std::string(Constant::kRaftSnapshotRegionDateFileNameSuffix));
+  }
 }
+
+// std::string GetSnapshotPolicy(std::shared_ptr<dingodb::Config> config) {
+//   std::string policy = config->GetString("raft.snapshot_policy");
+//   return policy = policy.empty() ? Constant::kDefaultRaftSnapshotPolicy : policy;
+// }
 
 int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, int64_t term,
                                     int64_t log_index, braft::SnapshotWriter* writer, braft::Closure* done) {
   auto config = ConfigManager::GetInstance().GetConfig();
-  std::string policy = GetSnapshotPolicy(config);
+  // std::string policy = GetSnapshotPolicy(config);
+  std::string policy = FLAGS_raft_snapshot_policy;
   if (policy == "checkpoint") {
     SaveSnapshotByCheckpoint(region, engine, term, log_index, writer, done);
   } else if (policy == "scan") {
     AsyncSaveSnapshotByScan(region, engine, term, log_index, writer, done);
+  } else if (policy == "dingo") {
+    SaveSnapshotByDingo(region, engine, term, log_index, writer, done);
   }
 
   return 0;
@@ -483,6 +620,12 @@ int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
 int RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                    braft::SnapshotReader* reader) {
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
+  if (FLAGS_raft_snapshot_policy == "dingo") {
+    auto ret = raft_snapshot->LoadSnapshotDingo(reader, region);
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot(dingo) failed.", region->Id());
+    return -1;
+  }
+
   if (!raft_snapshot->LoadSnapshot(reader, region)) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed.", region->Id());
     return -1;

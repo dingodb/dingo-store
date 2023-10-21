@@ -38,7 +38,7 @@ namespace dingodb {
 void ClusterStatImpl::GetTabInfo(brpc::TabInfoList* info_list) const {
   brpc::TabInfo* info = info_list->add();
   info->tab_name = "dingo";
-  info->path = "/ClusterStat";
+  info->path = "/dingo";
 }
 
 void ClusterStatImpl::default_method(::google::protobuf::RpcController* controller,
@@ -81,7 +81,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
               store.server_location().host() + ":" + std::to_string(store.server_location().port()) +
               "> server:" + store.server_location().host() + ":" + std::to_string(store.server_location().port()) +
               "</a> <a href=http://" + store.raft_location().host() + ":" +
-              std::to_string(store.raft_location().port()) + "> raft:" + store.raft_location().host() + ":" +
+              std::to_string(store.raft_location().port()) + "/raft_stat> raft:" + store.raft_location().host() + ":" +
               std::to_string(store.raft_location().port()) + "</a></p>";
   }
 
