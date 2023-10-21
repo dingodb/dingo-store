@@ -57,13 +57,13 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
     return butil::Status(pb::error::EINTERNAL, "Create directory failed");
   }
   auto raw_engine = std::dynamic_pointer_cast<RawRocksEngine>(engine_);
-  auto raw_range = region->RawRange();
+  auto range = region->Range();
   // Build Iterator
   IteratorOptions options;
-  options.upper_bound = raw_range.end_key();
+  options.upper_bound = range.end_key();
 
   auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, engine_snapshot_, options);
-  iter->Seek(raw_range.start_key());
+  iter->Seek(range.start_key());
 
   // Build sst name and path
   std::string sst_name = std::to_string(region->Id()) + ".sst";
@@ -83,8 +83,8 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
   sst_file.set_level(0);
   sst_file.set_name(sst_name);
   sst_file.set_path(sst_path);
-  sst_file.set_start_key(raw_range.start_key());
-  sst_file.set_end_key(raw_range.end_key());
+  sst_file.set_start_key(range.start_key());
+  sst_file.set_end_key(range.end_key());
 
   DINGO_LOG(INFO) << "sst file info: " << sst_file.ShortDebugString();
   sst_files.push_back(sst_file);
@@ -135,7 +135,7 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
   }
 
   // Get region actual range
-  sst_files = FilterSstFile(tmp_sst_files, region->RawRange());
+  sst_files = FilterSstFile(tmp_sst_files, region->Range());
   for (const auto& sst_file : sst_files) {
     DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file info: {}", region->Id(),
                                    sst_file.ShortDebugString());
@@ -155,14 +155,14 @@ bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region, i
 
   pb::store_internal::RaftSnapshotRegionMeta meta;
   *(meta.mutable_epoch()) = region->Epoch();
-  *(meta.mutable_range()) = region->RawRange();
+  *(meta.mutable_range()) = region->Range();
   meta.set_term(term);
   meta.set_log_index(log_index);
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] region meta epoch({}_{}) range[{}-{})", region->Id(),
                                  meta.epoch().conf_version(), meta.epoch().version(),
-                                 Helper::StringToHex(region->RawRange().start_key()),
-                                 Helper::StringToHex(region->RawRange().end_key()));
+                                 Helper::StringToHex(region->Range().start_key()),
+                                 Helper::StringToHex(region->Range().end_key()));
 
   file << meta.SerializeAsString();
   file.close();
@@ -173,14 +173,14 @@ bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region, i
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
                                 GenSnapshotFileFunc func, int64_t region_version, int64_t term, int64_t log_index) {
-  if (region->RawRange().start_key().empty() || region->RawRange().end_key().empty()) {
+  if (region->Range().start_key().empty() || region->Range().end_key().empty()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, range is invalid", region->Id());
     return false;
   }
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] Save snapshot range[{}-{})", region->Id(),
-                                 Helper::StringToHex(region->RawRange().start_key()),
-                                 Helper::StringToHex(region->RawRange().end_key()));
+                                 Helper::StringToHex(region->Range().start_key()),
+                                 Helper::StringToHex(region->Range().end_key()));
 
   // Add region meta to snapshot
   if (!AddRegionMetaFile(writer, region, term, log_index)) {
@@ -263,7 +263,7 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   std::map<uint32_t, std::vector<pb::common::Range>> ranges_with_cf;
   for (const auto& cf_name : cf_names) {
     if (kTxnCf2Id.count(cf_name) > 0) {
-      ranges_with_cf.insert_or_assign(kTxnCf2Id.at(cf_name), std::vector<pb::common::Range>{region->RawRange()});
+      ranges_with_cf.insert_or_assign(kTxnCf2Id.at(cf_name), std::vector<pb::common::Range>{region->Range()});
     } else {
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] invalid cf name: {}", region->Id(), cf_name);
       return butil::Status(pb::error::EINTERNAL, fmt::format("invalid cf name: {}", cf_name));
@@ -330,7 +330,7 @@ bool RaftSnapshot::LoadSnapshot(braft::SnapshotReader* reader, store::RegionPtr 
                                    merge_sst_file_paths.size());
 
     auto status =
-        RawRocksEngine::MergeCheckpointFiles(reader->get_path(), region->RawRange(), cf_names, merge_sst_file_paths);
+        RawRocksEngine::MergeCheckpointFiles(reader->get_path(), region->Range(), cf_names, merge_sst_file_paths);
     if (!status.ok()) {
       // Clean temp file
       for (const auto& merge_file_path : merge_sst_file_paths) {

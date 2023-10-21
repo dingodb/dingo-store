@@ -203,27 +203,26 @@ class CoordinatorControl : public MetaControl {
                             std::vector<pb::common::Store> &selected_stores_for_regions);
   butil::Status CreateShadowRegion(const std::string &region_name, pb::common::RegionType region_type,
                                    const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
-                                   pb::common::Range region_raw_range, int64_t schema_id, int64_t table_id,
-                                   int64_t index_id, int64_t part_id, const pb::common::IndexParameter &index_parameter,
-                                   std::vector<int64_t> &store_ids, int64_t split_from_region_id,
-                                   int64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+                                   int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+                                   const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
+                                   int64_t split_from_region_id, int64_t &new_region_id,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionFinal(const std::string &region_name, pb::common::RegionType region_type,
                                   const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
-                                  pb::common::Range region_raw_range, int64_t schema_id, int64_t table_id,
-                                  int64_t index_id, int64_t part_id, const pb::common::IndexParameter &index_parameter,
-                                  std::vector<int64_t> &store_ids, int64_t split_from_region_id, int64_t &new_region_id,
+                                  int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+                                  const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
+                                  int64_t split_from_region_id, int64_t &new_region_id,
                                   std::vector<pb::coordinator::StoreOperation> &store_operations,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionAutoSelectStore(const std::string &region_name, pb::common::RegionType region_type,
                                             const std::string &resource_tag, int32_t replica_num,
-                                            pb::common::Range region_range, pb::common::Range region_raw_range,
-                                            int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+                                            pb::common::Range region_range, int64_t schema_id, int64_t table_id,
+                                            int64_t index_id, int64_t part_id,
                                             const pb::common::IndexParameter &index_parameter, int64_t &new_region_id,
                                             pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionForSplit(const std::string &region_name, pb::common::RegionType region_type,
-                                     const std::string &resource_tag, pb::common::Range region_range,
-                                     pb::common::Range region_raw_range, int64_t schema_id, int64_t table_id,
-                                     int64_t index_id, int64_t part_id,
+                                     const std::string &resource_tag, pb::common::Range region_range, int64_t schema_id,
+                                     int64_t table_id, int64_t index_id, int64_t part_id,
                                      const pb::common::IndexParameter &index_parameter, int64_t split_from_region_id,
                                      int64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionForSplitInternal(int64_t split_from_region_id, int64_t &new_region_id,

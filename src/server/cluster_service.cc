@@ -224,21 +224,6 @@ void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region
                              Helper::StringToHex(region.definition().range().end_key()));
   }
 
-  std::string raw_range_info;
-  if (region.definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
-    raw_range_info = fmt::format("<li>RawRange:[{}, {}); [{}/{}, {}/{})</li>",
-                                 Helper::StringToHex(region.definition().raw_range().start_key()),
-                                 Helper::StringToHex(region.definition().raw_range().end_key()),
-                                 VectorCodec::DecodePartitionId(region.definition().raw_range().start_key()),
-                                 VectorCodec::DecodeVectorId(region.definition().raw_range().start_key()),
-                                 VectorCodec::DecodePartitionId(region.definition().raw_range().end_key()),
-                                 VectorCodec::DecodeVectorId(region.definition().raw_range().end_key()));
-  } else {
-    raw_range_info =
-        fmt::format("<li>RawRange:[{}, {})</li>", Helper::StringToHex(region.definition().raw_range().start_key()),
-                    Helper::StringToHex(region.definition().raw_range().end_key()));
-  }
-
   os << "<li>RegionID:";
   os << std::to_string(region.id());
   os << "<ul>";
@@ -247,7 +232,6 @@ void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region
   os << leader_info;
   os << follower_info;
   os << range_info;
-  os << raw_range_info;
   os << "</ul>";
   os << "</li>";
 }
