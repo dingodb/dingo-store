@@ -275,19 +275,29 @@ void VectorIndexWrapper::ClearVectorIndex() {
   share_vector_index_ = nullptr;
 }
 
-VectorIndexPtr VectorIndexWrapper::GetOwnVectorIndex() { return vector_indexs_[active_index_.load()]; }
+VectorIndexPtr VectorIndexWrapper::GetOwnVectorIndex() {
+  BAIDU_SCOPED_LOCK(vector_index_mutex_);
+  return vector_indexs_[active_index_.load()];
+}
 
 VectorIndexPtr VectorIndexWrapper::GetVectorIndex() {
+  BAIDU_SCOPED_LOCK(vector_index_mutex_);
+
   if (share_vector_index_ != nullptr) {
     return share_vector_index_;
   }
 
-  return GetOwnVectorIndex();
+  return vector_indexs_[active_index_.load()];
 }
 
-VectorIndexPtr VectorIndexWrapper::ShareVectorIndex() { return share_vector_index_; }
+VectorIndexPtr VectorIndexWrapper::ShareVectorIndex() {
+  BAIDU_SCOPED_LOCK(vector_index_mutex_);
+  return share_vector_index_;
+}
 
 void VectorIndexWrapper::SetShareVectorIndex(VectorIndexPtr vector_index) {
+  BAIDU_SCOPED_LOCK(vector_index_mutex_);
+
   share_vector_index_ = vector_index;
 
   // During split, there may occur leader change, set ready_ to true can improve the availablidy of vector index
