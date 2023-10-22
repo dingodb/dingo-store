@@ -40,6 +40,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "engine/raw_engine.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -273,19 +274,42 @@ butil::Status RawRocksEngine::MergeCheckpointFile(const std::string& path, const
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}", status.ToString()));
   }
 
-  // Create iterator
-  IteratorOptions iter_options;
-  iter_options.upper_bound = range.end_key();
+  butil::Status ret;
+  {
+    // Create iterator
+    IteratorOptions iter_options;
+    iter_options.upper_bound = range.end_key();
 
-  rocksdb::ReadOptions read_options;
-  read_options.auto_prefix_mode = true;
+    rocksdb::ReadOptions read_options;
+    read_options.auto_prefix_mode = true;
 
-  auto iter =
-      std::make_shared<RawRocksEngine::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handles[0]));
-  iter->Seek(range.start_key());
+    auto iter =
+        std::make_shared<RawRocksEngine::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handles[0]));
+    iter->Seek(range.start_key());
 
-  // Create sst writer
-  return NewSstFileWriter()->SaveFile(iter, merge_sst_path);
+    // Create sst writer
+    ret = NewSstFileWriter()->SaveFile(iter, merge_sst_path);
+  }
+
+  // Close snapshot db.
+  try {
+    CancelAllBackgroundWork(snapshot_db, true);
+    snapshot_db->DropColumnFamilies(handles);
+    for (auto& handle : handles) {
+      snapshot_db->DestroyColumnFamilyHandle(handle);
+    }
+    snapshot_db->Close();
+    delete snapshot_db;
+  } catch (std::exception& e) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] close snapshot db failed, path: {} error: {}", path, e.what());
+  }
+
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint failed, path: {} error: {}", path, ret.error_str());
+    return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb merge checkpoint failed, {}", ret.error_str()));
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
