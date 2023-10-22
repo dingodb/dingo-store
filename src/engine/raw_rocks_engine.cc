@@ -317,26 +317,28 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
       handle = handles[1];
     }
 
+    butil::Status ret_status = butil::Status::OK();
     {
       auto iter =
           std::make_shared<RawRocksEngine::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handle));
       if (iter == nullptr) {
         DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, create iterator failed");
-        return butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, create iterator failed");
-      }
-      iter->Seek(range.start_key());
-      auto ret = NewSstFileWriter()->SaveFile(iter, merge_sst_path);
-      if (ret.error_code() == pb::error::Errno::ENO_ENTRIES) {
-        DINGO_LOG(WARNING) << "[rocksdb] merge checkpoint files no entries, file_name=" << merge_sst_path;
-        merge_sst_paths[i] = "";
-      } else if (!ret.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, save file failed")
-                         << ", error: " << ret.error_str();
-        return butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, save file failed");
-      }
+        ret_status = butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, create iterator failed");
+      } else {
+        iter->Seek(range.start_key());
+        auto ret = NewSstFileWriter()->SaveFile(iter, merge_sst_path);
+        if (ret.error_code() == pb::error::Errno::ENO_ENTRIES) {
+          DINGO_LOG(WARNING) << "[rocksdb] merge checkpoint files no entries, file_name=" << merge_sst_path;
+          merge_sst_paths[i] = "";
+        } else if (!ret.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, save file failed")
+                           << ", error: " << ret.error_str();
+          ret_status = butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, save file failed");
+        }
 
-      DINGO_LOG(INFO) << fmt::format("[rocksdb] merge checkpoint files success, path: {} cf_name: {}", path,
-                                     cf_names[i]);
+        DINGO_LOG(INFO) << fmt::format("[rocksdb] merge checkpoint files success, path: {} cf_name: {}", path,
+                                       cf_names[i]);
+      }
     }
 
     // Close snapshot db.
@@ -350,6 +352,11 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
       delete snapshot_db;
     } catch (std::exception& e) {
       DINGO_LOG(ERROR) << fmt::format("[rocksdb] close snapshot db failed, path: {} error: {}", path, e.what());
+      ret_status = butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb close snapshot db failed, {}", e.what()));
+    }
+
+    if (!ret_status.ok()) {
+      return ret_status;
     }
   }
 
