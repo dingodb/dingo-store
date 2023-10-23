@@ -308,6 +308,8 @@ class RawRocksEngine : public RawEngine {
                                       const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) override;
 
     butil::Status KvBatchDeleteRange(const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) override;
+    butil::Status KvDeleteRange(const pb::common::Range& range) override;
+    butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) override;
 
    private:
     std::vector<std::shared_ptr<ColumnFamily>> column_families_;

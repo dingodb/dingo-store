@@ -42,7 +42,7 @@
 namespace dingodb {
 
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
+  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, {region->Range()});
   iter->Init();
 
   int64_t size = 0;
@@ -73,7 +73,7 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
+  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, {region->Range()});
   iter->Init();
 
   int64_t size = 0;
@@ -99,7 +99,7 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, region->PhysicsRange());
+  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, {region->Range()});
   iter->Init();
 
   int64_t size = 0;

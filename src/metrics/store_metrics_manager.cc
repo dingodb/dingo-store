@@ -234,16 +234,17 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
   valid_regions.reserve(regions.size());
   region_sizes.reserve(regions.size());
   for (const auto& region : regions) {
-    auto tmp_ranges = region->PhysicsRange();
-    if (!tmp_ranges.empty() && tmp_ranges[0].start_key() < tmp_ranges[0].end_key()) {
-      ranges.insert(ranges.end(), tmp_ranges.begin(), tmp_ranges.end());
-      valid_regions.push_back(region);
-      region_sizes.push_back(std::make_pair(region->Id(), 0));
-    } else {
+    auto range = region->Range();
+    if (range.start_key() >= range.end_key()) {
       DINGO_LOG(ERROR) << fmt::format(
           "[metrics.region][region({})] get region approximate size failed, invalid range [{}-{})", region->Id(),
-          Helper::StringToHex(tmp_ranges[0].start_key()), Helper::StringToHex(tmp_ranges[0].end_key()));
+          Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()));
+      continue;
     }
+
+    ranges.push_back(range);
+    valid_regions.push_back(region);
+    region_sizes.push_back(std::make_pair(region->Id(), 0));
   }
 
   auto column_family_names = Helper::GetColumnFamilyNames();

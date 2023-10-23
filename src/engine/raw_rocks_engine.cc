@@ -532,6 +532,62 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchDeleteRange(
   return butil::Status::OK();
 }
 
+butil::Status RawRocksEngine::MultiCfWriter::KvDeleteRange(const pb::common::Range& range) {
+  if (range.start_key().empty() || range.end_key().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+  }
+  if (range.start_key() >= range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+  }
+
+  rocksdb::WriteBatch batch;
+  for (const auto& column_family : column_families_) {
+    rocksdb::Status s = batch.DeleteRange(column_family->GetHandle(), range.start_key(), range.end_key());
+    if (!s.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
+      return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
+    }
+  }
+
+  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
+  }
+
+  return butil::Status();
+}
+
+butil::Status RawRocksEngine::MultiCfWriter::KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) {
+  for (const auto& range : ranges) {
+    if (range.start_key().empty() || range.end_key().empty()) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+    }
+    if (range.start_key() >= range.end_key()) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+    }
+  }
+
+  rocksdb::WriteBatch batch;
+  for (const auto& column_family : column_families_) {
+    for (const auto& range : ranges) {
+      rocksdb::Status s = batch.DeleteRange(column_family->GetHandle(), range.start_key(), range.end_key());
+      if (!s.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
+      }
+    }
+  }
+
+  rocksdb::Status s = db_->Write(rocksdb::WriteOptions(), &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
+  }
+
+  return butil::Status();
+}
+
 std::shared_ptr<dingodb::Iterator> RawRocksEngine::NewIterator(const std::string& cf_name, IteratorOptions options) {
   return NewIterator(cf_name, NewSnapshot(), options);
 }
