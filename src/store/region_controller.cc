@@ -208,9 +208,8 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  auto engine = Server::GetInstance().GetEngine();
-  auto writer = engine->GetRawEngine()->NewWriter(Constant::kStoreDataCF);
-  status = writer->KvBatchDeleteRange(region->PhysicsRange());
+  auto writer = Server::GetInstance().GetRawEngine()->NewMultiCfWriter(Helper::GetColumnFamilyNames());
+  status = writer->KvDeleteRange(region->Range());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled.", region_id);
   }

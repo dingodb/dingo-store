@@ -135,6 +135,8 @@ class RawEngine {
 
     virtual butil::Status KvBatchDeleteRange(
         const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) = 0;
+    virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
+    virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
   };
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;

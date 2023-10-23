@@ -282,23 +282,26 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   int64_t size = 0;
   int32_t key_count = 0;
   std::string min_key, max_key;
-  auto ranges = region->PhysicsRange();
-  for (int i = 0; i < ranges.size(); ++i) {
-    auto range = ranges[i];
+  auto range = region->Range();
+
+  auto column_family_names = Helper::GetColumnFamilyNames();
+  for (const auto& name : column_family_names) {
     IteratorOptions options;
     options.upper_bound = range.end_key();
-    auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
-
+    auto iter = raw_engine->NewIterator(name, options);
+    int32_t temp_key_count = 0;
     for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
       size += iter->Key().size() + iter->Value().size();
-      if (i == 0) {
-        ++key_count;
-        if (min_key.empty()) {
-          min_key = iter->Key();
-        }
+
+      ++temp_key_count;
+      if (min_key.empty()) {
+        min_key = iter->Key();
+      }
+      if (max_key.compare(iter->Key()) < 0) {
         max_key = iter->Key();
       }
     }
+    key_count = std::max(key_count, temp_key_count);
   }
 
   region_metrics.set_min_key(min_key);
