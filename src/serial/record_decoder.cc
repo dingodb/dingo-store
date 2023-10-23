@@ -42,24 +42,56 @@ void RecordDecoder::Init(int schema_version, std::shared_ptr<std::vector<std::sh
   this->common_id_ = common_id;
 }
 
+bool RecordDecoder::CheckPrefix(Buf* buf) const {
+  return buf->ReadLong() == common_id_;
+}
+
+bool RecordDecoder::CheckReverseTag(Buf* buf) const {
+  if (buf->ReverseRead() == codec_version_) {
+    buf->ReverseSkip(3);
+    return true;
+  }
+  return false;
+}
+
+bool RecordDecoder::CheckSchemaVersion(Buf* buf) const {
+  return buf->ReadInt() <= schema_version_;
+}
+
+template <typename T>
+void CastAndDecode(
+  const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf, std::vector<std::any>& record
+) {
+  auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<T>>>(schema);
+  if (ds->IsKey()) {
+    record.at(ds->GetIndex()) = ds->DecodeKey(key_buf);
+  } else {
+    if (value_buf->IsEnd()) {
+      record.at(ds->GetIndex()) = std::optional<T>(std::nullopt);
+    } else {
+      record.at(ds->GetIndex()) = ds->DecodeValue(value_buf);
+    }
+  }
+}
+
 int RecordDecoder::Decode(const std::string& key, const std::string& value, std::vector<std::any>& record) {
   Buf* key_buf = new Buf(key, this->le_);
   Buf* value_buf = new Buf(value, this->le_);
-  if (key_buf->ReadLong() != common_id_) {
+  if (!CheckPrefix(key_buf)) {
     //"Wrong Common Id"
     delete key_buf;
     delete value_buf;
     return -1;
   }
 
-  if (key_buf->ReverseReadInt() != codec_version_) {
+  if (!CheckReverseTag(key_buf)) {
     //"Wrong Codec Version"
     delete key_buf;
     delete value_buf;
     return -1;
   }
 
-  if (value_buf->ReadInt() != schema_version_) {
+  if (!CheckSchemaVersion(value_buf)) {
     //"Wrong Schema Version"
     delete key_buf;
     delete value_buf;
@@ -72,112 +104,51 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
       BaseSchema::Type type = bs->GetType();
       switch (type) {
         case BaseSchema::kBool: {
-          auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
-          if (bos->IsKey()) {
-            record.at(bos->GetIndex()) = bos->DecodeKey(key_buf);
-          } else {
-            record.at(bos->GetIndex()) = bos->DecodeValue(value_buf);
-          }
+	  CastAndDecode<bool>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kInteger: {
-          auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
-          if (is->IsKey()) {
-            record.at(is->GetIndex()) = is->DecodeKey(key_buf);
-          } else {
-            record.at(is->GetIndex()) = is->DecodeValue(value_buf);
-          }
+	  CastAndDecode<int32_t>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kFloat: {
-          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
-          if (fs->IsKey()) {
-            record.at(fs->GetIndex()) = fs->DecodeKey(key_buf);
-          } else {
-            record.at(fs->GetIndex()) = fs->DecodeValue(value_buf);
-          }
+	  CastAndDecode<float>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kLong: {
-          auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
-          if (ls->IsKey()) {
-            record.at(ls->GetIndex()) = ls->DecodeKey(key_buf);
-          } else {
-            record.at(ls->GetIndex()) = ls->DecodeValue(value_buf);
-          }
+	  CastAndDecode<int64_t>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kDouble: {
-          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
-          if (ds->IsKey()) {
-            record.at(ds->GetIndex()) = ds->DecodeKey(key_buf);
-          } else {
-            record.at(ds->GetIndex()) = ds->DecodeValue(value_buf);
-          }
+	  CastAndDecode<double>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kString: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::string>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kBoolList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<bool>>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::shared_ptr<std::vector<bool>>>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kStringList: {
-          auto ss =
-              std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<std::string>>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::shared_ptr<std::vector<std::string>>>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kDoubleList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<double>>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::shared_ptr<std::vector<double>>>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kFloatList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<float>>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::shared_ptr<std::vector<float>>>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kIntegerList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int32_t>>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::shared_ptr<std::vector<int32_t>>>(bs, key_buf, value_buf, record);
           break;
         }
         case BaseSchema::kLongList: {
-          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::vector<int64_t>>>>>(bs);
-          if (ss->IsKey()) {
-            record.at(ss->GetIndex()) = ss->DecodeKey(key_buf);
-          } else {
-            record.at(ss->GetIndex()) = ss->DecodeValue(value_buf);
-          }
+	  CastAndDecode<std::shared_ptr<std::vector<int64_t>>>(bs, key_buf, value_buf, record);
           break;
         }
         default: {
@@ -194,13 +165,13 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
 int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& record /*output*/) {
   Buf* key_buf = new Buf(key, this->le_);
 
-  if (key_buf->ReadLong() != common_id_) {
+  if (!CheckPrefix(key_buf)) {
     //"Wrong Common Id"
     delete key_buf;
     return -1;
   }
 
-  if (key_buf->ReverseReadInt() != codec_version_) {
+  if (!CheckReverseTag(key_buf)) {
     //"Wrong Codec Version"
     delete key_buf;
     return -1;
@@ -287,14 +258,18 @@ void DecodeOrSkip(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema, 
     if (schema->IsKey()) {
       record.at(n) = schema->DecodeKey(&key_buf);
     } else {
-      record.at(n) = schema->DecodeValue(&value_buf);
+      if (value_buf.IsEnd()) {
+        record.at(schema->GetIndex()) = std::optional<T>(std::nullopt);
+      } else {
+	record.at(n) = schema->DecodeValue(&value_buf);
+      }
     }
     n++;
   } else {
     // record.at(schema->GetIndex()) = std::nullopt;
     if (schema->IsKey()) {
       schema->SkipKey(&key_buf);
-    } else {
+    } else if (!value_buf.IsEnd()) {
       schema->SkipValue(&value_buf);
     }
   }
@@ -324,14 +299,18 @@ void DecodeOrSkip1(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema,
     if (schema->IsKey()) {
       record.at(recordIndex) = schema->DecodeKey(&key_buf);
     } else {
-      record.at(recordIndex) = schema->DecodeValue(&value_buf);
+      if (value_buf.IsEnd()) {
+        record.at(schema->GetIndex()) = std::optional<T>(std::nullopt);
+      } else {
+	record.at(recordIndex) = schema->DecodeValue(&value_buf);
+      }
     }
     n++;
   } else {
     // record.at(schema->GetIndex()) = std::nullopt;
     if (schema->IsKey()) {
       schema->SkipKey(&key_buf);
-    } else {
+    } else if (value_buf.IsEnd()) {
       schema->SkipValue(&value_buf);
     }
   }
@@ -342,8 +321,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
                           std::vector<std::any>& record) {
   Buf key_buf(key, this->le_);
   Buf value_buf(value, this->le_);
-  if (key_buf.ReadLong() != common_id_ || key_buf.ReverseReadInt() != codec_version_ ||
-      value_buf.ReadInt() != schema_version_) {
+  if (!CheckPrefix(&key_buf) || !CheckReverseTag(&key_buf) || !CheckSchemaVersion(&value_buf)) {
     return -1;
   }
   record.resize(column_indexes.size());

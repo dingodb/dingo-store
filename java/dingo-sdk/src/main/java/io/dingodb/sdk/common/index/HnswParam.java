@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.index;
 
+import io.dingodb.common.Common;
 import lombok.*;
 
 @Getter
@@ -23,7 +24,7 @@ import lombok.*;
 @EqualsAndHashCode
 @NoArgsConstructor
 @AllArgsConstructor
-public class HnswParam {
+public class HnswParam implements VectorIndexParam {
 
     private Integer dimension;
     private VectorIndexParameter.MetricType metricType;
@@ -31,4 +32,16 @@ public class HnswParam {
     @Setter
     private Integer maxElements;
     private Integer nlinks;
+
+    @Override
+    public <T> T toProto() {
+        return (T) Common.CreateHnswParam.newBuilder()
+            .setDimension(dimension)
+            .setMetricType(Common.MetricType.valueOf(metricType.name()))
+            .setEfConstruction(efConstruction)
+            .setMaxElements(maxElements)
+            .setNlinks(nlinks)
+            .build();
+    }
+
 }

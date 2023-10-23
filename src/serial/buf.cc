@@ -248,4 +248,8 @@ std::string Buf::GetString() {
 
 bool Buf::IsLe() const { return this->le_; }
 
+bool Buf::IsEnd() const {
+  return (reverse_pos_ - forward_pos_ + 1) == 0;
+}
+
 }  // namespace dingodb

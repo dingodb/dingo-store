@@ -16,11 +16,21 @@
 
 package io.dingodb.sdk.common.partition;
 
+import io.dingodb.sdk.common.DingoCommonId;
+
 public interface PartitionDetail {
 
-    String getPartName();
+    default DingoCommonId id() {
+        return null;
+    }
 
-    String getOperator();
+    default String getPartName() {
+        return null;
+    }
+
+    default String getOperator() {
+        return null;
+    }
 
     Object[] getOperand();
 }

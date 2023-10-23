@@ -18,6 +18,11 @@ package io.dingodb.sdk.common.table;
 
 public interface Column {
 
+    int DEFAULT_PRECISION = -1;
+    int DEFAULT_SCALE = Integer.MIN_VALUE;
+    int DISABLE = 1;
+    int HIDDEN = 1 << 1;
+
     String getName();
 
     String getType();
@@ -35,6 +40,22 @@ public interface Column {
     String getDefaultValue();
 
     boolean isAutoIncrement();
+
+    default int getState() {
+        return DISABLE;
+    }
+
+    default int getCreateVersion() {
+        return 1;
+    }
+
+    default int getUpdateVersion() {
+        return 1;
+    }
+
+    default int getDeleteVersion() {
+        return -1;
+    }
 
     default boolean isPrimary() {
         return getPrimary() > -1;

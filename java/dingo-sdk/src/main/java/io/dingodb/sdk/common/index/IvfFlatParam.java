@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.index;
 
+import io.dingodb.common.Common;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -27,9 +28,19 @@ import lombok.ToString;
 @EqualsAndHashCode
 @NoArgsConstructor
 @AllArgsConstructor
-public class IvfFlatParam {
+public class IvfFlatParam implements VectorIndexParam {
 
     private Integer dimension;
     private VectorIndexParameter.MetricType metricType;
     private Integer ncentroids;
+
+    @Override
+    public <T> T toProto() {
+        return (T) Common.CreateIvfFlatParam.newBuilder()
+            .setDimension(dimension)
+            .setMetricType(Common.MetricType.valueOf(metricType.name()))
+            .setNcentroids(ncentroids)
+            .build();
+    }
+
 }

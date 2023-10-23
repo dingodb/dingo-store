@@ -160,6 +160,10 @@ public class Optional<T> {
         }
     }
 
+    public Optional<T> filterNot(Predicate<? super T> predicate) {
+        return of(optional.filter(v -> !predicate.test(v)));
+    }
+
     public <U> Optional<U> map(Function<? super T, U> mapper) {
         return of(optional.map(mapper));
     }

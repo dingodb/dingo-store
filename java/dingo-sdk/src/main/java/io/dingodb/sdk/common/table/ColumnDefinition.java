@@ -16,31 +16,37 @@
 
 package io.dingodb.sdk.common.table;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.ToString;
 
+@Getter
 @Builder
 @ToString
 @EqualsAndHashCode
+@AllArgsConstructor
 public class ColumnDefinition implements Column {
-
-    public static final int DEFAULT_PRECISION = -1;
-    public static final int DEFAULT_SCALE = Integer.MIN_VALUE;
 
     private String name;
     private String type;
     private String elementType;
     @Builder.Default
-    private int precision = DEFAULT_PRECISION;
+    private int precision = Column.DEFAULT_PRECISION;
     @Builder.Default
-    private int scale = DEFAULT_SCALE;
+    private int scale = Column.DEFAULT_SCALE;
     @Builder.Default
     private boolean nullable = true;
     @Builder.Default
     private int primary = -1;
     private String defaultValue;
     private boolean isAutoIncrement;
+
+    private int state = Column.DISABLE;
+    private int createVersion;
+    private int updateVersion;
+    private int deleteVersion;
 
     @Deprecated
     public ColumnDefinition(
@@ -71,42 +77,8 @@ public class ColumnDefinition implements Column {
     }
 
     @Override
-    public String getType() {
-        return type;
-    }
-
-    @Override
-    public String getElementType() {
-        return elementType;
-    }
-
-    @Override
-    public int getPrecision() {
-        return precision;
-    }
-
-    @Override
-    public int getScale() {
-        return scale;
-    }
-
-    @Override
-    public boolean isNullable() {
-        return nullable;
-    }
-
-    @Override
     public int getPrimary() {
         return primary < 0 ? -1 : primary;
     }
 
-    @Override
-    public String getDefaultValue() {
-        return defaultValue;
-    }
-
-    @Override
-    public boolean isAutoIncrement() {
-        return isAutoIncrement;
-    }
 }

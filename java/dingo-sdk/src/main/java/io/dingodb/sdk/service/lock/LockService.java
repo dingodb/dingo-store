@@ -43,7 +43,7 @@ public class LockService {
 
     public final String resourcePrefix;
 
-    private final VersionServiceConnector connector;
+    public final VersionServiceConnector connector;
 
     public LockService(String servers) {
         this(servers, 30);
@@ -54,14 +54,14 @@ public class LockService {
     }
 
     public LockService(String servers, int leaseTtl) {
-        this(UUID.randomUUID().toString(), servers, leaseTtl);
+        this(servers, UUID.randomUUID().toString(), leaseTtl);
     }
 
-    public LockService(String resource, String servers, int leaseTtl) {
-        this(resource, new VersionServiceConnector(servers, leaseTtl));
+    public LockService(String servers, String resource, int leaseTtl) {
+        this(new VersionServiceConnector(servers, leaseTtl), resource);
     }
 
-    private LockService(String resource, VersionServiceConnector connector) {
+    private LockService(VersionServiceConnector connector, String resource) {
         this.resource = resource;
         this.connector = connector;
         this.resourcePrefix = resource + "|0|";
@@ -285,7 +285,7 @@ public class LockService {
             .build();
     }
 
-    private Version.DeleteRangeRequest deleteAllRangeRequest(String resourcePrefix) {
+    public Version.DeleteRangeRequest deleteAllRangeRequest(String resourcePrefix) {
         byte[] end = resourcePrefix.getBytes(StandardCharsets.UTF_8);
         end[resourceSepIndex]++;
         return Version.DeleteRangeRequest.newBuilder()

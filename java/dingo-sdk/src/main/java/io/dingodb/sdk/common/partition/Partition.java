@@ -20,7 +20,12 @@ import java.util.List;
 
 public interface Partition {
 
+    @Deprecated
     String getFuncName();
+
+    default String getStrategy() {
+        return getFuncName();
+    }
 
     List<String> getCols();
 
