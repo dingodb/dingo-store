@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.table;
 
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.index.IndexParameter;
 import io.dingodb.sdk.common.partition.Partition;
 
@@ -25,6 +26,10 @@ import java.util.List;
 import java.util.Map;
 
 public interface Table {
+
+    default DingoCommonId id() {
+        return null;
+    }
 
     String getName();
 

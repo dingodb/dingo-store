@@ -18,4 +18,9 @@ package io.dingodb.sdk.common.serial;
 
 public class Config {
     public final static int SCALE = 100;
+    public final static int KEY_PREFIX_SIZE = 8;
+    public final static int KEY_REVERSE_TAG_SIZE = 4;
+
+    public final static byte CODEC_VERSION = 1;
+
 }

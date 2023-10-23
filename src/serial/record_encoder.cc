@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "record_encoder.h"
+#include <sys/types.h>
 
 #include <memory>
 #include <string>
@@ -21,6 +22,7 @@
 #include "serial/keyvalue.h"  // IWYU pragma: keep
 
 namespace dingodb {
+
 
 RecordEncoder::RecordEncoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas,
                              long common_id) {
@@ -44,6 +46,21 @@ void RecordEncoder::Init(int schema_version, std::shared_ptr<std::vector<std::sh
   this->key_buf_size_ = size[0];
   this->value_buf_size_ = size[1];
   delete[] size;
+}
+
+void RecordEncoder::EncodePrefix(Buf* buf) const {
+  buf->WriteLong(common_id_);
+}
+
+void RecordEncoder::EncodeReverseTag(Buf* buf) const {
+  buf->ReverseWrite(codec_version_);
+  buf->ReverseWrite(0);
+  buf->ReverseWrite(0);
+  buf->ReverseWrite(0);
+}
+
+void RecordEncoder::EncodeSchemaVersion(Buf* buf) const {
+  buf->WriteInt(schema_version_);
 }
 
 int RecordEncoder::Encode(const std::vector<std::any>& record, std::string& key, std::string& value) {
@@ -73,8 +90,8 @@ int RecordEncoder::Encode(const std::vector<std::any>& record, pb::common::KeyVa
 int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& output) {
   Buf* key_buf = new Buf(key_buf_size_, this->le_);
   key_buf->EnsureRemainder(12);
-  key_buf->WriteLong(common_id_);
-  key_buf->ReverseWriteInt(codec_version_);
+  EncodePrefix(key_buf);
+  EncodeReverseTag(key_buf);
   int index = 0;
   for (const auto& bs : *schemas_) {
     if (bs) {
@@ -138,7 +155,7 @@ int RecordEncoder::EncodeKey(const std::vector<std::any>& record, std::string& o
 int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string& output) {
   Buf* value_buf = new Buf(value_buf_size_, this->le_);
   value_buf->EnsureRemainder(4);
-  value_buf->WriteInt(schema_version_);
+  EncodeSchemaVersion(value_buf);
   int index = 0;
   for (const auto& bs : *schemas_) {
     if (bs) {
@@ -253,8 +270,7 @@ int RecordEncoder::EncodeValue(const std::vector<std::any>& record, std::string&
 int RecordEncoder::EncodeKeyPrefix(const std::vector<std::any>& record, int column_count, std::string& output) {
   Buf* key_prefix_buf = new Buf(key_buf_size_, this->le_);
   key_prefix_buf->EnsureRemainder(8);
-  key_prefix_buf->WriteLong(common_id_);
-
+  this->EncodePrefix(key_prefix_buf);
   for (const auto& bs : *schemas_) {
     if (bs) {
       BaseSchema::Type type = bs->GetType();

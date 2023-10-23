@@ -18,6 +18,7 @@ package io.dingodb.sdk.service.connector;
 
 import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.DingoClientException.RetryException;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.common.utils.NoBreakFunctions;
@@ -33,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -133,24 +135,35 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             Function<R, Response<R>> toResponse
     ) {
         S stub;
+
+        boolean connected = false;
+        Map<String, Integer> errMsgs = new HashMap<>();
+
         while (retryTimes-- > 0) {
             if ((stub = getStub()) == null) {
+                if (log.isDebugEnabled()) {
+                    log.warn("Get connection stub failed, exec {}, will retry...", function.getClass());
+                }
                 LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                 refresh(stub);
                 continue;
             }
+            connected = true;
             try {
                 Response<R> response = toResponse.apply(function.apply(stub));
                 ErrorOuterClass.Error error = response.getError();
                 int errCode = error.getErrcodeValue();
                 if (errCode != 0) {
                     String authority = Optional.mapOrGet(stub.getChannel(), Channel::authority, () -> "");
+                    errMsgs.compute(authority + ">>" + response.error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1);
                     switch (errChecker.apply(errCode)) {
                         case RETRY:
-                            log.warn(
+                            if (log.isDebugEnabled()) {
+                                log.warn(
                                     "Exec {} failed, store: [{}], code: [{}], message: {}, will retry...",
                                     function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
-                            );
+                                );
+                            }
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
                             continue;
@@ -161,10 +174,12 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                             );
                             throw new DingoClientException(errCode, error.getErrmsg());
                         case REFRESH:
-                            log.warn(
+                            if (log.isDebugEnabled()) {
+                                log.warn(
                                     "Exec {} failed, store: [{}], code: [{}], message: {}, will refresh...",
                                     function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
-                            );
+                                );
+                            }
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
                             throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
@@ -182,12 +197,27 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 }
                 return response;
             } catch (StatusRuntimeException e) {
-                log.warn("Exec {} failed: {}.", function.getClass(), e.getMessage());
+                errMsgs.compute(e.getMessage(), (k, v) -> v == null ? 1 : v + 1);
+                if (log.isDebugEnabled()) {
+                    log.warn("Exec {} failed: {}.", function.getClass(), e.getMessage());
+                }
                 LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                 refresh(stub);
             }
         }
-        throw new DingoClientException.RetryException("Retry attempts exhausted, failed to exec operation.");
+
+        // if connected is false, means can not get leader connection
+        if (connected) {
+            StringBuilder errMsgBuilder = new StringBuilder();
+            errMsgs.forEach((k, v) -> errMsgBuilder
+                .append('[').append(v).append("] times [").append(k).append(']').append(", ")
+            );
+            throw new RetryException(
+                "Exec attempts exhausted, failed to exec operation, " + errMsgBuilder
+            );
+        } else {
+            throw new RetryException("Transform leader attempts exhausted, cannot get leader connection.");
+        }
     }
 
     public void refresh(S stub) {

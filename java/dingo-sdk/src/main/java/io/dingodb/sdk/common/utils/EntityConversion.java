@@ -21,13 +21,12 @@ import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
 import io.dingodb.meta.Meta;
 import io.dingodb.sdk.common.Context;
-import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.Location;
+import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.Range;
 import io.dingodb.sdk.common.RangeWithOptions;
-import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.cluster.Executor;
 import io.dingodb.sdk.common.cluster.ExecutorMap;
 import io.dingodb.sdk.common.cluster.ExecutorUser;
@@ -35,23 +34,17 @@ import io.dingodb.sdk.common.cluster.InternalExecutor;
 import io.dingodb.sdk.common.cluster.InternalExecutorMap;
 import io.dingodb.sdk.common.cluster.InternalExecutorUser;
 import io.dingodb.sdk.common.codec.CodecUtils;
-import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
-import io.dingodb.sdk.common.codec.KeyValueCodec;
 import io.dingodb.sdk.common.index.DiskAnnParam;
 import io.dingodb.sdk.common.index.FlatParam;
 import io.dingodb.sdk.common.index.HnswParam;
 import io.dingodb.sdk.common.index.Index;
-import io.dingodb.sdk.common.index.IndexDefinition;
 import io.dingodb.sdk.common.index.IndexMetrics;
 import io.dingodb.sdk.common.index.IndexParameter;
 import io.dingodb.sdk.common.index.IvfFlatParam;
 import io.dingodb.sdk.common.index.IvfPqParam;
+import io.dingodb.sdk.common.index.ProtoIndexDefinition;
 import io.dingodb.sdk.common.index.ScalarIndexParameter;
 import io.dingodb.sdk.common.index.VectorIndexParameter;
-import io.dingodb.sdk.common.partition.Partition;
-import io.dingodb.sdk.common.partition.PartitionDetail;
-import io.dingodb.sdk.common.partition.PartitionDetailDefinition;
-import io.dingodb.sdk.common.partition.PartitionRule;
 import io.dingodb.sdk.common.region.RegionEpoch;
 import io.dingodb.sdk.common.region.RegionHeartbeatState;
 import io.dingodb.sdk.common.region.RegionState;
@@ -60,10 +53,10 @@ import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.serial.schema.LongSchema;
 import io.dingodb.sdk.common.serial.schema.Type;
 import io.dingodb.sdk.common.table.Column;
-import io.dingodb.sdk.common.table.ColumnDefinition;
+import io.dingodb.sdk.common.table.ProtoColumnDefinition;
+import io.dingodb.sdk.common.table.ProtoTableDefinition;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.table.Table;
-import io.dingodb.sdk.common.table.TableDefinition;
 import io.dingodb.sdk.common.table.metric.TableMetrics;
 import io.dingodb.sdk.common.vector.ScalarField;
 import io.dingodb.sdk.common.vector.ScalarValue;
@@ -77,101 +70,36 @@ import io.dingodb.sdk.service.store.Coprocessor;
 import io.dingodb.store.Store;
 
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.dingodb.common.Common.IndexType.INDEX_TYPE_SCALAR;
 import static io.dingodb.common.Common.IndexType.INDEX_TYPE_VECTOR;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
-import static io.dingodb.sdk.common.utils.Parameters.cleanNull;
 
 public class EntityConversion {
 
     public static final LongSchema SCHEMA = new LongSchema(0);
 
-    public static Meta.TableDefinition mapping(Table table, Meta.DingoCommonId tableId, List<Meta.DingoCommonId> partitionIds) {
-        Optional.ofNullable(table.getColumns())
-                .filter(__ -> __.stream()
-                        .map(Column::getName)
-                        .distinct()
-                        .count() == __.size())
-                .orElseThrow(() -> new DingoClientException("Table field names cannot be repeated."));
-        List<Meta.ColumnDefinition> columnDefinitions = table.getColumns().stream()
-                .map(EntityConversion::mapping)
-                .collect(Collectors.toList());
-
-        return Meta.TableDefinition.newBuilder()
-                .setName(table.getName().toUpperCase())
-                .setVersion(table.getVersion())
-                .setTtl(table.getTtl())
-                .setTablePartition(calcRange(table, tableId, partitionIds))
-                .setEngine(Common.Engine.valueOf(table.getEngine()))
-                .setReplica(table.getReplica())
-                .addAllColumns(columnDefinitions)
-                .setAutoIncrement(table.getAutoIncrement())
-                .putAllProperties(table.getProperties() == null ? new HashMap() : table.getProperties())
-                .setCreateSql(Parameters.cleanNull(table.getCreateSql(), ""))
-                .setIndexParameter(Optional.mapOrGet(table.getIndexParameter(), EntityConversion::mapping, () -> Common.IndexParameter.newBuilder().build()))
-                .build();
+    public static Meta.TableDefinition mapping(Table table, Meta.TableIdWithPartIds ids) {
+        return ProtoTableDefinition.build(ids, table).getDefinition();
     }
 
     public static Table mapping(Meta.TableDefinitionWithId tableDefinitionWithId) {
-        Meta.TableDefinition tableDefinition = tableDefinitionWithId.getTableDefinition();
-        List<Column> columns = tableDefinition.getColumnsList().stream()
-                .map(EntityConversion::mapping)
-                .collect(Collectors.toList());
-        return TableDefinition.builder()
-                .name(tableDefinition.getName())
-                .columns(columns)
-                .version(tableDefinition.getVersion())
-                .ttl((int) tableDefinition.getTtl())
-                .engine(tableDefinition.getEngine().name())
-                .properties(tableDefinition.getPropertiesMap())
-                .partition(mapping(tableDefinitionWithId.getTableId().getEntityId(), tableDefinition, columns))
-                .replica(tableDefinition.getReplica())
-                .autoIncrement(tableDefinition.getAutoIncrement())
-                .createSql(tableDefinition.getCreateSql())
-                .indexParameter(Optional.mapOrNull(tableDefinition.getIndexParameter(), EntityConversion::mapping))
-                .build();
+        return ProtoTableDefinition.from(tableDefinitionWithId);
     }
 
-    public static Partition mapping(long id, Meta.TableDefinition tableDefinition, List<Column> columns) {
-        Meta.PartitionRule partition = tableDefinition.getTablePartition();
-        if (partition.getPartitionsCount() < 1) {
-            return null;
-        }
-        DingoKeyValueCodec codec = DingoKeyValueCodec.of(id, columns);
-        List<PartitionDetail> details = partition.getPartitionsList().stream()
-                .map(Meta.Partition::getRange)
-                .map(Common.Range::getStartKey)
-                .map(ByteString::toByteArray)
-                .map(__ -> codec.resetPrefix(__, id))
-                .sorted(ByteArrayUtils::compare)
-                .skip(1)
-                .map(wrap(codec::decodeKeyPrefix))
-                .map(key -> new PartitionDetailDefinition(null, null, key))
-                .collect(Collectors.toList());
-
-        return new PartitionRule(getStrategy(partition.getStrategy()), partition.getColumnsList(), details);
+    public static Meta.TableDefinition mapping(Table table) {
+        return ProtoTableDefinition.copy(table).getDefinition();
     }
 
     public static Column mapping(Meta.ColumnDefinition definition) {
-        return ColumnDefinition.builder()
-                .name(definition.getName())
-                .type(definition.getSqlType())
-                .elementType(definition.getElementType())
-                .precision(definition.getPrecision())
-                .scale(definition.getScale())
-                .nullable(definition.getNullable())
-                .primary(definition.getIndexOfKey())
-                .defaultValue(definition.getDefaultVal())
-                .isAutoIncrement(definition.getIsAutoIncrement())
-                .build();
+        return ProtoColumnDefinition.from(definition);
+    }
+
+    public static Meta.ColumnDefinition mapping(Column column) {
+        return ProtoColumnDefinition.copy(column).getDelegate();
     }
 
     public static TableMetrics mapping(Meta.TableMetrics metrics) {
@@ -271,10 +199,7 @@ public class EntityConversion {
     }
 
     public static DingoCommonId mapping(Meta.DingoCommonId commonId) {
-        return new SDKCommonId(
-                DingoCommonId.Type.valueOf(commonId.getEntityType().name()),
-                commonId.getParentEntityId(),
-                commonId.getEntityId());
+        return SDKCommonId.from(commonId);
     }
 
     public static Common.Executor mapping(Executor executor) {
@@ -313,90 +238,16 @@ public class EntityConversion {
                         .collect(Collectors.toList()));
     }
 
-    public static Index mapping(long id, Meta.IndexDefinition definition) {
-        return new IndexDefinition(
-                definition.getName(),
-                definition.getVersion(),
-                mapping(id, definition.getIndexPartition()),
-                definition.getReplica(),
-                mapping(definition.getIndexParameter()),
-                definition.getWithAutoIncrment(),
-                definition.getAutoIncrement());
+    public static Meta.IndexDefinition mapping(Index index) {
+        return ProtoIndexDefinition.copy(index).getDefinition();
     }
 
-    public static PartitionRule mapping(long id, Meta.PartitionRule partition) {
-        if (partition.getPartitionsCount() < 1) {
-            return null;
-        }
-        SCHEMA.setIsKey(true);
-	SCHEMA.setAllowNull(false);
-        DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
-        List<PartitionDetail> details = partition.getPartitionsList().stream()
-                .map(Meta.Partition::getRange)
-                .map(Common.Range::getStartKey)
-                .map(ByteString::toByteArray)
-                .map(__ -> codec.resetPrefix(__, id))
-                .sorted(ByteArrayUtils::compare)
-                .skip(1)
-                .map(wrap(codec::decodeKeyPrefix))
-                .map(key -> new PartitionDetailDefinition("", "", key))
-                .collect(Collectors.toList());
-
-        return new PartitionRule(getStrategy(partition.getStrategy()), partition.getColumnsList(), details);
+    public static Index mapping(Meta.IndexDefinitionWithId indexDefinitionWithId) {
+        return ProtoIndexDefinition.from(indexDefinitionWithId);
     }
 
-    private static String getStrategy(Meta.PartitionStrategy partitionStrategy) {
-        String strategy;
-        if (partitionStrategy == Meta.PartitionStrategy.PT_STRATEGY_HASH) {
-            strategy = "HASH";
-        } else {
-            strategy = "RANGE";
-        }
-        return strategy;
-    }
-
-    private static void getStrategy(Partition partition, Meta.PartitionRule.Builder builder) {
-        if (partition != null && partition.getFuncName() != null) {
-            if (partition.getFuncName().equalsIgnoreCase("HASH")) {
-                builder.setStrategy(Meta.PartitionStrategy.PT_STRATEGY_HASH);
-            } else {
-                builder.setStrategy(Meta.PartitionStrategy.PT_STRATEGY_RANGE);
-            }
-        }
-    }
-
-    public static Meta.IndexDefinition mapping(long id, Index index, List<Meta.DingoCommonId> partitionIds) {
-        SCHEMA.setIsKey(true);
-        SCHEMA.setAllowNull(false);
-        DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
-        Iterator<byte[]> keys = Optional.<Partition, Stream<byte[]>>mapOrGet(
-                index.getIndexPartition(), __ -> encodePartitionDetails(__.getDetails(), codec),
-                                Stream::empty)
-                .sorted(ByteArrayUtils::compare).iterator();
-
-        Meta.PartitionRule.Builder builder = Meta.PartitionRule.newBuilder();
-        byte[] start = codec.encodeMinKeyPrefix();
-        for (Meta.DingoCommonId commonId : partitionIds) {
-            builder.addPartitions(Meta.Partition.newBuilder()
-                    .setId(commonId)
-                    .setRange(Common.Range.newBuilder()
-                            .setStartKey(ByteString.copyFrom(codec.resetPrefix(start, commonId.getEntityId())))
-                            .setEndKey(ByteString.copyFrom(codec.resetPrefix(codec.encodeMaxKeyPrefix(), commonId.getEntityId() + 1)))
-                            .build())
-                    .build());
-            start = keys.hasNext() ? keys.next() : start;
-        }
-        getStrategy(index.getIndexPartition(), builder);
-
-        return Meta.IndexDefinition.newBuilder()
-                .setName(index.getName())
-                .setVersion(index.getVersion())
-                .setIndexPartition(builder.build())
-                .setReplica(index.getReplica())
-                .setIndexParameter(mapping(index.getIndexParameter()))
-                .setWithAutoIncrment(index.getIsAutoIncrement())
-                .setAutoIncrement(index.getAutoIncrement())
-                .build();
+    public static Meta.IndexDefinition mapping(Index index, Meta.TableIdWithPartIds ids) {
+        return ProtoIndexDefinition.build(ids, index).getDefinition();
     }
 
     public static IndexParameter mapping(Common.IndexParameter parameter) {
@@ -475,44 +326,19 @@ public class EntityConversion {
                     .setVectorIndexType(Common.VectorIndexType.valueOf(vectorParameter.getVectorIndexType().name()));
             switch (vectorParameter.getVectorIndexType()) {
                 case VECTOR_INDEX_TYPE_FLAT:
-                    build.setFlatParameter(Common.CreateFlatParam.newBuilder()
-                            .setDimension(vectorParameter.getFlatParam().getDimension())
-                            .setMetricType(Common.MetricType.valueOf(vectorParameter.getFlatParam().getMetricType().name()))
-                            .build());
+                    build.mergeFlatParameter(vectorParameter.getVectorIndexParam().toProto());
                     break;
                 case VECTOR_INDEX_TYPE_IVF_FLAT:
-                    IvfFlatParam ivfFlatParam = vectorParameter.getIvfFlatParam();
-                    build.setIvfFlatParameter(Common.CreateIvfFlatParam.newBuilder()
-                            .setDimension(ivfFlatParam.getDimension())
-                            .setMetricType(Common.MetricType.valueOf(ivfFlatParam.getMetricType().name()))
-                            .setNcentroids(ivfFlatParam.getNcentroids())
-                            .build());
+                    build.mergeIvfFlatParameter(vectorParameter.getVectorIndexParam().toProto());
                     break;
                 case VECTOR_INDEX_TYPE_IVF_PQ:
-                    IvfPqParam ivfPqParam = vectorParameter.getIvfPqParam();
-                    build.setIvfPqParameter(Common.CreateIvfPqParam.newBuilder()
-                            .setDimension(ivfPqParam.getDimension())
-                            .setMetricType(Common.MetricType.valueOf(ivfPqParam.getMetricType().name()))
-                            .setNcentroids(ivfPqParam.getNcentroids())
-                            .setBucketInitSize(ivfPqParam.getBucketInitSize())
-                            .setBucketMaxSize(ivfPqParam.getBucketMaxSize())
-                            .build());
+                    build.mergeIvfPqParameter(vectorParameter.getVectorIndexParam().toProto());
                     break;
                 case VECTOR_INDEX_TYPE_HNSW:
-                    HnswParam hnswParam = vectorParameter.getHnswParam();
-                    build.setHnswParameter(Common.CreateHnswParam.newBuilder()
-                            .setDimension(hnswParam.getDimension())
-                            .setMetricType(Common.MetricType.valueOf(hnswParam.getMetricType().name()))
-                            .setEfConstruction(hnswParam.getEfConstruction())
-                            .setMaxElements(hnswParam.getMaxElements())
-                            .setNlinks(hnswParam.getNlinks()).build());
+                    build.mergeHnswParameter(vectorParameter.getVectorIndexParam().toProto());
                     break;
                 case VECTOR_INDEX_TYPE_DISKANN:
-                    DiskAnnParam diskAnnParam = vectorParameter.getDiskAnnParam();
-                    build.setDiskannParameter(Common.CreateDiskAnnParam.newBuilder()
-                            .setDimension(diskAnnParam.getDimension())
-                            .setMetricType(Common.MetricType.valueOf(diskAnnParam.getMetricType().name()))
-                            .build());
+                    build.mergeDiskannParameter(vectorParameter.getVectorIndexParam().toProto());
                     break;
             }
             builder.setVectorIndexParameter(build.build());
@@ -818,59 +644,6 @@ public class EntityConversion {
             default:
                 throw new IllegalStateException("Unexpected value: " + type);
         }
-    }
-
-    public static Meta.PartitionRule calcRange(
-            Table table,
-            Meta.DingoCommonId tableId,
-            List<Meta.DingoCommonId> partitionIds) {
-        DingoCommonId tableId1 = mapping(tableId);
-        List<Column> keyColumns = table.getKeyColumns();
-        keyColumns.sort(Comparator.comparingInt(Column::getPrimary));
-        KeyValueCodec codec = DingoKeyValueCodec.of(tableId1.entityId(), keyColumns);
-        byte[] minKeyPrefix = codec.encodeMinKeyPrefix();
-        byte[] maxKeyPrefix = codec.encodeMaxKeyPrefix();
-        Meta.PartitionRule.Builder builder = Meta.PartitionRule.newBuilder();
-
-        Iterator<byte[]> keys = Optional.<Partition, Stream<byte[]>>mapOrGet(
-                table.getPartition(), __ -> encodePartitionDetails(__.getDetails(), codec),
-                        Stream::empty)
-                .sorted(ByteArrayUtils::compare).iterator();
-
-        byte[] start = minKeyPrefix;
-        for (Meta.DingoCommonId id : partitionIds) {
-            builder.addPartitions(Meta.Partition.newBuilder()
-                    .setId(id)
-                    .setRange(Common.Range.newBuilder()
-                            .setStartKey(ByteString.copyFrom(codec.resetPrefix(start, id.getEntityId())))
-                            .setEndKey(ByteString.copyFrom(codec.resetPrefix(maxKeyPrefix, id.getEntityId() + 1)))
-                            .build())
-                    .build());
-            start = keys.hasNext() ? keys.next() : start;
-        }
-        getStrategy(table.getPartition(), builder);
-        return builder.build();
-    }
-
-    private static Stream<byte[]> encodePartitionDetails(List<PartitionDetail> details, KeyValueCodec codec) {
-        return Parameters.<List<PartitionDetail>>cleanNull(details, Collections::emptyList).stream()
-                .map(PartitionDetail::getOperand)
-                .map(NoBreakFunctions
-                        .<Object[], byte[]>wrap(operand -> codec.encodeKeyPrefix(operand, operand.length), NoBreakFunctions.throwException()));
-    }
-
-    public static Meta.ColumnDefinition mapping(Column column) {
-        return Meta.ColumnDefinition.newBuilder()
-                .setName(column.getName())
-                .setNullable(column.isNullable())
-                .setElementType(cleanNull(column.getElementType(), ""))
-                .setDefaultVal(cleanNull(column.getDefaultValue(), ""))
-                .setPrecision(column.getPrecision())
-                .setScale(column.getScale())
-                .setIndexOfKey(column.getPrimary())
-                .setSqlType(column.getType())
-                .setIsAutoIncrement(column.isAutoIncrement())
-                .build();
     }
 
 }

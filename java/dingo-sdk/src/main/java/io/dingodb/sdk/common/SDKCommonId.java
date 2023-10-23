@@ -16,6 +16,8 @@
 
 package io.dingodb.sdk.common;
 
+import io.dingodb.meta.Meta;
+
 public class SDKCommonId implements DingoCommonId {
 
     private Type type;
@@ -50,29 +52,25 @@ public class SDKCommonId implements DingoCommonId {
 
     @Override
     public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (other == null || getClass() != other.getClass()) {
+        if (!(other instanceof DingoCommonId)) {
             return false;
         }
-
-        SDKCommonId that = (SDKCommonId) other;
-
-        if (parentId != that.parentId) {
-            return false;
-        }
-        if (entityId != that.entityId) {
-            return false;
-        }
-        return type == that.type;
+        return DingoCommonId.equals(this, (DingoCommonId) other);
     }
 
     @Override
     public int hashCode() {
-        int result = type.hashCode();
-        result = 31 * result + (int) (parentId ^ (parentId >>> 32));
-        result = 31 * result + (int) (entityId ^ (entityId >>> 32));
-        return result;
+        return DingoCommonId.hashCode(this);
     }
+
+    public static SDKCommonId from(Meta.DingoCommonId from) {
+        return new SDKCommonId(
+            DingoCommonId.Type.valueOf(from.getEntityType().name()), from.getParentEntityId(), from.getEntityId()
+        );
+    }
+
+    public static SDKCommonId copy(DingoCommonId copy) {
+        return new SDKCommonId(copy.type(), copy.parentId(), copy.entityId());
+    }
+
 }

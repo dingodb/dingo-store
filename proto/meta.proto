@@ -75,6 +75,11 @@ message ColumnDefinition {
   bool has_default_val = 8;
   string default_val = 9;
   bool is_auto_increment = 10;
+
+  uint32 state = 50;
+  uint32 create_version = 51;
+  uint32 update_version = 52;
+  uint32 delete_version = 53;
 }
 
 // Information about Index.

@@ -16,60 +16,82 @@
 
 package io.dingodb.sdk.common.codec;
 
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.serial.RecordDecoder;
 import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.Table;
+import io.dingodb.sdk.common.utils.Optional;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class DingoKeyValueCodec implements KeyValueCodec {
 
-    private List<DingoSchema> schemas;
+    private final long id;
+    private final List<DingoSchema> schemas;
     RecordEncoder re;
     RecordDecoder rd;
 
-    public DingoKeyValueCodec(long commonId, List<DingoSchema> schemas) {
+    public DingoKeyValueCodec(long id, List<DingoSchema> schemas) {
+        this(1, id, schemas);
+    }
+
+    public DingoKeyValueCodec(int schemaVer, long id, List<DingoSchema> schemas) {
         this.schemas = schemas;
-        re = new RecordEncoder(0, schemas, commonId);
-        rd = new RecordDecoder(0, schemas, commonId);
+        this.id = id;
+        re = new RecordEncoder(schemaVer, schemas, id);
+        rd = new RecordDecoder(schemaVer, schemas, id);
+    }
+
+    public static DingoKeyValueCodec of(Table table) {
+        return of(
+            table.getVersion(),
+            Optional.mapOrGet(table.id(), DingoCommonId::entityId, () -> 0L),
+            table.getColumns()
+        );
     }
 
     public static DingoKeyValueCodec of(long id, Table table) {
-        return of(id, table.getColumns());
+        return of(table.getVersion(), id, table);
     }
 
     public static DingoKeyValueCodec of(long id, List<Column> columns) {
-        return new DingoKeyValueCodec(id, CodecUtils.createSchemaForColumns(columns));
+        return of(1, id, columns);
+    }
+
+    public static DingoKeyValueCodec of(int schemaVer, long id, Table table) {
+        return of(schemaVer, id, table.getColumns());
+    }
+
+    public static DingoKeyValueCodec of(int schemaVer, long id, List<Column> columns) {
+        return new DingoKeyValueCodec(schemaVer, id, CodecUtils.createSchemaForColumns(columns));
     }
 
     @Override
-    public Object[] decode(KeyValue keyValue) throws IOException {
+    public Object[] decode(KeyValue keyValue) {
         return rd.decode(keyValue);
     }
 
     @Override
-    public Object[] decodeKeyPrefix(byte[] keyPrefix) throws IOException {
+    public Object[] decodeKeyPrefix(byte[] keyPrefix) {
         return rd.decodeKeyPrefix(keyPrefix);
     }
 
     @Override
-    public KeyValue encode(Object @NonNull [] record) throws IOException {
+    public KeyValue encode(Object @NonNull [] record) {
         return re.encode(record);
     }
 
     @Override
-    public byte[] encodeKey(Object[] record) throws IOException {
+    public byte[] encodeKey(Object[] record) {
         return re.encodeKey(record);
     }
 
     @Override
-    public byte[] encodeKeyPrefix(Object[] record, int columnCount) throws IOException {
+    public byte[] encodeKeyPrefix(Object[] record, int columnCount) {
         return re.encodeKeyPrefix(record, columnCount);
     }
 
@@ -81,6 +103,10 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     @Override
     public byte[] encodeMaxKeyPrefix() {
         return re.encodeMaxKeyPrefix();
+    }
+
+    public byte[] resetPrefix(byte[] key) {
+        return re.resetKeyPrefix(key, id);
     }
 
     @Override
