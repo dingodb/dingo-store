@@ -259,7 +259,7 @@ void DecodeOrSkip(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema, 
       record.at(n) = schema->DecodeKey(&key_buf);
     } else {
       if (value_buf.IsEnd()) {
-        record.at(schema->GetIndex()) = std::optional<T>(std::nullopt);
+        record.at(n) = std::optional<T>(std::nullopt);
       } else {
 	record.at(n) = schema->DecodeValue(&value_buf);
       }
@@ -300,7 +300,7 @@ void DecodeOrSkip1(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema,
       record.at(recordIndex) = schema->DecodeKey(&key_buf);
     } else {
       if (value_buf.IsEnd()) {
-        record.at(schema->GetIndex()) = std::optional<T>(std::nullopt);
+        record.at(recordIndex) = std::optional<T>(std::nullopt);
       } else {
 	record.at(recordIndex) = schema->DecodeValue(&value_buf);
       }
@@ -310,7 +310,7 @@ void DecodeOrSkip1(const std::shared_ptr<DingoSchema<std::optional<T>>>& schema,
     // record.at(schema->GetIndex()) = std::nullopt;
     if (schema->IsKey()) {
       schema->SkipKey(&key_buf);
-    } else if (value_buf.IsEnd()) {
+    } else if (!value_buf.IsEnd()) {
       schema->SkipValue(&value_buf);
     }
   }
