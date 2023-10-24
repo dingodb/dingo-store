@@ -95,16 +95,27 @@ class Constant {
   inline static const std::string kBaseColumnFamily = "store.base";
 
   inline static const std::string kBlockSize = "block_size";
+  inline static const std::string kBlockSizeDefaultValue = "131072";  // 128KB
   inline static const std::string kBlockCache = "block_cache";
+  inline static const std::string kBlockCacheDefaultValue = "1073741824";  // 1GB
   inline static const std::string kArenaBlockSize = "arena_block_size";
+  inline static const std::string kArenaBlockSizeDefaultValue = "67108864";  // 64MB
   inline static const std::string kMinWriteBufferNumberToMerge = "min_write_buffer_number_to_merge";
+  inline static const std::string kMinWriteBufferNumberToMergeDefaultValue = "2";
   inline static const std::string kMaxWriteBufferNumber = "max_write_buffer_number";
+  inline static const std::string kMaxWriteBufferNumberDefaultValue = "5";
   inline static const std::string kMaxCompactionBytes = "max_compaction_bytes";
+  inline static const std::string kMaxCompactionBytesDefaultValue = "1073741824";  // 1GB
   inline static const std::string kWriteBufferSize = "write_buffer_size";
+  inline static const std::string kWriteBufferSizeDefaultValue = "67108864";  // 64MB
   inline static const std::string kPrefixExtractor = "prefix_extractor";
+  inline static const std::string kPrefixExtractorDefaultValue = "24";
   inline static const std::string kMaxBytesForLevelBase = "max_bytes_for_level_base";
+  inline static const std::string kMaxBytesForLevelBaseDefaultValue = "134217728";  // 128MB
   inline static const std::string kTargetFileSizeBase = "target_file_size_base";
+  inline static const std::string kTargetFileSizeBaseDefaultValue = "67108864";  // 64MB
   inline static const std::string kMaxBytesForLevelMultiplier = "max_bytes_for_level_multiplier";
+  inline static const std::string kMaxBytesForLevelMultiplierDefaultValue = "10";
 
   static const int kRocksdbBackgroundThreadNumDefault = 16;
   static const int kStatsDumpPeriodSecDefault = 600;

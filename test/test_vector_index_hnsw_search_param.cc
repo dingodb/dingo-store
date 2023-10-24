@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "config/config_manager.h"
 #include "faiss/MetricType.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -46,8 +47,8 @@ class VectorIndexHnswSearchParamTest : public testing::Test {
   static void SetUpTestSuite() {
     const std::string &filename = "../../conf/index.yaml";
 
-    Server::GetInstance()->InitConfig(filename);
-    auto config = Server::GetInstance()->GetConfig();
+    Server::GetInstance().InitConfig(filename);
+    auto config = ConfigManager::GetInstance().GetConfig();
     int64_t hnsw_save_threshold_write_key_num = config->GetInt64("vector.hnsw_save_threshold_write_key_num");
     std::cout << "hnsw_save_threshold_write_key_num : " << hnsw_save_threshold_write_key_num << std::endl;
   }

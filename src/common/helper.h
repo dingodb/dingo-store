@@ -189,6 +189,8 @@ class Helper {
 
   // Get column family names except meta.
   static std::vector<std::string> GetColumnFamilyNames();
+  static std::vector<std::string> GetAllColumnFamilyNames();
+  static std::vector<std::string> GetCoordinatorColumnFamilyNames();
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);

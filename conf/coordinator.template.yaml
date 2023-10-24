@@ -35,17 +35,3 @@ store:
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   stats_dump_period_s: 120
-  base:
-    block_size: 131072 # 128KB
-    block_cache: 536870912 # 512MB
-    arena_block_size: 67108864 # 64MB
-    min_write_buffer_number_to_merge: 2
-    max_write_buffer_number: 5
-    max_compaction_bytes: 1677721600 # 1600MB
-    write_buffer_size: 67108864 # 64MB
-    prefix_extractor: 24
-    max_bytes_for_level_base: 134217728 # 128MB
-    target_file_size_base: 67108864 # 64MB
-  column_families:
-    - default
-    - meta

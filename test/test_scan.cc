@@ -47,11 +47,11 @@ class ScanTest : public testing::Test {
   static std::shared_ptr<Config> GetConfig() { return config_; }
 
   static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return raw_raw_rocks_engine_; }
-  static ScanManager *&GetManager() { return manager_; }
+  static ScanManager &GetManager() { return ScanManager::GetInstance(); }
 
   static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
     if (!scan_) {
-      scan_ = manager_->CreateScan(scan_id);
+      scan_ = ScanManager::GetInstance().CreateScan(scan_id);
       scan_id_ = *scan_id;
     } else {
       *scan_id = scan_id_;
@@ -61,7 +61,7 @@ class ScanTest : public testing::Test {
 
   static void DeleteScan() {
     if (!scan_id_.empty() || scan_) {
-      manager_->DeleteScan(scan_id_);
+      ScanManager::GetInstance().DeleteScan(scan_id_);
     }
     scan_.reset();
     scan_id_ = "";
@@ -70,12 +70,9 @@ class ScanTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     std::cout << "ScanTest::SetUp()" << '\n';
-    server_ = Server::GetInstance();
-    server_->SetRole(pb::common::ClusterRole::STORE);
-    server_->InitConfig(kFileName);
-    config_manager_ = ConfigManager::GetInstance();
-    config_ = config_manager_->GetConfig(pb::common::ClusterRole::STORE);
-    manager_ = ScanManager::GetInstance();
+    Server::GetInstance().SetRole(pb::common::ClusterRole::STORE);
+    Server::GetInstance().InitConfig(kFileName);
+    config_ = ConfigManager::GetInstance().GetConfig(pb::common::ClusterRole::STORE);
     raw_raw_rocks_engine_ = std::make_shared<RawRocksEngine>();
   }
 
@@ -88,12 +85,9 @@ class ScanTest : public testing::Test {
   void TearDown() override {}
 
  private:
-  inline static Server *server_ = nullptr;  // NOLINT
   inline static const std::string kFileName = "../../conf/store.yaml";
-  inline static ConfigManager *config_manager_ = nullptr;               // NOLINT
   inline static std::shared_ptr<Config> config_;                        // NOLINT
   inline static std::shared_ptr<RawRocksEngine> raw_raw_rocks_engine_;  // NOLINT
-  inline static ScanManager *manager_ = nullptr;                        // NOLINT
   inline static std::shared_ptr<ScanContext> scan_;                     // NOLINT
   inline static std::string scan_id_;                                   // NOLINT
 };
@@ -128,8 +122,8 @@ TEST_F(ScanTest, InitRocksdb) {
   ret = raw_rocks_engine->Init(config);
   EXPECT_TRUE(ret);
 
-  auto *manager = this->GetManager();
-  manager->Init(config);
+  auto &manager = this->GetManager();
+  manager.Init(config);
 }
 
 TEST_F(ScanTest, Open) {
@@ -139,8 +133,6 @@ TEST_F(ScanTest, Open) {
   std::cout << "scan_id : " << scan_id << '\n';
 
   EXPECT_NE(scan.get(), nullptr);
-
-  auto *manager = this->GetManager();
 
   butil::Status ok;
 
@@ -366,8 +358,6 @@ TEST_F(ScanTest, ScanBeginEqual) {
 
   EXPECT_NE(scan.get(), nullptr);
 
-  auto *manager = this->GetManager();
-
   butil::Status ok;
 
   ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -401,7 +391,6 @@ TEST_F(ScanTest, ScanBeginOthers) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
@@ -611,7 +600,6 @@ TEST_F(ScanTest, ScanBeginNormal) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
@@ -654,7 +642,6 @@ TEST_F(ScanTest, ScanContinue) {
   auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << '\n';
 
-  auto *manager = this->GetManager();
   butil::Status ok;
 
   int64_t max_fetch_cnt = 2;
@@ -697,7 +684,6 @@ TEST_F(ScanTest, ScanRelease) {
   auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << '\n';
 
-  auto *manager = this->GetManager();
   butil::Status ok;
 
   // scan_id empty failed
@@ -715,8 +701,6 @@ TEST_F(ScanTest, IsRecyclable) {
   auto scan = this->GetScan(&scan_id);
   std::cout << "scan_id : " << scan_id << '\n';
 
-  auto *manager = this->GetManager();
-
   bool ret = scan->IsRecyclable();
 
   EXPECT_EQ(ret, false);
@@ -732,7 +716,6 @@ TEST_F(ScanTest, scan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
@@ -793,10 +776,10 @@ TEST_F(ScanTest, Init2) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
   butil::Status ok;
   std::shared_ptr<Config> config = this->GetConfig();
-  bool ret = manager->Init(config);
+  bool ret = manager.Init(config);
 
   EXPECT_EQ(ret, true);
 }
@@ -804,9 +787,9 @@ TEST_F(ScanTest, Init2) {
 TEST_F(ScanTest, CreateScan) {
   std::string scan_id;
 
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
-  std::shared_ptr<ScanContext> scan = manager->CreateScan(&scan_id);
+  std::shared_ptr<ScanContext> scan = manager.CreateScan(&scan_id);
 
   EXPECT_NE(scan.get(), nullptr);
 }
@@ -815,15 +798,15 @@ TEST_F(ScanTest, FindScan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
   this->GetScan(&scan_id);
 
-  auto scan = manager->FindScan(scan_id);
+  auto scan = manager.FindScan(scan_id);
 
   EXPECT_NE(scan.get(), nullptr);
 
-  scan = manager->FindScan("");
+  scan = manager.FindScan("");
 
   EXPECT_EQ(scan.get(), nullptr);
 }
@@ -832,63 +815,63 @@ TEST_F(ScanTest, TryDeleteScan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
   this->GetScan(&scan_id);
 
-  manager->TryDeleteScan(scan_id);
+  manager.TryDeleteScan(scan_id);
 }
 
 TEST_F(ScanTest, DeleteScan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
   this->GetScan(&scan_id);
 
-  manager->DeleteScan(scan_id);
+  manager.DeleteScan(scan_id);
 }
 
 TEST_F(ScanTest, GetTimeoutMs) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
-  auto timeout_ms = manager->GetTimeoutMs();
+  auto timeout_ms = manager.GetTimeoutMs();
   EXPECT_NE(timeout_ms, 0);
 }
 
 TEST_F(ScanTest, GetMaxBytesRpc) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
-  auto max_bytes_rpc = manager->GetMaxBytesRpc();
+  auto max_bytes_rpc = manager.GetMaxBytesRpc();
   EXPECT_NE(max_bytes_rpc, 0);
 }
 
 TEST_F(ScanTest, GetMaxFetchCntByServer) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
-  auto max_fetch_cnt_by_server = manager->GetMaxFetchCntByServer();
+  auto max_fetch_cnt_by_server = manager.GetMaxFetchCntByServer();
   EXPECT_NE(max_fetch_cnt_by_server, 0);
 }
 
 TEST_F(ScanTest, RegularCleaningHandler) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
-  manager->RegularCleaningHandler(manager);
+  manager.RegularCleaningHandler(nullptr);
 }
 
 TEST_F(ScanTest, max_times) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
-  auto *manager = this->GetManager();
+  auto &manager = this->GetManager();
 
   dingodb::CrontabManager crontab_manager;
 
@@ -897,8 +880,8 @@ TEST_F(ScanTest, max_times) {
   crontab->max_times = 0;
   crontab->interval = 100;
   // crontab->interval_ = manager->GetScanIntervalMs();
-  crontab->func = manager->RegularCleaningHandler;
-  crontab->arg = manager;
+  crontab->func = manager.RegularCleaningHandler;
+  crontab->arg = nullptr;
 
   auto config = this->GetConfig();
   auto name = Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS;

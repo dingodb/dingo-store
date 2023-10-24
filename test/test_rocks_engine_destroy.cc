@@ -46,19 +46,15 @@ class RawRocksEngineBugTest : public testing::Test {
  protected:  // NOLINT
   void SetUp() override {
     std::cout << "RawRocksEngineTest::SetUp()" << std::endl;
-    server_ = dingodb::Server::GetInstance();
     filename_ = "../../conf/store.yaml";
-    server_->SetRole(dingodb::pb::common::ClusterRole::STORE);
-    server_->InitConfig(filename_);
-    config_manager_ = dingodb::ConfigManager::GetInstance();
-    config_ = config_manager_->GetConfig(dingodb::pb::common::ClusterRole::STORE);
+    dingodb::Server::GetInstance().SetRole(dingodb::pb::common::ClusterRole::STORE);
+    dingodb::Server::GetInstance().InitConfig(filename_);
+    config_ = dingodb::ConfigManager::GetInstance().GetConfig(dingodb::pb::common::ClusterRole::STORE);
   }
   void TearDown() override {}
 
  private:
-  dingodb::Server *server_;
   std::string filename_ = "../../conf/store.yaml";
-  dingodb::ConfigManager *config_manager_;
   std::shared_ptr<dingodb::Config> config_;
   dingodb::RawRocksEngine raw_raw_rocks_engine_;
 };

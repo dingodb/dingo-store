@@ -64,11 +64,11 @@ class ScanWithCoprocessor : public testing::Test {
   static std::shared_ptr<Config> GetConfig() { return config_; }
 
   static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return engine; }
-  static ScanManager *&GetManager() { return manager_; }
+  static ScanManager &GetManager() { return ScanManager::GetInstance(); }
 
   static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
     if (!scan_) {
-      scan_ = manager_->CreateScan(scan_id);
+      scan_ = GetManager().CreateScan(scan_id);
       scan_id_ = *scan_id;
     } else {
       *scan_id = scan_id_;
@@ -78,7 +78,7 @@ class ScanWithCoprocessor : public testing::Test {
 
   static void DeleteScan() {
     if (!scan_id_.empty() || scan_) {
-      manager_->DeleteScan(scan_id_);
+      GetManager().DeleteScan(scan_id_);
     }
     scan_.reset();
     scan_id_ = "";
@@ -87,12 +87,9 @@ class ScanWithCoprocessor : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     std::cout << "ScanWithCoprocessor::SetUp()" << '\n';
-    server_ = Server::GetInstance();
-    server_->SetRole(pb::common::ClusterRole::STORE);
-    server_->InitConfig(kFileName);
-    config_manager_ = ConfigManager::GetInstance();
-    config_ = config_manager_->GetConfig(pb::common::ClusterRole::STORE);
-    manager_ = ScanManager::GetInstance();
+    Server::GetInstance().SetRole(pb::common::ClusterRole::STORE);
+    Server::GetInstance().InitConfig(kFileName);
+    config_ = ConfigManager::GetInstance().GetConfig(pb::common::ClusterRole::STORE);
     engine = std::make_shared<RawRocksEngine>();
   }
 
@@ -106,13 +103,10 @@ class ScanWithCoprocessor : public testing::Test {
   void TearDown() override {}
 
  private:
-  inline static Server *server_ = nullptr;  // NOLINT
   inline static const std::string kFileName = "../../conf/store.yaml";
-  inline static ConfigManager *config_manager_ = nullptr;  // NOLINT
-  inline static std::shared_ptr<Config> config_;           // NOLINT
-  inline static ScanManager *manager_ = nullptr;           // NOLINT
-  inline static std::shared_ptr<ScanContext> scan_;        // NOLINT
-  inline static std::string scan_id_;                      // NOLINT
+  inline static std::shared_ptr<Config> config_;     // NOLINT
+  inline static std::shared_ptr<ScanContext> scan_;  // NOLINT
+  inline static std::string scan_id_;                // NOLINT
 
  public:
   inline static std::shared_ptr<RawRocksEngine> engine;
@@ -135,8 +129,8 @@ TEST_F(ScanWithCoprocessor, InitRocksdb) {
   ret = raw_rocks_engine->Init(config);
   EXPECT_TRUE(ret);
 
-  auto *manager = this->GetManager();
-  manager->Init(config);
+  auto &manager = this->GetManager();
+  manager.Init(config);
 }
 
 TEST_F(ScanWithCoprocessor, Prepare) {
@@ -660,7 +654,6 @@ TEST_F(ScanWithCoprocessor, scan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
 
-  auto *manager = this->GetManager();
   butil::Status ok;
 
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
