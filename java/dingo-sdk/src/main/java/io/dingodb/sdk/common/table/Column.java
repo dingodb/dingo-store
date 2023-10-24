@@ -20,7 +20,7 @@ public interface Column {
 
     int DEFAULT_PRECISION = -1;
     int DEFAULT_SCALE = Integer.MIN_VALUE;
-    int DISABLE = 1;
+    int ENABLE = 1;
     int HIDDEN = 1 << 1;
 
     String getName();
@@ -42,7 +42,7 @@ public interface Column {
     boolean isAutoIncrement();
 
     default int getState() {
-        return DISABLE;
+        return ENABLE;
     }
 
     default int getCreateVersion() {

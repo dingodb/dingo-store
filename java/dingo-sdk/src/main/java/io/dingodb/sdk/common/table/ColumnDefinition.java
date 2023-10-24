@@ -43,7 +43,7 @@ public class ColumnDefinition implements Column {
     private String defaultValue;
     private boolean isAutoIncrement;
 
-    private int state = Column.DISABLE;
+    private int state = Column.ENABLE;
     private int createVersion;
     private int updateVersion;
     private int deleteVersion;

@@ -85,6 +85,10 @@ public class ProtoColumnDefinition implements Column {
                 .setIndexOfKey(column.getPrimary())
                 .setSqlType(column.getType())
                 .setIsAutoIncrement(column.isAutoIncrement())
+                .setState(column.getState())
+                .setCreateVersion(column.getCreateVersion())
+                .setUpdateVersion(column.getUpdateVersion())
+                .setDeleteVersion(column.getDeleteVersion())
                 .build()
         );
     }
