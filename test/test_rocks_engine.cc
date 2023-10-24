@@ -95,20 +95,20 @@ const std::string kYamlConfigContent =
     "    prefix_extractor: 8\n"
     "    max_bytes_for_level_base: 41943040\n"
     "    target_file_size_base: 4194304\n"
-    "  default:\n"
-    "  instruction:\n"
+    "  meta:\n"
     "    max_write_buffer_number: 3\n"
     "  column_families:\n"
     "    - default\n"
-    "    - meta\n"
-    "    - instruction\n";
+    "    - meta\n";
 
 class RawRocksEngineTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     std::srand(std::time(nullptr));
 
-    std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
+    Helper::CreateDirectories("./rocks_example");
+
+    config = std::make_shared<YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
       std::cout << "Load config failed" << std::endl;
       return;
@@ -123,6 +123,7 @@ class RawRocksEngineTest : public testing::Test {
   static void TearDownTestSuite() {
     engine->Close();
     engine->Destroy();
+    Helper::RemoveAllFileOrDirectory("./rocks_example");
   }
 
   void SetUp() override {}
@@ -130,9 +131,154 @@ class RawRocksEngineTest : public testing::Test {
   void TearDown() override {}
 
   static std::shared_ptr<RawRocksEngine> engine;
+  static std::shared_ptr<Config> config;
 };
 
 std::shared_ptr<RawRocksEngine> RawRocksEngineTest::engine = nullptr;
+std::shared_ptr<Config> RawRocksEngineTest::config = nullptr;
+
+template <typename T>
+bool CastValueTest(std::string value, T &dst_value) {
+  if (value.empty()) {
+    return false;
+  }
+  try {
+    if (std::is_same_v<size_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stoul(value);
+    } else if (std::is_same_v<int32_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stoi(value);
+    } else if (std::is_same_v<uint32_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stoi(value);
+    } else if (std::is_same_v<int64_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stoll(value);
+    } else if (std::is_same_v<int64_t, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stoul(value);
+    } else if (std::is_same_v<int, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stoi(value);
+    } else if (std::is_same_v<float, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stof(value);
+    } else if (std::is_same_v<double, std::remove_reference_t<std::remove_cv_t<T>>>) {
+      dst_value = std::stod(value);
+    } else {
+      return false;
+    }
+  } catch (const std::invalid_argument &e) {
+    return false;
+  } catch (const std::out_of_range &e) {
+    return false;
+  }
+
+  return true;
+}
+
+template <>
+bool CastValueTest(std::string value, std::string &dst_value) {
+  dst_value = value;
+  return true;
+}
+
+TEST_F(RawRocksEngineTest, CastValue) {
+  {
+    size_t value = 0;
+    EXPECT_EQ(true, CastValueTest("100", value));
+    EXPECT_EQ(100, value);
+  }
+
+  {
+    uint32_t value = 0;
+    EXPECT_EQ(true, CastValueTest("100", value));
+    EXPECT_EQ(100, value);
+  }
+
+  {
+    int32_t value = 0;
+    EXPECT_EQ(true, CastValueTest("100", value));
+    EXPECT_EQ(100, value);
+  }
+
+  {
+    uint64_t value = 0;
+    EXPECT_EQ(true, CastValueTest("100", value));
+    EXPECT_EQ(100, value);
+  }
+
+  {
+    int64_t value = 0;
+    EXPECT_EQ(true, CastValueTest("100", value));
+    EXPECT_EQ(100, value);
+  }
+
+  {
+    float value = 0.0;
+    EXPECT_EQ(true, CastValueTest("100.1", value));
+    EXPECT_FLOAT_EQ(100.1, value);
+  }
+
+  {
+    double value = 0.0;
+    EXPECT_EQ(true, CastValueTest("100.1", value));
+    EXPECT_DOUBLE_EQ(100.1, value);
+  }
+
+  {
+    std::string value = "0";
+    EXPECT_EQ(true, CastValueTest("10", value));
+    EXPECT_EQ("10", value);
+  }
+}
+
+TEST_F(RawRocksEngineTest, GenColumnFamilyByDefaultConfig) {
+  std::vector<std::string> column_family_names = {"default", "meta"};
+  auto column_family_map = RawRocksEngine::GenColumnFamilyByDefaultConfig(column_family_names);
+  EXPECT_EQ(2, column_family_map.size());
+  for (const auto &cf_name : column_family_names) {
+    EXPECT_EQ(cf_name, column_family_map[cf_name]->Name());
+  }
+
+  {
+    auto column_family = column_family_map["default"];
+    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
+    EXPECT_EQ("67108864", column_family->GetConfItem("target_file_size_base"));
+  }
+  {
+    auto column_family = column_family_map["meta"];
+    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
+    EXPECT_EQ("67108864", column_family->GetConfItem("target_file_size_base"));
+  }
+}
+
+TEST_F(RawRocksEngineTest, SetColumnFamilyCustomConfig) {
+  std::vector<std::string> column_family_names = {"default", "meta"};
+  auto column_family_map = RawRocksEngine::GenColumnFamilyByDefaultConfig(column_family_names);
+  RawRocksEngine::SetColumnFamilyCustomConfig(RawRocksEngineTest::config, column_family_map);
+
+  {
+    auto column_family = column_family_map["default"];
+    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
+    EXPECT_EQ("4194304", column_family->GetConfItem("target_file_size_base"));
+    EXPECT_EQ("4", column_family->GetConfItem("max_write_buffer_number"));
+  }
+  {
+    auto column_family = column_family_map["meta"];
+    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
+    EXPECT_EQ("4194304", column_family->GetConfItem("target_file_size_base"));
+    EXPECT_EQ("3", column_family->GetConfItem("max_write_buffer_number"));
+  }
+}
+
+TEST_F(RawRocksEngineTest, GenRcoksDBColumnFamilyOptions) {
+  std::vector<std::string> column_family_names = {"default", "meta"};
+  auto column_family_map = RawRocksEngine::GenColumnFamilyByDefaultConfig(column_family_names);
+  RawRocksEngine::SetColumnFamilyCustomConfig(RawRocksEngineTest::config, column_family_map);
+
+  auto column_family = column_family_map["default"];
+  auto column_family_options = RawRocksEngine::GenRcoksDBColumnFamilyOptions(column_family);
+  EXPECT_EQ(67108864, column_family_options.arena_block_size);
+  EXPECT_EQ(4, column_family_options.min_write_buffer_number_to_merge);
+  EXPECT_EQ(4, column_family_options.max_write_buffer_number);
+  EXPECT_EQ(134217728, column_family_options.max_compaction_bytes);
+  EXPECT_EQ(67108864, column_family_options.write_buffer_size);
+}
 
 TEST_F(RawRocksEngineTest, GetName) {
   std::string name = RawRocksEngineTest::engine->GetName();
@@ -144,14 +290,9 @@ TEST_F(RawRocksEngineTest, GetID) {
   EXPECT_EQ(id, pb::common::RawEngine::RAW_ENG_ROCKSDB);
 }
 
-TEST_F(RawRocksEngineTest, GetSnapshot$ReleaseSnapshot) {
+TEST_F(RawRocksEngineTest, GetSnapshotReleaseSnapshot) {
   std::shared_ptr<Snapshot> snapshot = RawRocksEngineTest::engine->GetSnapshot();
   EXPECT_NE(snapshot.get(), nullptr);
-
-  // RawRocksEngineTest::engine->ReleaseSnapshot(snapshot);
-
-  // bugs crash
-  // RawRocksEngineTest::engine->ReleaseSnapshot({});
 }
 
 TEST_F(RawRocksEngineTest, Flush) {
@@ -1609,226 +1750,6 @@ TEST_F(RawRocksEngineTest, KvCount) {
     EXPECT_EQ(count, kvs.size());
   }
 }
-
-// TEST_F(RawRocksEngineTest, CreateReader) {
-//   RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
-
-//   // Context empty
-//   {
-//     std::shared_ptr<Context> ctx;
-
-//     std::shared_ptr<EngineReader> reader = RawRocksEngineTest::engine->CreateReader({});
-//     EXPECT_EQ(reader.get(), nullptr);
-//   }
-
-//   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-
-//   // Context not empty, but Context name empty
-//   {
-//     std::shared_ptr<EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
-//     EXPECT_EQ(reader.get(), nullptr);
-//   }
-
-//   // Context not empty, but Context name not exist
-//   {
-//     ctx->set_cf_name("dummy");
-
-//     std::shared_ptr<EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
-//     EXPECT_EQ(reader.get(), nullptr);
-//   }
-
-//   const std::string &cf_name = kDefaultCf;
-//   ctx->set_cf_name(cf_name);
-
-//   // ok
-//   {
-//     std::shared_ptr<EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
-//     EXPECT_NE(reader.get(), nullptr);
-//   }
-// }
-
-// TEST_F(RawRocksEngineTest, EngineReader) {
-//   RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
-//   const std::string &cf_name = kDefaultCf;
-//   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-//   ctx->set_cf_name(cf_name);
-
-//   std::shared_ptr<EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
-
-//   // GetSelf
-//   {
-//     std::shared_ptr<EngineReader> reader_another = reader->GetSelf();
-//     EXPECT_EQ(2, reader_another.use_count());
-//   }
-
-//   // test in another unit. ingore
-//   { std::shared_ptr<EngineIterator> iter = reader->Scan("", ""); }
-
-//   {
-//     const std::string &key = "key";
-//     auto value = reader->KvGet(key);
-//     EXPECT_EQ("value", *value);
-//   }
-
-//   {
-//     const std::string &key = "keykey";
-//     auto value = reader->KvGet(key);
-//     EXPECT_EQ(nullptr, value.get());
-//   }
-
-//   {
-//     auto name = reader->GetName();
-//     EXPECT_EQ("RocksReader", name);
-//   }
-
-//   {
-//     uint32_t id = reader->GetID();
-//     EXPECT_EQ(EnumEngineReader::kRocksReader, static_cast<EnumEngineReader>(id));
-//   }
-// }
-
-// TEST_F(RawRocksEngineTest, EngineIterator) {
-//   RocksEngine &engine = rocks_engine_test->GetRawRocksEngine();
-//   const std::string &cf_name = kDefaultCf;
-//   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-//   ctx->set_cf_name(cf_name);
-
-//   std::shared_ptr<EngineReader> reader = RawRocksEngineTest::engine->CreateReader(ctx);
-//   std::shared_ptr<EngineIterator> engine_iterator = reader->Scan("", "");
-
-//   // GetSelf
-//   {
-//     auto engine_iterator_another = engine_iterator->GetSelf();
-//     EXPECT_EQ(2, engine_iterator_another.use_count());
-//   }
-
-//   {
-//     auto name = engine_iterator->GetName();
-//     EXPECT_EQ("RocksIterator", name);
-//   }
-
-//   {
-//     uint32_t id = engine_iterator->GetID();
-//     EXPECT_EQ(EnumEngineIterator::kRocksIterator, static_cast<EnumEngineIterator>(id));
-//   }
-
-//   {
-//     std::string start_key;
-//     std::string end_key;
-
-//     std::shared_ptr<EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
-
-//     std::cout << "start_key : " << start_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     while (engine_iterator->HasNext()) {
-//       std::string key;
-//       std::string value;
-//       engine_iterator->GetKV(key, value);
-//       std::cout << key << ":" << value << std::endl;
-//       engine_iterator->Next();
-//     }
-//   }
-
-//   {
-//     std::string start_key = "key101";
-//     std::string end_key;
-
-//     std::shared_ptr<EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
-
-//     std::cout << "start_key : " << start_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     while (engine_iterator->HasNext()) {
-//       std::string key;
-//       std::string value;
-//       engine_iterator->GetKV(key, value);
-//       std::cout << key << ":" << value << std::endl;
-//       engine_iterator->Next();
-//     }
-//   }
-
-//   {
-//     std::string start_key = "key201";
-//     std::string end_key = "key204";
-
-//     std::shared_ptr<EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
-
-//     std::cout << "start_key : " << start_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     while (engine_iterator->HasNext()) {
-//       std::string key;
-//       std::string value;
-//       engine_iterator->GetKV(key, value);
-//       std::cout << key << ":" << value << std::endl;
-//       engine_iterator->Next();
-//     }
-//   }
-
-//   {
-//     std::string start_key;
-//     std::string end_key;
-
-//     std::vector<pb::common::KeyValue> kvs;
-
-//     kvs.reserve(300);
-
-//     for (size_t i = 0; i < 300; i++) {
-//       pb::common::KeyValue kv;
-//       kv.set_key("key" + std::to_string(i));
-//       kv.set_value("value" + std::to_string(i));
-//       kvs.push_back(kv);
-//     }
-
-//     pb::error::Errno ok = RawRocksEngineTest::engine->KvBatchPut(ctx, kvs);
-//     EXPECT_EQ(ok, pb::error::Errno::OK);
-
-//     std::shared_ptr<EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
-
-//     std::cout << "start_key : " << start_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     while (engine_iterator->HasNext()) {
-//       std::string key;
-//       std::string value;
-//       engine_iterator->GetKV(key, value);
-//       std::cout << key << ":" << value << std::endl;
-//       engine_iterator->Next();
-//     }
-//   }
-
-//   {
-//     std::string start_key;
-//     std::string end_key;
-
-//     std::vector<pb::common::KeyValue> kvs;
-
-//     kvs.reserve(300);
-
-//     for (size_t i = 0; i < 300; i++) {
-//       pb::common::KeyValue kv;
-//       kv.set_key("key" + std::to_string(i));
-//       kv.set_value("value" + std::to_string(i));
-//       kvs.push_back(kv);
-//     }
-
-//     bool run_once = false;
-//     std::shared_ptr<EngineIterator> engine_iterator = reader->Scan(start_key, end_key);
-
-//     std::cout << "start_key : " << start_key << " "
-//               << "end_key : " << end_key << std::endl;
-//     while (engine_iterator->HasNext()) {
-//       std::string key;
-//       std::string value;
-//       engine_iterator->GetKV(key, value);
-//       std::cout << key << ":" << value << std::endl;
-//       engine_iterator->Next();
-
-//       if (!run_once) {
-//         pb::error::Errno ok = RawRocksEngineTest::engine->KvBatchPut(ctx, kvs);
-//         EXPECT_EQ(ok, pb::error::Errno::OK);
-//         run_once = true;
-//       }
-//     }
-//   }
-// }
 
 TEST_F(RawRocksEngineTest, KvDelete) {
   const std::string &cf_name = kDefaultCf;

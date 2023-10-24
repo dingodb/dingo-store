@@ -123,6 +123,20 @@ TEST(ConfigTest, list_01) {
   }
 }
 
+TEST(ConfigTest, list_02) {
+  dingodb::YamlConfig config;
+
+  const std::string yaml =
+      "host:\n"
+      "- 8400\n"
+      "- 127.0.0.1";
+
+  config.Load(yaml);
+  auto result = config.GetStringList("port");
+  std::vector<std::string> expected = {};
+  EXPECT_EQ(result.size(), expected.size());
+}
+
 TEST(ConfigTest, map_01) {
   dingodb::YamlConfig config;
 
@@ -140,4 +154,17 @@ TEST(ConfigTest, map_01) {
       EXPECT_EQ("127.0.0.1", it.second);
     }
   }
+}
+
+TEST(ConfigTest, map_02) {
+  dingodb::YamlConfig config;
+
+  const std::string yaml =
+      "host:\n"
+      "  port: 8400\n"
+      "  ip: 127.0.0.1";
+
+  config.Load(yaml);
+  auto result = config.GetStringMap("port");
+  EXPECT_EQ(0, result.size());
 }

@@ -153,6 +153,9 @@ std::vector<T> YamlConfig::GetList(const std::string& key) {
   YAML::Node node = YAML::Clone(configs_[active_index_]);
   for (auto& token : tokens) {
     node = node[token];
+    if (!node.IsDefined()) {
+      return {};
+    }
   }
 
   return node.as<std::vector<T> >();

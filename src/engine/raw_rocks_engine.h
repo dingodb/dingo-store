@@ -50,17 +50,14 @@ class RawRocksEngine : public RawEngine {
   RawRocksEngine(RawRocksEngine&& rhs) = delete;
   RawRocksEngine& operator=(RawRocksEngine&& rhs) = delete;
 
-  using CfDefaultConfValueBase = std::variant<int64_t, double, std::string>;
-  using CfDefaultConfValue = std::optional<CfDefaultConfValueBase>;
-  using CfDefaultConf = std::map<std::string, CfDefaultConfValue>;
+  using ColumnFamilyConfig = std::map<std::string, std::string>;
 
   class ColumnFamily {
    public:
     ColumnFamily();
-    explicit ColumnFamily(const std::string& cf_name, const CfDefaultConf& default_conf,
-                          const std::map<std::string, std::string>& conf, rocksdb::ColumnFamilyHandle* handle);
-    explicit ColumnFamily(const std::string& cf_name, const CfDefaultConf& default_conf,
-                          const std::map<std::string, std::string>& conf);
+    explicit ColumnFamily(const std::string& cf_name, const ColumnFamilyConfig& config,
+                          rocksdb::ColumnFamilyHandle* handle);
+    explicit ColumnFamily(const std::string& cf_name, const ColumnFamilyConfig& config);
 
     ~ColumnFamily();
 
@@ -69,27 +66,39 @@ class RawRocksEngine : public RawEngine {
     ColumnFamily(ColumnFamily&& rhs) noexcept;
     ColumnFamily& operator=(ColumnFamily&& rhs) noexcept;
 
+    static std::shared_ptr<ColumnFamily> New(const std::string& cf_name, const ColumnFamilyConfig& config) {
+      return std::make_shared<ColumnFamily>(cf_name, config);
+    }
+
     void SetName(const std::string& name) { name_ = name; }
     const std::string& Name() const { return name_; }
 
-    void SetDefaultConf(const CfDefaultConf& default_conf) { default_conf_ = default_conf; }
-    const CfDefaultConf& GetDefaultConf() const { return default_conf_; }
-
-    void SetConf(const std::map<std::string, std::string>& conf) { conf_ = conf; }
-    const std::map<std::string, std::string>& GetConf() const { return conf_; }
+    void SetConfItem(const std::string& name, const std::string& value) {
+      auto it = config_.find(name);
+      if (it == config_.end()) {
+        config_.insert(std::make_pair(name, value));
+      } else {
+        it->second = value;
+      }
+    }
+    std::string GetConfItem(const std::string& name) {
+      auto it = config_.find(name);
+      return it == config_.end() ? "" : it->second;
+    }
 
     void SetHandle(rocksdb::ColumnFamilyHandle* handle) { handle_ = handle; }
     rocksdb::ColumnFamilyHandle* GetHandle() const { return handle_; }
 
-   protected:
-    // NOLINT
+    void Dump();
+
    private:
     std::string name_;
-    CfDefaultConf default_conf_;
-    std::map<std::string, std::string> conf_;
+    ColumnFamilyConfig config_;
     // reference family_handles_  do not release this handle
     rocksdb::ColumnFamilyHandle* handle_;
   };
+  using ColumnFamilyPtr = std::shared_ptr<ColumnFamily>;
+  using ColumnFamilyMap = std::map<std::string, ColumnFamilyPtr>;
 
   class RocksSnapshot : public dingodb::Snapshot {
    public:
@@ -391,37 +400,20 @@ class RawRocksEngine : public RawEngine {
 
   std::vector<int64_t> GetApproximateSizes(const std::string& cf_name, std::vector<pb::common::Range>& ranges) override;
 
+  // Generate ColumnFamilyMap used by default config.
+  static ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names);
+  // Set custom config override default config.
+  static void SetColumnFamilyCustomConfig(const std::shared_ptr<Config>& config, ColumnFamilyMap& column_families);
+  // Generate rocksdb::ColumnFamilyOptions used by ColumnFamilyPtr.
+  static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(ColumnFamilyPtr column_family);
+
  private:
-  bool InitCfConfig(const std::vector<std::string>& column_families);
+  // Init rocksdb
+  bool InitDB(const std::string& db_path);
 
-  // set cf config
-  static bool SetCfConfiguration(const CfDefaultConf& default_conf,
-                                 const std::map<std::string, std::string>& cf_configuration,
-                                 rocksdb::ColumnFamilyOptions* family_options);
-
-  // set default column family if not exist. rocksdb not allow no default
-  // column family we will move default to first
-  static void SetDefaultIfNotExist(std::vector<std::string>& column_families);
-
-  // new_cf = base + cf . cf will overwrite base value if exists.
-  static void CreateNewMap(const std::map<std::string, std::string>& base, const std::map<std::string, std::string>& cf,
-                           std::map<std::string, std::string>& new_cf);
-
-  bool RocksdbInit(std::shared_ptr<Config> config, const std::string& db_path,
-                   const std::vector<std::string>& column_family,
-                   std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);
-
-  void SetColumnFamilyHandle(const std::vector<std::string>& column_families,
-                             const std::vector<rocksdb::ColumnFamilyHandle*>& family_handles);
-
-  void SetColumnFamilyFromConfig(const std::shared_ptr<Config>& config,
-                                 const std::vector<std::string>& column_families);
-
-  // destroy rocksdb need
   std::string db_path_;
-  rocksdb::Options db_options_;
   std::shared_ptr<rocksdb::DB> db_;
-  std::map<std::string, std::shared_ptr<ColumnFamily>> column_families_;
+  ColumnFamilyMap column_families_;
 };
 
 }  // namespace dingodb

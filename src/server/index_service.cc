@@ -59,7 +59,8 @@ DECLARE_uint32(max_scan_lock_limit);
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
-static butil::Status ValidateVectorBatchQueryRequest(const pb::index::VectorBatchQueryRequest* request,
+static butil::Status ValidateVectorBatchQueryRequest(StoragePtr storage,
+                                                     const pb::index::VectorBatchQueryRequest* request,
                                                      store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -86,6 +87,11 @@ static butil::Status ValidateVectorBatchQueryRequest(const pb::index::VectorBatc
                                      request->vector_ids().size(), FLAGS_vector_max_batch_count));
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->vector_ids()));
 }
 
@@ -98,7 +104,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorBatchQueryRequest(request, region);
+  butil::Status status = ValidateVectorBatchQueryRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -153,7 +159,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   }
 }
 
-static butil::Status ValidateVectorSearchRequest(const pb::index::VectorSearchRequest* request,
+static butil::Status ValidateVectorSearchRequest(StoragePtr storage, const pb::index::VectorSearchRequest* request,
                                                  store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -193,6 +199,11 @@ static butil::Status ValidateVectorSearchRequest(const pb::index::VectorSearchRe
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   if (!region->VectorIndexWrapper()->IsReady()) {
     if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
@@ -225,7 +236,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorSearchRequest(request, region);
+  butil::Status status = ValidateVectorSearchRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -288,7 +299,8 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateVectorAddRequest(const pb::index::VectorAddRequest* request, store::RegionPtr region) {
+static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::index::VectorAddRequest* request,
+                                              store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
@@ -318,6 +330,11 @@ static butil::Status ValidateVectorAddRequest(const pb::index::VectorAddRequest*
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
                          fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_vector_max_request_size));
+  }
+
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -386,7 +403,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  auto status = ValidateVectorAddRequest(request, region);
+  auto status = ValidateVectorAddRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -436,7 +453,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateVectorDeleteRequest(const pb::index::VectorDeleteRequest* request,
+static butil::Status ValidateVectorDeleteRequest(StoragePtr storage, const pb::index::VectorDeleteRequest* request,
                                                  store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -463,6 +480,11 @@ static butil::Status ValidateVectorDeleteRequest(const pb::index::VectorDeleteRe
                                      FLAGS_vector_max_batch_count));
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
     if (region->VectorIndexWrapper()->IsBuildError()) {
@@ -485,7 +507,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  auto status = ValidateVectorDeleteRequest(request, region);
+  auto status = ValidateVectorDeleteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -530,7 +552,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateVectorGetBorderIdRequest(const pb::index::VectorGetBorderIdRequest* request,
+static butil::Status ValidateVectorGetBorderIdRequest(StoragePtr storage,
+                                                      const pb::index::VectorGetBorderIdRequest* request,
                                                       store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -547,6 +570,11 @@ static butil::Status ValidateVectorGetBorderIdRequest(const pb::index::VectorGet
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   return ServiceHelper::ValidateIndexRegion(region, {});
 }
 
@@ -559,7 +587,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorGetBorderIdRequest(request, region);
+  butil::Status status = ValidateVectorGetBorderIdRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -603,7 +631,8 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   }
 }
 
-static butil::Status ValidateVectorScanQueryRequest(const pb::index::VectorScanQueryRequest* request,
+static butil::Status ValidateVectorScanQueryRequest(StoragePtr storage,
+                                                    const pb::index::VectorScanQueryRequest* request,
                                                     store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -633,6 +662,11 @@ static butil::Status ValidateVectorScanQueryRequest(const pb::index::VectorScanQ
                          FLAGS_vector_max_batch_count);
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   // for VectorScanQuery, client can do scan from any id, so we don't need to check vector id
   // sdk will merge, sort, limit_cut of all the results for user.
   return ServiceHelper::ValidateIndexRegion(region, {});
@@ -647,7 +681,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorScanQueryRequest(request, region);
+  butil::Status status = ValidateVectorScanQueryRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -707,7 +741,8 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   }
 }
 
-static butil::Status ValidateVectorGetRegionMetricsRequest(const pb::index::VectorGetRegionMetricsRequest* request,
+static butil::Status ValidateVectorGetRegionMetricsRequest(StoragePtr storage,
+                                                           const pb::index::VectorGetRegionMetricsRequest* request,
                                                            store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -722,6 +757,11 @@ static butil::Status ValidateVectorGetRegionMetricsRequest(const pb::index::Vect
 
   if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -746,7 +786,7 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorGetRegionMetricsRequest(request, region);
+  butil::Status status = ValidateVectorGetRegionMetricsRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -790,7 +830,8 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   }
 }
 
-static butil::Status ValidateVectorCountRequest(const pb::index::VectorCountRequest* request, store::RegionPtr region) {
+static butil::Status ValidateVectorCountRequest(StoragePtr storage, const pb::index::VectorCountRequest* request,
+                                                store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
         pb::error::EREGION_NOT_FOUND,
@@ -810,6 +851,11 @@ static butil::Status ValidateVectorCountRequest(const pb::index::VectorCountRequ
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_id_start/vector_id_end range is error");
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   std::vector<int64_t> vector_ids;
   if (request->vector_id_start() != 0) {
     vector_ids.push_back(request->vector_id_start());
@@ -817,6 +863,7 @@ static butil::Status ValidateVectorCountRequest(const pb::index::VectorCountRequ
   if (request->vector_id_end() != 0) {
     vector_ids.push_back(request->vector_id_end() - 1);
   }
+
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
@@ -852,7 +899,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorCountRequest(request, region);
+  butil::Status status = ValidateVectorCountRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -895,7 +942,8 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateVectorSearchDebugRequest(const pb::index::VectorSearchDebugRequest* request,
+static butil::Status ValidateVectorSearchDebugRequest(StoragePtr storage,
+                                                      const pb::index::VectorSearchDebugRequest* request,
                                                       store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(
@@ -942,6 +990,11 @@ static butil::Status ValidateVectorSearchDebugRequest(const pb::index::VectorSea
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   }
 
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
+  }
+
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (!vector_index_wrapper->IsReady()) {
     if (region->VectorIndexWrapper()->IsBuildError()) {
@@ -977,7 +1030,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
   int64_t region_id = request->context().region_id();
 
   auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
-  butil::Status status = ValidateVectorSearchDebugRequest(request, region);
+  butil::Status status = ValidateVectorSearchDebugRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1284,7 +1337,7 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   }
 }
 
-static butil::Status ValidateTxnPrewriteRequest(const pb::index::TxnPrewriteRequest* request) {
+static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::index::TxnPrewriteRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1346,6 +1399,11 @@ static butil::Status ValidateTxnPrewriteRequest(const pb::index::TxnPrewriteRequ
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
                          fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_vector_max_request_size));
+  }
+
+  status = storage->ValidateLeader(request->context().region_id());
+  if (!status.ok()) {
+    return status;
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -1423,7 +1481,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 
   int64_t region_id = request->context().region_id();
 
-  auto status = ValidateTxnPrewriteRequest(request);
+  auto status = ValidateTxnPrewriteRequest(storage, request);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());

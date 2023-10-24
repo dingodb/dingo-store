@@ -753,6 +753,29 @@ std::vector<std::string> Helper::GetColumnFamilyNames() {
   return cfs;
 }
 
+std::vector<std::string> Helper::GetAllColumnFamilyNames() {
+  std::vector<std::string> cfs;
+
+  cfs.push_back(Constant::kStoreDataCF);
+  cfs.push_back(Constant::kStoreMetaCF);
+  cfs.push_back(Constant::kVectorScalarCF);
+  cfs.push_back(Constant::kVectorTableCF);
+  cfs.push_back(Constant::kTxnDataCF);
+  cfs.push_back(Constant::kTxnLockCF);
+  cfs.push_back(Constant::kTxnWriteCF);
+
+  return cfs;
+}
+
+std::vector<std::string> Helper::GetCoordinatorColumnFamilyNames() {
+  std::vector<std::string> cfs;
+
+  cfs.push_back(Constant::kStoreDataCF);
+  cfs.push_back(Constant::kStoreMetaCF);
+
+  return cfs;
+}
+
 int64_t Helper::TimestampNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();

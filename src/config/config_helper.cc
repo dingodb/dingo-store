@@ -17,6 +17,7 @@
 #include <string>
 
 #include "common/constant.h"
+#include "common/helper.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 
@@ -144,6 +145,33 @@ uint32_t ConfigHelper::GetVectorIndexBackgroundWorkerNum() {
                                       Constant::kVectorIndexBackgroundWorkerNumDefaultValue);
   }
   return vector_index_background_worker_num;
+}
+
+int ConfigHelper::GetRocksDBBackgroundThreadNum() {
+  auto config = ConfigManager::GetInstance().GetConfig();
+  if (config == nullptr) {
+    return Constant::kRocksdbBackgroundThreadNumDefault;
+  }
+
+  int num = config->GetInt("store.background_thread_num");
+  if (num <= 0) {
+    double ratio = config->GetDouble("store.background_thread_ratio");
+    if (ratio > 0) {
+      num = std::round(ratio * static_cast<double>(Helper::GetCoreNum()));
+    }
+  }
+
+  return num > 0 ? num : Constant::kRocksdbBackgroundThreadNumDefault;
+}
+
+int ConfigHelper::GetRocksDBStatsDumpPeriodSec() {
+  auto config = ConfigManager::GetInstance().GetConfig();
+  if (config == nullptr) {
+    return Constant::kStatsDumpPeriodSecDefault;
+  }
+
+  int num = config->GetInt("store.stats_dump_period_s");
+  return (num <= 0) ? Constant::kStatsDumpPeriodSecDefault : num;
 }
 
 }  // namespace dingodb
