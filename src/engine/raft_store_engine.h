@@ -63,6 +63,7 @@ class RaftControlAble {
   virtual butil::Status ChangeNode(std::shared_ptr<Context> ctx, int64_t region_id,
                                    std::vector<pb::common::Peer> peers) = 0;
   virtual std::shared_ptr<RaftNode> GetNode(int64_t region_id) = 0;
+  virtual bool IsLeader(int64_t region_id) = 0;
 
   virtual butil::Status TransferLeader(int64_t region_id, const pb::common::Peer& peer) = 0;
 
@@ -91,6 +92,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   butil::Status StopNode(std::shared_ptr<Context> ctx, int64_t region_id) override;
   butil::Status DestroyNode(std::shared_ptr<Context> ctx, int64_t region_id) override;
   std::shared_ptr<RaftNode> GetNode(int64_t region_id) override;
+  bool IsLeader(int64_t region_id) override;
 
   butil::Status TransferLeader(int64_t region_id, const pb::common::Peer& peer) override;
 

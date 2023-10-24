@@ -164,6 +164,7 @@ class Server {
   std::shared_ptr<StoreController> GetStoreController() { return store_controller_; }
   std::shared_ptr<RegionController> GetRegionController() { return region_controller_; }
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
+  VectorIndexManagerPtr GetVectorIndexManager() { return vector_index_manager_; }
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
   std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControlReference() { return auto_increment_control_; }
   std::shared_ptr<TsoControl> GetTsoControl() { return tso_control_; }
@@ -196,6 +197,8 @@ class Server {
 
   bool IsReadOnly() const { return is_read_only_; }
   void SetReadOnly(bool is_read_only) { is_read_only_ = is_read_only; }
+
+  bool IsLeader(int64_t region_id) { return storage_->IsLeader(region_id); }
 
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker() { return pre_split_checker_; }
 
@@ -264,6 +267,9 @@ class Server {
   std::shared_ptr<RegionController> region_controller_;
   // This is region command manager, save region command
   std::shared_ptr<RegionCommandManager> region_command_manager_;
+
+  // This is vector index manager.
+  VectorIndexManagerPtr vector_index_manager_;
 
   // This is manage coordinator meta data, like store state and region state.
   std::shared_ptr<CoordinatorControl> coordinator_control_;

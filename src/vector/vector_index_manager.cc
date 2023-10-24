@@ -29,6 +29,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
+#include "config/config_helper.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
@@ -48,6 +49,22 @@
 
 namespace dingodb {
 
+// Check whether need hold vector index
+bool NeedHoldVectorIndex(int64_t region_id) {
+  auto config = ConfigManager::GetInstance().GetConfig();
+  if (config == nullptr) {
+    return true;
+  }
+
+  if (!config->GetBool("vector.enable_follower_hold_index")) {
+    // If follower, delete vector index.
+    if (!Server::GetInstance().IsLeader(region_id)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void RebuildVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.rebuild][index_id({})] pending tasks({}) rebuild running({}) total running({}).",
@@ -60,10 +77,12 @@ void RebuildVectorIndexTask::Run() {
     VectorIndexManager::DecVectorIndexTaskRunningNum();
     VectorIndexManager::DecVectorIndexRebuildTaskRunningNum();
     vector_index_wrapper_->DecPendingTaskNum();
+    vector_index_wrapper_->DecRebuildingNum();
 
     LOG(INFO) << fmt::format(
-        "[vector_index.rebuild][index_id({})] pending tasks({}) rebuild running({}) total running({}).",
-        vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
+        "[vector_index.rebuild][index_id({})] pending tasks({}) self rebuild({}) rebuild running({}) total "
+        "running({}).",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(), vector_index_wrapper_->RebuildingNum(),
         VectorIndexManager::GetVectorIndexRebuildTaskRunningNum(), VectorIndexManager::GetVectorIndexTaskRunningNum());
   });
 
@@ -103,8 +122,8 @@ void RebuildVectorIndexTask::Run() {
   }
 
   if (force_) {
-    if (!vector_index_wrapper_->IsHoldVectorIndex() &&
-        !VectorIndexManager::NeedHoldVectorIndex(vector_index_wrapper_->Id())) {
+    if (!NeedHoldVectorIndex(vector_index_wrapper_->Id())) {
+      vector_index_wrapper_->SetIsHoldVectorIndex(false);
       vector_index_wrapper_->ClearVectorIndex();
     }
 
@@ -164,10 +183,12 @@ void LoadOrBuildVectorIndexTask::Run() {
   ON_SCOPE_EXIT([&]() {
     VectorIndexManager::DecVectorIndexTaskRunningNum();
     vector_index_wrapper_->DecPendingTaskNum();
+    vector_index_wrapper_->DecLoadoruildingNum();
 
-    LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending tasks({}) total running({}).",
-                             vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
-                             VectorIndexManager::GetVectorIndexTaskRunningNum());
+    LOG(INFO) << fmt::format(
+        "[vector_index.loadorbuild][index_id({})] pending tasks({}) self loadorbuild({}) total running({}).",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->PendingTaskNum(),
+        vector_index_wrapper_->LoadorbuildingNum(), VectorIndexManager::GetVectorIndexTaskRunningNum());
   });
 
   if (vector_index_wrapper_->IsStop()) {
@@ -214,53 +235,27 @@ void LoadOrBuildVectorIndexTask::Run() {
 std::atomic<int> VectorIndexManager::vector_index_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_rebuild_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_save_task_running_num = 0;
-bool VectorIndexManager::Init(std::vector<store::RegionPtr> regions) { return true; }  // NOLINT
 
-// Check whether need hold vector index
-bool VectorIndexManager::NeedHoldVectorIndex(int64_t region_id) {
-  auto config = ConfigManager::GetInstance().GetConfig();
-  if (config == nullptr) {
-    return true;
+bool VectorIndexManager::Init() {
+  workers_ = WorkerSet::New("VectorIndexWorkerSet", ConfigHelper::GetVectorIndexBackgroundWorkerNum());
+  if (!workers_->Init()) {
+    DINGO_LOG(ERROR) << "Init vector index manager worker set failed!";
+    return false;
   }
 
-  if (!config->GetBool("vector.enable_follower_hold_index")) {
-    // If follower, delete vector index.
-    auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
-    if (raft_store_engine != nullptr) {
-      auto node = raft_store_engine->GetNode(region_id);
-      if (node == nullptr) {
-        LOG(ERROR) << fmt::format("No found raft node {}.", region_id);
-        return false;
-      }
-
-      if (!node->IsLeader()) {
-        return false;
-      }
-    }
-  }
   return true;
+}
+
+void VectorIndexManager::Destroy() {
+  if (workers_ != nullptr) {
+    workers_->Destroy();
+  }
 }
 
 // Load vector index for already exist vector index at bootstrap.
 // Priority load from snapshot, if snapshot not exist then load from original data.
 butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
-
-  if (vector_index_wrapper->IsRebuilding()) {
-    DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.load][index_id({})] vector index is rebuilding, maybe need to give up, this is just a warning, "
-        "build will proceed.",
-        vector_index_wrapper->Id());
-  }
-  if (vector_index_wrapper->IsLoadorbuilding()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.load][index_id({})] vector index is loadorbuilding, give up.",
-                                      vector_index_wrapper->Id());
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_BUILD_CONFLICT, "Vector index is loadorbuilding, give up.");
-  }
-
-  ON_SCOPE_EXIT([&]() { vector_index_wrapper->SetLoadoruilding(false); });
-
-  vector_index_wrapper->SetLoadoruilding(true);
 
   int64_t start_time = Helper::TimestampMs();
   int64_t vector_index_id = vector_index_wrapper->Id();
@@ -315,14 +310,23 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
 void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
 
+  if (vector_index_wrapper->LoadorbuildingNum() > 0) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.launch][index_id({})] Already exist loadorbuild on execute queue.",
+                                   vector_index_wrapper->Id());
+    return;
+  }
+
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
   auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper);
-  if (!vector_index_wrapper->ExecuteTask(task)) {
+  if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch loadorbuild vector index failed",
                                     vector_index_wrapper->Id());
+  } else {
+    vector_index_wrapper->IncLoadoruildingNum();
+    vector_index_wrapper->IncPendingTaskNum();
   }
 }
 
@@ -605,24 +609,19 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force) {
   assert(vector_index_wrapper != nullptr);
 
-  // split will check if GetVectorIndexTaskRunningNum is exceeed limit, so for rebuild task for split, we do not check
-  // rebuild running num.
-  if (!force && GetVectorIndexRebuildTaskRunningNum() > Constant::kVectorIndexRebuildTaskRunningNumMaxValue) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.launch][index_id({})] running rebuild task execeed limit({}/{}), give up.",
-        vector_index_wrapper->Id(), GetVectorIndexRebuildTaskRunningNum(),
-        Constant::kVectorIndexRebuildTaskRunningNumMaxValue);
-    return;
-  }
-
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch rebuild vector index, pending tasks({}) total running({}).",
-      vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
+      "[vector_index.launch][index_id({})] Launch rebuild vector index, rebuild({}) pending tasks({}) total "
+      "running({}).",
+      vector_index_wrapper->Id(), vector_index_wrapper->RebuildingNum(), vector_index_wrapper->PendingTaskNum(),
+      GetVectorIndexTaskRunningNum());
 
   auto task = std::make_shared<RebuildVectorIndexTask>(vector_index_wrapper, force);
-  if (!vector_index_wrapper->ExecuteTask(task)) {
+  if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch rebuild vector index failed",
                                     vector_index_wrapper->Id());
+  } else {
+    vector_index_wrapper->IncRebuildingNum();
+    vector_index_wrapper->IncPendingTaskNum();
   }
 }
 
@@ -630,22 +629,7 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
 butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
 
-  if (vector_index_wrapper->IsLoadorbuilding()) {
-    DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.rebuild][index_id({})] vector index is loadorbuilding, maybe need to give up, this is just a "
-        "warning, rebuid will proceed.",
-        vector_index_wrapper->Id());
-  }
-
-  if (vector_index_wrapper->IsRebuilding()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({}_v{})] vector index is rebuilding, give up.",
-                                      vector_index_wrapper->Id(), vector_index_wrapper->Version());
-    return butil::Status(pb::error::Errno::EVECTOR_INDEX_REBUILD_CONFLICT, "Vector index is rebuilding, give up.");
-  }
-
-  ON_SCOPE_EXIT([&]() { vector_index_wrapper->SetIsRebuilding(false); });
-
-  vector_index_wrapper->SetIsRebuilding(true);
+  ON_SCOPE_EXIT([&]() { vector_index_wrapper->DecRebuildingNum(); });
 
   int64_t vector_index_id = vector_index_wrapper->Id();
 
@@ -770,22 +754,16 @@ butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_i
 void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
   assert(vector_index_wrapper != nullptr);
 
-  if (GetVectorIndexSaveTaskRunningNum() > Constant::kVectorIndexSaveTaskRunningNumMaxValue) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.launch][index_id({})] running save task execeed limit({}/{}), give up.",
-        vector_index_wrapper->Id(), GetVectorIndexSaveTaskRunningNum(),
-        Constant::kVectorIndexSaveTaskRunningNumMaxValue);
-    return;
-  }
-
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.launch][index_id({})] Launch save vector index, pending tasks({}) total running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
   auto task = std::make_shared<SaveVectorIndexTask>(vector_index_wrapper);
-  if (!vector_index_wrapper->ExecuteTask(task)) {
+  if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch save vector index failed",
                                     vector_index_wrapper->Id());
+  } else {
+    vector_index_wrapper->IncPendingTaskNum();
   }
 }
 
@@ -896,6 +874,14 @@ butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vec
   }
 
   return butil::Status::OK();
+}
+
+bool VectorIndexManager::ExecuteTask(int64_t region_id, TaskRunnablePtr task) {
+  if (workers_ == nullptr) {
+    return false;
+  }
+
+  return workers_->ExecuteHashByRegionId(region_id, task);
 }
 
 }  // namespace dingodb

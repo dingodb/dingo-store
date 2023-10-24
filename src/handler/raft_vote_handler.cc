@@ -30,6 +30,7 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
 
   // Load vector index.
   auto vector_index_wrapper = region->VectorIndexWrapper();
+  vector_index_wrapper->SetIsHoldVectorIndex(true);
   if (vector_index_wrapper->IsReady()) {
     DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                    region->Id());
@@ -52,11 +53,8 @@ int VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status)
     return 0;
   }
 
-  if (region->VectorIndexWrapper()->IsHoldVectorIndex()) {
-    return 0;
-  }
-
   // Delete vector index.
+  region->VectorIndexWrapper()->SetIsHoldVectorIndex(false);
   region->VectorIndexWrapper()->ClearVectorIndex();
 
   return 0;

@@ -514,7 +514,10 @@ bool Server::InitStoreMetricsManager() {
   return store_metrics_manager_->Init();
 }
 
-bool Server::InitVectorIndexManager() { return VectorIndexManager::Init(GetAllAliveRegion()); }
+bool Server::InitVectorIndexManager() {
+  vector_index_manager_ = VectorIndexManager::New();
+  return vector_index_manager_->Init();
+}
 
 bool Server::InitPreSplitChecker() {
   pre_split_checker_ = std::make_shared<PreSplitChecker>();
@@ -560,6 +563,7 @@ void Server::Destroy() {
   heartbeat_->Destroy();
   region_controller_->Destroy();
   store_controller_->Destroy();
+  vector_index_manager_->Destroy();
 
   google::ShutdownGoogleLogging();
 }
