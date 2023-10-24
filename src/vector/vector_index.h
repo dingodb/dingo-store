@@ -84,6 +84,7 @@ class VectorIndex {
 
   // Range filter just for flat
   // Range transform list
+  // deprecated
   class FlatRangeFilterFunctor : public FilterFunctor {
    public:
     FlatRangeFilterFunctor(int64_t min_vector_id, int64_t max_vector_id)
@@ -127,11 +128,10 @@ class VectorIndex {
 
   class FlatListFilterFunctor : public FilterFunctor {
    public:
-    explicit FlatListFilterFunctor(std::vector<int64_t>&& vector_ids)  // NOLINT
-        : vector_ids_(std::forward<std::vector<int64_t>>(vector_ids)) {
+    explicit FlatListFilterFunctor(const std::vector<int64_t>& vector_ids) {
       // highly optimized code, do not modify it
-      array_indexs_.rehash(vector_ids_.size());
-      array_indexs_.insert(vector_ids_.begin(), vector_ids_.end());
+      array_indexs_.rehash(vector_ids.size());
+      array_indexs_.insert(vector_ids.begin(), vector_ids.end());
     }
     FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
     FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
@@ -141,18 +141,16 @@ class VectorIndex {
     bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
 
    private:
-    std::vector<int64_t> vector_ids_;
     std::unordered_set<int64_t> array_indexs_;
   };
 
   // List filter just for ivf flat
   class IvfFlatListFilterFunctor : public FilterFunctor {
    public:
-    explicit IvfFlatListFilterFunctor(std::vector<int64_t>&& vector_ids)  // NOLINT
-        : vector_ids_(std::forward<std::vector<int64_t>>(vector_ids)) {
+    explicit IvfFlatListFilterFunctor(const std::vector<int64_t>& vector_ids) {
       // highly optimized code, do not modify it
-      array_indexs_.rehash(vector_ids_.size());
-      array_indexs_.insert(vector_ids_.begin(), vector_ids_.end());
+      array_indexs_.rehash(vector_ids.size());
+      array_indexs_.insert(vector_ids.begin(), vector_ids.end());
     }
     IvfFlatListFilterFunctor(const IvfFlatListFilterFunctor&) = delete;
     IvfFlatListFilterFunctor(IvfFlatListFilterFunctor&&) = delete;
@@ -162,7 +160,25 @@ class VectorIndex {
     bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
 
    private:
-    std::vector<int64_t> vector_ids_;
+    std::unordered_set<int64_t> array_indexs_;
+  };
+
+  // List filter just for ivf pq
+  class IvfPqListFilterFunctor : public FilterFunctor {
+   public:
+    explicit IvfPqListFilterFunctor(const std::vector<int64_t>& vector_ids) {
+      // highly optimized code, do not modify it
+      array_indexs_.rehash(vector_ids.size());
+      array_indexs_.insert(vector_ids.begin(), vector_ids.end());
+    }
+    IvfPqListFilterFunctor(const IvfPqListFilterFunctor&) = delete;
+    IvfPqListFilterFunctor(IvfPqListFilterFunctor&&) = delete;
+    IvfPqListFilterFunctor& operator=(const IvfPqListFilterFunctor&) = delete;
+    IvfPqListFilterFunctor& operator=(IvfPqListFilterFunctor&&) = delete;
+
+    bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
+
+   private:
     std::unordered_set<int64_t> array_indexs_;
   };
 
@@ -196,6 +212,7 @@ class VectorIndex {
   virtual bool NeedToRebuild() = 0;
   virtual bool NeedTrain() { return false; }
   virtual bool IsTrained() { return true; }
+  virtual bool NeedToSave(int64_t last_save_log_behind) = 0;
   virtual bool SupportSave() { return false; }
 
   virtual uint32_t WriteOpParallelNum() { return 1; }
@@ -203,6 +220,13 @@ class VectorIndex {
   int64_t Id() const { return id; }
 
   pb::common::VectorIndexType VectorIndexType() { return vector_index_type; }
+
+  // Fix ivf pq internal using flat search.
+  // if not use this function . maybe search filter transform.
+  // this will poor performance and poor maintainability.
+  virtual pb::common::VectorIndexType VectorIndexSubType() {
+    return pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
+  }
 
   int64_t ApplyLogId() const;
   void SetApplyLogId(int64_t apply_log_id);
@@ -299,6 +323,22 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   pb::common::VectorIndexType Type() { return vector_index_type_; }
 
+  // Fix ivf pq internal using flat search.
+  // if not use this function . maybe search filter transform.
+  // this will poor performance and poor maintainability.
+  pb::common::VectorIndexType SubType() {
+    BAIDU_SCOPED_LOCK(vector_index_mutex_);
+    int active_index_int = active_index_.load();
+    switch (active_index_int) {
+      case 0:
+        [[fallthrough]];
+      case 1:
+        return vector_indexs_[active_index_int]->VectorIndexSubType();
+      default:
+        return pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
+    }
+  }
+
   pb::common::VectorIndexParameter IndexParameter() { return index_parameter_; }
 
   int64_t ApplyLogId();
@@ -365,6 +405,11 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
                        std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
                        const pb::common::VectorSearchParameter& parameter = {});
+
+  static butil::Status SetVectorIndexFilter(
+      VectorIndexPtr vector_index,
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
+      int64_t min_vector_id, int64_t max_vector_id);
 
  private:
   // vector index id

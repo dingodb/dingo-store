@@ -32,7 +32,7 @@
 
 namespace dingodb {
 
-DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
+// DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 void VectorIndex::SetSnapshotLogId(int64_t snapshot_log_id) {
   this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
@@ -380,29 +380,8 @@ bool VectorIndexWrapper::SupportSave() {
 }
 
 bool VectorIndexWrapper::NeedToSave(int64_t last_save_log_behind) {
-  if (Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-    return false;
-  }
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
-    return false;
-  }
-  int64_t element_count = 0, deleted_count = 0;
-  auto status = vector_index->GetCount(element_count);
-  if (!status.ok()) {
-    return false;
-  }
-  status = vector_index->GetDeletedCount(deleted_count);
-  if (!status.ok()) {
-    return false;
-  }
-
-  if (element_count == 0 && deleted_count == 0) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index need_to_save=false: element count is 0 and deleted count is "
-        "0, element_count={} "
-        "deleted_count={}",
-        Id(), element_count, deleted_count);
     return false;
   }
 
@@ -413,13 +392,20 @@ bool VectorIndexWrapper::NeedToSave(int64_t last_save_log_behind) {
     return true;
   }
 
-  if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
+  bool ret = vector_index->NeedToSave(last_save_log_behind);
+  if (ret) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: last_save_log_behind={} "
-        "FLAGS_hnsw_need_save_count={}",
-        Id(), last_save_log_behind, FLAGS_hnsw_need_save_count);
+        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: last_save_log_behind={} ", Id(),
+        last_save_log_behind);
     last_save_write_key_count_ = write_key_count_;
-    return true;
+
+    return ret;
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.wrapper][index_id({})] vector index need_to_save=false: element count is 0 and deleted count is "
+        "0",
+        Id());
+    return ret;
   }
 
   if ((write_key_count_ - last_save_write_key_count_) >= save_snapshot_threshold_write_key_num_) {
@@ -432,9 +418,8 @@ bool VectorIndexWrapper::NeedToSave(int64_t last_save_log_behind) {
 
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.wrapper][index_id({})] vector index need_to_save=false: last_save_log_behind={} "
-      "hnsw_need_save_count={} write_key_count={}/{}/{}",
-      Id(), last_save_log_behind, FLAGS_hnsw_need_save_count, write_key_count_, last_save_write_key_count_,
-      save_snapshot_threshold_write_key_num_);
+      "write_key_count={}/{}/{}",
+      Id(), last_save_log_behind, write_key_count_, last_save_write_key_count_, save_snapshot_threshold_write_key_num_);
 
   return false;
 }
@@ -574,14 +559,7 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
     int64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
     int64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
     max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
-    if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
-      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-    } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-      // filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
-      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-    } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
-      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-    }
+    VectorIndexWrapper::SetVectorIndexFilter(vector_index, filters, min_vector_id, max_vector_id);
   }
 
   return vector_index->Search(vector_with_ids, topk, filters, results, reconstruct, parameter);
@@ -600,6 +578,29 @@ bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
     }
   }
   return true;
+}
+butil::Status VectorIndexWrapper::SetVectorIndexFilter(
+    VectorIndexPtr vector_index,
+    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
+    int64_t min_vector_id, int64_t max_vector_id) {
+  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+    // filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
+    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
+    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_PQ) {
+    if (vector_index->VectorIndexSubType() == pb::common::VECTOR_INDEX_TYPE_IVF_PQ) {
+      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+    } else if (vector_index->VectorIndexSubType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
+    } else {
+      // do nothing
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

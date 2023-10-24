@@ -45,6 +45,7 @@
 namespace dingodb {
 
 DEFINE_uint32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
+DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
@@ -540,6 +541,25 @@ bool VectorIndexHnsw::NeedToRebuild() {
   }
 
   return (deleted_count > 0 && deleted_count > element_count / 2);
+}
+
+bool VectorIndexHnsw::NeedToSave(int64_t last_save_log_behind) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  int64_t element_count = 0, deleted_count = 0;
+
+  element_count = this->hnsw_index_->getCurrentElementCount();
+  deleted_count = this->hnsw_index_->getDeletedCount();
+
+  if (element_count == 0 && deleted_count == 0) {
+    return false;
+  }
+
+  if (last_save_log_behind > FLAGS_hnsw_need_save_count) {
+    return true;
+  }
+
+  return false;
 }
 
 }  // namespace dingodb

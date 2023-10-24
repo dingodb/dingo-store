@@ -161,6 +161,8 @@ DEFINE_int64(def_version, 0, "version");
 DEFINE_int64(tso_save_physical, 0, "new tso save physical");
 DEFINE_int64(tso_new_physical, 0, "new tso physical");
 DEFINE_int64(tso_new_logical, 0, "new tso logical");
+DEFINE_int32(nsubvector, 8, "ivf pq default subvector nums 8");
+DEFINE_int32(nbits_per_idx, 8, "ivf pq default nbits_per_idx 8");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 

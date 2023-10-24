@@ -108,6 +108,7 @@ class VectorIndexIvfFlat : public VectorIndex {
   bool NeedToRebuild() override;
   bool NeedTrain() override { return true; }
   bool IsTrained() override;
+  bool NeedToSave(int64_t last_save_log_behind) override;
 
  private:
   void Init();
