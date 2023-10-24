@@ -124,12 +124,6 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   status = storage->VectorBatchQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
     return;
   }
 
@@ -265,12 +259,6 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   status = storage->VectorBatchSearch(ctx, vector_results);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
     return;
   }
 
@@ -422,12 +410,6 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   status = storage->VectorAdd(ctx, vectors);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
   }
@@ -521,12 +503,6 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
   status = storage->VectorDelete(ctx, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
   }
@@ -598,12 +574,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
   status = storage->VectorGetBorderId(region->Id(), region->Range(), request->get_min(), vector_id);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -707,12 +678,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   status = storage->VectorScanQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -797,12 +763,7 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
   status = storage->VectorGetRegionMetrics(region->Id(), region->Range(), region->VectorIndexWrapper(), metrics);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -911,12 +872,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
                                 GenCountRange(region, request->vector_id_start(), request->vector_id_end()), count);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -1061,12 +1017,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
                                            search_time_us);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -1150,12 +1101,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
   status = storage->TxnBatchGet(ctx, request->start_ts(), keys, txn_result_info, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -1279,12 +1225,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
                             txn_result_info, kvs, has_more, end_key);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -1509,12 +1450,6 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
                                 already_exists, one_pc_commit_ts);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
   }
@@ -1609,12 +1544,6 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   status = storage->TxnCommit(ctx, request->start_ts(), request->commit_ts(), keys, txn_result_info, commit_ts);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
     return;
@@ -1712,12 +1641,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
                                       request->current_ts(), txn_result_info, lock_ttl, commit_ts, action, lock_info);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     if (!is_sync) done->Run();
   }
 }
@@ -1809,12 +1733,6 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys, txn_result_info);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
     return;
@@ -1906,12 +1824,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   status = storage->TxnBatchGet(ctx, request->start_ts(), keys, txn_result_info, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -2020,12 +1933,6 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   status = storage->TxnBatchRollback(ctx, request->start_ts(), keys, txn_result_info, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
     return;
@@ -2127,12 +2034,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
                                 txn_result_info, locks);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
+
     return;
   }
 
@@ -2221,12 +2123,6 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
                                  txn_result_info, lock_ttl);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
     return;
@@ -2298,12 +2194,6 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, co
   status = storage->TxnGc(ctx, request->safe_point_ts(), txn_result_info);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
     return;
@@ -2382,12 +2272,6 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   status = storage->TxnDeleteRange(ctx, request->start_key(), request->end_key());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
 
     if (!is_sync) done->Run();
   }
@@ -2478,12 +2362,6 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
                             txn_data_keys, txn_data_values);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      response->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
-                                                        Server::GetInstance().ServerAddr(), region_id,
-                                                        status.error_str()));
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
   }
 }
 

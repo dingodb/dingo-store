@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "butil/endpoint.h"
 #include "common/constant.h"
@@ -57,23 +58,7 @@ class ServiceClosure : public google::protobuf::Closure {
   }
   ~ServiceClosure() override = default;
 
-  void Run() override {
-    std::unique_ptr<ServiceClosure<T, U>> self_guard(this);
-    brpc::ClosureGuard done_guard(done_);
-
-    uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
-    if (response_->error().errcode() != 0) {
-      DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}",
-                                      method_name_, elapsed_time,
-                                      response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                      request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
-    } else {
-      DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}",
-                                      method_name_, elapsed_time,
-                                      response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                      request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
-    }
-  }
+  void Run() override;
 
  private:
   std::string method_name_;
@@ -142,6 +127,51 @@ void ServiceHelper::RedirectLeader(std::string addr, T* response) {
     Helper::SetPbMessageErrorLeader(node_info, response);
   } else {
     response->mutable_error()->set_store_id(Server::GetInstance().Id());
+  }
+}
+
+template <typename T, typename U>
+void ServiceClosure<T, U>::Run() {
+  std::unique_ptr<ServiceClosure<T, U>> self_guard(this);
+  brpc::ClosureGuard done_guard(done_);
+
+  uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+
+  if (response_->error().errcode() != 0) {
+    // Set leader redirect info(pb.Error.leader_location).
+    if (response_->error().errcode() == pb::error::ERAFT_NOTLEADER) {
+      ServiceHelper::RedirectLeader(response_->error().errmsg(), response_);
+      response_->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
+                                                         Server::GetInstance().ServerAddr(),
+                                                         request_->context().region_id(), response_->error().errmsg()));
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}", method_name_,
+                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  } else {
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}", method_name_,
+                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  }
+}
+
+template <>
+inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::VectorCalcDistanceResponse>::Run() {
+  std::unique_ptr<ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::VectorCalcDistanceResponse>>
+      self_guard(this);
+  brpc::ClosureGuard done_guard(done_);
+
+  uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+
+  if (response_->error().errcode() != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}", method_name_,
+                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  } else {
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}", method_name_,
+                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
 }
 
