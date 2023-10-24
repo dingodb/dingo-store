@@ -90,18 +90,11 @@ std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(int64_t id,
 
 std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::GetSelf() { return shared_from_this(); }
 
-bool VectorIndexWrapper::Init() {
-  if (!worker_->Init()) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Init vector index wrapper failed.", Id());
-    return false;
-  }
-  return true;
-}
+bool VectorIndexWrapper::Init() { return true; }
 
 void VectorIndexWrapper::Destroy() {
   DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index destroy.", Id());
   stop_.store(true);
-  worker_->Destroy();
 }
 
 bool VectorIndexWrapper::Recover() {
@@ -222,6 +215,8 @@ void VectorIndexWrapper::SetIsSwitchingVectorIndex(bool is_switching) {
 bool VectorIndexWrapper::IsHoldVectorIndex() const { return is_hold_vector_index_.load(); }
 
 void VectorIndexWrapper::SetIsHoldVectorIndex(bool need) {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] set vector index hold({}->{})", Id(),
+                                 IsHoldVectorIndex(), need);
   is_hold_vector_index_.store(need);
   SaveMeta();
 }
@@ -231,6 +226,10 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
   // Check vector index is stop
   if (IsStop()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());
+    return;
+  }
+  if (!IsHoldVectorIndex()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not hold.", Id());
     return;
   }
 
@@ -305,24 +304,17 @@ void VectorIndexWrapper::SetShareVectorIndex(VectorIndexPtr vector_index) {
   ready_.store(true);
 }
 
-bool VectorIndexWrapper::ExecuteTask(TaskRunnablePtr task) {
-  if (worker_ == nullptr) {
-    return false;
-  }
+int VectorIndexWrapper::PendingTaskNum() { return pending_task_num_.load(std::memory_order_relaxed); }
+void VectorIndexWrapper::IncPendingTaskNum() { pending_task_num_.fetch_add(1, std::memory_order_relaxed); }
+void VectorIndexWrapper::DecPendingTaskNum() { pending_task_num_.fetch_sub(1, std::memory_order_relaxed); }
 
-  bool ret = worker_->Execute(task);
-  if (ret) {
-    IncPendingTaskNum();
-  }
+uint32_t VectorIndexWrapper::LoadorbuildingNum() { return loadorbuilding_num_.load(std::memory_order_relaxed); }
+void VectorIndexWrapper::IncLoadoruildingNum() { loadorbuilding_num_.fetch_add(1, std::memory_order_relaxed); }
+void VectorIndexWrapper::DecLoadoruildingNum() { loadorbuilding_num_.fetch_sub(1, std::memory_order_relaxed); }
 
-  return ret;
-}
-
-int VectorIndexWrapper::PendingTaskNum() { return pending_task_num_.load(); }
-
-void VectorIndexWrapper::IncPendingTaskNum() { pending_task_num_.fetch_add(1); }
-
-void VectorIndexWrapper::DecPendingTaskNum() { pending_task_num_.fetch_sub(1); }
+bool VectorIndexWrapper::RebuildingNum() { return rebuilding_num_.load(std::memory_order_relaxed); }
+void VectorIndexWrapper::IncRebuildingNum() { rebuilding_num_.fetch_add(1, std::memory_order_relaxed); }
+void VectorIndexWrapper::DecRebuildingNum() { rebuilding_num_.fetch_sub(1, std::memory_order_relaxed); }
 
 int32_t VectorIndexWrapper::GetDimension() {
   auto vector_index = GetVectorIndex();

@@ -65,6 +65,14 @@ butil::Status Storage::ValidateLeader(int64_t region_id) {
   return butil::Status();
 }
 
+bool Storage::IsLeader(int64_t region_id) {
+  if (engine_ == nullptr || engine_->GetID() != pb::common::ENG_RAFT_STORE) {
+    return false;
+  }
+  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
+  return raft_kv_engine->IsLeader(region_id);
+}
+
 butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                              std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());

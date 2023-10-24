@@ -142,6 +142,7 @@ class Storage {
                                        int64_t& search_time_us);
 
   butil::Status ValidateLeader(int64_t region_id);
+  bool IsLeader(int64_t region_id);
 
  private:
   std::shared_ptr<Engine> engine_;

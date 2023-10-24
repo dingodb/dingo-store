@@ -245,12 +245,11 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
         index_parameter_(index_parameter),
         is_hold_vector_index_(false),
         pending_task_num_(0),
+        loadorbuilding_num_(0),
+        rebuilding_num_(0),
         save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
-    worker_ = Worker::New();
     snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
     bthread_mutex_init(&vector_index_mutex_, nullptr);
-    is_loadorbuilding_.store(false);
-    is_rebuilding_.store(false);
   }
   ~VectorIndexWrapper();
 
@@ -273,12 +272,6 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsReady() { return ready_.load(); }
   bool IsStop() { return stop_.load(); }
   bool IsOwnReady() { return GetOwnVectorIndex() != nullptr; }
-
-  bool IsLoadorbuilding() { return is_loadorbuilding_.load(); }
-  void SetLoadoruilding(bool is_building) { return is_loadorbuilding_.store(is_building); }
-
-  bool IsRebuilding() { return is_rebuilding_.load(); }
-  void SetIsRebuilding(bool is_building) { return is_rebuilding_.store(is_building); }
 
   bool IsBuildError() { return build_error_.load(); }
 
@@ -342,6 +335,14 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   void IncPendingTaskNum();
   void DecPendingTaskNum();
 
+  uint32_t LoadorbuildingNum();
+  void IncLoadoruildingNum();
+  void DecLoadoruildingNum();
+
+  bool RebuildingNum();
+  void IncRebuildingNum();
+  void DecRebuildingNum();
+
   int32_t GetDimension();
   butil::Status GetCount(int64_t& count);
   butil::Status GetDeletedCount(int64_t& deleted_count);
@@ -368,10 +369,6 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   int64_t version_{0};
   // vector index is ready
   std::atomic<bool> ready_;
-  // vector is loadorbuilding
-  std::atomic<bool> is_loadorbuilding_;
-  // vector is rebuilding
-  std::atomic<bool> is_rebuilding_;
   // stop vector index
   std::atomic<bool> stop_;
   // vector index build status
@@ -405,9 +402,11 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // Snapshot set
   vector_index::SnapshotMetaSetPtr snapshot_set_;
 
-  // Run long time task, e.g. rebuild
-  WorkerPtr worker_;
   std::atomic<int> pending_task_num_;
+  // vector index loadorbuilding num
+  std::atomic<uint32_t> loadorbuilding_num_;
+  // vector index rebuilding num
+  std::atomic<uint32_t> rebuilding_num_;
 
   // write(add/update/delete) key count
   int64_t write_key_count_{0};

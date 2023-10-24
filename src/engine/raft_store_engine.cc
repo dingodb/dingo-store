@@ -289,6 +289,15 @@ butil::Status RaftStoreEngine::DestroyNode(std::shared_ptr<Context> /*ctx*/, int
 
 std::shared_ptr<RaftNode> RaftStoreEngine::GetNode(int64_t region_id) { return raft_node_manager_->GetNode(region_id); }
 
+bool RaftStoreEngine::IsLeader(int64_t region_id) {
+  auto node = GetNode(region_id);
+  if (node == nullptr) {
+    return false;
+  }
+
+  return node->IsLeader();
+}
+
 butil::Status RaftStoreEngine::DoSnapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {

@@ -534,15 +534,13 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     if (vector_index != nullptr) {
       to_region->VectorIndexWrapper()->SetShareVectorIndex(vector_index);
     } else {
-      DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed",
+      DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed.",
                                         from_region->Id(), to_region->Id());
     }
 
     // build vector index
     VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), true);
     VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), true);
-
-    from_region->VectorIndexWrapper()->SetIsHoldVectorIndex(false);
   }
 
   // update StoreRegionState to NORMAL

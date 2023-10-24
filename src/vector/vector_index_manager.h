@@ -79,15 +79,13 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
 // Manage vector index, e.g. build/rebuild/save/load vector index.
 class VectorIndexManager {
  public:
-  VectorIndexManager(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MetaReader> meta_reader,
-                     std::shared_ptr<MetaWriter> meta_writer) {}
-
+  VectorIndexManager() = default;
   ~VectorIndexManager() = default;
 
-  static bool Init(std::vector<store::RegionPtr> regions);
+  bool Init();
+  void Destroy();
 
-  // Check whether should hold vector index.
-  static bool NeedHoldVectorIndex(int64_t region_id);
+  static std::shared_ptr<VectorIndexManager> New() { return std::make_shared<VectorIndexManager>(); }
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
@@ -123,6 +121,8 @@ class VectorIndexManager {
   static void IncVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_add(1); }
   static void DecVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_sub(1); }
 
+  bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
+
  private:
   // Build vector index with original data(rocksdb).
   // Invoke when server starting.
@@ -137,7 +137,12 @@ class VectorIndexManager {
 
   static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, std::shared_ptr<Iterator> iter,
                                      const std::string &start_key, [[maybe_unused]] const std::string &end_key);
+
+  // Execute all vector index load/build/rebuild/save task.
+  WorkerSetPtr workers_;
 };
+
+using VectorIndexManagerPtr = std::shared_ptr<VectorIndexManager>;
 
 }  // namespace dingodb
 
