@@ -106,21 +106,20 @@ public class ProtoPartitionRule implements Partition {
     ) {
         Meta.PartitionRule.Builder builder = Meta.PartitionRule.newBuilder();
 
-        builder.setStrategy(getStrategy(Parameters.cleanNull(strategy, "RANGE")));
+        Meta.PartitionStrategy partitionStrategy = getStrategy(Parameters.cleanNull(strategy, "RANGE"));
+        builder.setStrategy(partitionStrategy);
         builder.addAllColumns(cols);
 
         details = Optional.ofNullable(details)
             .filter(Objects::nonNull)
             .filterNot(List::isEmpty)
-            .ifAbsentSet(() -> Collections.singletonList(ProtoPartitionDetail.EMPTY))
+            .ifAbsentSet(Collections::emptyList)
             .get();
 
         int idIndex = 0;
-        if (details.stream().map(PartitionDetail::getOperand).noneMatch(__ -> __.length == 0)) {
-            builder.addPartitions(ProtoPartitionDetail.build(
-                SDKCommonId.from(ids.get(idIndex++)), ProtoPartitionDetail.EMPTY, codec).getDelegate()
-            );
-        }
+        builder.addPartitions(ProtoPartitionDetail.build(
+            SDKCommonId.from(ids.get(idIndex++)), ProtoPartitionDetail.EMPTY, codec).getDelegate()
+        );
 
         for (PartitionDetail detail : details) {
             builder.addPartitions(
