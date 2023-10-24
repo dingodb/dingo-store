@@ -46,6 +46,8 @@ DECLARE_uint32(part_count);
 DECLARE_uint32(ncentroids);
 DECLARE_string(metrics_type);
 DECLARE_int64(def_version);
+DECLARE_int32(nsubvector);
+DECLARE_int32(nbits_per_idx);
 
 DECLARE_int64(tso_save_physical);
 DECLARE_int64(tso_new_physical);
@@ -742,6 +744,8 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
   } else if (FLAGS_vector_index_type == "ivf_flat") {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
+  } else if (FLAGS_vector_index_type == "ivf_pq") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
   } else {
     DINGO_LOG(WARNING) << "vector_index_type is invalid, now only support hnsw and flat";
     return;
@@ -797,6 +801,13 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     ivf_flat_index_parameter->set_dimension(FLAGS_dimension);
     ivf_flat_index_parameter->set_metric_type(metric_type);
     ivf_flat_index_parameter->set_ncentroids(FLAGS_ncentroids);
+  } else if (FLAGS_vector_index_type == "ivf_pq") {
+    auto* ivf_pq_index_parameter = vector_index_parameter->mutable_ivf_pq_parameter();
+    ivf_pq_index_parameter->set_dimension(FLAGS_dimension);
+    ivf_pq_index_parameter->set_metric_type(metric_type);
+    ivf_pq_index_parameter->set_ncentroids(FLAGS_ncentroids);
+    ivf_pq_index_parameter->set_nsubvector(FLAGS_nsubvector);
+    ivf_pq_index_parameter->set_nbits_per_idx(FLAGS_nbits_per_idx);
   }
 
   index_definition->set_version(1);

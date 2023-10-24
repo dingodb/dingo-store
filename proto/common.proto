@@ -418,6 +418,9 @@ message CreateIvfPqParam {
 
   // Inverted list (IVF) bucket maximum capacity default 1280000 optional
   int32 bucket_max_size = 6;
+
+  // bit number of sub cluster center. default 8 required.  means 256.
+  int32 nbits_per_idx = 7;
 }
 
 message CreateHnswParam {

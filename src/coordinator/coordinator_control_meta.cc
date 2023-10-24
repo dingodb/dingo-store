@@ -932,7 +932,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       // check ivf_flat_parameter.ncentroids
       // The number of centroids (clusters) used in the product quantization. This parameter affects the memory usage
       // of the index and the accuracy of the search. This parameter must be greater than 0.
-      if (ivf_flat_parameter.ncentroids() <= 0) {
+      if (ivf_flat_parameter.ncentroids() < 0) {
         DINGO_LOG(ERROR) << "ivf_flat_parameter.ncentroids is illegal " << ivf_flat_parameter.ncentroids();
         return butil::Status(
             pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -971,7 +971,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       // check ivf_pq_parameter.nlist
       // The number of inverted lists (buckets) used in the index. This parameter affects the memory usage of the
       // index and the accuracy of the search. This parameter must be greater than 0.
-      if (ivf_pq_parameter.ncentroids() <= 0) {
+      if (ivf_pq_parameter.ncentroids() < 0) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.ncentroids is illegal " << ivf_pq_parameter.ncentroids();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "ivf_pq_parameter.ncentroids is illegal " + std::to_string(ivf_pq_parameter.ncentroids()));
@@ -980,7 +980,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       // check ivf_pq_parameter.nsubvector
       // The number of subvectors used in the product quantization. This parameter affects the memory usage of the
       // index and the accuracy of the search. This parameter must be greater than 0.
-      if (ivf_pq_parameter.nsubvector() <= 0) {
+      if (ivf_pq_parameter.nsubvector() < 0) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.nsubvector is illegal " << ivf_pq_parameter.nsubvector();
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                              "ivf_pq_parameter.nsubvector is illegal " + std::to_string(ivf_pq_parameter.nsubvector()));
@@ -989,7 +989,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       // check ivf_pq_parameter.bucket_init_size
       // The number of bits used to represent each subvector in the index. This parameter affects the memory usage of
       // the index and the accuracy of the search. This parameter must be greater than 0.
-      if (ivf_pq_parameter.bucket_init_size() <= 0) {
+      if (ivf_pq_parameter.bucket_init_size() < 0) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.bucket_init_size is illegal " << ivf_pq_parameter.bucket_init_size();
         return butil::Status(
             pb::error::Errno::EILLEGAL_PARAMTETERS,
@@ -999,7 +999,7 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       // check ivf_pq_parameter.bucket_max_size
       // The maximum number of vectors that can be added to each inverted list (bucket) in the index. This parameter
       // affects the memory usage of the index and the accuracy of the search. This parameter must be greater than 0.
-      if (ivf_pq_parameter.bucket_max_size() <= 0) {
+      if (ivf_pq_parameter.bucket_max_size() < 0) {
         DINGO_LOG(ERROR) << "ivf_pq_parameter.bucket_max_size is illegal " << ivf_pq_parameter.bucket_max_size();
         return butil::Status(
             pb::error::Errno::EILLEGAL_PARAMTETERS,

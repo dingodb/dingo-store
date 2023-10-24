@@ -78,6 +78,7 @@ class VectorIndexHnsw : public VectorIndex {
     return butil::Status::OK();
   }
   bool NeedToRebuild() override;
+  bool NeedToSave(int64_t last_save_log_behind) override;
   bool SupportSave() override;
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();

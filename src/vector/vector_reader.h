@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "butil/status.h"
 #include "engine/engine.h"
@@ -129,6 +130,11 @@ class VectorReader {
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
       int64_t& search_time_us);  // NOLINT
+
+  static butil::Status SetVectorIndexFilter(
+      VectorIndexWrapperPtr vector_index,
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
+      const std::vector<int64_t>& vector_ids);
 
   RawEngine::ReaderPtr reader_;
 };

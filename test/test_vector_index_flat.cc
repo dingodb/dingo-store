@@ -36,7 +36,7 @@
 
 namespace dingodb {
 
-class VectorIndexMemoryTest : public testing::Test {
+class VectorIndexFlatTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
@@ -52,7 +52,7 @@ class VectorIndexMemoryTest : public testing::Test {
   inline static std::vector<float> data_base;
 };
 
-TEST_F(VectorIndexMemoryTest, Create) {
+TEST_F(VectorIndexFlatTest, Create) {
   static const pb::common::Range kRange;
   // invalid param
   {
@@ -133,8 +133,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
   }
 }
 
-
-TEST_F(VectorIndexMemoryTest, DeleteNoData) {
+TEST_F(VectorIndexFlatTest, DeleteNoData) {
   butil::Status ok;
 
   // id not found
@@ -172,7 +171,21 @@ TEST_F(VectorIndexMemoryTest, DeleteNoData) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, Add) {
+TEST_F(VectorIndexFlatTest, NeedToSave) {
+  int64_t last_save_log_behind = 0;
+  bool ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+
+  last_save_log_behind = 1000;
+  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+
+  last_save_log_behind = 10000000;
+  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+}
+
+TEST_F(VectorIndexFlatTest, Add) {
   butil::Status ok;
 
   // create random data
@@ -256,7 +269,21 @@ TEST_F(VectorIndexMemoryTest, Add) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, Delete) {
+TEST_F(VectorIndexFlatTest, NeedToSaveAfterAdd) {
+  int64_t last_save_log_behind = 0;
+  bool ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+
+  last_save_log_behind = 1000;
+  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+
+  last_save_log_behind = 10000000;
+  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  EXPECT_TRUE(ok);
+}
+
+TEST_F(VectorIndexFlatTest, Delete) {
   butil::Status ok;
 
   // id not found
@@ -294,7 +321,7 @@ TEST_F(VectorIndexMemoryTest, Delete) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, Upsert) {
+TEST_F(VectorIndexFlatTest, Upsert) {
   butil::Status ok;
 
   // create random data
@@ -423,7 +450,7 @@ TEST_F(VectorIndexMemoryTest, Upsert) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, Search) {
+TEST_F(VectorIndexFlatTest, Search) {
   butil::Status ok;
 
   // invalid param failed, topk == 0, return OK
@@ -484,7 +511,7 @@ TEST_F(VectorIndexMemoryTest, Search) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, CreateCosine) {
+TEST_F(VectorIndexFlatTest, CreateCosine) {
   static const pb::common::Range kRange;
   // valid param COSINE
   {
@@ -498,7 +525,7 @@ TEST_F(VectorIndexMemoryTest, CreateCosine) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, AddCosine) {
+TEST_F(VectorIndexFlatTest, AddCosine) {
   butil::Status ok;
 
   // create random data
@@ -582,7 +609,7 @@ TEST_F(VectorIndexMemoryTest, AddCosine) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, DeleteCosine) {
+TEST_F(VectorIndexFlatTest, DeleteCosine) {
   butil::Status ok;
 
   // id not found
@@ -620,7 +647,7 @@ TEST_F(VectorIndexMemoryTest, DeleteCosine) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, UpsertCosine) {
+TEST_F(VectorIndexFlatTest, UpsertCosine) {
   butil::Status ok;
 
   // create random data
@@ -749,7 +776,7 @@ TEST_F(VectorIndexMemoryTest, UpsertCosine) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, SearchCosine) {
+TEST_F(VectorIndexFlatTest, SearchCosine) {
   butil::Status ok;
 
   // invalid param failed, topk == 0, return OK
@@ -806,6 +833,117 @@ TEST_F(VectorIndexMemoryTest, SearchCosine) {
       ids.push_back(i);
     }
     vector_index_flat->Delete(ids);
+  }
+}
+
+TEST_F(VectorIndexFlatTest, Save) {
+  butil::Status ok;
+
+  ok = vector_index_flat->Save("");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+  ok = vector_index_flat->Save("/var/flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+
+  ok = vector_index_flat->Save("./flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+}
+
+TEST_F(VectorIndexFlatTest, Load) {
+  butil::Status ok;
+
+  ok = vector_index_flat->Load("");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+  ok = vector_index_flat->Load("/var/ivf_flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+
+  ok = vector_index_flat->Load("./flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+}
+
+TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
+  butil::Status ok;
+
+  // ok
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = 3;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto& result : results) {
+      DINGO_LOG(INFO) << "results:" << result.DebugString();
+      DINGO_LOG(INFO) << "";
+    }
+  }
+
+  // ok with param
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = 3;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    std::vector<int64_t> vector_ids;
+    for (int64_t i = 0; i < data_base_size; i++) {
+      vector_ids.emplace_back(i);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(vector_ids.begin(), vector_ids.end(), g);
+
+    std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
+    std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
+
+    std::shared_ptr<VectorIndex::IvfFlatListFilterFunctor> filter =
+        std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_select_ids));
+    const bool reconstruct = false;
+    pb::common::VectorSearchParameter parameter;
+    parameter.mutable_ivf_flat()->set_nprobe(10);
+    ok = vector_index_flat->Search(vector_with_ids, topk, {filter}, results, false, parameter);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto& result : results) {
+      DINGO_LOG(INFO) << "L2:" << result.DebugString();
+      DINGO_LOG(INFO) << "";
+    }
+
+    bool is_all_in_vector = true;
+    for (const auto& result : results) {
+      for (const auto& distance : result.vector_with_distances()) {
+        auto id = distance.vector_with_id().id();
+        auto iter = std::find(vector_select_ids_clone.begin(), vector_select_ids_clone.end(), id);
+        if (iter == vector_select_ids_clone.end()) {
+          DINGO_LOG(INFO) << "L2 : Not Find id : " << id;
+          is_all_in_vector = false;
+        }
+      }
+    }
+    if (is_all_in_vector) {
+      DINGO_LOG(INFO) << "L2 : All Id in  vectors ";
+    }
   }
 }
 

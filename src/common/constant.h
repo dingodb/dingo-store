@@ -161,6 +161,13 @@ class Constant {
   static constexpr int32_t kCreateIvfFlatParamNcentroids = 2048;
   static constexpr int32_t kSearchIvfFlatParamNprobe = 80;
 
+  static constexpr int32_t kCreateIvfPqParamNcentroids = 2048;
+  static constexpr int32_t kCreateIvfPqParamNsubvector = 64;
+  static constexpr int32_t kCreateIvfPqParamNbitsPerIdx = 8;
+  static constexpr int32_t kCreateIvfPqParamNbitsPerIdxMaxWarning = 16;
+
+   static constexpr int32_t kSearchIvfPqParamNprobe = 80;
+
   // split region
   static constexpr int kSplitDoSnapshotRetryTimes = 5;
   inline static const std::string kSplitStrategy = "PRE_CREATE_REGION";

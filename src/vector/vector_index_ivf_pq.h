@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_VECTOR_INDEX_FLAT_H_  // NOLINT
-#define DINGODB_VECTOR_INDEX_FLAT_H_
+#ifndef DINGODB_VECTOR_INDEX_IVF_PQ_H_  // NOLINT
+#define DINGODB_VECTOR_INDEX_IVF_PQ_H_
 
 #include <array>
 #include <atomic>
@@ -22,6 +22,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "bthread/mutex.h"
@@ -30,6 +32,7 @@
 #include "faiss/Index.h"
 #include "faiss/IndexFlat.h"
 #include "faiss/IndexIDMap.h"
+#include "faiss/IndexIVFFlat.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
 #include "faiss/utils/distances.h"
@@ -37,45 +40,26 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_flat.h"
+#include "vector/vector_index_raw_ivf_pq.h"
 
 namespace dingodb {
 
-// Filter vector id
-class FlatIDSelector : public faiss::IDSelector {
+class VectorIndexIvfPq : public VectorIndex {
  public:
-  FlatIDSelector(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
-  ~FlatIDSelector() override = default;
-  bool is_member(faiss::idx_t id) const override {  // NOLINT
-    if (filters_.empty()) {
-      return true;
-    }
-    for (const auto& filter : filters_) {
-      if (!filter->Check(id)) {
-        return false;
-      }
-    }
+  explicit VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                            const pb::common::Range& ranges);
 
-    return true;
-  }
+  ~VectorIndexIvfPq() override;
 
- private:
-  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
-};
-
-class VectorIndexFlat : public VectorIndex {
- public:
-  explicit VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                           const pb::common::Range& ranges);
-
-  ~VectorIndexFlat() override;
-
-  VectorIndexFlat(const VectorIndexFlat& rhs) = delete;
-  VectorIndexFlat& operator=(const VectorIndexFlat& rhs) = delete;
-  VectorIndexFlat(VectorIndexFlat&& rhs) = delete;
-  VectorIndexFlat& operator=(VectorIndexFlat&& rhs) = delete;
+  VectorIndexIvfPq(const VectorIndexIvfPq& rhs) = delete;
+  VectorIndexIvfPq& operator=(const VectorIndexIvfPq& rhs) = delete;
+  VectorIndexIvfPq(VectorIndexIvfPq&& rhs) = delete;
+  VectorIndexIvfPq& operator=(VectorIndexIvfPq&& rhs) = delete;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
+  bool SupportSave() override;
 
   // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
@@ -94,43 +78,60 @@ class VectorIndexFlat : public VectorIndex {
 
   void LockWrite() override;
   void UnlockWrite() override;
-  bool SupportSave() override;
 
   int32_t GetDimension() override;
   butil::Status GetCount([[maybe_unused]] int64_t& count) override;
   butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
-  butil::Status Train([[maybe_unused]] const std::vector<float>& train_datas) override { return butil::Status::OK(); }
-  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override {
-    return butil::Status::OK();
-  }
 
-  bool NeedToRebuild() override { return false; }
-
+  butil::Status Train(const std::vector<float>& train_datas) override;
+  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override;
+  bool NeedToRebuild() override;
+  bool NeedTrain() override { return true; }
+  bool IsTrained() override;
   bool NeedToSave(int64_t last_save_log_behind) override;
 
+  pb::common::VectorIndexType VectorIndexSubType() override;
+
  private:
-  [[deprecated("faiss fix bug. never use.")]] void SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x,
-                                                                   faiss::idx_t k, faiss::Index::distance_t* distances,
-                                                                   faiss::idx_t* labels,
-                                                                   std::shared_ptr<FlatIDSelector> filters);
+  void Init();
+
+  bool DoIsTrained();
+
+  // train failed. reset
+  void Reset();
+
   // Dimension of the elements
   faiss::idx_t dimension_;
 
   // only support L2 and IP
   pb::common::MetricType metric_type_;
 
-  std::unique_ptr<faiss::Index> raw_index_;
-
-  std::unique_ptr<faiss::IndexIDMap2> index_id_map2_;
-
   bthread_mutex_t mutex_;
 
-  // normalize vector
-  bool normalize_;
+  size_t nlist_;
+
+  size_t nsubvector_;
+
+  int32_t nbits_per_idx_;
+
+  std::unique_ptr<VectorIndexFlat> index_flat_;
+
+  std::unique_ptr<VectorIndexRawIvfPq> index_raw_ivf_pq_;
+
+  enum class IndexTypeInIvfPq : char {
+    kUnknow = 0,
+    kFlat = 1,
+    kIvfPq = 2,
+  };
+  IndexTypeInIvfPq index_type_in_ivf_pq_;
+
+  template <typename FLAT_FUNC_PTR, typename PQ_FUNC_PTR, typename... Args>
+  butil::Status InvokeConcreteFunction(const char* name, FLAT_FUNC_PTR flat_func_ptr, PQ_FUNC_PTR pq_func_ptr,
+                                       Args&&... args);
 };
 
 }  // namespace dingodb
 
-#endif  // DINGODB_VECTOR_INDEX_FLAT_H_  // NOLINT
+#endif  // DINGODB_VECTOR_INDEX_IVF_PQ_H_  // NOLINT

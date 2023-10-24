@@ -33,18 +33,18 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_ivf_flat.h"
+#include "vector/vector_index_raw_ivf_pq.h"
 
 namespace dingodb {
 
-class VectorIndexIvfFlatTest : public testing::Test {
+class VectorIndexRawIvfPqTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
   static void TearDownTestSuite() {
-    vector_index_ivf_flat_l2.reset();
-    vector_index_ivf_flat_ip.reset();
-    vector_index_ivf_flat_consine.reset();
+    vector_index_raw_ivf_pq_l2.reset();
+    vector_index_raw_ivf_pq_ip.reset();
+    vector_index_raw_ivf_pq_consine.reset();
   }
 
   static void ReCreate() {
@@ -53,35 +53,41 @@ class VectorIndexIvfFlatTest : public testing::Test {
     {
       int64_t id = 1;
       pb::common::VectorIndexParameter index_parameter;
-      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-      index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-      index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
+      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+      index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+      index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-      index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+      index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
+      index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
+      index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
+      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
     }
 
     // valid param L2
     {
       int64_t id = 1;
       pb::common::VectorIndexParameter index_parameter;
-      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-      index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-      index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-      index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+      index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+      index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+      index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
+      index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
+      index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
+      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
     }
 
     // valid param cosine
     {
       int64_t id = 1;
       pb::common::VectorIndexParameter index_parameter;
-      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-      index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-      index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
+      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+      index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+      index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-      index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_consine = VectorIndexFactory::New(id, index_parameter, kRange);
+      index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
+      index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
+      index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
+      vector_index_raw_ivf_pq_consine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
     }
   }
 
@@ -89,27 +95,30 @@ class VectorIndexIvfFlatTest : public testing::Test {
 
   void TearDown() override {}
 
-  inline static std::shared_ptr<VectorIndex> vector_index_ivf_flat_l2;
-  inline static std::shared_ptr<VectorIndex> vector_index_ivf_flat_ip;
-  inline static std::shared_ptr<VectorIndex> vector_index_ivf_flat_consine;
-  inline static faiss::idx_t dimension = 8;
-  inline static int data_base_size = 100;
-  inline static int32_t ncentroids = 10;
+  inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_l2;
+  inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_ip;
+  inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_consine;
+  inline static faiss::idx_t dimension = 64;
+  // inline static int data_base_size = 100000;
+  inline static int data_base_size = 1000;
+  inline static int32_t ncentroids = 100;
+  inline static size_t nsubvector = 8;
+  inline static int32_t nbits_per_idx = 8;
   inline static std::vector<float> data_base;
   inline static int32_t start_id = 1000;
-  inline static std::string path_l2 = "./l2_ivf_flat";
-  inline static std::string path_ip = "./ip_ivf_flat";
-  inline static std::string path_consine = "./consine_ivf_flat";
+  inline static std::string path_l2 = "./l2_raw_ivf_pq";
+  inline static std::string path_ip = "./ip_raw_ivf_pq";
+  inline static std::string path_consine = "./consine_raw_ivf_pq";
 };
 
-TEST_F(VectorIndexIvfFlatTest, Create) {
+TEST_F(VectorIndexRawIvfPqTest, Create) {
   static const pb::common::Range kRange;
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
   // invalid param
@@ -117,103 +126,157 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(64);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
-    index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
-  }
-
-  // invalid param IP
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(64);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
   // valid param L2  ncentroids = 0
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
+  // invalid param IP
+  {
+    int64_t id = 1;
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(-1);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
+  }
+
+  // invalid param IP
+  {
+    int64_t id = 1;
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
+
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
+    index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(3);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
+  }
+
+  // invalid param IP
+  {
+    int64_t id = 1;
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
+
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
+    index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(1);
+    index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(-1);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
+  }
+
+  // invalid param IP
+  {
+    int64_t id = 1;
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
+
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
+    index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(3);
+    index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(1);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////
   // valid param IP
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_ivf_flat_ip.get(), nullptr);
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
+    index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
+    index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
+    vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_raw_ivf_pq_ip.get(), nullptr);
   }
 
   // valid param L2
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
+    index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
+    index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
+    vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
   // valid param cosine
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
-        ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-    index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_consine = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_ivf_flat_consine.get(), nullptr);
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
+    index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
+    index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
+    index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
+    vector_index_raw_ivf_pq_consine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_raw_ivf_pq_consine.get(), nullptr);
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
+TEST_F(VectorIndexRawIvfPqTest, DeleteNoData) {
   butil::Status ok;
 
   // id not found
@@ -221,9 +284,9 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
     int64_t id = 10000000;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 
   // id exist
@@ -231,9 +294,9 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
     int64_t id = 0;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 
   // id exist batch
@@ -242,9 +305,9 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 
   // id exist batch again
@@ -253,27 +316,27 @@ TEST_F(VectorIndexIvfFlatTest, DeleteNoData) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, NeedToSave) {
+TEST_F(VectorIndexRawIvfPqTest, NeedToSave) {
   int64_t last_save_log_behind = 0;
-  bool ok = vector_index_ivf_flat_l2->NeedToSave(last_save_log_behind);
+  bool ok = vector_index_raw_ivf_pq_l2->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 1000;
-  ok = vector_index_ivf_flat_l2->NeedToSave(last_save_log_behind);
+  ok = vector_index_raw_ivf_pq_l2->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 10000000;
-  ok = vector_index_ivf_flat_l2->NeedToSave(last_save_log_behind);
+  ok = vector_index_raw_ivf_pq_l2->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 }
 
-TEST_F(VectorIndexIvfFlatTest, TrainVectorWithId) {
+TEST_F(VectorIndexRawIvfPqTest, TrainVectorWithId) {
   butil::Status ok;
 
   // create random data
@@ -290,26 +353,28 @@ TEST_F(VectorIndexIvfFlatTest, TrainVectorWithId) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
-                << " [";
+      // std::cout << "[" << i << "]"
+      //           << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          // std::cout << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        // std::cout << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      // std::cout << "]" << '\n';
     }
   }
 
+  std::cout << "create random data complete!!!" << '\n';
+
   // invalid.  no data
   {
-    ok = vector_index_ivf_flat_l2->Train(std::vector<pb::common::VectorWithId>{});
+    ok = vector_index_raw_ivf_pq_l2->Train(std::vector<pb::common::VectorWithId>{});
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_ip->Train(std::vector<pb::common::VectorWithId>{});
+    ok = vector_index_raw_ivf_pq_ip->Train(std::vector<pb::common::VectorWithId>{});
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_consine->Train(std::vector<pb::common::VectorWithId>{});
+    ok = vector_index_raw_ivf_pq_consine->Train(std::vector<pb::common::VectorWithId>{});
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 
@@ -335,11 +400,11 @@ TEST_F(VectorIndexIvfFlatTest, TrainVectorWithId) {
         data_base_not_align.begin() + (data_base_size * static_cast<int>(dimension) - 1));
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Train(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Train(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_ip->Train(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Train(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_consine->Train(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Train(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 
@@ -358,18 +423,18 @@ TEST_F(VectorIndexIvfFlatTest, TrainVectorWithId) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_ivf_flat_l2->Train(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Train(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Train(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Train(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Train(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Train(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     ReCreate();
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, Train) {
+TEST_F(VectorIndexRawIvfPqTest, Train) {
   butil::Status ok;
 
   // create random data
@@ -386,26 +451,28 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
-                << " [";
+      // std::cout << "[" << i << "]"
+      //           << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          // std::cout << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        // std::cout << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      // std::cout << "]" << '\n';
     }
   }
 
+  std::cout << "create random data complete!!!" << '\n';
+
   // invalid.  no data
   {
-    ok = vector_index_ivf_flat_l2->Train(std::vector<float>{});
+    ok = vector_index_raw_ivf_pq_l2->Train(std::vector<float>{});
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_ip->Train(std::vector<float>{});
+    ok = vector_index_raw_ivf_pq_ip->Train(std::vector<float>{});
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_consine->Train(std::vector<float>{});
+    ok = vector_index_raw_ivf_pq_consine->Train(std::vector<float>{});
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 
@@ -413,11 +480,11 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
   {
     std::vector<float> data_base_not_align = data_base;
     data_base_not_align.resize(data_base.size() - 1);
-    ok = vector_index_ivf_flat_l2->Train(data_base_not_align);
+    ok = vector_index_raw_ivf_pq_l2->Train(data_base_not_align);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_ip->Train(data_base_not_align);
+    ok = vector_index_raw_ivf_pq_ip->Train(data_base_not_align);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_consine->Train(data_base_not_align);
+    ok = vector_index_raw_ivf_pq_consine->Train(data_base_not_align);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 
@@ -425,23 +492,23 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
   {
     std::vector<float> data_base_too_small = data_base;
     data_base_too_small.resize((ncentroids - 1) * dimension);
-    ok = vector_index_ivf_flat_l2->Train(data_base_too_small);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Train(data_base_too_small);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Train(data_base_too_small);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_raw_ivf_pq_l2->Train(data_base_too_small);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    ok = vector_index_raw_ivf_pq_ip->Train(data_base_too_small);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    ok = vector_index_raw_ivf_pq_consine->Train(data_base_too_small);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
     ReCreate();
   }
 
   // valid. but warning. ok
   {
-    ok = vector_index_ivf_flat_l2->Train(data_base);
+    ok = vector_index_raw_ivf_pq_l2->Train(data_base);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Train(data_base);
+    ok = vector_index_raw_ivf_pq_ip->Train(data_base);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Train(data_base);
+    ok = vector_index_raw_ivf_pq_consine->Train(data_base);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     ReCreate();
   }
@@ -450,11 +517,11 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
   {
     std::vector<float> data_base_warning = data_base;
     data_base_warning.resize(38 * (ncentroids)*dimension);
-    ok = vector_index_ivf_flat_l2->Train(data_base_warning);
+    ok = vector_index_raw_ivf_pq_l2->Train(data_base_warning);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Train(data_base_warning);
+    ok = vector_index_raw_ivf_pq_ip->Train(data_base_warning);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Train(data_base_warning);
+    ok = vector_index_raw_ivf_pq_consine->Train(data_base_warning);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     ReCreate();
   }
@@ -463,28 +530,28 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
   {
     std::vector<float> data_base_warning = data_base;
     data_base_warning.resize(255 * (ncentroids)*dimension);
-    ok = vector_index_ivf_flat_l2->Train(data_base_warning);
+    ok = vector_index_raw_ivf_pq_l2->Train(data_base_warning);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Train(data_base_warning);
+    ok = vector_index_raw_ivf_pq_ip->Train(data_base_warning);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Train(data_base_warning);
+    ok = vector_index_raw_ivf_pq_consine->Train(data_base_warning);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     // ReCreate();
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, Add) {
+TEST_F(VectorIndexRawIvfPqTest, Add) {
   butil::Status ok;
   auto internal_start_id = start_id;
 
   // empty OK
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
-    ok = vector_index_ivf_flat_l2->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
@@ -495,11 +562,11 @@ TEST_F(VectorIndexIvfFlatTest, Add) {
 
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_ivf_flat_ip->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_ivf_flat_consine->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
@@ -515,11 +582,11 @@ TEST_F(VectorIndexIvfFlatTest, Add) {
 
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -538,16 +605,16 @@ TEST_F(VectorIndexIvfFlatTest, Add) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_ivf_flat_l2->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, Delete) {
+TEST_F(VectorIndexRawIvfPqTest, Delete) {
   butil::Status ok;
 
   // id not found
@@ -555,9 +622,9 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
     int64_t id = 10000000;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 
   // id exist
@@ -565,9 +632,9 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
     int64_t id = start_id;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 
   // id exist batch
@@ -576,9 +643,9 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(start_id + i);
     }
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 
   // id exist batch again
@@ -587,13 +654,13 @@ TEST_F(VectorIndexIvfFlatTest, Delete) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(start_id + i);
     }
-    vector_index_ivf_flat_l2->Delete(ids);
-    vector_index_ivf_flat_ip->Delete(ids);
-    vector_index_ivf_flat_consine->Delete(ids);
+    vector_index_raw_ivf_pq_l2->Delete(ids);
+    vector_index_raw_ivf_pq_ip->Delete(ids);
+    vector_index_raw_ivf_pq_consine->Delete(ids);
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, Upsert) {
+TEST_F(VectorIndexRawIvfPqTest, Upsert) {
   butil::Status ok;
 
   // add all data
@@ -611,22 +678,22 @@ TEST_F(VectorIndexIvfFlatTest, Upsert) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_ivf_flat_l2->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Add(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // empty OK
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
-    ok = vector_index_ivf_flat_l2->Upsert(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Upsert(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Upsert(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
@@ -645,16 +712,16 @@ TEST_F(VectorIndexIvfFlatTest, Upsert) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_ivf_flat_l2->Upsert(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_l2->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_ip->Upsert(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_ip->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-    ok = vector_index_ivf_flat_consine->Upsert(vector_with_ids);
+    ok = vector_index_raw_ivf_pq_consine->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 }
 
-TEST_F(VectorIndexIvfFlatTest, Search) {
+TEST_F(VectorIndexRawIvfPqTest, Search) {
   butil::Status ok;
 
   // invalid param failed, topk == 0, return OK
@@ -664,11 +731,11 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -687,11 +754,11 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_consine->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -708,14 +775,14 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     uint32_t topk = 3;
     std::vector<pb::index::VectorWithDistanceResult> results_l2;
     std::vector<pb::index::VectorWithDistanceResult> results_ip;
-    std::vector<pb::index::VectorWithDistanceResult> results_constine;
+    std::vector<pb::index::VectorWithDistanceResult> results_consine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Search(vector_with_ids, topk, {}, results_constine);
+    ok = vector_index_raw_ivf_pq_consine->Search(vector_with_ids, topk, {}, results_consine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -728,7 +795,7 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
       DINGO_LOG(INFO) << "";
     }
 
-    for (const auto& result : results_constine) {
+    for (const auto& result : results_consine) {
       DINGO_LOG(INFO) << "COSINE:" << result.DebugString();
       DINGO_LOG(INFO) << "";
     }
@@ -747,7 +814,7 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     uint32_t topk = 3;
     std::vector<pb::index::VectorWithDistanceResult> results_l2;
     std::vector<pb::index::VectorWithDistanceResult> results_ip;
-    std::vector<pb::index::VectorWithDistanceResult> results_constine;
+    std::vector<pb::index::VectorWithDistanceResult> results_consine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
@@ -763,18 +830,18 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfFlatListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
+        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
-    parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    parameter.mutable_ivf_pq()->set_nprobe(10);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_consine->Search(vector_with_ids, topk, {filter}, results_constine, false, parameter);
+    ok = vector_index_raw_ivf_pq_consine->Search(vector_with_ids, topk, {filter}, results_consine, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -817,13 +884,13 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
       DINGO_LOG(INFO) << "IP : All Id in vectors ";
     }
 
-    for (const auto& result : results_constine) {
+    for (const auto& result : results_consine) {
       DINGO_LOG(INFO) << "COSINE:" << result.DebugString();
       DINGO_LOG(INFO) << "";
     }
 
     is_all_in_vector = true;
-    for (const auto& result : results_constine) {
+    for (const auto& result : results_consine) {
       for (const auto& distance : result.vector_with_distances()) {
         auto id = distance.vector_with_id().id();
         auto iter = std::find(vector_select_ids_clone.begin(), vector_select_ids_clone.end(), id);
@@ -837,90 +904,99 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
       DINGO_LOG(INFO) << "COSINE : All Id in vectors ";
     }
   }
-
-  // // id exist batch
-  // {
-  //   std::vector<int64_t> ids;
-  //   for (size_t i = 0; i < data_base_size; i++) {
-  //     ids.push_back(i + start_id);
-  //   }
-  //   vector_index_ivf_flat_l2->Delete(ids);
-  //   vector_index_ivf_flat_ip->Delete(ids);
-  //   vector_index_ivf_flat_consine->Delete(ids);
-  // }
 }
 
-TEST_F(VectorIndexIvfFlatTest, NeedToSaveAfterAdd) {
+TEST_F(VectorIndexRawIvfPqTest, NeedToSaveAfterAdd) {
   int64_t last_save_log_behind = 0;
-  bool ok = vector_index_ivf_flat_l2->NeedToSave(last_save_log_behind);
+  bool ok = vector_index_raw_ivf_pq_l2->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 1000;
-  ok = vector_index_ivf_flat_l2->NeedToSave(last_save_log_behind);
+  ok = vector_index_raw_ivf_pq_l2->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 10000000;
-  ok = vector_index_ivf_flat_l2->NeedToSave(last_save_log_behind);
+  ok = vector_index_raw_ivf_pq_l2->NeedToSave(last_save_log_behind);
   EXPECT_TRUE(ok);
 }
 
-TEST_F(VectorIndexIvfFlatTest, NeedToRebuild) {
-  bool b1 = vector_index_ivf_flat_l2->NeedToRebuild();
-  bool b2 = vector_index_ivf_flat_ip->NeedToRebuild();
-  bool b3 = vector_index_ivf_flat_consine->NeedToRebuild();
+TEST_F(VectorIndexRawIvfPqTest, NeedToRebuild) {
+  bool b1 = vector_index_raw_ivf_pq_l2->NeedToRebuild();
+  bool b2 = vector_index_raw_ivf_pq_ip->NeedToRebuild();
+  bool b3 = vector_index_raw_ivf_pq_consine->NeedToRebuild();
 }
 
-TEST_F(VectorIndexIvfFlatTest, NeedTrain) {
-  EXPECT_TRUE(vector_index_ivf_flat_l2->NeedTrain());
-  EXPECT_TRUE(vector_index_ivf_flat_ip->NeedTrain());
-  EXPECT_TRUE(vector_index_ivf_flat_consine->NeedTrain());
+TEST_F(VectorIndexRawIvfPqTest, NeedTrain) {
+  EXPECT_TRUE(vector_index_raw_ivf_pq_l2->NeedTrain());
+  EXPECT_TRUE(vector_index_raw_ivf_pq_ip->NeedTrain());
+  EXPECT_TRUE(vector_index_raw_ivf_pq_consine->NeedTrain());
 }
 
-TEST_F(VectorIndexIvfFlatTest, IsTrained) {
-  EXPECT_TRUE(vector_index_ivf_flat_l2->IsTrained());
-  EXPECT_TRUE(vector_index_ivf_flat_ip->IsTrained());
-  EXPECT_TRUE(vector_index_ivf_flat_consine->IsTrained());
+TEST_F(VectorIndexRawIvfPqTest, IsTrained) {
+  EXPECT_TRUE(vector_index_raw_ivf_pq_l2->IsTrained());
+  EXPECT_TRUE(vector_index_raw_ivf_pq_ip->IsTrained());
+  EXPECT_TRUE(vector_index_raw_ivf_pq_consine->IsTrained());
 }
 
-TEST_F(VectorIndexIvfFlatTest, Save) {
+TEST_F(VectorIndexRawIvfPqTest, GetCount) {
+  int64_t count = 0;
+  vector_index_raw_ivf_pq_l2->GetCount(count);
+  vector_index_raw_ivf_pq_ip->GetCount(count);
+  vector_index_raw_ivf_pq_consine->GetCount(count);
+}
+
+TEST_F(VectorIndexRawIvfPqTest, GetMemorySize) {
+  int64_t memory_size = 0;
+  vector_index_raw_ivf_pq_l2->GetMemorySize(memory_size);
+  vector_index_raw_ivf_pq_ip->GetMemorySize(memory_size);
+  vector_index_raw_ivf_pq_consine->GetMemorySize(memory_size);
+}
+
+TEST_F(VectorIndexRawIvfPqTest, Save) {
   butil::Status ok;
 
-  ok = vector_index_ivf_flat_l2->Save("");
+  ok = vector_index_raw_ivf_pq_l2->Save("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_ivf_flat_l2->Save("/var/ivf_flat");
+  ok = vector_index_raw_ivf_pq_l2->Save("/var/ivf_pq");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_ivf_flat_l2->Save(path_l2);
+  ok = vector_index_raw_ivf_pq_l2->Save(path_l2);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-  ok = vector_index_ivf_flat_ip->Save(path_ip);
+  ok = vector_index_raw_ivf_pq_ip->Save(path_ip);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-  ok = vector_index_ivf_flat_consine->Save(path_consine);
+  ok = vector_index_raw_ivf_pq_consine->Save(path_consine);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 }
 
-TEST_F(VectorIndexIvfFlatTest, Load) {
+TEST_F(VectorIndexRawIvfPqTest, Load) {
   butil::Status ok;
 
-  ok = vector_index_ivf_flat_l2->Load("");
+  ok = vector_index_raw_ivf_pq_l2->Load("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_ivf_flat_l2->Load("/var/ivf_flat");
+  ok = vector_index_raw_ivf_pq_l2->Load("/var/ivf_pq");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_ivf_flat_l2->Load(path_l2);
+  ok = vector_index_raw_ivf_pq_l2->Load(path_l2);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_raw_ivf_pq_l2->Load(path_ip);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_ivf_flat_ip->Load(path_ip);
+  ok = vector_index_raw_ivf_pq_ip->Load(path_ip);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_raw_ivf_pq_ip->Load(path_l2);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_ivf_flat_consine->Load(path_consine);
+  ok = vector_index_raw_ivf_pq_consine->Load(path_consine);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_raw_ivf_pq_consine->Load(path_l2);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 }
 
-TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
+TEST_F(VectorIndexRawIvfPqTest, SearchAfterLoad) {
   butil::Status ok;
 
   // invalid param failed, topk == 0, return OK
@@ -930,11 +1006,11 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -953,11 +1029,11 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_consine->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -974,14 +1050,14 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     uint32_t topk = 3;
     std::vector<pb::index::VectorWithDistanceResult> results_l2;
     std::vector<pb::index::VectorWithDistanceResult> results_ip;
-    std::vector<pb::index::VectorWithDistanceResult> results_constine;
+    std::vector<pb::index::VectorWithDistanceResult> results_consine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_consine->Search(vector_with_ids, topk, {}, results_constine);
+    ok = vector_index_raw_ivf_pq_consine->Search(vector_with_ids, topk, {}, results_consine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -994,7 +1070,7 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
       DINGO_LOG(INFO) << "";
     }
 
-    for (const auto& result : results_constine) {
+    for (const auto& result : results_consine) {
       DINGO_LOG(INFO) << "COSINE:" << result.DebugString();
       DINGO_LOG(INFO) << "";
     }
@@ -1013,7 +1089,7 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     uint32_t topk = 3;
     std::vector<pb::index::VectorWithDistanceResult> results_l2;
     std::vector<pb::index::VectorWithDistanceResult> results_ip;
-    std::vector<pb::index::VectorWithDistanceResult> results_constine;
+    std::vector<pb::index::VectorWithDistanceResult> results_consine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
@@ -1029,18 +1105,18 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfFlatListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
+        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
-    parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    parameter.mutable_ivf_pq()->set_nprobe(10);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_consine->Search(vector_with_ids, topk, {filter}, results_constine, false, parameter);
+    ok = vector_index_raw_ivf_pq_consine->Search(vector_with_ids, topk, {filter}, results_consine, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1083,13 +1159,13 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
       DINGO_LOG(INFO) << "IP : All Id in vectors ";
     }
 
-    for (const auto& result : results_constine) {
+    for (const auto& result : results_consine) {
       DINGO_LOG(INFO) << "COSINE:" << result.DebugString();
       DINGO_LOG(INFO) << "";
     }
 
     is_all_in_vector = true;
-    for (const auto& result : results_constine) {
+    for (const auto& result : results_consine) {
       for (const auto& distance : result.vector_with_distances()) {
         auto id = distance.vector_with_id().id();
         auto iter = std::find(vector_select_ids_clone.begin(), vector_select_ids_clone.end(), id);

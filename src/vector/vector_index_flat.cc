@@ -18,6 +18,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -31,6 +32,7 @@
 #include "common/logging.h"
 #include "faiss/Index.h"
 #include "faiss/MetricType.h"
+#include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "hnswlib/space_ip.h"
 #include "hnswlib/space_l2.h"
@@ -41,6 +43,7 @@
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
+DEFINE_uint64(flat_need_save_count, 10000, "flat need save count");
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::Range& range)
@@ -115,11 +118,6 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
 
   BAIDU_SCOPED_LOCK(mutex_);
 
-  if (is_upsert) {
-    faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
-    index_id_map2_->remove_ids(sel);
-  }
-
   std::unique_ptr<float[]> vectors;
   try {
     vectors.reset(new float[vector_with_ids.size() * dimension_]);
@@ -139,7 +137,13 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
     }
   }
 
-  index_id_map2_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+  std::thread([&]() {
+    if (is_upsert) {
+      faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+      index_id_map2_->remove_ids(sel);
+    }
+    index_id_map2_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+  }).join();
 
   return butil::Status::OK();
 }
@@ -176,7 +180,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
   size_t remove_count = 0;
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    remove_count = index_id_map2_->remove_ids(sel);
+    std::thread([&]() { remove_count = index_id_map2_->remove_ids(sel); }).join();
   }
 
   if (0 == remove_count) {
@@ -304,17 +308,168 @@ void VectorIndexFlat::LockWrite() { bthread_mutex_lock(&mutex_); }
 
 void VectorIndexFlat::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 
-butil::Status VectorIndexFlat::Save(const std::string& /*path*/) {
-  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support save");
+bool VectorIndexFlat::SupportSave() { return true; }
+
+butil::Status VectorIndexFlat::Save(const std::string& path) {
+  if (BAIDU_UNLIKELY(path.empty())) {
+    std::string s = fmt::format("path empty. not support");
+    // DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  // The outside has been locked. Remove the locking operation here.
+  // BAIDU_SCOPED_LOCK(mutex_);
+  std::promise<butil::Status> promise_status;
+  std::future<butil::Status> future_status = promise_status.get_future();
+  std::thread t(
+      [&](std::promise<butil::Status>& promise_status) {
+        try {
+          faiss::write_index(index_id_map2_.get(), path.c_str());
+          promise_status.set_value(butil::Status());
+        } catch (std::exception& e) {
+          std::string s =
+              fmt::format("VectorIndexFlat::Save faiss::write_index failed. path : {} error : {}", path, e.what());
+          // LOG(ERROR) << "["
+          //            << "lambda faiss::write_index"
+          //            << "] " << s;
+          promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
+        }
+      },
+      std::ref(promise_status));
+
+  butil::Status status = future_status.get();
+  t.join();
+
+  if (status.ok()) {
+    // DINGO_LOG(INFO) << fmt::format("VectorIndexFlat::Save success. path : {}", path);
+  }
+
+  return status;
 }
 
-butil::Status VectorIndexFlat::Load(const std::string& /*path*/) {
-  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "Flat index not support load");
+butil::Status VectorIndexFlat::Load(const std::string& path) {
+  if (BAIDU_UNLIKELY(path.empty())) {
+    std::string s = fmt::format("path empty. not support");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  // The outside has been locked. Remove the locking operation here.
+  // BAIDU_SCOPED_LOCK(mutex_);
+  std::promise<std::pair<faiss::Index*, butil::Status>> promise_status;
+  std::future<std::pair<faiss::Index*, butil::Status>> future_status = promise_status.get_future();
+  std::thread t(
+      [&](std::promise<std::pair<faiss::Index*, butil::Status>>& promise_status) {
+        faiss::Index* internal_raw_index = nullptr;
+        try {
+          faiss::Index* internal_raw_index = faiss::read_index(path.c_str(), 0);
+          promise_status.set_value(std::pair<faiss::Index*, butil::Status>(internal_raw_index, butil::Status()));
+        } catch (std::exception& e) {
+          std::string s =
+              fmt::format("VectorIndexFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
+          LOG(ERROR) << "["
+                     << "lambda faiss::read_index"
+                     << "] " << s;
+          promise_status.set_value(std::pair<faiss::Index*, butil::Status>(
+              internal_raw_index, butil::Status(pb::error::Errno::EINTERNAL, s)));
+        }
+      },
+      std::ref(promise_status));
+
+  auto [internal_raw_index, status] = future_status.get();
+  t.join();
+
+  if (!status.ok()) {
+    if (internal_raw_index) {
+      delete internal_raw_index;
+      internal_raw_index = nullptr;
+    }
+
+    return status;
+  }
+
+  faiss::IndexIDMap2* internal_index = dynamic_cast<faiss::IndexIDMap2*>(internal_raw_index);
+  if (BAIDU_UNLIKELY(!internal_index)) {
+    if (internal_raw_index) {
+      delete internal_raw_index;
+      internal_raw_index = nullptr;
+    }
+    std::string s =
+        fmt::format("VectorIndexFlat::Load faiss::read_index failed. Maybe not IndexIVFPq.  path : {} ", path);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  // avoid mem leak!!!
+  std::unique_ptr<faiss::IndexIDMap2> internal_index_id_map2(internal_index);
+
+  // double check
+  if (BAIDU_UNLIKELY(internal_index->d != dimension_)) {
+    std::string s = fmt::format("VectorIndexFlat::Load load dimension : {} !=  dimension_ : {}. path : {}",
+                                internal_index->d, dimension_, path);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  if (BAIDU_UNLIKELY(!internal_index->is_trained)) {
+    std::string s = fmt::format("VectorIndexFlat::Load load is not train. path : {}", path);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  switch (metric_type_) {
+    case pb::common::METRIC_TYPE_NONE:
+      [[fallthrough]];
+    case pb::common::METRIC_TYPE_L2: {
+      if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_L2)) {
+        std::string s =
+            fmt::format("VectorIndexFlat::Load load from path type : {} != local type : {}. path : {}",
+                        static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EINTERNAL, s);
+      }
+      break;
+    }
+
+    case pb::common::METRIC_TYPE_INNER_PRODUCT:
+    case pb::common::METRIC_TYPE_COSINE: {
+      if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_INNER_PRODUCT)) {
+        std::string s =
+            fmt::format("VectorIndexFlat::Load load from path type : {} != local type : {}. path : {}",
+                        static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EINTERNAL, s);
+      }
+      break;
+    }
+    case pb::common::MetricType_INT_MIN_SENTINEL_DO_NOT_USE_:
+      [[fallthrough]];
+    case pb::common::MetricType_INT_MAX_SENTINEL_DO_NOT_USE_:
+      [[fallthrough]];
+    default: {
+      std::string s = fmt::format("VectorIndexFlat::Load load from path type : {} != local type : {}. path : {}",
+                                  static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EINTERNAL, s);
+    }
+  }
+
+  raw_index_.reset();
+  index_id_map2_ = std::move(internal_index_id_map2);
+
+  if (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_) {
+    normalize_ = true;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("VectorIndexFlat::Load success. path : {}", path);
+
+  return butil::Status::OK();
 }
 
 int32_t VectorIndexFlat::GetDimension() { return this->dimension_; }
 
 butil::Status VectorIndexFlat::GetCount(int64_t& count) {
+  BAIDU_SCOPED_LOCK(mutex_);
   count = index_id_map2_->id_map.size();
   return butil::Status::OK();
 }
@@ -325,6 +480,7 @@ butil::Status VectorIndexFlat::GetDeletedCount(int64_t& deleted_count) {
 }
 
 butil::Status VectorIndexFlat::GetMemorySize(int64_t& memory_size) {
+  BAIDU_SCOPED_LOCK(mutex_);
   auto count = index_id_map2_->ntotal;
   if (count == 0) {
     memory_size = 0;
@@ -352,6 +508,24 @@ void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::compon
   for (faiss::idx_t i = 0; i < n * k; ++i) {
     li[i] = li[i] < 0 ? li[i] : index_id_map2_->id_map[li[i]];
   }
+}
+
+bool VectorIndexFlat::NeedToSave(int64_t last_save_log_behind) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  int64_t element_count = 0;
+
+  element_count = index_id_map2_->id_map.size();
+
+  if (element_count == 0) {
+    return false;
+  }
+
+  if (last_save_log_behind > FLAGS_flat_need_save_count) {
+    return true;
+  }
+
+  return false;
 }
 
 }  // namespace dingodb
