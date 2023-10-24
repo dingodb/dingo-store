@@ -725,6 +725,7 @@ butil::Status CoordinatorControl::DropTable(int64_t schema_id, int64_t table_id,
 
     auto* table_to_delete_table = table_to_delete->mutable_table();
     table_to_delete_table->set_id(table_id);
+    table_to_delete_table->set_schema_id(schema_id);
   }
 
   // add deleted_table
@@ -1550,6 +1551,7 @@ butil::Status CoordinatorControl::DropIndex(int64_t schema_id, int64_t index_id,
 
     auto* index_to_delete_index = index_to_delete->mutable_table();
     index_to_delete_index->set_id(index_id);
+    index_to_delete_index->set_schema_id(schema_id);
   }
 
   // addd deleted_index
@@ -1609,7 +1611,7 @@ butil::Status CoordinatorControl::GetTables(int64_t schema_id,
       pb::coordinator_internal::TableInternal table_internal;
       int ret = table_map_.Get(table_id, table_internal);
       if (ret < 0) {
-        DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+        DINGO_LOG(ERROR) << "ERRROR: table_id not found, id=" << table_id;
         continue;
       }
 
