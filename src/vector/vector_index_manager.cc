@@ -581,6 +581,9 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
       upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
       vectors.clear();
+
+      // yield, for other bthread run.
+      bthread_yield();
     }
 
     // Print build progress
