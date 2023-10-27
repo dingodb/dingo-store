@@ -183,12 +183,12 @@ butil::Status TxnEngineHelper::Rollback(const std::shared_ptr<RawEngine> &engine
   }
 
   // after all mutations is processed, write into raw engine
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
-  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
-  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
-  kv_deletes_with_cf.insert_or_assign(Constant::kTxnDataCfId, kv_deletes_data);
+  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCF, kv_puts_write);
+  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCF, kv_deletes_lock);
+  kv_deletes_with_cf.insert_or_assign(Constant::kTxnDataCF, kv_deletes_data);
 
   auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
@@ -255,11 +255,11 @@ butil::Status TxnEngineHelper::Commit(const std::shared_ptr<RawEngine> &engine,
   }
 
   // after all mutations is processed, write into raw engine
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
-  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
-  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
+  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCF, kv_puts_write);
+  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCF, kv_deletes_lock);
 
   auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {

@@ -130,11 +130,11 @@ class RawEngine {
     virtual ~MultiCfWriter() = default;
     // map<cf_index, vector<kvs>>
     virtual butil::Status KvBatchPutAndDelete(
-        const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-        const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) = 0;
+        const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+        const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) = 0;
 
     virtual butil::Status KvBatchDeleteRange(
-        const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) = 0;
+        const std::map<std::string, std::vector<pb::common::Range>>& ranges_with_cf) = 0;
     virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
     virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
   };
@@ -146,6 +146,7 @@ class RawEngine {
   virtual pb::common::RawEngine GetID() = 0;
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
+  virtual butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) = 0;
 
   virtual void Flush(const std::string& cf_name) = 0;
   virtual butil::Status Compact(const std::string& cf_name) = 0;

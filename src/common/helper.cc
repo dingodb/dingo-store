@@ -63,10 +63,8 @@
 
 namespace dingodb {
 
-const std::map<std::string, uint32_t> kCf2Id = {
-    {Constant::kStoreDataCF, Constant::kStoreDataCfId},     {Constant::kVectorScalarCF, Constant::kVectorScalarCfId},
-    {Constant::kVectorTableCF, Constant::kVectorTableCfId}, {Constant::kTxnDataCF, Constant::kTxnDataCfId},
-    {Constant::kTxnLockCF, Constant::kTxnLockCfId},         {Constant::kTxnWriteCF, Constant::kTxnWriteCfId}};
+const std::set<std::string> kCfNames = {Constant::kStoreDataCF, Constant::kVectorScalarCF, Constant::kVectorTableCF,
+                                        Constant::kTxnDataCF,   Constant::kTxnLockCF,      Constant::kTxnWriteCF};
 
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;

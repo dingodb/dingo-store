@@ -309,19 +309,21 @@ class RawRocksEngine : public RawEngine {
 
   class MultiCfWriter : public RawEngine::MultiCfWriter {
    public:
-    MultiCfWriter(std::shared_ptr<rocksdb::DB> db, std::vector<std::shared_ptr<ColumnFamily>> column_families)
-        : db_(db), column_families_(column_families){};
+    MultiCfWriter(std::shared_ptr<rocksdb::DB> db, std::map<std::string, std::shared_ptr<ColumnFamily>> cf_map)
+        : db_(db), cf_map_(cf_map){};
     ~MultiCfWriter() override = default;
     // map<cf_index, vector<kvs>>
-    butil::Status KvBatchPutAndDelete(const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-                                      const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) override;
+    butil::Status KvBatchPutAndDelete(
+        const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+        const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) override;
 
-    butil::Status KvBatchDeleteRange(const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) override;
+    butil::Status KvBatchDeleteRange(
+        const std::map<std::string, std::vector<pb::common::Range>>& ranges_with_cf) override;
     butil::Status KvDeleteRange(const pb::common::Range& range) override;
     butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) override;
 
    private:
-    std::vector<std::shared_ptr<ColumnFamily>> column_families_;
+    std::map<std::string, std::shared_ptr<ColumnFamily>> cf_map_;
     std::shared_ptr<rocksdb::DB> db_;
   };
 
@@ -375,7 +377,7 @@ class RawRocksEngine : public RawEngine {
                                             const std::vector<std::string>& cf_names,
                                             std::vector<std::string>& merge_sst_paths);
 
-  butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files);
+  butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) override;
 
   void Flush(const std::string& cf_name) override;
   butil::Status Compact(const std::string& cf_name) override;

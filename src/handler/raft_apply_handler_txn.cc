@@ -86,36 +86,32 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
                      << ", new multi cf writer failed, request: " << request.ShortDebugString();
     return;
   }
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
   for (const auto &puts : request.puts_with_cf()) {
-    if (!kCf2Id.count(puts.cf_name())) {
+    if (!kCfNames.count(puts.cf_name())) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                       region->Id(), term_id, log_id)
                        << ", cf_name: " << puts.cf_name() << " not supported, request: " << request.ShortDebugString();
       continue;
     }
 
-    uint32_t cf_id = kCf2Id.at(puts.cf_name());
-
     std::vector<pb::common::KeyValue> kv_puts;
     for (const auto &kv : puts.kvs()) {
       kv_puts.push_back(kv);
     }
 
-    kv_puts_with_cf.insert_or_assign(cf_id, kv_puts);
+    kv_puts_with_cf.insert_or_assign(puts.cf_name(), kv_puts);
   }
 
   for (const auto &dels : request.deletes_with_cf()) {
-    if (!kCf2Id.count(dels.cf_name())) {
+    if (!kCfNames.count(dels.cf_name())) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                       region->Id(), term_id, log_id)
                        << ", cf_name: " << dels.cf_name() << " not supported, request: " << request.ShortDebugString();
       continue;
     }
-
-    uint32_t cf_id = kCf2Id.at(dels.cf_name());
 
     std::vector<std::string> kv_deletes;
 
@@ -123,7 +119,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       kv_deletes.push_back(key);
     }
 
-    kv_deletes_with_cf.insert_or_assign(cf_id, kv_deletes);
+    kv_deletes_with_cf.insert_or_assign(dels.cf_name(), kv_deletes);
   }
 
   status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
@@ -377,11 +373,11 @@ void TxnHandler::HandleTxnPrewriteRequest([[maybe_unused]] std::shared_ptr<Conte
   }
 
   // after all mutations is processed, write into raw engine
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
-  kv_puts_with_cf.insert_or_assign(Constant::kTxnDataCfId, kv_puts_data);
-  kv_puts_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_puts_lock);
+  kv_puts_with_cf.insert_or_assign(Constant::kTxnDataCF, kv_puts_data);
+  kv_puts_with_cf.insert_or_assign(Constant::kTxnLockCF, kv_puts_lock);
 
   auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
@@ -600,11 +596,11 @@ butil::Status TxnHandler::DoTxnCommit(std::shared_ptr<Context> ctx, store::Regio
   }
 
   // after all mutations is processed, write into raw engine
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
-  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCfId, kv_puts_write);
-  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCfId, kv_deletes_lock);
+  kv_puts_with_cf.insert_or_assign(Constant::kTxnWriteCF, kv_puts_write);
+  kv_deletes_with_cf.insert_or_assign(Constant::kTxnLockCF, kv_deletes_lock);
 
   auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
   if (writer == nullptr) {
@@ -1156,11 +1152,11 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
   lock_ranges.push_back(range);
   write_ranges.push_back(range);
 
-  std::map<uint32_t, std::vector<pb::common::Range>> ranges_with_cf;
+  std::map<std::string, std::vector<pb::common::Range>> ranges_with_cf;
 
-  ranges_with_cf.insert_or_assign(Constant::kTxnDataCfId, data_ranges);
-  ranges_with_cf.insert_or_assign(Constant::kTxnLockCfId, lock_ranges);
-  ranges_with_cf.insert_or_assign(Constant::kTxnWriteCfId, write_ranges);
+  ranges_with_cf.insert_or_assign(Constant::kTxnDataCF, data_ranges);
+  ranges_with_cf.insert_or_assign(Constant::kTxnLockCF, lock_ranges);
+  ranges_with_cf.insert_or_assign(Constant::kTxnWriteCF, write_ranges);
 
   auto status = writer->KvBatchDeleteRange(ranges_with_cf);
   if (!status.ok()) {
