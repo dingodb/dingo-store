@@ -734,12 +734,18 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
         vector_index_id, meta.ShortDebugString());
     return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, save meta to meta file failed");
   }
-  if (meta.snapshot_log_id() <= 0 || meta.vector_index_id() <= 0) {
+  if (meta.vector_index_id() <= 0) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] Save vector index success, meta is illegal, "
+        "[vector_index.save_snapshot][index_id({})] Save vector index success, vector_index_id in meta is illegal, "
         "error: {}",
         vector_index_id, meta.ShortDebugString());
     return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, meta is illegal");
+  }
+  if (meta.snapshot_log_id() <= 0) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.save_snapshot][index_id({})] Save vector index success, applied_log_id in meta is illegal, just "
+        "warning, maybe saving the initial build index after process start, error: {}",
+        vector_index_id, meta.ShortDebugString());
   }
 
   // result is SUCCESS and meta is legal, the vector snapshot is succeed
