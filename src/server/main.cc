@@ -801,16 +801,18 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
+    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
+    // workers to load index, so InitStoreMetaManager must be called before InitStoreMetaManager
+    if (!dingo_server.InitVectorIndexManager()) {
+      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
+      return -1;
+    }
     if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
     }
     if (!dingo_server.InitStoreMetricsManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
-      return -1;
-    }
-    if (!dingo_server.InitVectorIndexManager()) {
-      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
       return -1;
     }
     if (!dingo_server.InitStoreController()) {
