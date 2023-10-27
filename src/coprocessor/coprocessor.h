@@ -24,7 +24,7 @@
 
 #include "butil/status.h"
 #include "coprocessor/aggregation_manager.h"
-#include "engine/raw_engine.h"
+#include "engine/iterator.h"
 #include "proto/store.pb.h"
 #include "scan/scan_filter.h"
 
@@ -42,8 +42,8 @@ class Coprocessor {
 
   butil::Status Open(const pb::store::Coprocessor& coprocessor);
 
-  butil::Status Execute(const std::shared_ptr<EngineIterator>& iter, bool key_only, size_t max_fetch_cnt,
-                        int64_t max_bytes_rpc, std::vector<pb::common::KeyValue>* kvs);
+  butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
+                        std::vector<pb::common::KeyValue>* kvs);
   void Close();
 
  private:

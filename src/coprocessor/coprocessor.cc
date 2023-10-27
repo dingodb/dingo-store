@@ -189,18 +189,19 @@ butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
   return butil::Status();
 }
 
-butil::Status Coprocessor::Execute(const std::shared_ptr<EngineIterator>& iter, bool key_only, size_t max_fetch_cnt,
-                                   int64_t max_bytes_rpc, std::vector<pb::common::KeyValue>* kvs) {
+butil::Status Coprocessor::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
+                                   std::vector<pb::common::KeyValue>* kvs) {
   DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Execute Enter");
   ScanFilter scan_filter = ScanFilter(key_only, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;
-  while (iter->HasNext()) {
-    pb::common::KeyValue key_value;
-    iter->GetKV(*key_value.mutable_key(), *key_value.mutable_value());
+  while (iter->Valid()) {
+    pb::common::KeyValue kv;
+    *kv.mutable_key() = iter->Key();
+    *kv.mutable_value() = iter->Value();
     bool has_result_kv = false;
     pb::common::KeyValue result_key_value;
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::DoExecute Call");
-    status = DoExecute(key_value, &has_result_kv, &result_key_value);
+    status = DoExecute(kv, &has_result_kv, &result_key_value);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Coprocessor::Execute failed");
       return status;

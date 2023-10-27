@@ -26,6 +26,7 @@
 #include "butil/status.h"
 #include "common/context.h"
 #include "coprocessor/coprocessor.h"
+#include "engine/iterator.h"
 #include "engine/raw_engine.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -109,10 +110,7 @@ class ScanContext {
 
   std::string cf_name_;
 
-  std::shared_ptr<EngineIterator> iter_;
-
-  // call iter_->Start
-  bool is_already_call_start_;
+  IteratorPtr iter_;
 
   // millisecond 1s = 1000 millisecond
   std::chrono::milliseconds last_time_ms_;

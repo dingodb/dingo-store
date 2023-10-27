@@ -32,37 +32,6 @@
 
 namespace dingodb {
 
-enum class EnumEngineIterator {
-  kRocks = 0,
-  kMemory = 1,
-  kXdp = 2,
-  kRaftStore = 3,
-  kColumnar = 4,
-};
-
-enum class EnumEngineReader {
-  kRocks = 0,
-  kMemory = 1,
-  kXdp = 2,
-  kRaftStore = 3,
-  kColumnar = 4,
-};
-
-class EngineIterator : public std::enable_shared_from_this<EngineIterator> {
- public:
-  EngineIterator() = default;
-  virtual ~EngineIterator() = default;
-  std::shared_ptr<EngineIterator> GetSelf() { return shared_from_this(); }
-  virtual void Start() = 0;
-  virtual bool HasNext() = 0;
-  virtual void Next() = 0;
-  virtual bool GetKV(std::string& key, std::string& value) = 0;  // NOLINT
-  virtual bool GetKey(std::string& key) = 0;                     // NOLINT
-  virtual bool GetValue(std::string& value) = 0;                 // NOLINT
-  virtual const std::string& GetName() const = 0;
-  virtual uint32_t GetID() = 0;
-};
-
 class RawEngine {
  public:
   virtual ~RawEngine() = default;
@@ -84,7 +53,6 @@ class RawEngine {
     virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
                                   const std::string& end_key, int64_t& count) = 0;
 
-    virtual std::shared_ptr<EngineIterator> NewIterator(const std::string& start_key, const std::string& end_key) = 0;
     virtual std::shared_ptr<dingodb::Iterator> NewIterator(IteratorOptions options) = 0;
     virtual std::shared_ptr<dingodb::Iterator> NewIterator(std::shared_ptr<Snapshot> snapshot,
                                                            IteratorOptions options) = 0;
