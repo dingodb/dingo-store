@@ -466,33 +466,33 @@ std::shared_ptr<RawEngine::Writer> RawRocksEngine::NewWriter(const std::string& 
 }
 
 std::shared_ptr<RawEngine::MultiCfWriter> RawRocksEngine::NewMultiCfWriter(const std::vector<std::string>& cf_names) {
-  std::vector<std::shared_ptr<ColumnFamily>> column_families;
+  std::map<std::string, std::shared_ptr<ColumnFamily>> cf_map;
   for (const auto& cf_name : cf_names) {
     auto column_family = GetColumnFamily(cf_name);
     if (column_family == nullptr) {
       return nullptr;
     }
-    column_families.push_back(column_family);
+    cf_map.insert_or_assign(cf_name, column_family);
   }
-  return std::make_shared<MultiCfWriter>(db_, column_families);
+  return std::make_shared<MultiCfWriter>(db_, cf_map);
 }
 
 butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
-    const std::map<uint32_t, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-    const std::map<uint32_t, std::vector<std::string>>& kv_deletes_with_cf) {
+    const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+    const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) {
   DINGO_LOG(INFO) << "MultiCfWriter::KvBatchPutAndDelete, kv_puts_with_cf size: " << kv_puts_with_cf.size()
                   << ", kv_deletes_with_cf size: " << kv_deletes_with_cf.size();
 
   rocksdb::WriteBatch batch;
-  for (const auto& [cf_id, kv_puts] : kv_puts_with_cf) {
+  for (const auto& [cf_name, kv_puts] : kv_puts_with_cf) {
     if (BAIDU_UNLIKELY(kv_puts.empty())) {
       DINGO_LOG(ERROR) << fmt::format("keys empty not support");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
-    if (BAIDU_UNLIKELY(cf_id >= column_families_.size() || cf_id < 0)) {
-      DINGO_LOG(ERROR) << "cf_id is invalid, cf_id: " << cf_id;
-      return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
+    if (BAIDU_UNLIKELY(cf_map_.find(cf_name) == cf_map_.end())) {
+      DINGO_LOG(ERROR) << "cf_name is invalid, cf_name: " << cf_name;
+      return butil::Status(pb::error::EKEY_EMPTY, "cf_name is invalid");
     }
 
     for (const auto& kv : kv_puts) {
@@ -500,7 +500,7 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
         DINGO_LOG(ERROR) << fmt::format("key empty not support");
         return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
       } else {
-        rocksdb::Status s = batch.Put(column_families_[cf_id]->GetHandle(), kv.key(), kv.value());
+        rocksdb::Status s = batch.Put(cf_map_[cf_name]->GetHandle(), kv.key(), kv.value());
         if (BAIDU_UNLIKELY(!s.ok())) {
           DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
           return butil::Status(pb::error::EINTERNAL, "Internal put error");
@@ -509,15 +509,14 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
     }
   }
 
-  for (const auto& [cf_id, kv_deletes] : kv_deletes_with_cf) {
+  for (const auto& [cf_name, kv_deletes] : kv_deletes_with_cf) {
     if (BAIDU_UNLIKELY(kv_deletes.empty())) {
       DINGO_LOG(ERROR) << fmt::format("keys empty not support");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
-
-    if (BAIDU_UNLIKELY(cf_id >= column_families_.size() || cf_id < 0)) {
-      DINGO_LOG(ERROR) << "cf_id is invalid, cf_id: " << cf_id;
-      return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
+    if (BAIDU_UNLIKELY(cf_map_.find(cf_name) == cf_map_.end())) {
+      DINGO_LOG(ERROR) << "cf_name is invalid, cf_name: " << cf_name;
+      return butil::Status(pb::error::EKEY_EMPTY, "cf_name is invalid");
     }
 
     for (const auto& key : kv_deletes) {
@@ -525,7 +524,7 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
         DINGO_LOG(ERROR) << fmt::format("key empty not support");
         return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
       } else {
-        rocksdb::Status s = batch.Delete(column_families_[cf_id]->GetHandle(), key);
+        rocksdb::Status s = batch.Delete(cf_map_[cf_name]->GetHandle(), key);
         if (BAIDU_UNLIKELY(!s.ok())) {
           DINGO_LOG(ERROR) << fmt::format("rocksdb::WriteBatch::Put failed : {}", s.ToString());
           return butil::Status(pb::error::EINTERNAL, "Internal delete error");
@@ -545,13 +544,13 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchPutAndDelete(
 }
 
 butil::Status RawRocksEngine::MultiCfWriter::KvBatchDeleteRange(
-    const std::map<uint32_t, std::vector<pb::common::Range>>& ranges_with_cf) {
+    const std::map<std::string, std::vector<pb::common::Range>>& ranges_with_cf) {
   DINGO_LOG(INFO) << "MultiCfWriter::KvBatchDeleteRange, ranges_with_cf size: " << ranges_with_cf.size();
 
-  for (const auto& [cf_id, ranges] : ranges_with_cf) {
-    if (BAIDU_UNLIKELY(cf_id >= column_families_.size() || cf_id < 0)) {
-      DINGO_LOG(ERROR) << "cf_id is invalid, cf_id: " << cf_id;
-      return butil::Status(pb::error::EKEY_EMPTY, "cf_id is invalid");
+  for (const auto& [cf_name, ranges] : ranges_with_cf) {
+    if (BAIDU_UNLIKELY(cf_map_.find(cf_name) == cf_map_.end())) {
+      DINGO_LOG(ERROR) << "cf_name is invalid, cf_name: " << cf_name;
+      return butil::Status(pb::error::EKEY_EMPTY, "cf_name is invalid");
     }
 
     for (const auto& range : ranges) {
@@ -565,8 +564,8 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchDeleteRange(
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
       }
 
-      auto status = db_->DeleteRange(rocksdb::WriteOptions(), column_families_[cf_id]->GetHandle(), range.start_key(),
-                                     range.end_key());
+      auto status =
+          db_->DeleteRange(rocksdb::WriteOptions(), cf_map_[cf_name]->GetHandle(), range.start_key(), range.end_key());
       if (!status.ok()) {
         DINGO_LOG(ERROR) << fmt::format("rocksdb::DB::Write failed : {}", status.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
@@ -586,8 +585,8 @@ butil::Status RawRocksEngine::MultiCfWriter::KvDeleteRange(const pb::common::Ran
   }
 
   rocksdb::WriteBatch batch;
-  for (const auto& column_family : column_families_) {
-    rocksdb::Status s = batch.DeleteRange(column_family->GetHandle(), range.start_key(), range.end_key());
+  for (const auto& it : cf_map_) {
+    rocksdb::Status s = batch.DeleteRange(it.second->GetHandle(), range.start_key(), range.end_key());
     if (!s.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
       return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
@@ -614,9 +613,9 @@ butil::Status RawRocksEngine::MultiCfWriter::KvBatchDeleteRange(const std::vecto
   }
 
   rocksdb::WriteBatch batch;
-  for (const auto& column_family : column_families_) {
+  for (const auto& it : cf_map_) {
     for (const auto& range : ranges) {
-      rocksdb::Status s = batch.DeleteRange(column_family->GetHandle(), range.start_key(), range.end_key());
+      rocksdb::Status s = batch.DeleteRange(it.second->GetHandle(), range.start_key(), range.end_key());
       if (!s.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete range error");

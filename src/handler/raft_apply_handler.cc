@@ -781,8 +781,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
 
   // Transform vector to kv
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
   std::vector<pb::common::KeyValue> kvs_default;  // for vector data
   std::vector<pb::common::KeyValue> kvs_scalar;   // for vector scalar data
@@ -821,9 +821,9 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       kvs_table.push_back(kv);
     }
   }
-  kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCfId, kvs_default);
-  kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCfId, kvs_scalar);
-  kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCfId, kvs_table);
+  kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
+  kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
+  kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
 
   // build vector_with_ids
   std::vector<pb::common::VectorWithId> vector_with_ids;
@@ -971,8 +971,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   // Transform vector to kv
-  std::map<uint32_t, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<uint32_t, std::vector<std::string>> kv_deletes_with_cf;
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
   std::vector<std::string> kv_deletes_default;
 
@@ -998,9 +998,9 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   if (!kv_deletes_default.empty()) {
-    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCfId, kv_deletes_default);
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCfId, kv_deletes_default);
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCfId, kv_deletes_default);
+    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_deletes_default);
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCF, kv_deletes_default);
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCF, kv_deletes_default);
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();

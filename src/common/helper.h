@@ -31,7 +31,7 @@
 
 namespace dingodb {
 
-extern const std::map<std::string, uint32_t> kCf2Id;
+extern const std::set<std::string> kCfNames;
 
 class Helper {
   using Errno = pb::error::Errno;

@@ -263,14 +263,9 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   auto cf_names = Helper::GetColumnFamilyNames();
   auto writer = engine_->NewMultiCfWriter(cf_names);
 
-  std::map<uint32_t, std::vector<pb::common::Range>> ranges_with_cf;
+  std::map<std::string, std::vector<pb::common::Range>> ranges_with_cf;
   for (const auto& cf_name : cf_names) {
-    if (kCf2Id.count(cf_name) > 0) {
-      ranges_with_cf.insert_or_assign(kCf2Id.at(cf_name), std::vector<pb::common::Range>{region->Range()});
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] invalid cf name: {}", region->Id(), cf_name);
-      return butil::Status(pb::error::EINTERNAL, fmt::format("invalid cf name: {}", cf_name));
-    }
+    ranges_with_cf.insert_or_assign(cf_name, std::vector<pb::common::Range>{region->Range()});
   }
 
   status = writer->KvBatchDeleteRange(ranges_with_cf);
