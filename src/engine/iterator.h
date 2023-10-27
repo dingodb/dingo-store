@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_ITERATOR_H_
 #define DINGODB_ENGINE_ITERATOR_H_
 
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -61,6 +62,8 @@ class Iterator {
   virtual std::string_view Key() const = 0;
   virtual std::string_view Value() const = 0;
 };
+
+using IteratorPtr = std::shared_ptr<Iterator>;
 
 class MultipleRangeIterator {
  public:

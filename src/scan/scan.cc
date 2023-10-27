@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -56,7 +57,6 @@ ScanContext::ScanContext()
       state_(ScanState::kUninit),
       engine_(nullptr),
       iter_(nullptr),
-      is_already_call_start_(false),
       last_time_ms_(GetCurrentTime())
 #if defined(ENABLE_SCAN_OPTIMIZATION)
       ,
@@ -118,7 +118,6 @@ void ScanContext::Close() {
   engine_ = nullptr;
   cf_name_.clear();
   iter_ = nullptr;
-  is_already_call_start_ = false;
   last_time_ms_.zero();
   coprocessor_.reset();
   bthread_mutex_destroy(&mutex_);
@@ -133,11 +132,6 @@ std::chrono::milliseconds ScanContext::GetCurrentTime() {
 }
 
 butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
-  if (!is_already_call_start_) {
-    iter_->Start();
-    is_already_call_start_ = true;
-  }
-
   if (!disable_coprocessor_) {
     butil::Status status;
     status = coprocessor_->Execute(iter_, key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_,
@@ -150,20 +144,11 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
 
   ScanFilter scan_filter = ScanFilter(key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_);
 
-  while (iter_->HasNext()) {
+  while (iter_->Valid()) {
     pb::common::KeyValue kv;
-    std::string key;
-    std::string value;
-    if (key_only_) {
-      iter_->GetKey(key);
-
-    } else {
-      iter_->GetKV(key, value);
-    }
-
-    kv.set_key(std::move(key));
+    *kv.mutable_key() = iter_->Key();
     if (!key_only_) {
-      kv.set_value(std::move(value));
+      *kv.mutable_value() = iter_->Value();
     }
 
     kvs.emplace_back(kv);
@@ -184,10 +169,6 @@ butil::Status ScanContext::AsyncWork() {
   auto lambda_call = [this]() {
     BAIDU_SCOPED_LOCK(mutex_);
     seek_state_ = ScanContext::SeekState::kInitting;
-    if (!is_already_call_start_) {
-      iter_->Start();
-      is_already_call_start_ = true;
-    }
     last_time_ms_ = GetCurrentTime();
     seek_state_ = SeekState::kInitted;
   };
@@ -418,13 +399,16 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
 
   std::shared_ptr<RawEngine::Reader> reader = context->engine_->NewReader(context->cf_name_);
 
-  context->iter_ = reader->NewIterator(context->range_.start_key(), context->range_.end_key());
+  IteratorOptions options;
+  options.upper_bound = context->range_.end_key();
 
+  context->iter_ = reader->NewIterator(options);
   if (!context->iter_) {
     context->state_ = ScanState::kError;
     DINGO_LOG(ERROR) << fmt::format("RawEngine::Reader::NewIterator failed");
     return butil::Status(pb::error::EINTERNAL, "Internal error : create iter failed");
   }
+  context->iter_->Seek(context->range_.start_key());
 
   if (context->max_fetch_cnt_ > 0) {
     butil::Status s = context->GetKeyValue(*kvs);
