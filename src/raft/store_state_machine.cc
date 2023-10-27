@@ -200,6 +200,13 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
 //      2>. load snapshot files
 //      3>. applied_index = max_index
 int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
+  if (is_restart_for_load_snapshot_) {
+    is_restart_for_load_snapshot_ = false;
+    DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load, restart for load snapshot, just skip load",
+                                   region_->Id());
+    return 0;
+  }
+
   braft::SnapshotMeta meta;
   int ret = reader->load_meta(&meta);
   if (ret != 0) {

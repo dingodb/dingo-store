@@ -462,8 +462,10 @@ bool RaftSnapshot::LoadSnapshotDingo(braft::SnapshotReader* reader, store::Regio
   auto cf_names = Helper::GetColumnFamilyNames();
 
   for (auto& cf_name : cf_names) {
-    std::string filepath = reader->get_path() + "/" + cf_name + ".sst";
+    std::string filepath = reader->get_path() + "/" + cf_name + Constant::kRaftSnapshotRegionDateFileNameSuffix;
     sst_files.push_back(filepath);
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst_files.push_back, filepath: {}", region->Id(),
+                                   filepath);
   }
 
   FAIL_POINT("load_snapshot_suspend");
@@ -479,8 +481,9 @@ bool RaftSnapshot::LoadSnapshotDingo(braft::SnapshotReader* reader, store::Regio
     }
 
     if (!Helper::IsExistPath(sst_path)) {
-      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file is not exist, skip ingest, cf_name: {}",
-                                     region->Id(), cf_name);
+      DINGO_LOG(INFO) << fmt::format(
+          "[raft.snapshot][region({})] sst file is not exist, skip ingest, cf_name: {}, sst_path: {}", region->Id(),
+          cf_name, sst_path);
       continue;
     }
 
@@ -621,9 +624,11 @@ int RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawE
                                    braft::SnapshotReader* reader) {
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (FLAGS_raft_snapshot_policy == "dingo") {
-    auto ret = raft_snapshot->LoadSnapshotDingo(reader, region);
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot(dingo) failed.", region->Id());
-    return -1;
+    if (!raft_snapshot->LoadSnapshotDingo(reader, region)) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot(dingo) failed.", region->Id());
+      return -1;
+    }
+    return 0;
   }
 
   if (!raft_snapshot->LoadSnapshot(reader, region)) {

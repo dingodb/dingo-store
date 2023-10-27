@@ -185,10 +185,11 @@ class DingoMetaReaderAdaptor : public braft::FileAdaptor {
  private:
   static int64_t SerializeToIobuf(butil::IOPortal* portal, const rocksdb::Slice& key) {
     if (portal != nullptr) {
-      portal->append((void*)&key.size_, sizeof(size_t));
+      // portal->append((void*)&key.size_, sizeof(size_t));
       portal->append((void*)key.data_, key.size_);
     }
-    return sizeof(size_t) + key.size_;
+    // return sizeof(size_t) + key.size_;
+    return key.size_;
   }
 
   bool RegionShutdown();

@@ -140,7 +140,7 @@ bool RaftStoreEngine::Recover() {
         parameter.is_restart = false;
       }
 
-      AddNode(region, parameter, true);
+      AddNode(region, parameter);
       if (region->NeedBootstrapDoSnapshot()) {
         DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] need do snapshot.", region->Id());
         auto node = GetNode(region->Id());
@@ -164,7 +164,7 @@ pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE;
 
 std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return engine_; }
 
-butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter, bool is_recover) {
+butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   // Build StateMachine
@@ -172,6 +172,12 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
       engine_, region, parameter.raft_meta, parameter.region_metrics, parameter.listeners, parameter.is_restart);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
+  }
+
+  if (parameter.is_restart) {
+    DINGO_LOG(INFO) << "[raft.engine][region(" << region->Id()
+                    << ")] recover raft node, last_applied_index = " << region->GetAppliedIndex();
+    state_machine->UpdateAppliedIndex(region->GetAppliedIndex());
   }
 
   // Build log storage
@@ -187,7 +193,7 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
 
   if (node->Init(region, Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), parameter.raft_path,
                  parameter.election_timeout_ms, parameter.snapshot_interval_s) != 0) {
-    if (is_recover) {
+    if (parameter.is_restart) {
       DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] Raft init failed. Please check raft storage!",
                                       region->Id())
                        << ", raft_path: " << parameter.raft_path

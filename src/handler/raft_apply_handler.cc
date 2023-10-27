@@ -593,7 +593,7 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   parameter.listeners = listener_factory->Build();
 
-  auto status = raft_store_engine->AddNode(region, parameter, false);
+  auto status = raft_store_engine->AddNode(region, parameter);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] add node failed, error: {}", parent_region_id,
                                     region->Id(), status.error_str());
