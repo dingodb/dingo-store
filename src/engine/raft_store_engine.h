@@ -55,7 +55,7 @@ class RaftControlAble {
     std::shared_ptr<EventListenerCollection> listeners;
   };
 
-  virtual butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter, bool is_recover) = 0;
+  virtual butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) = 0;
   virtual butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region,
                                 std::shared_ptr<MetaControl> meta_control, bool is_volatile) = 0;
   virtual butil::Status StopNode(std::shared_ptr<Context> ctx, int64_t region_id) = 0;
@@ -84,7 +84,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
   std::shared_ptr<RawEngine> GetRawEngine() override;
 
-  butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter, bool is_recover) override;
+  butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) override;
   butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region, std::shared_ptr<MetaControl> meta_control,
                         bool is_volatile) override;
   butil::Status ChangeNode(std::shared_ptr<Context> ctx, int64_t region_id,

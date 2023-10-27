@@ -303,7 +303,12 @@ ssize_t DingoMetaReaderAdaptor::read(butil::IOPortal* portal, off_t offset, size
     return -1;
   }
 
-  size_t count = SerializeToIobuf(portal, meta_data_.substr(offset));
+  DINGO_LOG(INFO) << "region_id: " << region_id_ << " read meta, time_cost: " << time_cost.GetTime()
+                  << ", off: " << offset << ", size: " << size << ", meta_size: " << meta_data_.size();
+
+  size_t read_size = meta_data_.size() - offset > size ? size : meta_data_.size() - offset;
+  size_t count = SerializeToIobuf(portal, meta_data_.substr(offset, read_size));
+
   DINGO_LOG(INFO) << "region_id: " << region_id_ << " read meta, time_cost: " << time_cost.GetTime()
                   << ", off: " << offset << ", size: " << size << ", ret_size: " << count;
 
@@ -662,6 +667,7 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
     auto* reader =
         new DingoMetaReaderAdaptor(region_id_, path, snapshot_context->applied_term, snapshot_context->applied_index,
                                    snapshot_context->region_epoch, snapshot_context->range);
+    reader->Open();
     return reader;
   }
 
@@ -693,6 +699,7 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
 
   // first open snapshot file
   if (iter_context == nullptr) {
+    iter_context = std::make_shared<IteratorContext>();
     iter_context->region_id = region_id_;
     iter_context->cf_name = cf_name;
     iter_context->reading = false;
@@ -708,6 +715,8 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
         iter_context->cf_name, iter_context->snapshot_context->snapshot, IteratorOptions());
     iter_context->iter = new_iter;
     iter_context->iter->Seek(iter_context->lower_bound);
+
+    snapshot_context->data_iterators[cf_name] = iter_context;
 
     DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open reader, path: " << path
                        << ", time_cost: " << time_cost.GetTime();
@@ -761,7 +770,7 @@ bool DingoFileSystemAdaptor::directory_exists(const std::string& path) {
 braft::DirReader* DingoFileSystemAdaptor::directory_reader(const std::string& path) { return new PosixDirReader(path); }
 
 bool DingoFileSystemAdaptor::open_snapshot(const std::string& path) {
-  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path;
+  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " start open snapshot path: " << path;
   BAIDU_SCOPED_LOCK(snapshot_mutex_);
   auto iter = snapshot_context_env_map_.find(path);
   if (iter != snapshot_context_env_map_.end()) {
@@ -802,7 +811,7 @@ bool DingoFileSystemAdaptor::open_snapshot(const std::string& path) {
   }
 
   region->LockRegionRaft();
-  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path;
+  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path << ", LockRegionRaft";
   auto raw_engine = region->GetRawEngine();
   if (raw_engine == nullptr) {
     DINGO_LOG(ERROR) << "region_id: " << region_id_ << " raw_engine is null";
@@ -811,9 +820,17 @@ bool DingoFileSystemAdaptor::open_snapshot(const std::string& path) {
   snapshot_context_env_map_[path].snapshot_context = std::make_shared<SnapshotContext>(raw_engine);
   snapshot_context_env_map_[path].snapshot_context->applied_term = region->GetAppliedTerm();
   snapshot_context_env_map_[path].snapshot_context->applied_index = region->GetAppliedIndex();
-  snapshot_context_env_map_[path].snapshot_context->region_epoch = region->Epoch(true);
-  snapshot_context_env_map_[path].snapshot_context->range = region->Range(true);
+  snapshot_context_env_map_[path].snapshot_context->region_epoch = region->Epoch();
+  snapshot_context_env_map_[path].snapshot_context->range = region->Range();
+
+  DINGO_LOG(INFO) << "region_id: " << region_id_ << " open snapshot path: " << path
+                  << ", applied_term: " << snapshot_context_env_map_[path].snapshot_context->applied_term
+                  << ", applied_index: " << snapshot_context_env_map_[path].snapshot_context->applied_index
+                  << ", range: " << snapshot_context_env_map_[path].snapshot_context->range.ShortDebugString()
+                  << ", epoch: " << snapshot_context_env_map_[path].snapshot_context->region_epoch.ShortDebugString();
+
   region->UnlockRegionRaft();
+  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path << ", UnockRegionRaft";
 
   snapshot_context_env_map_[path].count++;
   snapshot_context_env_map_[path].cost.Reset();
@@ -856,9 +873,14 @@ void DingoFileSystemAdaptor::Close(const std::string& path) {
   }
 
   auto& snapshot_ctx = iter->second;
-  snapshot_ctx.snapshot_context->data_iterators.clear();
 
-  snapshot_context_env_map_.erase(iter);
+  auto cf_name = GetSnapshotCfName(path);
+  if (cf_name.empty()) {
+    DINGO_LOG(ERROR) << "snapshot file path: " << path << " is invalid, cannot get cf_name, region_id: " << region_id_;
+    return;
+  }
+
+  snapshot_ctx.snapshot_context->data_iterators.erase(cf_name);
 
   DINGO_LOG(WARNING) << "close snapshot data file, path: " << path << ", region_id: " << region_id_;
 }
