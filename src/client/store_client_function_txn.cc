@@ -655,7 +655,7 @@ void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& reg
 
 // index
 void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnGetRequest request;
+  dingodb::pb::store::TxnGetRequest request;
   dingodb::pb::index::TxnGetResponse response;
 
   request.mutable_context()->set_region_id(region_id);
@@ -686,7 +686,7 @@ void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& regi
 }
 
 void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnScanRequest request;
+  dingodb::pb::store::TxnScanRequest request;
   dingodb::pb::index::TxnScanResponse response;
 
   request.mutable_context()->set_region_id(region_id);
@@ -966,7 +966,7 @@ void IndexSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Regi
 }
 
 void IndexSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnBatchGetRequest request;
+  dingodb::pb::store::TxnBatchGetRequest request;
   dingodb::pb::index::TxnBatchGetResponse response;
 
   request.mutable_context()->set_region_id(region_id);
@@ -1173,8 +1173,8 @@ void IndexSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Regi
 }
 
 void IndexSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnDumpRequest request;
-  dingodb::pb::index::TxnDumpResponse response;
+  dingodb::pb::store::TxnDumpRequest request;
+  dingodb::pb::store::TxnDumpResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());

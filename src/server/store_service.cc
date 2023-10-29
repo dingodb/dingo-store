@@ -23,7 +23,6 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
-#include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
@@ -31,9 +30,7 @@
 #include "gflags/gflags.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
-#include "proto/node.pb.h"
 #include "proto/store.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
@@ -2204,6 +2201,26 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
                             txn_data_keys, txn_data_values);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+  }
+
+  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  for (auto& key : txn_write_keys) {
+    response->add_write_keys()->Swap(&key);
+  }
+  for (auto& value : txn_write_values) {
+    response->add_write_values()->Swap(&value);
+  }
+  for (auto& key : txn_lock_keys) {
+    response->add_lock_keys()->Swap(&key);
+  }
+  for (auto& value : txn_lock_values) {
+    response->add_lock_values()->Swap(&value);
+  }
+  for (auto& key : txn_data_keys) {
+    response->add_data_keys()->Swap(&key);
+  }
+  for (auto& value : txn_data_values) {
+    response->add_data_values()->Swap(&value);
   }
 }
 

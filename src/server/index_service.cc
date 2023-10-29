@@ -23,7 +23,6 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/context.h"
-#include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
@@ -37,7 +36,6 @@
 #include "proto/store.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
-#include "server/util_service.h"
 #include "vector/codec.h"
 
 using dingodb::pb::error::Errno;
@@ -1051,7 +1049,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
 }
 
 // txn
-static butil::Status ValidateTxnGetRequest(const pb::index::TxnGetRequest* request) {
+static butil::Status ValidateTxnGetRequest(const pb::store::TxnGetRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1073,7 +1071,7 @@ static butil::Status ValidateTxnGetRequest(const pb::index::TxnGetRequest* reque
   return butil::Status();
 }
 
-void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, const pb::index::TxnGetRequest* request,
+void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
               pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -1093,7 +1091,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
   ctx->SetIsolationLevel(request->context().isolation_level());
 
   std::vector<std::string> keys;
-  auto* mut_request = const_cast<pb::index::TxnGetRequest*>(request);
+  auto* mut_request = const_cast<pb::store::TxnGetRequest*>(request);
   keys.emplace_back(std::move(*mut_request->release_key()));
   pb::store::TxnResultInfo txn_result_info;
 
@@ -1131,7 +1129,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
   response->mutable_txn_result()->CopyFrom(txn_result_info);
 }
 
-void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::index::TxnGetRequest* request,
+void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
                               pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnGet", done, request, response);
 
@@ -1149,7 +1147,7 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
   }
 }
 
-static butil::Status ValidateTxnScanRequestIndex(const pb::index::TxnScanRequest* request, store::RegionPtr region,
+static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest* request, store::RegionPtr region,
                                                  const pb::common::Range& req_range) {
   if (region == nullptr) {
     return butil::Status(
@@ -1190,7 +1188,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::index::TxnScanRequest
 }
 
 void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
-               const pb::index::TxnScanRequest* request, pb::index::TxnScanResponse* response,
+               const pb::store::TxnScanRequest* request, pb::index::TxnScanResponse* response,
                google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -1259,7 +1257,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   response->set_has_more(has_more);
 }
 
-void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::index::TxnScanRequest* request,
+void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
                                pb::index::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnScan", done, request, response);
 
@@ -1649,7 +1647,7 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   }
 }
 
-static butil::Status ValidateTxnBatchGetRequest(const pb::index::TxnBatchGetRequest* request) {
+static butil::Status ValidateTxnBatchGetRequest(const pb::store::TxnBatchGetRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1682,7 +1680,7 @@ static butil::Status ValidateTxnBatchGetRequest(const pb::index::TxnBatchGetRequ
 }
 
 void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::index::TxnBatchGetRequest* request, pb::index::TxnBatchGetResponse* response,
+                   const pb::store::TxnBatchGetRequest* request, pb::index::TxnBatchGetResponse* response,
                    google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -1739,7 +1737,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 }
 
 void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
-                                   const pb::index::TxnBatchGetRequest* request,
+                                   const pb::store::TxnBatchGetRequest* request,
                                    pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnBatchGet", done, request, response);
 
@@ -2027,7 +2025,7 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
   }
 }
 
-static butil::Status ValidateTxnDumpRequest(const pb::index::TxnDumpRequest* request) {
+static butil::Status ValidateTxnDumpRequest(const pb::store::TxnDumpRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -2060,43 +2058,11 @@ static butil::Status ValidateTxnDumpRequest(const pb::index::TxnDumpRequest* req
 }
 
 void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
-               const pb::index::TxnDumpRequest* request, pb::index::TxnDumpResponse* response,
-               google::protobuf::Closure* done) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+               const pb::store::TxnDumpRequest* request, pb::store::TxnDumpResponse* response,
+               google::protobuf::Closure* done);
 
-  int64_t region_id = request->context().region_id();
-
-  butil::Status status = ValidateTxnDumpRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>();
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-
-  pb::store::TxnResultInfo txn_result_info;
-  std::vector<pb::store::TxnWriteKey> txn_write_keys;
-  std::vector<pb::store::TxnWriteValue> txn_write_values;
-  std::vector<pb::store::TxnLockKey> txn_lock_keys;
-  std::vector<pb::store::TxnLockValue> txn_lock_values;
-  std::vector<pb::store::TxnDataKey> txn_data_keys;
-  std::vector<pb::store::TxnDataValue> txn_data_values;
-
-  status = storage->TxnDump(ctx, request->start_key(), request->end_key(), request->start_ts(), request->end_ts(),
-                            txn_result_info, txn_write_keys, txn_write_values, txn_lock_keys, txn_lock_values,
-                            txn_data_keys, txn_data_values);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-  }
-}
-
-void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::index::TxnDumpRequest* request,
-                               pb::index::TxnDumpResponse* response, google::protobuf::Closure* done) {
+void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
+                               pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnDump", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
