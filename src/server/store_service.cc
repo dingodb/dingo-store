@@ -1323,14 +1323,9 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
     mutations.emplace_back(mutation);
   }
 
-  pb::store::TxnResultInfo txn_result_info;
-  std::vector<std::string> already_exists;
-  int64_t one_pc_commit_ts = 0;
-
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnPrewrite(ctx, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
-                                request->txn_size(), request->try_one_pc(), request->max_commit_ts(), txn_result_info,
-                                already_exists, one_pc_commit_ts);
+                                request->txn_size(), request->try_one_pc(), request->max_commit_ts());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1424,20 +1419,14 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
     keys.emplace_back(key);
   }
 
-  pb::store::TxnResultInfo txn_result_info;
-  int64_t commit_ts = 0;
-
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnCommit(ctx, request->start_ts(), request->commit_ts(), keys, txn_result_info, commit_ts);
+  status = storage->TxnCommit(ctx, request->start_ts(), request->commit_ts(), keys);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
     return;
   }
-
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
-  response->set_commit_ts(commit_ts);
 }
 
 void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
@@ -1516,15 +1505,8 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   ctx->SetIsolationLevel(request->context().isolation_level());
   if (is_sync) ctx->EnableSyncMode();
 
-  pb::store::TxnResultInfo txn_result_info;
-  int64_t lock_ttl = 0;
-  int64_t commit_ts = 0;
-  pb::store::Action action;
-  pb::store::LockInfo lock_info;
-
-  std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
-                                      request->current_ts(), txn_result_info, lock_ttl, commit_ts, action, lock_info);
+                                      request->current_ts());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1613,18 +1595,14 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
     keys.emplace_back(key);
   }
 
-  pb::store::TxnResultInfo txn_result_info;
-
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys, txn_result_info);
+  status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
     return;
   }
-
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
 }
 
 void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controller,
@@ -1798,18 +1776,13 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
     keys.emplace_back(key);
   }
 
-  pb::store::TxnResultInfo txn_result_info;
-
-  std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnBatchRollback(ctx, request->start_ts(), keys, txn_result_info, kvs);
+  status = storage->TxnBatchRollback(ctx, request->start_ts(), keys);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
     return;
   }
-
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
 }
 
 void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* controller,
@@ -1990,20 +1963,13 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetIsolationLevel(request->context().isolation_level());
   if (is_sync) ctx->EnableSyncMode();
 
-  pb::store::TxnResultInfo txn_result_info;
-  int64_t lock_ttl = 0;
-
-  status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl(),
-                                 txn_result_info, lock_ttl);
+  status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
     return;
   }
-
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
-  response->set_lock_ttl(lock_ttl);
 }
 
 void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
@@ -2067,10 +2033,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetIsolationLevel(request->context().isolation_level());
   if (is_sync) ctx->EnableSyncMode();
 
-  pb::store::TxnResultInfo txn_result_info;
-  int64_t lock_ttl = 0;
-
-  status = storage->TxnGc(ctx, request->safe_point_ts(), txn_result_info);
+  status = storage->TxnGc(ctx, request->safe_point_ts());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

@@ -1376,7 +1376,8 @@ std::string Helper::UnpaddingUserKey(const std::string& padding_key) {
 
 // for txn, encode data/write key
 std::string Helper::EncodeTxnKey(const std::string& key, int64_t ts) {
-  std::string padding_key = Helper::PaddingUserKey(key);
+  // std::string padding_key = Helper::PaddingUserKey(key);
+  const std::string& padding_key = key;
   Buf buf(padding_key.length() + 8);
   buf.Write(padding_key);
   buf.WriteLongWithNegation(ts);
@@ -1385,7 +1386,8 @@ std::string Helper::EncodeTxnKey(const std::string& key, int64_t ts) {
 }
 
 std::string Helper::EncodeTxnKey(const std::string_view& key, int64_t ts) {
-  std::string padding_key = Helper::PaddingUserKey(std::string(key));
+  // std::string padding_key = Helper::PaddingUserKey(std::string(key));
+  std::string padding_key = std::string(key);
   Buf buf(padding_key.length() + 8);
   buf.Write(padding_key);
   buf.WriteLongWithNegation(ts);
@@ -1400,7 +1402,8 @@ butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key,
   }
 
   auto padding_key = txn_key.substr(0, txn_key.length() - 8);
-  key = Helper::UnpaddingUserKey(padding_key);
+  // key = Helper::UnpaddingUserKey(padding_key);
+  key = padding_key;
   if (key.empty()) {
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, padding_key is empty");
   }
@@ -1419,7 +1422,8 @@ butil::Status Helper::DecodeTxnKey(const std::string_view& txn_key, std::string&
   }
 
   auto padding_key = txn_key.substr(0, txn_key.length() - 8);
-  key = Helper::UnpaddingUserKey(std::string(padding_key));
+  // key = Helper::UnpaddingUserKey(std::string(padding_key));
+  key = std::string(padding_key);
   if (key.empty()) {
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, padding_key is empty");
   }
