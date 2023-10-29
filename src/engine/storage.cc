@@ -556,9 +556,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
 
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-                                   pb::store::TxnResultInfo& txn_result_info, std::vector<std::string> already_exist,
-                                   int64_t& one_pc_commit_ts) {
+                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -566,39 +564,20 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
 
   DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size() << " primary_lock : " << primary_lock
                   << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
-                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts
-                  << " txn_result_info : " << txn_result_info.ShortDebugString()
-                  << " already_exist size : " << already_exist.size() << " one_pc_commit_ts : " << one_pc_commit_ts;
+                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* prewrite_request = txn_raft_request.mutable_prewrite();
-  for (const auto& mutation : mutations) {
-    prewrite_request->add_mutations()->CopyFrom(mutation);
-  }
-  prewrite_request->set_primary_lock(primary_lock);
-  prewrite_request->set_start_ts(start_ts);
-  prewrite_request->set_lock_ttl(lock_ttl);
-  prewrite_request->set_txn_size(txn_size);
-  prewrite_request->set_try_one_pc(try_one_pc);
-  prewrite_request->set_max_commit_ts(max_commit_ts);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-                                   pb::store::TxnResultInfo& txn_result_info, std::vector<std::string> already_exist,
-                                   int64_t& one_pc_commit_ts) {
+                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -606,158 +585,90 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
 
   DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size() << " primary_lock : " << primary_lock
                   << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
-                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts
-                  << " txn_result_info : " << txn_result_info.ShortDebugString()
-                  << " already_exist size : " << already_exist.size() << " one_pc_commit_ts : " << one_pc_commit_ts;
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* prewrite_request = txn_raft_request.mutable_prewrite();
-  for (const auto& mutation : mutations) {
-    prewrite_request->add_mutations()->CopyFrom(mutation);
-  }
-  prewrite_request->set_primary_lock(primary_lock);
-  prewrite_request->set_start_ts(start_ts);
-  prewrite_request->set_lock_ttl(lock_ttl);
-  prewrite_request->set_txn_size(txn_size);
-  prewrite_request->set_try_one_pc(try_one_pc);
-  prewrite_request->set_max_commit_ts(max_commit_ts);
+                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
 
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                 const std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info,
-                                 int64_t& committed_ts) {
+                                 const std::vector<std::string>& keys) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
   DINGO_LOG(INFO) << "TxnCommit start_ts : " << start_ts << " commit_ts : " << commit_ts
-                  << " keys size : " << keys.size() << " txn_result_info : " << txn_result_info.ShortDebugString()
-                  << " committed_ts : " << committed_ts;
+                  << " keys size : " << keys.size();
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* commit_request = txn_raft_request.mutable_commit();
-  for (const auto& key : keys) {
-    commit_request->add_keys(key);
-  }
-  commit_request->set_start_ts(start_ts);
-  commit_request->set_commit_ts(commit_ts);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnCommit(ctx, start_ts, commit_ts, keys);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, int64_t lock_ts,
-                                         int64_t caller_start_ts, int64_t current_ts,
-                                         pb::store::TxnResultInfo& txn_result_info, int64_t& lock_ttl,
-                                         int64_t& commit_ts, pb::store::Action& action,
-                                         pb::store::LockInfo& lock_info) {
+                                         int64_t caller_start_ts, int64_t current_ts) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
   DINGO_LOG(INFO) << "TxnCheckTxnStatus primary_key : " << primary_key << " lock_ts : " << lock_ts
-                  << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts
-                  << " txn_result_info : " << txn_result_info.ShortDebugString() << " lock_ttl : " << lock_ttl
-                  << " commit_ts : " << commit_ts << " action : " << action
-                  << " lock_info : " << lock_info.ShortDebugString();
+                  << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts;
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* check_txn_status_request = txn_raft_request.mutable_check_txn_status();
-  check_txn_status_request->set_primary_key(primary_key);
-  check_txn_status_request->set_lock_ts(lock_ts);
-  check_txn_status_request->set_caller_start_ts(caller_start_ts);
-  check_txn_status_request->set_current_ts(current_ts);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnCheckTxnStatus(ctx, primary_key, lock_ts, caller_start_ts, current_ts);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                      std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info) {
+                                      const std::vector<std::string>& keys) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
   DINGO_LOG(INFO) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
-                  << " keys size : " << keys.size() << " txn_result_info : " << txn_result_info.ShortDebugString();
+                  << " keys size : " << keys.size();
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* resolve_lock_request = txn_raft_request.mutable_resolve_lock();
-  for (const auto& key : keys) {
-    resolve_lock_request->add_keys(key);
-  }
-  resolve_lock_request->set_start_ts(start_ts);
-  resolve_lock_request->set_commit_ts(commit_ts);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnResolveLock(ctx, start_ts, commit_ts, keys);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                        const std::vector<std::string>& keys, pb::store::TxnResultInfo& txn_result_info,
-                                        std::vector<pb::common::KeyValue>& kvs) {
+                                        const std::vector<std::string>& keys) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnBatchRollback keys size : " << keys.size() << " kvs size : " << kvs.size()
-                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+  DINGO_LOG(INFO) << "TxnBatchRollback keys size : " << keys.size() << ", start_ts: " << start_ts;
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* rollback_request = txn_raft_request.mutable_rollback();
-  for (const auto& key : keys) {
-    rollback_request->add_keys(key);
-  }
-  rollback_request->set_start_ts(start_ts);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnBatchRollback(ctx, start_ts, keys);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const std::string& start_key,
@@ -787,44 +698,37 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
 }
 
 butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, int64_t start_ts,
-                                    int64_t advise_lock_ttl, pb::store::TxnResultInfo& txn_result_info,
-                                    int64_t& lock_ttl) {
+                                    int64_t advise_lock_ttl) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
   DINGO_LOG(INFO) << "TxnHeartBeat primary_lock : " << primary_lock << " start_ts : " << start_ts
-                  << " advise_lock_ttl : " << advise_lock_ttl
-                  << " txn_result_info : " << txn_result_info.ShortDebugString() << " lock_ttl : " << lock_ttl;
+                  << " advise_lock_ttl : " << advise_lock_ttl;
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* heartbeat_request = txn_raft_request.mutable_lock_heartbeat();
-  heartbeat_request->set_primary_lock(primary_lock);
-  heartbeat_request->set_start_ts(start_ts);
-  heartbeat_request->set_advise_lock_ttl(advise_lock_ttl);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnHeartBeat(ctx, primary_lock, start_ts, advise_lock_ttl);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
-butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts,
-                             pb::store::TxnResultInfo& txn_result_info) {
+butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnGc safe_point_ts : " << safe_point_ts
-                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+  DINGO_LOG(INFO) << "TxnGc safe_point_ts : " << safe_point_ts;
+
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnGc(ctx, safe_point_ts);
+  if (!status.ok()) {
+    return status;
+  }
 
   return butil::Status();
 }
@@ -838,21 +742,13 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
 
   DINGO_LOG(INFO) << "TxnDeleteRange start_key : " << start_key << " end_key : " << end_key;
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* delete_range_request = txn_raft_request.mutable_mvcc_delete_range();
-  delete_range_request->set_start_key(start_key);
-  delete_range_request->set_end_key(end_key);
-
-  if (ctx->IsSyncMode()) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnDeleteRange(ctx, start_key, end_key);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,

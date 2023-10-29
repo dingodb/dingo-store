@@ -50,7 +50,7 @@
 namespace dingodb {
 
 RaftStoreEngine::RaftStoreEngine(std::shared_ptr<RawEngine> engine)
-    : engine_(engine), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
+    : raw_engine_(engine), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
 
 RaftStoreEngine::~RaftStoreEngine() = default;
 
@@ -162,14 +162,14 @@ std::string RaftStoreEngine::GetName() { return pb::common::Engine_Name(pb::comm
 
 pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
-std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return engine_; }
+std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return raw_engine_; }
 
 butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   // Build StateMachine
   auto state_machine = std::make_shared<StoreStateMachine>(
-      engine_, region, parameter.raft_meta, parameter.region_metrics, parameter.listeners, parameter.is_restart);
+      raw_engine_, region, parameter.raft_meta, parameter.region_metrics, parameter.listeners, parameter.is_restart);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }
@@ -402,7 +402,7 @@ butil::Status RaftStoreEngine::Reader::KvCount(std::shared_ptr<Context> /*ctx*/,
 }
 
 std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(const std::string& cf_name) {
-  return std::make_shared<RaftStoreEngine::Reader>(engine_->NewReader(cf_name));
+  return std::make_shared<RaftStoreEngine::Reader>(raw_engine_->NewReader(cf_name));
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
@@ -453,20 +453,20 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
 
 std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(const std::string& /*cf_name*/) {
   // return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(cf_name));
-  return std::make_shared<RaftStoreEngine::VectorReader>(engine_->NewReader(Constant::kStoreDataCF),
-                                                         engine_->NewReader(Constant::kVectorScalarCF),
-                                                         engine_->NewReader(Constant::kVectorTableCF));
+  return std::make_shared<RaftStoreEngine::VectorReader>(raw_engine_->NewReader(Constant::kStoreDataCF),
+                                                         raw_engine_->NewReader(Constant::kVectorScalarCF),
+                                                         raw_engine_->NewReader(Constant::kVectorTableCF));
 }
 
 std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader() {
-  return std::make_shared<RaftStoreEngine::TxnReader>(engine_);
+  return std::make_shared<RaftStoreEngine::TxnReader>(raw_engine_);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, uint64_t start_ts,
                                                       const std::vector<std::string>& keys,
                                                       std::vector<pb::common::KeyValue>& kvs,
                                                       pb::store::TxnResultInfo& txn_result_info) {
-  return TxnEngineHelper::BatchGet(engine_, ctx->IsolationLevel(), start_ts, keys, kvs, txn_result_info);
+  return TxnEngineHelper::BatchGet(raw_engine_, ctx->IsolationLevel(), start_ts, keys, kvs, txn_result_info);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, uint64_t start_ts,
@@ -476,15 +476,74 @@ butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, 
                                                   pb::store::TxnResultInfo& txn_result_info,
                                                   std::vector<pb::common::KeyValue>& kvs, bool& has_more,
                                                   std::string& end_key) {
-  return TxnEngineHelper::Scan(engine_, ctx->IsolationLevel(), start_ts, range, limit, key_only, is_reverse,
+  return TxnEngineHelper::Scan(raw_engine_, ctx->IsolationLevel(), start_ts, range, limit, key_only, is_reverse,
                                disable_coprocessor, coprocessor, txn_result_info, kvs, has_more, end_key);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, uint64_t min_lock_ts,
                                                       uint64_t max_lock_ts, const pb::common::Range& range,
                                                       uint64_t limit, std::vector<pb::store::LockInfo>& lock_infos) {
-  return TxnEngineHelper::ScanLockInfo(engine_, min_lock_ts, max_lock_ts, range.start_key(), range.end_key(), limit,
+  return TxnEngineHelper::ScanLockInfo(raw_engine_, min_lock_ts, max_lock_ts, range.start_key(), range.end_key(), limit,
                                        lock_infos);
+}
+
+std::shared_ptr<Engine::TxnWriter> RaftStoreEngine::NewTxnWriter(std::shared_ptr<Engine> engine) {
+  return std::make_shared<RaftStoreEngine::TxnWriter>(raw_engine_, std::dynamic_pointer_cast<RaftStoreEngine>(engine));
+}
+
+// store prewrite
+butil::Status RaftStoreEngine::TxnWriter::TxnPrewrite(std::shared_ptr<Context> ctx,
+                                                      const std::vector<pb::store::Mutation>& mutations,
+                                                      const std::string& primary_lock, int64_t start_ts,
+                                                      int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
+                                                      int64_t max_commit_ts) {
+  return TxnEngineHelper::Prewrite(raw_engine_, raft_engine_, ctx, mutations, primary_lock, start_ts, lock_ttl,
+                                   txn_size, try_one_pc, max_commit_ts);
+}
+
+// index prewrite
+butil::Status RaftStoreEngine::TxnWriter::TxnPrewrite(std::shared_ptr<Context> ctx,
+                                                      const std::vector<pb::index::Mutation>& mutations,
+                                                      const std::string& primary_lock, int64_t start_ts,
+                                                      int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
+                                                      int64_t max_commit_ts) {
+  return butil ::Status::OK();
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                                                    const std::vector<std::string>& keys) {
+  return TxnEngineHelper::Commit(raw_engine_, raft_engine_, ctx, start_ts, commit_ts, keys);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx,
+                                                            const std::string& primary_key, int64_t lock_ts,
+                                                            int64_t caller_start_ts, int64_t current_ts) {
+  return TxnEngineHelper::CheckTxnStatus(raw_engine_, raft_engine_, ctx, primary_key, lock_ts, caller_start_ts,
+                                         current_ts);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                         int64_t commit_ts, const std::vector<std::string>& keys) {
+  return TxnEngineHelper::ResolveLock(raw_engine_, raft_engine_, ctx, start_ts, commit_ts, keys);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                           const std::vector<std::string>& keys) {
+  return TxnEngineHelper::BatchRollback(raw_engine_, raft_engine_, ctx, start_ts, keys);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock,
+                                                       int64_t start_ts, int64_t advise_lock_ttl) {
+  return TxnEngineHelper::HeartBeat(raw_engine_, raft_engine_, ctx, primary_lock, start_ts, advise_lock_ttl);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                                         const std::string& end_key) {
+  return TxnEngineHelper::DeleteRange(raw_engine_, raft_engine_, ctx, start_key, end_key);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
+  return TxnEngineHelper::Gc(raw_engine_, raft_engine_, ctx, safe_point_ts);
 }
 
 }  // namespace dingodb

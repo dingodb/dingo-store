@@ -53,11 +53,19 @@ class IndexServiceImpl : public pb::index::IndexService {
                          const pb::index::VectorSearchDebugRequest* request,
                          pb::index::VectorSearchDebugResponse* response, google::protobuf::Closure* done) override;
 
-  // txn api
+  // txn read
   void TxnGet(google::protobuf::RpcController* controller, const pb::index::TxnGetRequest* request,
               pb::index::TxnGetResponse* response, google::protobuf::Closure* done) override;
   void TxnScan(google::protobuf::RpcController* controller, const pb::index::TxnScanRequest* request,
                pb::index::TxnScanResponse* response, google::protobuf::Closure* done) override;
+  void TxnBatchGet(google::protobuf::RpcController* controller, const pb::index::TxnBatchGetRequest* request,
+                   pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) override;
+  void TxnScanLock(google::protobuf::RpcController* controller, const pb::index::TxnScanLockRequest* request,
+                   pb::index::TxnScanLockResponse* response, google::protobuf::Closure* done) override;
+  void TxnDump(google::protobuf::RpcController* controller, const pb::index::TxnDumpRequest* request,
+               pb::index::TxnDumpResponse* response, google::protobuf::Closure* done) override;
+
+  // txn write
   void TxnPrewrite(google::protobuf::RpcController* controller, const pb::index::TxnPrewriteRequest* request,
                    pb::index::TxnPrewriteResponse* response, google::protobuf::Closure* done) override;
   void TxnCommit(google::protobuf::RpcController* controller, const pb::index::TxnCommitRequest* request,
@@ -67,20 +75,14 @@ class IndexServiceImpl : public pb::index::IndexService {
                          pb::index::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done) override;
   void TxnResolveLock(google::protobuf::RpcController* controller, const pb::index::TxnResolveLockRequest* request,
                       pb::index::TxnResolveLockResponse* response, google::protobuf::Closure* done) override;
-  void TxnBatchGet(google::protobuf::RpcController* controller, const pb::index::TxnBatchGetRequest* request,
-                   pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) override;
   void TxnBatchRollback(google::protobuf::RpcController* controller, const pb::index::TxnBatchRollbackRequest* request,
                         pb::index::TxnBatchRollbackResponse* response, google::protobuf::Closure* done) override;
-  void TxnScanLock(google::protobuf::RpcController* controller, const pb::index::TxnScanLockRequest* request,
-                   pb::index::TxnScanLockResponse* response, google::protobuf::Closure* done) override;
   void TxnHeartBeat(google::protobuf::RpcController* controller, const pb::index::TxnHeartBeatRequest* request,
                     pb::index::TxnHeartBeatResponse* response, google::protobuf::Closure* done) override;
   void TxnGc(google::protobuf::RpcController* controller, const pb::index::TxnGcRequest* request,
              pb::index::TxnGcResponse* response, google::protobuf::Closure* done) override;
   void TxnDeleteRange(google::protobuf::RpcController* controller, const pb::index::TxnDeleteRangeRequest* request,
                       pb::index::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
-  void TxnDump(google::protobuf::RpcController* controller, const pb::index::TxnDumpRequest* request,
-               pb::index::TxnDumpResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }

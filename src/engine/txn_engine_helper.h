@@ -19,13 +19,16 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "engine/engine.h"
 #include "engine/raw_engine.h"
+#include "meta/store_meta_manager.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
 
 class TxnEngineHelper {
  public:
+  // txn read functions
   static butil::Status GetLockInfo(const std::shared_ptr<RawEngine::Reader> &reader, const std::string &key,
                                    pb::store::LockInfo &lock_info);
 
@@ -33,12 +36,9 @@ class TxnEngineHelper {
                                     const std::string &start_key, const std::string &end_key, uint32_t limit,
                                     std::vector<pb::store::LockInfo> &lock_infos);
 
-  static butil::Status Rollback(const std::shared_ptr<RawEngine> &engine,
-                                std::vector<std::string> &keys_to_rollback_with_data,
-                                std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts);
-
-  static butil::Status Commit(const std::shared_ptr<RawEngine> &engine, std::vector<pb::store::LockInfo> &lock_infos,
-                              int64_t commit_ts);
+  //   static butil::Status Commit(const std::shared_ptr<RawEngine> &engine, std::vector<pb::store::LockInfo>
+  //   &lock_infos,
+  //                               int64_t commit_ts);
 
   static butil::Status BatchGet(const std::shared_ptr<RawEngine> &engine,
                                 const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
@@ -65,6 +65,48 @@ class TxnEngineHelper {
 
   static butil::Status GetRollbackInfo(const std::shared_ptr<RawEngine::Reader> &write_reader, int64_t start_ts,
                                        const std::string &key, pb::store::WriteInfo &write_info);
+
+  // txn write functions
+  static butil::Status DoTxnCommit(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                   std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                   const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
+                                   int64_t commit_ts);
+
+  static butil::Status DoRollback(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                  std::shared_ptr<Context> ctx, std::vector<std::string> &keys_to_rollback_with_data,
+                                  std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts);
+
+  static butil::Status Prewrite(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
+                                const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
+                                bool try_one_pc, int64_t max_commit_ts);
+
+  static butil::Status Commit(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> engine,
+                              std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                              const std::vector<std::string> &keys);
+
+  static butil::Status BatchRollback(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                     std::shared_ptr<Context> ctx, int64_t start_ts,
+                                     const std::vector<std::string> &keys);
+
+  static butil::Status CheckTxnStatus(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> engine,
+                                      std::shared_ptr<Context> ctx, const std::string &primary_key, int64_t lock_ts,
+                                      int64_t caller_start_ts, int64_t current_ts);
+
+  static butil::Status ResolveLock(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                   std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                                   const std::vector<std::string> &keys);
+
+  static butil::Status HeartBeat(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                 std::shared_ptr<Context> ctx, const std::string &primary_lock, int64_t start_ts,
+                                 int64_t advise_lock_ttl);
+
+  static butil::Status DeleteRange(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                                   std::shared_ptr<Context> ctx, const std::string &start_key,
+                                   const std::string &end_key);
+
+  static butil::Status Gc(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+                          std::shared_ptr<Context> ctx, int64_t safe_point_ts);
 };
 
 }  // namespace dingodb

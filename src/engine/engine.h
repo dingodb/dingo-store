@@ -147,6 +147,34 @@ class Engine {
                                       std::vector<pb::store::LockInfo>& lock_infos) = 0;
   };
 
+  class TxnWriter {
+   public:
+    TxnWriter() = default;
+    virtual ~TxnWriter() = default;
+
+    // store prewrite
+    virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
+                                      const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                      int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) = 0;
+    // index prewrite
+    virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
+                                      const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                      int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) = 0;
+    virtual butil::Status TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                                    const std::vector<std::string>& keys) = 0;
+    virtual butil::Status TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key,
+                                            int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) = 0;
+    virtual butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                                         const std::vector<std::string>& keys) = 0;
+    virtual butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                           const std::vector<std::string>& keys) = 0;
+    virtual butil::Status TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, int64_t start_ts,
+                                       int64_t advise_lock_ttl) = 0;
+    virtual butil::Status TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                         const std::string& end_key) = 0;
+    virtual butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) = 0;
+  };
+
   virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
   virtual std::shared_ptr<VectorReader> NewVectorReader(const std::string&) {
     DINGO_LOG(ERROR) << "Not support NewVectorReader.";
@@ -154,6 +182,7 @@ class Engine {
   }
 
   virtual std::shared_ptr<TxnReader> NewTxnReader() = 0;
+  virtual std::shared_ptr<TxnWriter> NewTxnWriter(std::shared_ptr<Engine> engine) = 0;
 
   //  This is used by RaftStoreEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.
