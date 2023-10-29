@@ -1415,7 +1415,7 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::in
 }
 
 void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::index::TxnPrewriteRequest* request, pb::index::TxnPrewriteResponse* response,
+                   const pb::index::TxnPrewriteRequest* request, pb::store::TxnPrewriteResponse* response,
                    google::protobuf::Closure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
@@ -1435,9 +1435,12 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetIsolationLevel(request->context().isolation_level());
   if (is_sync) ctx->EnableSyncMode();
 
-  std::vector<pb::index::Mutation> mutations;
+  std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
-    mutations.emplace_back(mutation);
+    pb::store::Mutation store_mutation;
+    store_mutation.set_op(mutation.op());
+    store_mutation.set_key(mutation.key());
+    store_mutation.set_value(mutation.vector().SerializeAsString());
   }
 
   status = storage->TxnPrewrite(ctx, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
@@ -1451,7 +1454,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 
 void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    const pb::index::TxnPrewriteRequest* request,
-                                   pb::index::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
+                                   pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnPrewrite", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
@@ -1469,7 +1472,7 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnCommitRequest(const pb::index::TxnCommitRequest* request) {
+static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1506,42 +1509,11 @@ static butil::Status ValidateTxnCommitRequest(const pb::index::TxnCommitRequest*
 }
 
 void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller,
-                 const pb::index::TxnCommitRequest* request, pb::index::TxnCommitResponse* response,
-                 google::protobuf::Closure* done, bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  auto status = ValidateTxnCommitRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  std::vector<std::string> keys;
-  for (const auto& key : request->keys()) {
-    keys.emplace_back(key);
-  }
-
-  status = storage->TxnCommit(ctx, request->start_ts(), request->commit_ts(), keys);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-    return;
-  }
-}
+                 const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
+                 google::protobuf::Closure* done, bool is_sync);
 
 void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
-                                 const pb::index::TxnCommitRequest* request, pb::index::TxnCommitResponse* response,
+                                 const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnCommit", done, request, response);
 
@@ -1560,7 +1532,7 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnCheckTxnStatusRequest(const pb::index::TxnCheckTxnStatusRequest* request) {
+static butil::Status ValidateTxnCheckTxnStatusRequest(const pb::store::TxnCheckTxnStatusRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1596,40 +1568,12 @@ static butil::Status ValidateTxnCheckTxnStatusRequest(const pb::index::TxnCheckT
 }
 
 void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* controller,
-                         const pb::index::TxnCheckTxnStatusRequest* request,
-                         pb::index::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done,
-                         bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  butil::Status status = ValidateTxnCheckTxnStatusRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  std::shared_ptr<Context> ctx =
-      std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
-                                      request->current_ts());
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-  }
-}
+                         const pb::store::TxnCheckTxnStatusRequest* request,
+                         pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done, bool is_sync);
 
 void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* controller,
-                                         const pb::index::TxnCheckTxnStatusRequest* request,
-                                         pb::index::TxnCheckTxnStatusResponse* response,
+                                         const pb::store::TxnCheckTxnStatusRequest* request,
+                                         pb::store::TxnCheckTxnStatusResponse* response,
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnCheckTxnStatus", done, request, response);
 
@@ -1648,7 +1592,7 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   }
 }
 
-static butil::Status ValidateTxnResolveLockRequest(const pb::index::TxnResolveLockRequest* request) {
+static butil::Status ValidateTxnResolveLockRequest(const pb::store::TxnResolveLockRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1683,43 +1627,12 @@ static butil::Status ValidateTxnResolveLockRequest(const pb::index::TxnResolveLo
 }
 
 void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* controller,
-                      const pb::index::TxnResolveLockRequest* request, pb::index::TxnResolveLockResponse* response,
-                      google::protobuf::Closure* done, bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  auto status = ValidateTxnResolveLockRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  std::vector<std::string> keys;
-  for (const auto& key : request->keys()) {
-    keys.emplace_back(key);
-  }
-
-  status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-    return;
-  }
-}
+                      const pb::store::TxnResolveLockRequest* request, pb::store::TxnResolveLockResponse* response,
+                      google::protobuf::Closure* done, bool is_sync);
 
 void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controller,
-                                      const pb::index::TxnResolveLockRequest* request,
-                                      pb::index::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
+                                      const pb::store::TxnResolveLockRequest* request,
+                                      pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnResolveLock", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
@@ -1845,7 +1758,7 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnBatchRollbackRequest(const pb::index::TxnBatchRollbackRequest* request) {
+static butil::Status ValidateTxnBatchRollbackRequest(const pb::store::TxnBatchRollbackRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1878,43 +1791,12 @@ static butil::Status ValidateTxnBatchRollbackRequest(const pb::index::TxnBatchRo
 }
 
 void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* controller,
-                        const pb::index::TxnBatchRollbackRequest* request,
-                        pb::index::TxnBatchRollbackResponse* response, google::protobuf::Closure* done, bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  auto status = ValidateTxnBatchRollbackRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  std::vector<std::string> keys;
-  for (const auto& key : request->keys()) {
-    keys.emplace_back(key);
-  }
-
-  status = storage->TxnBatchRollback(ctx, request->start_ts(), keys);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-    return;
-  }
-}
+                        const pb::store::TxnBatchRollbackRequest* request,
+                        pb::store::TxnBatchRollbackResponse* response, google::protobuf::Closure* done, bool is_sync);
 
 void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* controller,
-                                        const pb::index::TxnBatchRollbackRequest* request,
-                                        pb::index::TxnBatchRollbackResponse* response,
+                                        const pb::store::TxnBatchRollbackRequest* request,
+                                        pb::store::TxnBatchRollbackResponse* response,
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnBatchRollback", done, request, response);
 
@@ -1933,7 +1815,7 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   }
 }
 
-static butil::Status ValidateTxnScanLockRequest(const pb::index::TxnScanLockRequest* request) {
+static butil::Status ValidateTxnScanLockRequest(const pb::store::TxnScanLockRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1979,45 +1861,12 @@ static butil::Status ValidateTxnScanLockRequest(const pb::index::TxnScanLockRequ
 }
 
 void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::index::TxnScanLockRequest* request, pb::index::TxnScanLockResponse* response,
-                   google::protobuf::Closure* done) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  butil::Status status = ValidateTxnScanLockRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>();
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-
-  pb::store::TxnResultInfo txn_result_info;
-  std::vector<pb::store::LockInfo> locks;
-
-  status = storage->TxnScanLock(ctx, request->max_ts(), request->start_key(), request->limit(), request->end_key(),
-                                txn_result_info, locks);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    return;
-  }
-
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
-  for (const auto& lock : locks) {
-    response->add_locks()->CopyFrom(lock);
-  }
-}
+                   const pb::store::TxnScanLockRequest* request, pb::store::TxnScanLockResponse* response,
+                   google::protobuf::Closure* done);
 
 void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
-                                   const pb::index::TxnScanLockRequest* request,
-                                   pb::index::TxnScanLockResponse* response, google::protobuf::Closure* done) {
+                                   const pb::store::TxnScanLockRequest* request,
+                                   pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnScanLock", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
@@ -2034,7 +1883,7 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnHeartBeatRequest(const pb::index::TxnHeartBeatRequest* request) {
+static butil::Status ValidateTxnHeartBeatRequest(const pb::store::TxnHeartBeatRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -2067,38 +1916,12 @@ static butil::Status ValidateTxnHeartBeatRequest(const pb::index::TxnHeartBeatRe
 }
 
 void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* controller,
-                    const pb::index::TxnHeartBeatRequest* request, pb::index::TxnHeartBeatResponse* response,
-                    google::protobuf::Closure* done, bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  auto status = ValidateTxnHeartBeatRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl());
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-    return;
-  }
-}
+                    const pb::store::TxnHeartBeatRequest* request, pb::store::TxnHeartBeatResponse* response,
+                    google::protobuf::Closure* done, bool is_sync);
 
 void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
-                                    const pb::index::TxnHeartBeatRequest* request,
-                                    pb::index::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
+                                    const pb::store::TxnHeartBeatRequest* request,
+                                    pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnHeartBeat", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
@@ -2116,7 +1939,7 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnGcRequest(const pb::index::TxnGcRequest* request) {
+static butil::Status ValidateTxnGcRequest(const pb::store::TxnGcRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -2132,37 +1955,11 @@ static butil::Status ValidateTxnGcRequest(const pb::index::TxnGcRequest* request
   return butil::Status();
 }
 
-void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, const pb::index::TxnGcRequest* request,
-             pb::index::TxnGcResponse* response, google::protobuf::Closure* done, bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
+             pb::store::TxnGcResponse* response, google::protobuf::Closure* done, bool is_sync);
 
-  int64_t region_id = request->context().region_id();
-
-  auto status = ValidateTxnGcRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  status = storage->TxnGc(ctx, request->safe_point_ts());
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-    return;
-  }
-}
-
-void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::index::TxnGcRequest* request,
-                             pb::index::TxnGcResponse* response, google::protobuf::Closure* done) {
+void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
+                             pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnGc", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
@@ -2179,7 +1976,7 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
   }
 }
 
-static butil::Status ValidateTxnDeleteRangeRequest(const pb::index::TxnDeleteRangeRequest* request) {
+static butil::Status ValidateTxnDeleteRangeRequest(const pb::store::TxnDeleteRangeRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -2208,37 +2005,12 @@ static butil::Status ValidateTxnDeleteRangeRequest(const pb::index::TxnDeleteRan
 }
 
 void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* controller,
-                      const pb::index::TxnDeleteRangeRequest* request, pb::index::TxnDeleteRangeResponse* response,
-                      google::protobuf::Closure* done, bool is_sync) {
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  int64_t region_id = request->context().region_id();
-
-  auto status = ValidateTxnDeleteRangeRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
-    return;
-  }
-
-  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
-
-  status = storage->TxnDeleteRange(ctx, request->start_key(), request->end_key());
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
-    if (!is_sync) done->Run();
-  }
-}
+                      const pb::store::TxnDeleteRangeRequest* request, pb::store::TxnDeleteRangeResponse* response,
+                      google::protobuf::Closure* done, bool is_sync);
 
 void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controller,
-                                      const pb::index::TxnDeleteRangeRequest* request,
-                                      pb::index::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
+                                      const pb::store::TxnDeleteRangeRequest* request,
+                                      pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure("TxnDeleteRange", done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {

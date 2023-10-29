@@ -575,27 +575,6 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
   return butil::Status();
 }
 
-butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
-                                   const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {
-  auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
-    return status;
-  }
-
-  DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size() << " primary_lock : " << primary_lock
-                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
-                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
-
-  auto writer = engine_->NewTxnWriter(engine_);
-  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts);
-  if (!status.ok()) {
-    return status;
-  }
-
-  return butil::Status();
-}
-
 butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                  const std::vector<std::string>& keys) {
   auto status = ValidateLeader(ctx->RegionId());
