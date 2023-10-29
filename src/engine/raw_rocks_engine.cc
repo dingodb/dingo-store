@@ -683,6 +683,9 @@ void RawRocksEngine::Close() {
     for (auto& handle : column_family_handles) {
       db_->DestroyColumnFamilyHandle(handle);
     }
+    for (auto& [_, column_family] : column_families_) {
+      column_family->SetHandle(nullptr);
+    }
 
     db_->Close();
     db_ = nullptr;
@@ -886,8 +889,10 @@ RawRocksEngine::ColumnFamily::ColumnFamily(const std::string& cf_name, const Col
 RawRocksEngine::ColumnFamily::~ColumnFamily() {
   name_ = "";
   config_.clear();
-  delete handle_;
-  handle_ = nullptr;
+  if (handle_ != nullptr) {
+    delete handle_;
+    handle_ = nullptr;
+  }
 }
 
 RawRocksEngine::ColumnFamily::ColumnFamily(const RawRocksEngine::ColumnFamily& rhs) {
