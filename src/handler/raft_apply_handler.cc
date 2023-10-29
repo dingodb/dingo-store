@@ -788,13 +788,15 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   std::vector<pb::common::KeyValue> kvs_scalar;   // for vector scalar data
   std::vector<pb::common::KeyValue> kvs_table;    // for vector table data
 
+  auto region_start_key = region->Range().start_key();
+  auto region_part_id = region->PartitionId();
   for (const auto &vector : request.vectors()) {
     // vector data
     {
       pb::common::KeyValue kv;
       std::string key;
       // VectorCodec::EncodeVectorData(region->PartitionId(), vector.id(), key);
-      VectorCodec::EncodeVectorKey(region->PartitionId(), vector.id(), key);
+      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
 
       kv.mutable_key()->swap(key);
       kv.set_value(vector.vector().SerializeAsString());
@@ -805,7 +807,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       pb::common::KeyValue kv;
       std::string key;
       // VectorCodec::EncodeVectorScalar(region->PartitionId(), vector.id(), key);
-      VectorCodec::EncodeVectorKey(region->PartitionId(), vector.id(), key);
+      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.scalar_data().SerializeAsString());
       kvs_scalar.push_back(kv);
@@ -815,7 +817,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       pb::common::KeyValue kv;
       std::string key;
       // VectorCodec::EncodeVectorTable(region->PartitionId(), vector.id(), key);
-      VectorCodec::EncodeVectorKey(region->PartitionId(), vector.id(), key);
+      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.table_data().SerializeAsString());
       kvs_table.push_back(kv);
@@ -980,10 +982,12 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   // std::vector<std::string> keys;
   std::vector<int64_t> delete_ids;
 
+  auto region_start_key = region->Range().start_key();
+  auto region_part_id = region->PartitionId();
   for (int i = 0; i < request.ids_size(); i++) {
     // set key_states
     std::string key;
-    VectorCodec::EncodeVectorKey(region->PartitionId(), request.ids(i), key);
+    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), key);
 
     std::string value;
     auto ret = reader->KvGet(snapshot, key, value);

@@ -175,7 +175,7 @@ class Helper {
 
     DINGO_LOG(INFO) << "mid_vector_id: " << mid_vector_id;
     std::string result;
-    dingodb::VectorCodec::EncodeVectorKey(partition_id, mid_vector_id, result);
+    dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, mid_vector_id, result);
     return result;
   }
 };

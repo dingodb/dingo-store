@@ -25,7 +25,6 @@
 #include <utility>
 #include <vector>
 
-#include "braft/closure_helper.h"
 #include "braft/configuration.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
@@ -35,7 +34,6 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
-#include "glog/logging.h"
 #include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -43,7 +41,6 @@
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -57,9 +54,6 @@ DECLARE_bool(ip2hostname);
 
 DEFINE_uint32(table_delete_after_deleted_time, 86400, "delete table after deleted time in seconds");
 DEFINE_uint32(index_delete_after_deleted_time, 86400, "delete index after deleted time in seconds");
-
-DEFINE_uint32(vector_regon_range_key_min_len, 8, "vector regon range key min len");
-DEFINE_uint32(vector_regon_range_key_max_len, 16, "vector regon range key max len");
 
 DEFINE_int32(
     region_update_timeout, 25,
@@ -1583,6 +1577,44 @@ butil::Status CoordinatorControl::ValidateMaxRegionCount() {
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key, const std::string& end_key) {
+  if (start_key.size() < 8 || end_key.size() < 8) {
+    DINGO_LOG(ERROR) << "region range illegal, start_key: " << Helper::StringToHex(start_key)
+                     << ", end_key: " << Helper::StringToHex(end_key);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range illegal");
+  }
+
+  if (start_key[0] != end_key[0]) {
+    DINGO_LOG(ERROR) << "region range illegal, start_key: " << Helper::StringToHex(start_key)
+                     << ", end_key: " << Helper::StringToHex(end_key);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range illegal");
+  }
+
+  auto region_prefix = start_key[0];
+  if (region_prefix == 0) {
+    DINGO_LOG(INFO) << "region has no prefix, this is a legacy region";
+    return butil::Status::OK();
+  } else if (region_prefix == Constant::kExecutorRaw) {
+    DINGO_LOG(INFO) << "region is kExecutorRaw";
+    return butil::Status::OK();
+  } else if (region_prefix == Constant::kExecutorTxn) {
+    DINGO_LOG(INFO) << "region is kExecutorTxn";
+    return butil::Status::OK();
+  } else if (region_prefix == Constant::kClientRaw) {
+    DINGO_LOG(INFO) << "region is kClientRaw";
+    return butil::Status::OK();
+  } else if (region_prefix == Constant::kClientTxn) {
+    DINGO_LOG(INFO) << "region is kClientTxn";
+    return butil::Status::OK();
+  } else {
+    DINGO_LOG(ERROR) << "region prefix is not legal, start_key: " << Helper::StringToHex(start_key)
+                     << ", end_key: " << Helper::StringToHex(end_key);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region prefix is not legal");
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::CreateShadowRegion(
     const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
     int32_t replica_num, pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id,
@@ -1594,6 +1626,11 @@ butil::Status CoordinatorControl::CreateShadowRegion(
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
                   << ", part_id=" << part_id << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
+
+  auto ret = CheckRegionPrefix(region_range.start_key(), region_range.end_key());
+  if (!ret.ok()) {
+    return ret;
+  }
 
   if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
     DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region";
@@ -1615,16 +1652,20 @@ butil::Status CoordinatorControl::CreateShadowRegion(
 
     // validate vector index region range
     // range's start_key and end_key must be less than 16 bytes
-    if (region_range.start_key().length() != FLAGS_vector_regon_range_key_min_len &&
-        region_range.start_key().size() != FLAGS_vector_regon_range_key_max_len) {
+    if (region_range.start_key().size() != Constant::kVectorKeyMinLen &&
+        region_range.start_key().size() != Constant::kVectorKeyMaxLen &&
+        region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+        region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
                        << Helper::StringToHex(region_range.start_key());
       return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                            "vector index region range start_key size is not 8 or 16 bytes");
     }
 
-    if (region_range.end_key().length() != FLAGS_vector_regon_range_key_min_len &&
-        region_range.end_key().size() != FLAGS_vector_regon_range_key_max_len) {
+    if (region_range.end_key().size() != Constant::kVectorKeyMinLen &&
+        region_range.end_key().size() != Constant::kVectorKeyMaxLen &&
+        region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+        region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
                        << Helper::StringToHex(region_range.end_key());
       return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
@@ -1746,6 +1787,11 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
                   << ", part_id=" << part_id << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
 
+  auto ret = CheckRegionPrefix(region_range.start_key(), region_range.end_key());
+  if (!ret.ok()) {
+    return ret;
+  }
+
   if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
     DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
@@ -1766,16 +1812,20 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
 
     // validate vector index region range
     // range's start_key and end_key must be less than 16 bytes
-    if (region_range.start_key().length() != FLAGS_vector_regon_range_key_min_len &&
-        region_range.start_key().size() != FLAGS_vector_regon_range_key_max_len) {
+    if (region_range.start_key().size() != Constant::kVectorKeyMinLen &&
+        region_range.start_key().size() != Constant::kVectorKeyMaxLen &&
+        region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+        region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
                        << Helper::StringToHex(region_range.start_key());
       return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                            "vector index region range start_key size is not 8 or 16 bytes");
     }
 
-    if (region_range.end_key().length() != FLAGS_vector_regon_range_key_min_len &&
-        region_range.end_key().size() != FLAGS_vector_regon_range_key_max_len) {
+    if (region_range.end_key().size() != Constant::kVectorKeyMinLen &&
+        region_range.end_key().size() != Constant::kVectorKeyMaxLen &&
+        region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+        region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
                        << Helper::StringToHex(region_range.end_key());
       return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
@@ -1802,8 +1852,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   }
 
   // select store for region
-  auto ret =
-      SelectStore(store_type, replica_num, resource_tag, new_index_parameter, store_ids, selected_stores_for_regions);
+  ret = SelectStore(store_type, replica_num, resource_tag, new_index_parameter, store_ids, selected_stores_for_regions);
   if (!ret.ok()) {
     return ret;
   }

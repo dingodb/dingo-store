@@ -1179,7 +1179,7 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     if (query_response.region().definition().index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
       if (FLAGS_vector_id > 0) {
         int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
-        dingodb::VectorCodec::EncodeVectorKey(partition_id, FLAGS_vector_id, real_mid);
+        dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, FLAGS_vector_id, real_mid);
       } else {
         real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
       }

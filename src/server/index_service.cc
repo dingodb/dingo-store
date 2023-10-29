@@ -112,6 +112,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
+  ctx->region_range = region->Range();
   ctx->vector_ids = Helper::PbRepeatedToVector(request->vector_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
@@ -830,11 +831,13 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
                                        int64_t end_vector_id) {                           // NOLINT
   pb::common::Range range;
 
+  auto region_start_key = region->Range().start_key();
+  auto region_part_id = region->PartitionId();
   if (start_vector_id == 0) {
     range.set_start_key(region->Range().start_key());
   } else {
     std::string key;
-    VectorCodec::EncodeVectorKey(region->PartitionId(), start_vector_id, key);
+    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, start_vector_id, key);
     range.set_start_key(key);
   }
 
@@ -842,7 +845,7 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
     range.set_end_key(region->Range().end_key());
   } else {
     std::string key;
-    VectorCodec::EncodeVectorKey(region->PartitionId(), end_vector_id, key);
+    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, end_vector_id, key);
     range.set_end_key(key);
   }
 

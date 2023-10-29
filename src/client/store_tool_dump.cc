@@ -454,8 +454,8 @@ void DumpVectorIndexDb(std::shared_ptr<Context> ctx) {
       std::string begin_key, end_key;
       // dingodb::VectorCodec::EncodeVectorData(partition_id, 0, begin_key);
       // dingodb::VectorCodec::EncodeVectorData(partition_id, INT64_MAX, end_key);
-      dingodb::VectorCodec::EncodeVectorKey(partition_id, 0, begin_key);
-      dingodb::VectorCodec::EncodeVectorKey(partition_id, INT64_MAX, end_key);
+      dingodb::VectorCodec::EncodeVectorKey(0, partition_id, 0, begin_key);
+      dingodb::VectorCodec::EncodeVectorKey(127, partition_id, INT64_MAX, end_key);
       db->Scan(begin_key, end_key, ctx->offset, ctx->limit, vector_data_handler);
     }
 

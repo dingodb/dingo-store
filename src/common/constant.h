@@ -55,13 +55,17 @@ class Constant {
   inline static const std::string kVectorScalarCF = "vector_scalar";
   inline static const std::string kVectorTableCF = "vector_table";
 
-  // cf seq id
-  // static constexpr uint32_t kStoreDataCfId = 0;
-  // static constexpr uint32_t kVectorScalarCfId = 1;
-  // static constexpr uint32_t kVectorTableCfId = 2;
-  // static constexpr uint32_t kTxnDataCfId = 3;
-  // static constexpr uint32_t kTxnLockCfId = 4;
-  // static constexpr uint32_t kTxnWriteCfId = 5;
+  // region range prefix
+  inline static const char kExecutorRaw = 'r';
+  inline static const char kExecutorTxn = 't';
+  inline static const char kClientRaw = 'w';
+  inline static const char kClientTxn = 'x';
+
+  // vector key len
+  inline static const uint32_t kVectorKeyMinLen = 8;
+  inline static const uint32_t kVectorKeyMinLenWithPrefix = 9;
+  inline static const uint32_t kVectorKeyMaxLen = 16;
+  inline static const uint32_t kVectorKeyMaxLenWithPrefix = 17;
 
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
