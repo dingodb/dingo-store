@@ -749,14 +749,14 @@ message TxnDumpResponse {
   repeated TxnDataKey data_keys = 3;
   // data value: raw_value
   repeated TxnDataValue data_values = 4;
-  // lock key: raw_key
+  // lock key: raw_key | lock_ver
   repeated TxnLockKey lock_keys = 5;
   // lock value: LockInfo
   repeated TxnLockValue lock_values = 6;
   // write key: raw_key | commit_ts
-  repeated TxnWriteKey keys = 7;
+  repeated TxnWriteKey write_keys = 7;
   // write value: WriteInfo
-  repeated TxnWriteValue values = 8;
+  repeated TxnWriteValue write_values = 8;
 }
 
 service StoreService {

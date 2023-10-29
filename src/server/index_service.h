@@ -54,16 +54,16 @@ class IndexServiceImpl : public pb::index::IndexService {
                          pb::index::VectorSearchDebugResponse* response, google::protobuf::Closure* done) override;
 
   // txn read
-  void TxnGet(google::protobuf::RpcController* controller, const pb::index::TxnGetRequest* request,
+  void TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
               pb::index::TxnGetResponse* response, google::protobuf::Closure* done) override;
-  void TxnScan(google::protobuf::RpcController* controller, const pb::index::TxnScanRequest* request,
+  void TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
                pb::index::TxnScanResponse* response, google::protobuf::Closure* done) override;
-  void TxnBatchGet(google::protobuf::RpcController* controller, const pb::index::TxnBatchGetRequest* request,
+  void TxnBatchGet(google::protobuf::RpcController* controller, const pb::store::TxnBatchGetRequest* request,
                    pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) override;
   void TxnScanLock(google::protobuf::RpcController* controller, const pb::store::TxnScanLockRequest* request,
                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) override;
-  void TxnDump(google::protobuf::RpcController* controller, const pb::index::TxnDumpRequest* request,
-               pb::index::TxnDumpResponse* response, google::protobuf::Closure* done) override;
+  void TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
+               pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) override;
 
   // txn write
   void TxnPrewrite(google::protobuf::RpcController* controller, const pb::index::TxnPrewriteRequest* request,
