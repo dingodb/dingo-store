@@ -65,24 +65,6 @@ class Iterator {
 
 using IteratorPtr = std::shared_ptr<Iterator>;
 
-class MultipleRangeIterator {
- public:
-  MultipleRangeIterator() = default;
-  virtual ~MultipleRangeIterator() = default;
-
-  MultipleRangeIterator(const MultipleRangeIterator&) = delete;
-  void operator=(const MultipleRangeIterator&) = delete;
-
-  virtual bool Init() = 0;
-  virtual bool IsValid() = 0;
-  virtual void Next() = 0;
-
-  virtual int64_t KeyValueSize() = 0;
-
-  virtual std::string FirstRangeKey() = 0;
-  virtual std::vector<std::string> AllRangeKeys() = 0;
-};
-
 };  // namespace dingodb
 
 #endif  // DINGODB_ENGINE_ITERATOR_H_

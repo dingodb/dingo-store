@@ -126,9 +126,6 @@ class RawEngine {
   virtual std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) = 0;
   virtual std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
                                                          IteratorOptions options) = 0;
-  virtual std::shared_ptr<MultipleRangeIterator> NewMultipleRangeIterator(
-      std::shared_ptr<RawEngine> raw_engine, const std::string& cf_name,
-      std::vector<dingodb::pb::common::Range> ranges) = 0;
 
   virtual std::vector<int64_t> GetApproximateSizes(const std::string& cf_name,
                                                    std::vector<pb::common::Range>& ranges) = 0;
