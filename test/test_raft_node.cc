@@ -149,7 +149,7 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
   auto node = std::make_shared<dingodb::RaftNode>(
       node_id, region->Name(), braft::PeerId(FormatLocation(peer.raft_location())), state_machine, log_storage);
 
-  if (node->Init(init_conf, config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000,
+  if (node->Init(region, init_conf, config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000,
                  config->GetInt("raft.snapshot_interval_s")) != 0) {
     node->Destroy();
     return nullptr;
@@ -187,18 +187,18 @@ class RaftNodeTest : public testing::Test {
     butil::EndPoint endpoint;
     butil::str2endpoint("127.0.0.1", 17001, &endpoint);
     if (braft::add_service(raft_server.get(), endpoint) != 0) {
-      std::cout << "Fail to add raft service!" << std::endl;
+      std::cout << "Fail to add raft service!" << '\n';
       return;
     }
 
     if (raft_server->Start(endpoint, nullptr) != 0) {
-      std::cout << "Fail to start raft server!" << std::endl;
+      std::cout << "Fail to start raft server!" << '\n';
       return;
     }
 
     config = std::make_shared<dingodb::YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << std::endl;
+      std::cout << "Load config failed" << '\n';
       return;
     }
   }
@@ -227,7 +227,7 @@ std::unique_ptr<brpc::Server> RaftNodeTest::raft_server = nullptr;
 // to 127.0.0.1:17001:1,127.0.0.1:17001:2,127.0.0.1:17001:3,127.0.0.1:17001:4
 // TEST_F(RaftNodeTest, AddOnePeer) {
 //   // Add one peer
-//   std::cout << "====Add one peer" << std::endl;
+//   std::cout << "====Add one peer" << '\n';
 
 //   std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3"};
 
@@ -247,7 +247,7 @@ std::unique_ptr<brpc::Server> RaftNodeTest::raft_server = nullptr;
 //   bthread_usleep(3 * 1000 * 1000L);
 
 //   // Change peers
-//   std::cout << "====Change peer" << std::endl;
+//   std::cout << "====Change peer" << '\n';
 //   std::vector<dingodb::pb::common::Peer> pb_peers;
 //   {
 //     dingodb::pb::common::Peer pb_peer;
@@ -290,12 +290,12 @@ std::unique_ptr<brpc::Server> RaftNodeTest::raft_server = nullptr;
 
 //   bthread_usleep(3 * 1000 * 1000L);
 
-//   std::cout << "====Watch peer" << std::endl;
+//   std::cout << "====Watch peer" << '\n';
 
 //   for (auto& node : inner_nodes) {
 //     std::cout << "region id: " << node->GetNodeId() << " leader id: " << node->GetLeaderId().to_string() <<
-//     std::endl; std::vector<braft::PeerId> tmp_peers; node->ListPeers(&tmp_peers); for (auto& peer : tmp_peers) {
-//       std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << std::endl;
+//     '\n'; std::vector<braft::PeerId> tmp_peers; node->ListPeers(&tmp_peers); for (auto& peer : tmp_peers) {
+//       std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << '\n';
 //     }
 //   }
 
@@ -309,7 +309,7 @@ std::unique_ptr<brpc::Server> RaftNodeTest::raft_server = nullptr;
 
 TEST_F(RaftNodeTest, DeleteOnePeer) {
   // Add one peer
-  std::cout << "====Delete one peer" << std::endl;
+  std::cout << "====Delete one peer" << '\n';
 
   std::vector<std::string> raft_addrs = {"127.0.0.1:17001:1", "127.0.0.1:17001:2", "127.0.0.1:17001:3",
                                          "127.0.0.1:17001:4"};
@@ -320,7 +320,7 @@ TEST_F(RaftNodeTest, DeleteOnePeer) {
   bthread_usleep(5 * 1000 * 1000L);
 
   // Change peers
-  std::cout << "====Change peer" << std::endl;
+  std::cout << "====Change peer" << '\n';
   std::vector<dingodb::pb::common::Peer> pb_peers;
   {
     dingodb::pb::common::Peer pb_peer;
@@ -355,19 +355,19 @@ TEST_F(RaftNodeTest, DeleteOnePeer) {
 
   bthread_usleep(3 * 1000 * 1000L);
 
-  std::cout << "====Watch peer" << std::endl;
+  std::cout << "====Watch peer" << '\n';
 
   for (auto& node : inner_nodes) {
-    std::cout << "region id: " << node->GetNodeId() << " leader id: " << node->GetLeaderId().to_string() << std::endl;
+    std::cout << "region id: " << node->GetNodeId() << " leader id: " << node->GetLeaderId().to_string() << '\n';
     std::vector<braft::PeerId> tmp_peers;
     node->ListPeers(&tmp_peers);
     for (auto& peer : tmp_peers) {
-      std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << std::endl;
+      std::cout << "region id: " << node->GetNodeId() << " peer: " << peer.to_string() << '\n';
     }
 
     auto status = node->GetStatus();
     if (status != nullptr) {
-      std::cout << "region id: " << node->GetNodeId() << " status: " << status->ShortDebugString() << std::endl;
+      std::cout << "region id: " << node->GetNodeId() << " status: " << status->ShortDebugString() << '\n';
     }
   }
 
