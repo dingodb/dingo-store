@@ -42,20 +42,22 @@
 namespace dingodb {
 
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, {region->Range()});
-  iter->Init();
+  IteratorOptions options;
+  options.upper_bound = region->Range().end_key();
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  iter->Seek(region->Range().start_key());
 
   int64_t size = 0;
   int64_t chunk_size = 0;
   std::vector<std::string> keys;
   bool is_split = false;
-  for (; iter->IsValid(); iter->Next()) {
-    int64_t key_value_size = iter->KeyValueSize();
+  for (; iter->Valid(); iter->Next()) {
+    int64_t key_value_size = iter->Key().size() + iter->Value().size();
     size += key_value_size;
     chunk_size += key_value_size;
     if (chunk_size >= split_chunk_size_) {
       chunk_size = 0;
-      keys.push_back(iter->FirstRangeKey());
+      keys.push_back(std::string(iter->Key()));
     }
     if (size >= split_threshold_size_) {
       is_split = true;
@@ -73,17 +75,19 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, {region->Range()});
-  iter->Init();
+  IteratorOptions options;
+  options.upper_bound = region->Range().end_key();
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  iter->Seek(region->Range().start_key());
 
   int64_t size = 0;
   std::string split_key;
   bool is_split = false;
   uint32_t split_pos = split_size_ * split_ratio_;
-  for (; iter->IsValid(); iter->Next()) {
-    size += iter->KeyValueSize();
+  for (; iter->Valid(); iter->Next()) {
+    size += iter->Key().size() + iter->Value().size();
     if (split_key.empty() && size >= split_pos) {
-      split_key = iter->FirstRangeKey();
+      split_key = iter->Key();
     } else if (size >= split_size_) {
       is_split = true;
     }
@@ -99,20 +103,22 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  auto iter = raw_engine_->NewMultipleRangeIterator(raw_engine_, Constant::kStoreDataCF, {region->Range()});
-  iter->Init();
+  IteratorOptions options;
+  options.upper_bound = region->Range().end_key();
+  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  iter->Seek(region->Range().start_key());
 
   int64_t size = 0;
   int64_t split_key_count = 0;
   std::string split_key;
   bool is_split = false;
   uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
-  for (; iter->IsValid(); iter->Next()) {
+  for (; iter->Valid(); iter->Next()) {
     ++split_key_count;
-    size += iter->KeyValueSize();
+    size += iter->Key().size() + iter->Value().size();
 
     if (split_key.empty() && split_key_count >= split_key_number) {
-      split_key = iter->FirstRangeKey();
+      split_key = iter->Key();
     } else if (split_key_count == split_keys_number_) {
       is_split = true;
     }
