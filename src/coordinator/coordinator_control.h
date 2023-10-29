@@ -201,31 +201,38 @@ class CoordinatorControl : public MetaControl {
   butil::Status SelectStore(pb::common::StoreType store_type, int32_t replica_num, const std::string &resource_tag,
                             const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                             std::vector<pb::common::Store> &selected_stores_for_regions);
+
   static butil::Status CheckRegionPrefix(const std::string &start_key, const std::string &end_key);
+
   butil::Status CreateShadowRegion(const std::string &region_name, pb::common::RegionType region_type,
-                                   const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
-                                   int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+                                   pb::common::RawEngine raw_engine, const std::string &resource_tag,
+                                   int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+                                   int64_t table_id, int64_t index_id, int64_t part_id,
                                    const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                    int64_t split_from_region_id, int64_t &new_region_id,
                                    pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status CreateRegionFinal(const std::string &region_name, pb::common::RegionType region_type,
-                                  const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
-                                  int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+                                  pb::common::RawEngine raw_engine, const std::string &resource_tag,
+                                  int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+                                  int64_t table_id, int64_t index_id, int64_t part_id,
                                   const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                   int64_t split_from_region_id, int64_t &new_region_id,
                                   std::vector<pb::coordinator::StoreOperation> &store_operations,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
+
   butil::Status CreateRegionAutoSelectStore(const std::string &region_name, pb::common::RegionType region_type,
-                                            const std::string &resource_tag, int32_t replica_num,
-                                            pb::common::Range region_range, int64_t schema_id, int64_t table_id,
-                                            int64_t index_id, int64_t part_id,
+                                            pb::common::RawEngine raw_engine, const std::string &resource_tag,
+                                            int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+                                            int64_t table_id, int64_t index_id, int64_t part_id,
                                             const pb::common::IndexParameter &index_parameter, int64_t &new_region_id,
                                             pb::coordinator_internal::MetaIncrement &meta_increment);
+
   butil::Status CreateRegionForSplit(const std::string &region_name, pb::common::RegionType region_type,
                                      const std::string &resource_tag, pb::common::Range region_range, int64_t schema_id,
                                      int64_t table_id, int64_t index_id, int64_t part_id,
                                      const pb::common::IndexParameter &index_parameter, int64_t split_from_region_id,
                                      int64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
   butil::Status CreateRegionForSplitInternal(int64_t split_from_region_id, int64_t &new_region_id,
                                              bool is_shadow_create,
                                              std::vector<pb::coordinator::StoreOperation> &store_operations,

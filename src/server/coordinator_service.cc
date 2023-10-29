@@ -966,13 +966,13 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
       store_ids.push_back(id);
     }
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    ret = coordinator_control_->CreateRegionFinal(region_name, region_type, resource_tag, replica_num, range, schema_id,
-                                                  table_id, index_id, part_id, index_parameter, store_ids, 0,
-                                                  new_region_id, store_operations, meta_increment);
+    ret = coordinator_control_->CreateRegionFinal(
+        region_name, region_type, pb::common::RawEngine::RAW_ENG_ROCKSDB, resource_tag, replica_num, range, schema_id,
+        table_id, index_id, part_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
   } else {
-    ret = coordinator_control_->CreateRegionAutoSelectStore(region_name, region_type, resource_tag, replica_num, range,
-                                                            schema_id, table_id, index_id, part_id, index_parameter,
-                                                            new_region_id, meta_increment);
+    ret = coordinator_control_->CreateRegionAutoSelectStore(
+        region_name, region_type, pb::common::RawEngine::RAW_ENG_ROCKSDB, resource_tag, replica_num, range, schema_id,
+        table_id, index_id, part_id, index_parameter, new_region_id, meta_increment);
   }
 
   if (!ret.ok()) {
