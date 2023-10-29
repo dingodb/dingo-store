@@ -24,52 +24,29 @@
 
 namespace dingodb {
 
-void VectorCodec::EncodeVectorKey(int64_t partition_id, int64_t vector_id, std::string& result) {
-  Buf buf(16);
-  buf.WriteLong(partition_id);
-  // buf.WriteLong(vector_id);
-  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-
-  buf.GetBytes(result);
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result) {
+  if (prefix == 0) {
+    // Buf buf(16);
+    Buf buf(Constant::kVectorKeyMaxLen);
+    buf.WriteLong(partition_id);
+    DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+    buf.GetBytes(result);
+  } else {
+    // Buf buf(17);
+    Buf buf(Constant::kVectorKeyMaxLenWithPrefix);
+    buf.WriteLong(partition_id);
+    DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+    buf.GetBytes(result);
+  }
 }
-
-// void VectorCodec::EncodeVectorData(int64_t partition_id, int64_t vector_id, std::string& result) {
-//   Buf buf(17);
-//   buf.Write(Constant::kVectorDataPrefix);
-//   buf.WriteLong(partition_id);
-//   // buf.WriteLong(vector_id);
-//   DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-
-//   buf.GetBytes(result);
-// }
-
-// void VectorCodec::EncodeVectorScalar(int64_t partition_id, int64_t vector_id, std::string& result) {
-//   Buf buf(17);
-//   buf.Write(Constant::kVectorScalarPrefix);
-//   buf.WriteLong(partition_id);
-//   // buf.WriteLong(vector_id);
-//   DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-
-//   buf.GetBytes(result);
-// }
-
-// void VectorCodec::EncodeVectorTable(int64_t partition_id, int64_t vector_id, std::string& result) {
-//   Buf buf(17);
-//   buf.Write(Constant::kVectorTablePrefix);
-//   buf.WriteLong(partition_id);
-//   // buf.WriteLong(vector_id);
-//   DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-
-//   buf.GetBytes(result);
-// }
 
 int64_t VectorCodec::DecodeVectorId(const std::string& value) {
   Buf buf(value);
-  if (value.size() == 17) {
+  if (value.size() == Constant::kVectorKeyMaxLenWithPrefix) {
     buf.Skip(9);
-  } else if (value.size() == 16) {
+  } else if (value.size() == Constant::kVectorKeyMaxLen) {
     buf.Skip(8);
-  } else if (value.size() == 9 || value.size() == 8) {
+  } else if (value.size() == Constant::kVectorKeyMinLen || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
     return 0;
   } else {
     DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:[" << Helper::StringToHex(value)
@@ -84,59 +61,18 @@ int64_t VectorCodec::DecodeVectorId(const std::string& value) {
 int64_t VectorCodec::DecodePartitionId(const std::string& value) {
   Buf buf(value);
 
-  if (value.size() == 17) {
+  // if (value.size() == 17 || value.size() == 9) {
+  if (value.size() == Constant::kVectorKeyMaxLenWithPrefix || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
     buf.Skip(1);
   }
 
   return buf.ReadLong();
 }
 
-// std::string VectorCodec::FillVectorDataPrefix(const std::string& value) {
-//   if (value.length() > 16) {
-//     DINGO_LOG(ERROR) << "FillVectorDataPrefix failed, value length is greater than 16, value:["
-//                      << Helper::StringToHex(value) << "]";
-//     return std::string();
-//   }
-
-//   Buf buf(17);
-//   buf.Write(Constant::kVectorDataPrefix);
-//   buf.Write(value);
-
-//   return buf.GetString();
-// }
-
-// std::string VectorCodec::FillVectorScalarPrefix(const std::string& value) {
-//   if (value.length() > 16) {
-//     DINGO_LOG(ERROR) << "FillVectorScalarPrefix failed, value length is greater than 16, value:["
-//                      << Helper::StringToHex(value) << "]";
-//     return std::string();
-//   }
-
-//   Buf buf(17);
-//   buf.Write(Constant::kVectorScalarPrefix);
-//   buf.Write(value);
-
-//   return buf.GetString();
-// }
-
-// std::string VectorCodec::FillVectorTablePrefix(const std::string& value) {
-//   if (value.length() > 16) {
-//     DINGO_LOG(ERROR) << "FillVectorTablePrefix failed, value length is greater than 16, value:["
-//                      << Helper::StringToHex(value) << "]";
-//     return std::string();
-//   }
-
-//   Buf buf(17);
-//   buf.Write(Constant::kVectorTablePrefix);
-//   buf.Write(value);
-
-//   return buf.GetString();
-// }
-
-// std::string VectorCodec::RemoveVectorPrefix(const std::string& value) { return value.substr(1); }  // NOLINT
-
 bool VectorCodec::IsValidKey(const std::string& key) {
-  return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
+  // return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
+  return (key.size() == Constant::kVectorKeyMinLen || key.size() == Constant::kVectorKeyMinLenWithPrefix ||
+          key.size() == Constant::kVectorKeyMaxLen || key.size() == Constant::kVectorKeyMaxLenWithPrefix);
 }
 
 }  // namespace dingodb
