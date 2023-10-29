@@ -183,12 +183,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     TxnWriter(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RaftStoreEngine> raft_engine)
         : raw_engine_(raw_engine), raft_engine_(raft_engine) {}
 
-    // store prewrite
     butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
-                              const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
-                              bool try_one_pc, int64_t max_commit_ts) override;
-    // index prewrite
-    butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
                               const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
                               bool try_one_pc, int64_t max_commit_ts) override;
     butil::Status TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,

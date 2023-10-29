@@ -152,12 +152,7 @@ class Engine {
     TxnWriter() = default;
     virtual ~TxnWriter() = default;
 
-    // store prewrite
     virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
-                                      const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                      int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) = 0;
-    // index prewrite
-    virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::index::Mutation>& mutations,
                                       const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
                                       int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) = 0;
     virtual butil::Status TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,

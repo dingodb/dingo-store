@@ -320,110 +320,6 @@ message TxnPrewriteRequest {
   int64 max_commit_ts = 8;
 }
 
-message TxnPrewriteResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // for prewrite, txn_result will be one of the following:
-  // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
-  // 2. WriteConflict: Write conflict with key which is already written after start_ts
-  //    2.1 Optimistic: in optimistic transactions.
-  //    2.2  PessimisticRetry: a lock acquisition request waits for a lock and awakes, or meets a newer version of data,
-  //                           let Executor retry.
-  //    2.3 SelfRolledBack: the transaction itself has been rolled back when it tries to prewrite.
-  // 3. otherwise, txn_result is empty
-  // for success prewrite, txn_result is empty
-  // for failure prewrite, txn_result is not empty
-  // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
-  // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
-  repeated dingodb.pb.store.AlreadyExist keys_already_exist = 3;
-  // When the transaction is successfully committed with 1PC protocol, this
-  // field will be set to the commit ts of the transaction. Otherwise, if dingo-store
-  // failed to commit it with 1PC or the transaction is not 1PC, the value will
-  // be 0.
-  int64 one_pc_commit_ts = 4;
-}
-
-message TxnCommitRequest {
-  dingodb.pb.store.Context context = 1;
-  // The start_ts of the transaction.
-  int64 start_ts = 2;
-  // The commit_ts of transaction. Must be greater than `start_ts`.
-  int64 commit_ts = 3;
-  // All keys in the transaction to be committed.
-  repeated bytes keys = 4;
-}
-
-message TxnCommitResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // the txn_result is one of the following:
-  // 1. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
-  // committing primary key meet this error, the transaction may be rolled back. If committing secondary key meet this,
-  // Executor can think its lock is resolved, and continue to commit.
-  // 2. otherwise, txn_result is empty
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // The commit_ts of the transaction.
-  int64 commit_ts = 3;
-}
-
-// CheckTxnStatusRequest checks the status of a transaction.
-// If the transaction is rollbacked/committed, return that result.
-// If the TTL of the transaction is exhausted, abort that transaction and inform the caller.
-// Otherwise, returns the TTL information for the transaction.
-message TxnCheckTxnStatusRequest {
-  dingodb.pb.store.Context context = 1;
-  // Primary key and lock ts together to locate the primary lock of a transaction.
-  bytes primary_key = 2;
-  // Starting timestamp of the transaction being checked.
-  int64 lock_ts = 3;
-  // The start timestamp of the transaction which this request is part of.
-  int64 caller_start_ts = 4;
-  // The client must specify the current time to dingo-store using this timestamp.
-  // It is used to check TTL timeouts. It may be inaccurate.
-  int64 current_ts = 5;
-}
-
-message TxnCheckTxnStatusResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // the txn_result is one of the following:
-  // 1. PrimaryMismatch: CheckTxnStatus is sent to a lock that's not the primary.
-  // 2. TxnNotFound: Txn not found when checking txn status.
-  // 3. otherwise, txn_result is empty
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // Three kinds of transaction status:
-  //   locked: lock_ttl > 0
-  //   committed: commit_ts > 0
-  //   rollbacked: lock_ttl = 0 && commit_ts = 0
-  int64 lock_ttl = 3;
-  // if the transaction of the lock is committed, the commit_ts is returned
-  int64 commit_ts = 4;
-  // The action performed by dingo-store (and why if the action is to rollback).
-  dingodb.pb.store.Action action = 5;
-  dingodb.pb.store.LockInfo lock_info = 6;
-}
-
-// For all keys locked by the transaction identified by `start_ts`, either
-// commit or rollback the transaction and unlock the key.
-message TxnResolveLockRequest {
-  dingodb.pb.store.Context context = 1;
-  int64 start_ts = 2;
-  // `commit_ts == 0` means the transaction was rolled back.
-  // `commit_ts > 0` means the transaction was committed at the given timestamp.
-  int64 commit_ts = 3;
-  // Only resolve specified keys.
-  repeated bytes keys = 4;
-}
-
-message TxnResolveLockResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // now the txn_result is not used, maybe used in the future
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-}
-
 message TxnBatchGetRequest {
   dingodb.pb.store.Context context = 1;
   repeated bytes keys = 2;
@@ -446,46 +342,6 @@ message TxnBatchGetResponse {
   // all keys. In this case, `vectors` should be empty and the client should redo
   // batch get all the keys after resolving the lock.
   repeated dingodb.pb.common.VectorWithId vectors = 3;
-}
-
-// Rollback a prewritten transaction. This will remove the preliminary data from
-// the database, unlock locks, and leave a rollback tombstone.
-message TxnBatchRollbackRequest {
-  dingodb.pb.store.Context context = 1;
-  // Identify the transaction to be rolled back.
-  int64 start_ts = 2;
-  // The keys to rollback.
-  repeated bytes keys = 3;
-}
-
-message TxnBatchRollbackResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-}
-
-// Scan the database for locks. Used at the start of the GC process to find all
-// old locks.
-message TxnScanLockRequest {
-  dingodb.pb.store.Context context = 1;
-  // Returns all locks with a start timestamp before `max_ts`.
-  int64 max_ts = 2;
-  // Start scanning from this key.
-  // the key is encoded from two int64 using big-endian, the first int64 is the part id, the
-  // second int64 is the vector id. The key MUST be 16 bytes.
-  bytes start_key = 3;
-  // The maximum number of locks to return.
-  uint32 limit = 4;
-  // The exclusive upperbound for scanning.
-  bytes end_key = 5;
-}
-
-message TxnScanLockResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // Info on all locks found by the scan.
-  repeated dingodb.pb.store.LockInfo locks = 3;
 }
 
 // Update the lock_ttl of a large transaction to
@@ -686,20 +542,17 @@ service IndexService {
 
   // txn rpcs
   rpc TxnGet(TxnGetRequest) returns (TxnGetResponse);
-  rpc TxnScan(TxnScanRequest) returns (TxnScanResponse);
-  rpc TxnPrewrite(TxnPrewriteRequest) returns (TxnPrewriteResponse);
-  rpc TxnCommit(TxnCommitRequest) returns (TxnCommitResponse);
-  rpc TxnCheckTxnStatus(TxnCheckTxnStatusRequest) returns (TxnCheckTxnStatusResponse);
-  rpc TxnResolveLock(TxnResolveLockRequest) returns (TxnResolveLockResponse);
   rpc TxnBatchGet(TxnBatchGetRequest) returns (TxnBatchGetResponse);
-  rpc TxnBatchRollback(TxnBatchRollbackRequest) returns (TxnBatchRollbackResponse);
-  rpc TxnScanLock(TxnScanLockRequest) returns (TxnScanLockResponse);
-  rpc TxnHeartBeat(TxnHeartBeatRequest) returns (TxnHeartBeatResponse);
-  rpc TxnGc(TxnGcRequest) returns (TxnGcResponse);
-  rpc TxnDeleteRange(TxnDeleteRangeRequest) returns (TxnDeleteRangeResponse);
+  rpc TxnScan(TxnScanRequest) returns (TxnScanResponse);
+  rpc TxnScanLock(dingodb.pb.store.TxnScanLockRequest) returns (dingodb.pb.store.TxnScanLockResponse);
   rpc TxnDump(TxnDumpRequest) returns (TxnDumpResponse);
 
-  // rpc TxnScanBegin(TxnScanBeginRequest) returns (TxnScanBeginResponse);
-  // rpc TxnScanContinue(TxnScanContinueRequest) returns (TxnScanContinueResponse);
-  // rpc TxnScanRelease(TxnScanReleaseRequest) returns (TxnScanReleaseResponse);
+  rpc TxnPrewrite(TxnPrewriteRequest) returns (dingodb.pb.store.TxnPrewriteResponse);
+  rpc TxnCommit(dingodb.pb.store.TxnCommitRequest) returns (dingodb.pb.store.TxnCommitResponse);
+  rpc TxnCheckTxnStatus(dingodb.pb.store.TxnCheckTxnStatusRequest) returns (dingodb.pb.store.TxnCheckTxnStatusResponse);
+  rpc TxnResolveLock(dingodb.pb.store.TxnResolveLockRequest) returns (dingodb.pb.store.TxnResolveLockResponse);
+  rpc TxnBatchRollback(dingodb.pb.store.TxnBatchRollbackRequest) returns (dingodb.pb.store.TxnBatchRollbackResponse);
+  rpc TxnHeartBeat(dingodb.pb.store.TxnHeartBeatRequest) returns (dingodb.pb.store.TxnHeartBeatResponse);
+  rpc TxnGc(dingodb.pb.store.TxnGcRequest) returns (dingodb.pb.store.TxnGcResponse);
+  rpc TxnDeleteRange(dingodb.pb.store.TxnDeleteRangeRequest) returns (dingodb.pb.store.TxnDeleteRangeResponse);
 };
