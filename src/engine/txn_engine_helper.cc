@@ -535,13 +535,11 @@ butil::Status TxnEngineHelper::ScanGetNextKeyValue(std::shared_ptr<RawEngine::Re
 butil::Status TxnEngineHelper::Scan(const std::shared_ptr<RawEngine> &engine,
                                     const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                                     const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
-                                    bool disable_coprocessor, const pb::store::Coprocessor &coprocessor,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
                                     bool &has_more, std::string &end_key) {
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts << ", limit: " << limit
                   << ", key_only: " << key_only << ", is_reverse: " << is_reverse
-                  << ", disable_coprocessor: " << disable_coprocessor << ", coprocessor: " << coprocessor.DebugString()
                   << ", txn_result_info: " << txn_result_info.ShortDebugString();
 
   if (engine == nullptr) {

@@ -261,11 +261,6 @@ message TxnScanRequest {
   // and when scanning backward, it scans [end_key, start_key) in descending order, where end_key < start_key.
   bool is_reverse = 7;  // NOT_IMPLEMENTED
 
-  // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
-  bool disable_coprocessor = 8;
-  // coprocessor
-  dingodb.pb.store.Coprocessor coprocessor = 9;
-
   VectorGetParameter parameter = 20;
 }
 
