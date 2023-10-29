@@ -36,10 +36,6 @@ class TxnEngineHelper {
                                     const std::string &start_key, const std::string &end_key, uint32_t limit,
                                     std::vector<pb::store::LockInfo> &lock_infos);
 
-  //   static butil::Status Commit(const std::shared_ptr<RawEngine> &engine, std::vector<pb::store::LockInfo>
-  //   &lock_infos,
-  //                               int64_t commit_ts);
-
   static butil::Status BatchGet(const std::shared_ptr<RawEngine> &engine,
                                 const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                                 const std::vector<std::string> &keys, std::vector<pb::common::KeyValue> &kvs,
