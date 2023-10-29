@@ -524,8 +524,7 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
 }
 
 butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range,
-                               int64_t limit, bool key_only, bool is_reverse, bool disable_coprocessor,
-                               const pb::store::Coprocessor& coprocessor, pb::store::TxnResultInfo& txn_result_info,
+                               int64_t limit, bool key_only, bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
                                std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
@@ -534,14 +533,11 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
 
   DINGO_LOG(INFO) << "TxnScan region_id: " << ctx->RegionId() << " range: " << range.ShortDebugString()
                   << " limit: " << limit << " start_ts: " << start_ts << " key_only: " << key_only
-                  << " is_reverse: " << is_reverse << " disable_coprocessor: " << disable_coprocessor
-                  << " coprocessor: " << coprocessor.ShortDebugString()
-                  << " txn_result_info: " << txn_result_info.ShortDebugString() << " kvs size: " << kvs.size()
-                  << " has_more: " << has_more << " end_key: " << end_key;
+                  << " is_reverse: " << is_reverse << " txn_result_info: " << txn_result_info.ShortDebugString()
+                  << " kvs size: " << kvs.size() << " has_more: " << has_more << " end_key: " << end_key;
 
   auto reader = engine_->NewTxnReader();
-  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, disable_coprocessor, coprocessor,
-                           txn_result_info, kvs, has_more, end_key);
+  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
