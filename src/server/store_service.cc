@@ -116,7 +116,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -193,7 +193,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -267,7 +267,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -349,7 +349,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   auto ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -425,7 +425,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -509,7 +509,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -587,7 +587,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -669,7 +669,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -738,7 +738,7 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -825,7 +825,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -916,7 +916,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -995,7 +995,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1062,7 +1062,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1141,7 +1141,7 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1237,7 +1237,7 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1345,7 +1345,7 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1441,7 +1441,7 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1527,7 +1527,7 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1617,7 +1617,7 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1710,7 +1710,7 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1798,7 +1798,7 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1898,7 +1898,7 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -1984,7 +1984,7 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -2051,7 +2051,7 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -2133,7 +2133,7 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 
@@ -2238,7 +2238,7 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EINTERNAL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 

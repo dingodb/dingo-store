@@ -237,7 +237,7 @@ std::atomic<int> VectorIndexManager::vector_index_rebuild_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_save_task_running_num = 0;
 
 bool VectorIndexManager::Init() {
-  workers_ = WorkerSet::New("VectorIndexWorkerSet", ConfigHelper::GetVectorIndexBackgroundWorkerNum());
+  workers_ = WorkerSet::New("VectorIndexWorkerSet", ConfigHelper::GetVectorIndexBackgroundWorkerNum(), 0);
   if (!workers_->Init()) {
     DINGO_LOG(ERROR) << "Init vector index manager worker set failed!";
     return false;

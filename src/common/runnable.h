@@ -87,11 +87,11 @@ using WorkerPtr = std::shared_ptr<Worker>;
 
 class WorkerSet {
  public:
-  WorkerSet(std::string name, uint32_t worker_num);
+  WorkerSet(std::string name, uint32_t worker_num, uint32_t max_pending_task_count);
   ~WorkerSet() = default;
 
-  static std::shared_ptr<WorkerSet> New(std::string name, uint32_t worker_num) {
-    return std::make_shared<WorkerSet>(name, worker_num);
+  static std::shared_ptr<WorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
+    return std::make_shared<WorkerSet>(name, worker_num, max_pending_task_count);
   }
 
   bool Init();
@@ -111,6 +111,7 @@ class WorkerSet {
 
  private:
   const std::string name_;
+  uint64_t max_pending_task_count_;
   uint32_t worker_num_;
   std::vector<WorkerPtr> workers_;
   std::atomic<uint64_t> active_worker_id_;
