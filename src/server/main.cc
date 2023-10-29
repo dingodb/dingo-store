@@ -74,6 +74,7 @@ DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size"
 
 DEFINE_uint32(omp_num_threads, 1, "omp num threads");
 DEFINE_uint32(service_worker_num, 10, "service worker num");
+DEFINE_uint64(service_worker_max_pending_num, 0, "service worker num");
 
 extern "C" {
 extern void omp_set_dynamic(int dynamic_threads) noexcept;  // NOLINT
@@ -415,6 +416,20 @@ int GetServiceWorkerNum(std::shared_ptr<dingodb::Config> config) {
   return FLAGS_service_worker_num;
 }
 
+// Get service worker max pending num used by config
+int64_t GetServiceWorkerMaxPendingNum(std::shared_ptr<dingodb::Config> config) {
+  auto num = config->GetInt64("server.service_worker_max_pending_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING)
+        << "server.service_worker_max_pending_num is not set, use dingodb::FLAGS_service_worker_max_pending_num";
+  } else {
+    FLAGS_service_worker_max_pending_num = num;
+    DINGO_LOG(INFO) << "server.service_worker_max_pending_num is set to " << num;
+  }
+
+  return FLAGS_service_worker_num;
+}
+
 // setup default conf and coor_list
 bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
   if (FLAGS_conf.empty()) {
@@ -592,7 +607,20 @@ int main(int argc, char *argv[]) {
   dingodb::ClusterStatImpl cluster_stat_service;
   dingodb::FileServiceImpl file_service;
 
-  dingodb::WorkerSetPtr worker_set = dingodb::WorkerSet::New("ServiceWorkerSet", FLAGS_service_worker_num);
+  auto service_worker_num = GetServiceWorkerNum(config);
+  if (service_worker_num < 0) {
+    DINGO_LOG(ERROR) << "GetServiceWorkerNum failed!";
+    return -1;
+  }
+
+  auto service_worker_max_pending_num = GetServiceWorkerMaxPendingNum(config);
+  if (service_worker_max_pending_num < 0) {
+    DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+    return -1;
+  }
+
+  dingodb::WorkerSetPtr worker_set =
+      dingodb::WorkerSet::New("ServiceWorkerSet", FLAGS_service_worker_num, FLAGS_service_worker_max_pending_num);
   if (!worker_set->Init()) {
     DINGO_LOG(ERROR) << "Init WorkerSet failed!";
     return -1;
@@ -620,12 +648,6 @@ int main(int argc, char *argv[]) {
 
   options.num_threads = GetWorkerThreadNum(config);
   DINGO_LOG(INFO) << "bthread worker_thread_num: " << options.num_threads;
-
-  auto service_worker_num = GetServiceWorkerNum(config);
-  if (service_worker_num < 0) {
-    DINGO_LOG(ERROR) << "GetServiceWorkerNum failed!";
-    return -1;
-  }
 
   if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";

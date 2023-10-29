@@ -11,6 +11,7 @@ server:
   worker_thread_num: 64 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 2 # cpu core * ratio
   service_worker_num: 32 # must < server.worker_thread_num
+  service_worker_max_pending_num: 1024 # 0 is unlimited
 region:
   region_max_size: 536870912 # 512MB
   enable_auto_split: true

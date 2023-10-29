@@ -119,9 +119,10 @@ void Worker::Nodify(EventType type) {
   }
 }
 
-WorkerSet::WorkerSet(std::string name, uint32_t worker_num)
+WorkerSet::WorkerSet(std::string name, uint32_t worker_num, uint32_t max_pending_task_count)
     : name_(name),
       worker_num_(worker_num),
+      max_pending_task_count_(max_pending_task_count),
       active_worker_id_(0),
       total_task_count_(fmt::format("dingo_{}_total_task_count", name)),
       pending_task_count_(fmt::format("dingo_{}_pending_task_count", name)) {}
@@ -145,6 +146,9 @@ void WorkerSet::Destroy() {
 }
 
 bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
+  if (max_pending_task_count_ > 0 && pending_task_count_.get_value() > max_pending_task_count_) {
+    return false;
+  }
   auto ret = workers_[active_worker_id_.fetch_add(1) % worker_num_]->Execute(task);
   if (ret) {
     IncPendingTaskCount();
@@ -155,6 +159,9 @@ bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
 }
 
 bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
+  if (max_pending_task_count_ > 0 && pending_task_count_.get_value() > max_pending_task_count_) {
+    return false;
+  }
   auto ret = workers_[region_id % worker_num_]->Execute(task);
   if (ret) {
     IncPendingTaskCount();
