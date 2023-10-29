@@ -613,9 +613,9 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::STORE_REGION, "", replica,
-                                           new_part_range, schema_id, new_table_id, 0, new_part_id, index_parameter,
-                                           new_region_id, meta_increment);
+    auto ret = CreateRegionAutoSelectStore(
+        region_name, pb::common::RegionType::STORE_REGION, pb::common::RawEngine::RAW_ENG_ROCKSDB, "", replica,
+        new_part_range, schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
@@ -1276,9 +1276,10 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, "", replica,
-                                           new_part_range, schema_id, 0, new_index_id, new_part_id,
-                                           table_definition.index_parameter(), new_region_id, meta_increment);
+    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION,
+                                           pb::common::RawEngine::RAW_ENG_ROCKSDB, "", replica, new_part_range,
+                                           schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
+                                           new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
