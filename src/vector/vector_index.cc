@@ -90,7 +90,7 @@ std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(int64_t id,
 
 std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::GetSelf() { return shared_from_this(); }
 
-bool VectorIndexWrapper::Init() { return true; }
+bool VectorIndexWrapper::Init() { return true; }  // NOLINT
 
 void VectorIndexWrapper::Destroy() {
   DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index destroy.", Id());
@@ -123,7 +123,7 @@ bool VectorIndexWrapper::Recover() {
     snapshot_set_->AddSnapshot(new_snapshot);
   }
 
-  if (IsHoldVectorIndex()) {
+  if (IsTempHoldVectorIndex()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] need bootstrap build vector index.", Id());
     VectorIndexManager::LaunchLoadOrBuildVectorIndex(GetSelf());
   }
@@ -147,7 +147,7 @@ butil::Status VectorIndexWrapper::SaveMeta() {
   meta.set_type(static_cast<int>(vector_index_type_));
   meta.set_apply_log_id(ApplyLogId());
   meta.set_snapshot_log_id(SnapshotLogId());
-  meta.set_is_hold_vector_index(IsHoldVectorIndex());
+  meta.set_is_hold_vector_index(IsTempHoldVectorIndex());
 
   auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenMetaKey(id_));
@@ -184,7 +184,7 @@ butil::Status VectorIndexWrapper::LoadMeta() {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] prase vector index meta failed.", Id());
   }
 
-  SetIsHoldVectorIndex(meta.is_hold_vector_index());
+  SetIsTempHoldVectorIndex(meta.is_hold_vector_index());
 
   return butil::Status();
 }
@@ -212,11 +212,11 @@ void VectorIndexWrapper::SetIsSwitchingVectorIndex(bool is_switching) {
   is_switching_vector_index_.store(is_switching);
 }
 
-bool VectorIndexWrapper::IsHoldVectorIndex() const { return is_hold_vector_index_.load(); }
+bool VectorIndexWrapper::IsTempHoldVectorIndex() const { return is_hold_vector_index_.load(); }
 
-void VectorIndexWrapper::SetIsHoldVectorIndex(bool need) {
+void VectorIndexWrapper::SetIsTempHoldVectorIndex(bool need) {
   DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] set vector index hold({}->{})", Id(),
-                                 IsHoldVectorIndex(), need);
+                                 IsTempHoldVectorIndex(), need);
   is_hold_vector_index_.store(need);
   SaveMeta();
 }
@@ -228,8 +228,10 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());
     return;
   }
-  if (!IsHoldVectorIndex()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not hold.", Id());
+  if (!IsPermanentHoldVectorIndex(this->Id()) && !IsTempHoldVectorIndex()) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.wrapper][index_id({})] vector index is not hold. is_perm_hold: {}, is_temp_hold: {}", Id(),
+        IsPermanentHoldVectorIndex(this->Id()), IsTempHoldVectorIndex());
     return;
   }
 
@@ -583,6 +585,21 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   }
 
   return vector_index->Search(vector_with_ids, topk, filters, results, reconstruct, parameter);
+}
+
+bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
+  auto config = ConfigManager::GetInstance().GetConfig();
+  if (config == nullptr) {
+    return true;
+  }
+
+  if (!config->GetBool("vector.enable_follower_hold_index")) {
+    // If follower, delete vector index.
+    if (!Server::GetInstance().IsLeader(region_id)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace dingodb

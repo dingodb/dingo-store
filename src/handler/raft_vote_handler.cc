@@ -30,7 +30,6 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
 
   // Load vector index.
   auto vector_index_wrapper = region->VectorIndexWrapper();
-  vector_index_wrapper->SetIsHoldVectorIndex(true);
   if (vector_index_wrapper->IsReady()) {
     DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                    region->Id());
@@ -42,38 +41,40 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
 }
 
 int VectorIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status) {
-  auto config = ConfigManager::GetInstance().GetConfig();
-  if (config == nullptr) {
-    return 0;
-  }
-  if (config->GetBool("vector.enable_follower_hold_index")) {
-    return 0;
-  }
   if (region == nullptr) {
+    return 0;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] vector index wrapper is null.", region->Id());
+    return -1;
+  }
+  if (vector_index_wrapper->IsPermanentHoldVectorIndex(vector_index_wrapper->Id()) ||
+      vector_index_wrapper->IsTempHoldVectorIndex()) {
     return 0;
   }
 
   // Delete vector index.
-  region->VectorIndexWrapper()->SetIsHoldVectorIndex(false);
   region->VectorIndexWrapper()->ClearVectorIndex();
 
   return 0;
 }
 
 int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
-  auto config = ConfigManager::GetInstance().GetConfig();
-  if (config == nullptr) {
-    return 0;
-  }
-  if (!config->GetBool("vector.enable_follower_hold_index")) {
-    return 0;
-  }
   if (region == nullptr) {
+    return 0;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] vector index wrapper is null.", region->Id());
+    return -1;
+  }
+  if (!vector_index_wrapper->IsPermanentHoldVectorIndex(vector_index_wrapper->Id()) &&
+      !vector_index_wrapper->IsTempHoldVectorIndex()) {
     return 0;
   }
 
   // Load vector index.
-  auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper->IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                       region->Id());

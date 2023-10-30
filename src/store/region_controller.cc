@@ -917,7 +917,7 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   }
 
   if (is_hold) {
-    vector_index_wrapper->SetIsHoldVectorIndex(true);
+    vector_index_wrapper->SetIsTempHoldVectorIndex(true);
     // Load vector index.
     if (!vector_index_wrapper->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);

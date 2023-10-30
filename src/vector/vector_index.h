@@ -312,8 +312,12 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsSwitchingVectorIndex();
   void SetIsSwitchingVectorIndex(bool is_switching);
 
-  bool IsHoldVectorIndex() const;
-  void SetIsHoldVectorIndex(bool need);
+  void SetIsTempHoldVectorIndex(bool need);
+
+  // check temp hold vector index
+  bool IsTempHoldVectorIndex() const;
+  // check permanent hold vector index
+  static bool IsPermanentHoldVectorIndex(int64_t region_id);
 
   vector_index::SnapshotMetaSetPtr SnapshotSet() {
     BAIDU_SCOPED_LOCK(vector_index_mutex_);
