@@ -131,7 +131,7 @@ class Constant {
   inline static const std::string kStoreScanMaxFetchCntByServer = "max_fetch_cnt_by_server";
   inline static const std::string kStoreScanScanIntervalS = "scan_interval_s";
 
-  inline static const std::string kMetaRegionName = "0-COORDINATOR";
+  inline static const std::string kMetaRegionName = "0-META";
   inline static const std::string kKvRegionName = "1-KV";
   inline static const std::string kTsoRegionName = "2-TSO";
   inline static const std::string kAutoIncrementRegionName = "3-AUTO_INCREMENT";

@@ -447,9 +447,10 @@ message GetCoordinatorMapResponse {
   dingodb.pb.error.Error error = 1;
   int64 epoch = 2;
   dingodb.pb.common.Location leader_location = 3;
-  repeated dingodb.pb.common.Location coordinator_locations = 4;
-  dingodb.pb.common.Location auto_increment_leader_location = 5;
-  dingodb.pb.common.Location tso_leader_location = 6;
+  dingodb.pb.common.Location kv_leader_location = 4;
+  dingodb.pb.common.Location tso_leader_location = 5;
+  dingodb.pb.common.Location auto_increment_leader_location = 6;
+  repeated dingodb.pb.common.Location coordinator_locations = 7;
 }
 
 message CreateRegionIdRequest {
