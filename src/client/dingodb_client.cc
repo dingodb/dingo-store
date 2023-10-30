@@ -158,6 +158,10 @@ DEFINE_string(metrics_type, "L2", "metrics type");
 DEFINE_uint64(safe_point, 0, "gc safe point");
 DEFINE_int64(def_version, 0, "version");
 
+DEFINE_int64(tso_save_physical, 0, "new tso save physical");
+DEFINE_int64(tso_new_physical, 0, "new tso physical");
+DEFINE_int64(tso_new_logical, 0, "new tso logical");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -822,6 +826,10 @@ int CoordinatorSender() {
   // tso
   else if (FLAGS_method == "GenTso") {
     SendGenTso(coordinator_interaction_meta);
+  } else if (FLAGS_method == "ResetTso") {
+    SendResetTso(coordinator_interaction_meta);
+  } else if (FLAGS_method == "UpdateTso") {
+    SendUpdateTso(coordinator_interaction_meta);
   }
 
   // gc

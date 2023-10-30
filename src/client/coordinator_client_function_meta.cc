@@ -47,6 +47,10 @@ DECLARE_uint32(ncentroids);
 DECLARE_string(metrics_type);
 DECLARE_int64(def_version);
 
+DECLARE_int64(tso_save_physical);
+DECLARE_int64(tso_new_physical);
+DECLARE_int64(tso_new_logical);
+
 DEFINE_bool(is_updating_index, false, "is index");
 
 // meta hello
@@ -1107,6 +1111,64 @@ void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_int
 
   request.set_op_type(::dingodb::pb::meta::TsoOpType::OP_GEN_TSO);
   request.set_count(10);
+
+  auto status = coordinator_interaction->SendRequest("TsoService", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendResetTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::TsoRequest request;
+  dingodb::pb::meta::TsoResponse response;
+
+  if (FLAGS_tso_new_physical == 0) {
+    DINGO_LOG(ERROR) << "tso_new_physical is empty";
+    return;
+  }
+
+  if (FLAGS_tso_save_physical == 0) {
+    DINGO_LOG(WARNING) << "tso_save_physical is empty, use tso_new_physical as tso_save_physical";
+    FLAGS_tso_save_physical = FLAGS_tso_new_physical;
+  }
+
+  if (FLAGS_tso_new_logical == 0) {
+    DINGO_LOG(WARNING) << "tso_new_logical is empty, use 0";
+  }
+
+  request.set_op_type(::dingodb::pb::meta::TsoOpType::OP_RESET_TSO);
+  request.set_save_physical(FLAGS_tso_save_physical);
+  request.mutable_current_timestamp()->set_physical(FLAGS_tso_new_physical);
+  request.mutable_current_timestamp()->set_logical(FLAGS_tso_new_logical);
+  request.set_force(true);
+
+  auto status = coordinator_interaction->SendRequest("TsoService", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SendUpdateTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::TsoRequest request;
+  dingodb::pb::meta::TsoResponse response;
+
+  if (FLAGS_tso_new_physical == 0) {
+    DINGO_LOG(ERROR) << "tso_new_physical is empty";
+    return;
+  }
+
+  if (FLAGS_tso_save_physical == 0) {
+    DINGO_LOG(WARNING) << "tso_save_physical is empty, use tso_new_physical as tso_save_physical";
+    FLAGS_tso_save_physical = FLAGS_tso_new_physical;
+  }
+
+  if (FLAGS_tso_new_logical == 0) {
+    DINGO_LOG(WARNING) << "tso_new_logical is empty, use 0";
+  }
+
+  request.set_op_type(::dingodb::pb::meta::TsoOpType::OP_RESET_TSO);
+  request.set_save_physical(FLAGS_tso_save_physical);
+  request.mutable_current_timestamp()->set_physical(FLAGS_tso_new_physical);
+  request.mutable_current_timestamp()->set_logical(FLAGS_tso_new_logical);
+  request.set_force(false);
 
   auto status = coordinator_interaction->SendRequest("TsoService", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
