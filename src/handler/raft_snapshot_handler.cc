@@ -66,7 +66,7 @@ butil::Status RaftSnapshot::GenSnapshotFileByScan(const std::string& checkpoint_
   IteratorOptions options;
   options.upper_bound = range.end_key();
 
-  auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, engine_snapshot_, options);
+  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, engine_snapshot_, options);
   iter->Seek(range.start_key());
 
   // Build sst name and path
@@ -124,14 +124,8 @@ butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& check
 
   std::vector<pb::store_internal::SstFileInfo> tmp_sst_files;
   auto checkpoint = raw_engine->NewCheckpoint();
-  std::vector<std::shared_ptr<RawRocksEngine::ColumnFamily>> column_families;
-  auto cf_names = Helper::GetColumnFamilyNames();
-  column_families.reserve(cf_names.size());
-  for (const auto& cf_name : cf_names) {
-    column_families.push_back(raw_engine->GetColumnFamily(cf_name));
-  }
 
-  auto status = checkpoint->Create(checkpoint_path, column_families, tmp_sst_files);
+  auto status = checkpoint->Create(checkpoint_path, Helper::GetColumnFamilyNames(), tmp_sst_files);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Create checkpoint failed, path: {} error: {} {}",
                                     region->Id(), checkpoint_path, status.error_code(), status.error_str());
@@ -260,16 +254,8 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
     store_region_meta->UpdateEpochVersionAndRange(region, meta.epoch().version(), meta.range());
   }
 
-  // Delete old region data
-  auto cf_names = Helper::GetColumnFamilyNames();
-  auto writer = engine_->NewMultiCfWriter(cf_names);
-
-  std::map<std::string, std::vector<pb::common::Range>> ranges_with_cf;
-  for (const auto& cf_name : cf_names) {
-    ranges_with_cf.insert_or_assign(cf_name, std::vector<pb::common::Range>{region->Range()});
-  }
-
-  status = writer->KvBatchDeleteRange(ranges_with_cf);
+  // Delete old region datas
+  status = engine_->Writer()->KvDeleteRange(Helper::GetColumnFamilyNames(), region->Range());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data failed, error: {}",
                                     region->Id(), status.error_str());

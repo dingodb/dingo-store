@@ -27,6 +27,8 @@ class Snapshot {
   virtual const void* Inner() = 0;
 };
 
+using SnapshotPtr = std::shared_ptr<Snapshot>;
+
 }  // namespace dingodb
 
 #endif  // DINGODB_ENGINE_SNAPSHOT_H_

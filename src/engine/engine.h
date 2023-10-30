@@ -170,9 +170,9 @@ class Engine {
     virtual butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) = 0;
   };
 
-  virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
-  virtual std::shared_ptr<VectorReader> NewVectorReader(const std::string&) {
-    DINGO_LOG(ERROR) << "Not support NewVectorReader.";
+  virtual std::shared_ptr<Reader> NewReader() = 0;
+  virtual std::shared_ptr<VectorReader> NewVectorReader() {
+    DINGO_LOG(FATAL) << "Not support NewVectorReader.";
     return nullptr;
   }
 

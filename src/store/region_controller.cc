@@ -208,8 +208,8 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  auto writer = Server::GetInstance().GetRawEngine()->NewMultiCfWriter(Helper::GetColumnFamilyNames());
-  status = writer->KvDeleteRange(region->Range());
+  auto writer = Server::GetInstance().GetRawEngine()->Writer();
+  status = writer->KvDeleteRange(Helper::GetColumnFamilyNames(), region->Range());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled.", region_id);
   }
@@ -1075,22 +1075,6 @@ void RegionCommandManager::TransformFromKv(const std::vector<pb::common::KeyValu
     region_commands_.insert_or_assign(command_id, region_cmd);
   }
 }
-
-// bool RegionController::InitVectorAppliedLogId(int64_t region_id) {
-//   int64_t max_log_id = 0;
-
-//   auto engine = Server::GetInstance().GetEngine();
-//   DINGO_LOG(INFO) << fmt::format("Build vector index for region {} ", region_id);
-//   auto reader = engine->GetRawEngine()->NewReader(Constant::kStoreDataCF);
-
-//   auto ret = reader->VectorGetMaxLogId(region_id, max_log_id);
-//   if (ret.ok()) {
-//     DINGO_LOG(INFO) << fmt::format("Region {} max log id is {}", region_id, max_log_id);
-//     applied_log_id_map.Put(region_id, max_log_id);
-//   }
-
-//   return true;
-// }
 
 bool RegionController::Init() {
   share_executor_ = std::make_shared<ControlExecutor>();

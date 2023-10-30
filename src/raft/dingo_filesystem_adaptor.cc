@@ -127,7 +127,7 @@ void DingoDataReaderAdaptor::ContextReset() {
   IteratorOptions iter_options;
   iter_options.lower_bound = temp_iter_context->lower_bound;
   iter_options.upper_bound = temp_iter_context->upper_bound;
-  auto new_iter = iter_ctx_in_adaptor_->snapshot_context->raw_engine->NewIterator(
+  auto new_iter = iter_ctx_in_adaptor_->snapshot_context->raw_engine->Reader()->NewIterator(
       iter_ctx_in_adaptor_->cf_name, iter_ctx_in_adaptor_->snapshot_context->snapshot, IteratorOptions());
   temp_iter_context->iter = new_iter;
   temp_iter_context->iter->Seek(temp_iter_context->lower_bound);
@@ -711,7 +711,7 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
     IteratorOptions iter_options;
     iter_options.lower_bound = iter_context->lower_bound;
     iter_options.upper_bound = iter_context->upper_bound;
-    auto new_iter = iter_context->snapshot_context->raw_engine->NewIterator(
+    auto new_iter = iter_context->snapshot_context->raw_engine->Reader()->NewIterator(
         iter_context->cf_name, iter_context->snapshot_context->snapshot, IteratorOptions());
     iter_context->iter = new_iter;
     iter_context->iter->Seek(iter_context->lower_bound);

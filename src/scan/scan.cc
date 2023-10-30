@@ -397,12 +397,12 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
     }
   }
 
-  std::shared_ptr<RawEngine::Reader> reader = context->engine_->NewReader(context->cf_name_);
+  auto reader = context->engine_->Reader();
 
   IteratorOptions options;
   options.upper_bound = context->range_.end_key();
 
-  context->iter_ = reader->NewIterator(options);
+  context->iter_ = reader->NewIterator(context->cf_name_, options);
   if (!context->iter_) {
     context->state_ = ScanState::kError;
     DINGO_LOG(ERROR) << fmt::format("RawEngine::Reader::NewIterator failed");

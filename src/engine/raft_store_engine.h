@@ -107,7 +107,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   // KV reader
   class Reader : public Engine::Reader {
    public:
-    Reader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
+    Reader(RawEngine::ReaderPtr reader) : reader_(reader) {}
     butil::Status KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) override;
 
     butil::Status KvScan(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
@@ -117,21 +117,15 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                           int64_t& count) override;
 
    private:
-    std::shared_ptr<RawEngine::Reader> reader_;
+    RawEngine::ReaderPtr reader_;
   };
 
-  std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
+  std::shared_ptr<Engine::Reader> NewReader() override;
 
   // Vector reader
   class VectorReader : public Engine::VectorReader {
    public:
-    // VectorReader(std::shared_ptr<RawEngine::Reader> reader) : reader_(reader) {}
-    VectorReader(std::shared_ptr<RawEngine::Reader> vector_data_reader,
-                 std::shared_ptr<RawEngine::Reader> vector_scalar_reader,
-                 std::shared_ptr<RawEngine::Reader> vector_table_reader)
-        : vector_data_reader_(vector_data_reader),
-          vector_scalar_reader_(vector_scalar_reader),
-          vector_table_reader_(vector_table_reader) {}
+    VectorReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
 
     butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,                           // NOLINT
                                     std::vector<pb::index::VectorWithDistanceResult>& results) override;  // NOLINT
@@ -153,10 +147,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                          int64_t& search_time_us) override;  // NOLINT
 
    private:
-    // std::shared_ptr<RawEngine::Reader> reader_;
-    std::shared_ptr<RawEngine::Reader> vector_data_reader_;
-    std::shared_ptr<RawEngine::Reader> vector_scalar_reader_;
-    std::shared_ptr<RawEngine::Reader> vector_table_reader_;
+    RawEngine::ReaderPtr reader_;
   };
 
   class TxnReader : public Engine::TxnReader {
@@ -204,7 +195,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     std::shared_ptr<RaftStoreEngine> raft_engine_;
   };
 
-  std::shared_ptr<Engine::VectorReader> NewVectorReader(const std::string& cf_name) override;
+  std::shared_ptr<Engine::VectorReader> NewVectorReader() override;
   std::shared_ptr<Engine::TxnReader> NewTxnReader() override;
   std::shared_ptr<Engine::TxnWriter> NewTxnWriter(std::shared_ptr<Engine> engine) override;
 

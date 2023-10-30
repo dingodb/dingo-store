@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -36,7 +37,7 @@ butil::Status VectorReader::QueryVectorWithId(const pb::common::Range& region_ra
   VectorCodec::EncodeVectorKey(region_range.start_key()[0], partition_id, vector_id, key);
 
   std::string value;
-  auto status = vector_data_reader_->KvGet(key, value);
+  auto status = reader_->KvGet(Constant::kStoreDataCF, key, value);
   if (!status.ok()) {
     return status;
   }
@@ -168,7 +169,7 @@ butil::Status VectorReader::QueryVectorTableData(const pb::common::Range& region
   std::string key, value;
   VectorCodec::EncodeVectorKey(region_range.start_key()[0], partition_id, vector_with_id.id(), key);
 
-  auto status = vector_table_reader_->KvGet(key, value);
+  auto status = reader_->KvGet(Constant::kVectorTableCF, key, value);
   if (!status.ok()) {
     return status;
   }
@@ -214,7 +215,7 @@ butil::Status VectorReader::QueryVectorScalarData(const pb::common::Range& regio
   // VectorCodec::EncodeVectorScalar(partition_id, vector_with_id.id(), key);
   VectorCodec::EncodeVectorKey(region_range.start_key()[0], partition_id, vector_with_id.id(), key);
 
-  auto status = vector_scalar_reader_->KvGet(key, value);
+  auto status = reader_->KvGet(Constant::kVectorScalarCF, key, value);
   if (!status.ok()) {
     return status;
   }
@@ -272,7 +273,7 @@ butil::Status VectorReader::CompareVectorScalarData(const pb::common::Range& reg
 
   VectorCodec::EncodeVectorKey(region_range.start_key()[0], partition_id, vector_id, key);
 
-  auto status = vector_scalar_reader_->KvGet(key, value);
+  auto status = reader_->KvGet(Constant::kVectorScalarCF, key, value);
   if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format("Get vector scalar data failed, vector_id: {} error: {} ", vector_id,
                                       status.error_str());
@@ -508,7 +509,7 @@ butil::Status VectorReader::VectorCount(const pb::common::Range& range, int64_t&
 
   IteratorOptions options;
   options.upper_bound = end_key;
-  auto iter = vector_data_reader_->NewIterator(options);
+  auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
   for (iter->Seek(begin_key); iter->Valid(); iter->Next()) {
     ++count;
   }
@@ -527,7 +528,7 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
     IteratorOptions options;
     options.lower_bound = start_key;
     options.upper_bound = end_key;
-    auto iter = vector_data_reader_->NewIterator(options);
+    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                       Helper::StringToHex(region_range.start_key()),
@@ -546,7 +547,7 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
   } else {
     IteratorOptions options;
     options.lower_bound = start_key;
-    auto iter = vector_data_reader_->NewIterator(options);
+    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                       Helper::StringToHex(region_range.start_key()),
@@ -596,7 +597,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
 
     options.lower_bound = range_start_key;
     options.upper_bound = range_end_key;
-    auto iter = vector_data_reader_->NewIterator(options);
+    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                       Helper::StringToHex(ctx->region_range.start_key()),
@@ -645,7 +646,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
     }
 
     options.lower_bound = range_start_key;
-    auto iter = vector_data_reader_->NewIterator(options);
+    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                       Helper::StringToHex(ctx->region_range.start_key()),
@@ -752,7 +753,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
   IteratorOptions options;
   options.upper_bound = end_key;
 
-  auto iter = vector_scalar_reader_->NewIterator(options);
+  auto iter = reader_->NewIterator(Constant::kVectorScalarCF, options);
   if (iter == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                     Helper::StringToHex(region_range.start_key()),
@@ -1044,7 +1045,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   };
 
   auto start_iter = lambda_time_now_function();
-  auto iter = vector_scalar_reader_->NewIterator(options);
+  auto iter = reader_->NewIterator(Constant::kVectorScalarCF, options);
   if (iter == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                     Helper::StringToHex(region_range.start_key()),

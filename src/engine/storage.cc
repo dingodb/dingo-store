@@ -79,7 +79,7 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
   if (!status.ok()) {
     return status;
   }
-  auto reader = engine_->NewReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewReader();
   for (const auto& key : keys) {
     std::string value;
     auto status = reader->KvGet(ctx, key, value);
@@ -299,7 +299,7 @@ butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Co
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status = reader->VectorBatchQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
@@ -320,7 +320,7 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status = reader->VectorBatchSearch(ctx, results);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
@@ -341,7 +341,7 @@ butil::Status Storage::VectorGetBorderId(int64_t region_id, const pb::common::Ra
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status = reader->VectorGetBorderId(region_range, get_min, vector_id);
   if (!status.ok()) {
     return status;
@@ -357,7 +357,7 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status = reader->VectorScanQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     return status;
@@ -374,7 +374,7 @@ butil::Status Storage::VectorGetRegionMetrics(int64_t region_id, const pb::commo
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status = reader->VectorGetRegionMetrics(region_id, region_range, vector_index_wrapper, region_metrics);
   if (!status.ok()) {
     return status;
@@ -389,7 +389,7 @@ butil::Status Storage::VectorCount(int64_t region_id, const pb::common::Range& r
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status = reader->VectorCount(range, count);
   if (!status.ok()) {
     return status;
@@ -482,7 +482,7 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+  auto reader = engine_->NewVectorReader();
   status =
       reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us, search_time_us);
   if (!status.ok()) {
@@ -752,18 +752,9 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     return butil::Status(pb::error::EINTERNAL, "get snapshot failed");
   }
 
-  auto data_reader = engine_->NewReader(Constant::kTxnDataCF);
-  if (data_reader == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "get data_reader failed");
-  }
-  auto lock_reader = engine_->NewReader(Constant::kTxnLockCF);
-  if (lock_reader == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "get lock_reader failed");
-  }
-  auto write_reader = engine_->NewReader(Constant::kTxnWriteCF);
-  if (write_reader == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "get write_reader failed");
-  }
+  auto data_reader = engine_->NewReader();
+  auto lock_reader = engine_->NewReader();
+  auto write_reader = engine_->NewReader();
 
   // scan [start_key, end_key) for data
   std::vector<pb::common::KeyValue> data_kvs;
@@ -772,6 +763,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   Buf buf_end(8);
   buf_end.WriteLong(end_ts);
 
+  ctx->SetCfName(Constant::kTxnDataCF);
   auto ret = data_reader->KvScan(ctx, start_key + buf_start.GetString(), end_key + buf_end.GetString(), data_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
@@ -799,6 +791,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
   // scan [start_key, end_key) for lock
   std::vector<pb::common::KeyValue> lock_kvs;
+  ctx->SetCfName(Constant::kTxnLockCF);
   ret = lock_reader->KvScan(ctx, start_key, end_key, lock_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan failed : {}", ret.error_cstr());
@@ -821,6 +814,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
   // scan [start_key, end_key) for write
   std::vector<pb::common::KeyValue> write_kvs;
+  ctx->SetCfName(Constant::kTxnWriteCF);
   ret = write_reader->KvScan(ctx, start_key + buf_start.GetString(), end_key + buf_end.GetString(), write_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());

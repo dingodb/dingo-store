@@ -44,7 +44,7 @@ namespace dingodb {
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   IteratorOptions options;
   options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
 
   int64_t size = 0;
@@ -77,7 +77,7 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   IteratorOptions options;
   options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
 
   int64_t size = 0;
@@ -105,7 +105,7 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
   IteratorOptions options;
   options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
 
   int64_t size = 0;

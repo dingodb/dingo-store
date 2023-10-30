@@ -79,13 +79,6 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     }
   }
 
-  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
-  if (writer == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
-                                    region->Id(), term_id, log_id)
-                     << ", new multi cf writer failed, request: " << request.ShortDebugString();
-    return;
-  }
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
   std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
@@ -122,6 +115,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     kv_deletes_with_cf.insert_or_assign(dels.cf_name(), kv_deletes);
   }
 
+  auto writer = engine->Writer();
   status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
   if (!status.ok()) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
@@ -205,14 +199,6 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
                                  term_id, log_id)
                   << ", request: " << request.ShortDebugString();
 
-  auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
-  if (writer == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnDeleteRange, term: {} apply_log_id: {}", region->Id(),
-                                    term_id, log_id)
-                     << ", new multi cf writer failed, request: " << request.ShortDebugString();
-    return;
-  }
-
   auto *response = dynamic_cast<pb::store::TxnDeleteRangeResponse *>(ctx->Response());
   auto *error = response->mutable_error();
 
@@ -235,6 +221,7 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
   ranges_with_cf.insert_or_assign(Constant::kTxnLockCF, lock_ranges);
   ranges_with_cf.insert_or_assign(Constant::kTxnWriteCF, write_ranges);
 
+  auto writer = engine->Writer();
   auto status = writer->KvBatchDeleteRange(ranges_with_cf);
   if (!status.ok()) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleTxnDeleteRange, term: {} apply_log_id: {}", region->Id(),

@@ -32,7 +32,7 @@
 
 namespace dingodb {
 
-class RawEngine {
+class RawEngine : public std::enable_shared_from_this<RawEngine> {
  public:
   virtual ~RawEngine() = default;
 
@@ -40,99 +40,94 @@ class RawEngine {
    public:
     Reader() = default;
     virtual ~Reader() = default;
-    virtual butil::Status KvGet(const std::string& key, std::string& value) = 0;
-    virtual butil::Status KvGet(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& key,
-                                std::string& value) = 0;
 
-    virtual butil::Status KvScan(const std::string& start_key, const std::string& end_key,
+    virtual butil::Status KvGet(const std::string& cf_name, const std::string& key, std::string& value) = 0;
+    virtual butil::Status KvGet(const std::string& cf_name, std::shared_ptr<dingodb::Snapshot> snapshot,
+                                const std::string& key, std::string& value) = 0;
+
+    virtual butil::Status KvScan(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
                                  std::vector<pb::common::KeyValue>& kvs) = 0;
-    virtual butil::Status KvScan(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                                 const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) = 0;
+    virtual butil::Status KvScan(const std::string& cf_name, std::shared_ptr<dingodb::Snapshot> snapshot,
+                                 const std::string& start_key, const std::string& end_key,
+                                 std::vector<pb::common::KeyValue>& kvs) = 0;
 
-    virtual butil::Status KvCount(const std::string& start_key, const std::string& end_key, int64_t& count) = 0;
-    virtual butil::Status KvCount(std::shared_ptr<dingodb::Snapshot> snapshot, const std::string& start_key,
-                                  const std::string& end_key, int64_t& count) = 0;
+    virtual butil::Status KvCount(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
+                                  int64_t& count) = 0;
+    virtual butil::Status KvCount(const std::string& cf_name, std::shared_ptr<dingodb::Snapshot> snapshot,
+                                  const std::string& start_key, const std::string& end_key, int64_t& count) = 0;
 
-    virtual std::shared_ptr<dingodb::Iterator> NewIterator(IteratorOptions options) = 0;
-    virtual std::shared_ptr<dingodb::Iterator> NewIterator(std::shared_ptr<Snapshot> snapshot,
+    virtual std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) = 0;
+    virtual std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name,
+                                                           std::shared_ptr<Snapshot> snapshot,
                                                            IteratorOptions options) = 0;
   };
+  using ReaderPtr = std::shared_ptr<Reader>;
 
   class Writer {
    public:
     Writer() = default;
     virtual ~Writer() = default;
-    virtual butil::Status KvPut(const pb::common::KeyValue& kv) = 0;
-    virtual butil::Status KvBatchPut(const std::vector<pb::common::KeyValue>& kvs) = 0;
-    virtual butil::Status KvBatchPutAndDelete(const std::vector<pb::common::KeyValue>& kv_puts,
+
+    virtual butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) = 0;
+    virtual butil::Status KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) = 0;
+    virtual butil::Status KvBatchPutAndDelete(const std::string& cf_name,
+                                              const std::vector<pb::common::KeyValue>& kv_puts,
                                               const std::vector<pb::common::KeyValue>& kv_deletes) = 0;
 
-    virtual butil::Status KvPutIfAbsent(const pb::common::KeyValue& kv, bool& key_state) = 0;
-    virtual butil::Status KvBatchPutIfAbsent(const std::vector<pb::common::KeyValue>& kvs,
+    virtual butil::Status KvPutIfAbsent(const std::string& cf_name, const pb::common::KeyValue& kv,
+                                        bool& key_state) = 0;
+    virtual butil::Status KvBatchPutIfAbsent(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
                                              std::vector<bool>& key_states, bool is_atomic) = 0;
 
-    virtual butil::Status KvCompareAndSet(const pb::common::KeyValue& kv, const std::string& value,
-                                          bool& key_state) = 0;
-    // Batch implementation comparisons and settings.
-    // There are three layers of semantics:
-    // 1. If key not exists, set key=value
-    // 2. If key exists, and value in request is null, delete key
-    // 3. If key exists, set key=value
-    // Not available internally, only for RPC use
-    virtual butil::Status KvBatchCompareAndSet(const std::vector<pb::common::KeyValue>& kvs,
+    virtual butil::Status KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv,
+                                          const std::string& value, bool& key_state) = 0;
+    virtual butil::Status KvBatchCompareAndSet(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
                                                const std::vector<std::string>& expect_values,
                                                std::vector<bool>& key_states, bool is_atomic) = 0;
 
-    virtual butil::Status KvDelete(const std::string& key) = 0;
-    virtual butil::Status KvBatchDelete(const std::vector<std::string>& keys) = 0;
+    virtual butil::Status KvDelete(const std::string& cf_name, const std::string& key) = 0;
+    virtual butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) = 0;
 
-    virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
-    virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
-
-    virtual butil::Status KvDeleteIfEqual(const pb::common::KeyValue& kv) = 0;
-  };
-
-  class MultiCfWriter {
-   public:
-    MultiCfWriter() = default;
-    virtual ~MultiCfWriter() = default;
-    // map<cf_index, vector<kvs>>
-    virtual butil::Status KvBatchPutAndDelete(
-        const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
-        const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) = 0;
-
+    virtual butil::Status KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) = 0;
+    virtual butil::Status KvDeleteRange(const std::vector<std::string>& cf_names, const pb::common::Range& range) = 0;
+    virtual butil::Status KvBatchDeleteRange(const std::string& cf_name,
+                                             const std::vector<pb::common::Range>& ranges) = 0;
     virtual butil::Status KvBatchDeleteRange(
-        const std::map<std::string, std::vector<pb::common::Range>>& ranges_with_cf) = 0;
-    virtual butil::Status KvDeleteRange(const pb::common::Range& range) = 0;
-    virtual butil::Status KvBatchDeleteRange(const std::vector<pb::common::Range>& ranges) = 0;
+        const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) = 0;
+
+    virtual butil::Status KvDeleteIfEqual(const std::string& cf_name, const pb::common::KeyValue& kv) = 0;
+
+    virtual butil::Status KvBatchPutAndDelete(
+        const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_put_with_cfs,
+        const std::map<std::string, std::vector<std::string>>& kv_delete_with_cfs) = 0;
   };
+  using WriterPtr = std::shared_ptr<Writer>;
 
   virtual bool Init(std::shared_ptr<Config> config) = 0;
+  virtual void Close() = 0;
+  virtual void Destroy() = 0;
   virtual bool Recover() { return true; }
 
   virtual std::string GetName() = 0;
   virtual pb::common::RawEngine GetID() = 0;
 
-  virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
+  virtual SnapshotPtr GetSnapshot() = 0;
+
+  virtual ReaderPtr Reader() = 0;
+  virtual WriterPtr Writer() = 0;
+
   virtual butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) = 0;
-
-  virtual void Flush(const std::string& cf_name) = 0;
-  virtual butil::Status Compact(const std::string& cf_name) = 0;
-
-  virtual std::shared_ptr<Snapshot> NewSnapshot() = 0;
-  virtual std::shared_ptr<Reader> NewReader(const std::string& cf_name) = 0;
-  virtual std::shared_ptr<RawEngine::Writer> NewWriter(const std::string& cf_name) = 0;
-  virtual std::shared_ptr<RawEngine::MultiCfWriter> NewMultiCfWriter(const std::vector<std::string>& cf_names) = 0;
-  virtual std::shared_ptr<Iterator> NewIterator(const std::string& cf_name, IteratorOptions options) = 0;
-  virtual std::shared_ptr<dingodb::Iterator> NewIterator(const std::string& cf_name, std::shared_ptr<Snapshot> snapshot,
-                                                         IteratorOptions options) = 0;
 
   virtual std::vector<int64_t> GetApproximateSizes(const std::string& cf_name,
                                                    std::vector<pb::common::Range>& ranges) = 0;
 
+  virtual void Flush(const std::string& cf_name) = 0;
+  virtual butil::Status Compact(const std::string& cf_name) = 0;
+
  protected:
   RawEngine() = default;
 };
+using RawEnginePtr = std::shared_ptr<RawEngine>;
 
 }  // namespace dingodb
 

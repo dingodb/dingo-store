@@ -28,80 +28,75 @@ namespace dingodb {
 
 class TxnEngineHelper {
  public:
-  // txn read functions
-  static butil::Status GetLockInfo(const std::shared_ptr<RawEngine::Reader> &reader, const std::string &key,
-                                   pb::store::LockInfo &lock_info);
+  static butil::Status GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key, pb::store::LockInfo &lock_info);
 
-  static butil::Status ScanLockInfo(const std::shared_ptr<RawEngine> &engine, int64_t min_lock_ts, int64_t max_lock_ts,
+  static butil::Status ScanLockInfo(RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
                                     const std::string &start_key, const std::string &end_key, uint32_t limit,
                                     std::vector<pb::store::LockInfo> &lock_infos);
 
-  static butil::Status BatchGet(const std::shared_ptr<RawEngine> &engine,
-                                const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
-                                const std::vector<std::string> &keys, std::vector<pb::common::KeyValue> &kvs,
-                                pb::store::TxnResultInfo &txn_result_info);
+  static butil::Status BatchGet(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
+                                int64_t start_ts, const std::vector<std::string> &keys,
+                                std::vector<pb::common::KeyValue> &kvs, pb::store::TxnResultInfo &txn_result_info);
 
-  static butil::Status ScanGetNextKeyValue(std::shared_ptr<RawEngine::Reader> data_reader,
-                                           std::shared_ptr<Iterator> write_iter, std::shared_ptr<Iterator> lock_iter,
-                                           int64_t start_ts, const std::string &start_iter_key,
-                                           std::string &last_lock_key, std::string &last_write_key,
-                                           pb::store::TxnResultInfo &txn_result_info, std::string &iter_key,
-                                           std::string &data_value);
+  static butil::Status ScanGetNextKeyValue(RawEngine::ReaderPtr reader, std::shared_ptr<Iterator> write_iter,
+                                           std::shared_ptr<Iterator> lock_iter, int64_t start_ts,
+                                           const std::string &start_iter_key, std::string &last_lock_key,
+                                           std::string &last_write_key, pb::store::TxnResultInfo &txn_result_info,
+                                           std::string &iter_key, std::string &data_value);
 
-  static butil::Status Scan(const std::shared_ptr<RawEngine> &engine, const pb::store::IsolationLevel &isolation_level,
-                            int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
-                            bool is_reverse, pb::store::TxnResultInfo &txn_result_info,
-                            std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key);
+  static butil::Status Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
+                            const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
+                            pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
+                            bool &has_more, std::string &end_key);
 
-  static butil::Status GetWriteInfo(const std::shared_ptr<RawEngine> &engine, int64_t min_commit_ts,
-                                    int64_t max_commit_ts, int64_t start_ts, const std::string &key,
-                                    bool include_rollback, bool include_delete, bool include_put,
-                                    pb::store::WriteInfo &write_info, int64_t &commit_ts);
+  static butil::Status GetWriteInfo(RawEnginePtr raw_engine, int64_t min_commit_ts, int64_t max_commit_ts,
+                                    int64_t start_ts, const std::string &key, bool include_rollback,
+                                    bool include_delete, bool include_put, pb::store::WriteInfo &write_info,
+                                    int64_t &commit_ts);
 
-  static butil::Status GetRollbackInfo(const std::shared_ptr<RawEngine::Reader> &write_reader, int64_t start_ts,
-                                       const std::string &key, pb::store::WriteInfo &write_info);
+  static butil::Status GetRollbackInfo(RawEngine::ReaderPtr write_reader, int64_t start_ts, const std::string &key,
+                                       pb::store::WriteInfo &write_info);
 
   // txn write functions
-  static butil::Status DoTxnCommit(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status DoTxnCommit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                    std::shared_ptr<Context> ctx, store::RegionPtr region,
                                    const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
                                    int64_t commit_ts);
 
-  static butil::Status DoRollback(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status DoRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                   std::shared_ptr<Context> ctx, std::vector<std::string> &keys_to_rollback_with_data,
                                   std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts);
 
-  static butil::Status Prewrite(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                 std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                 const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
                                 bool try_one_pc, int64_t max_commit_ts);
 
-  static butil::Status Commit(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> engine,
-                              std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                              const std::vector<std::string> &keys);
+  static butil::Status Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine, std::shared_ptr<Context> ctx,
+                              int64_t start_ts, int64_t commit_ts, const std::vector<std::string> &keys);
 
-  static butil::Status BatchRollback(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status BatchRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                      std::shared_ptr<Context> ctx, int64_t start_ts,
                                      const std::vector<std::string> &keys);
 
-  static butil::Status CheckTxnStatus(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> engine,
+  static butil::Status CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine,
                                       std::shared_ptr<Context> ctx, const std::string &primary_key, int64_t lock_ts,
                                       int64_t caller_start_ts, int64_t current_ts);
 
-  static butil::Status ResolveLock(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                    std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                    const std::vector<std::string> &keys);
 
-  static butil::Status HeartBeat(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                  std::shared_ptr<Context> ctx, const std::string &primary_lock, int64_t start_ts,
                                  int64_t advise_lock_ttl);
 
-  static butil::Status DeleteRange(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
+  static butil::Status DeleteRange(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                    std::shared_ptr<Context> ctx, const std::string &start_key,
                                    const std::string &end_key);
 
-  static butil::Status Gc(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<Engine> raft_engine,
-                          std::shared_ptr<Context> ctx, int64_t safe_point_ts);
+  static butil::Status Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                          int64_t safe_point_ts);
 };
 
 }  // namespace dingodb
