@@ -673,8 +673,9 @@ int main(int argc, char *argv[]) {
     dingo_server.SetEndpoints(GetEndpoints(config, "coordinator.peers"));
 
     coordinator_service.SetControl(dingo_server.GetCoordinatorControl());
-    coordinator_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControl());
+    coordinator_service.SetKvControl(dingo_server.GetKvControl());
     coordinator_service.SetTsoControl(dingo_server.GetTsoControl());
+    coordinator_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControl());
     meta_service.SetControl(dingo_server.GetCoordinatorControl());
     meta_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControl());
     meta_service.SetTsoControl(dingo_server.GetTsoControl());

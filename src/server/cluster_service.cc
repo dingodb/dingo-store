@@ -57,11 +57,8 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   std::vector<pb::common::Location> locations;
   controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
 
-  pb::common::StoreMap store_map;
-  controller_->GetStoreMap(store_map);
-
   butil::IOBufBuilder os;
-  const std::string header_in_str = "Cluster Information (" + std::string(GIT_VERSION) + ")";
+  const std::string header_in_str = "DingoDB Node Info (" + std::string(GIT_VERSION) + ")";
   // If Current Request is HTML mode, then construct HTML HEADER
   os << "<!DOCTYPE html><html><head>\n"
      << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
@@ -71,18 +68,27 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   os << "<h1 style=\"text-align: center;\">" << header_in_str << "</h1>";
 
-  os << "<p style=\"text-align: center; \">Coordinator Leader:<a href=http://" + coordinator_leader_location.host() +
-            ":" + std::to_string(coordinator_leader_location.port()) + "/ClusterStat>" +
-            coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a></p>";
+  os << "<p style=\"text-align: center; \">Coordinator";
+  if (controller_->IsLeader()) {
+    os << "(Leader)</a></p>";
 
-  for (const auto& store : store_map.stores()) {
-    os << "<p style=\"text-align: center; \">" + pb::common::StoreType_Name(store.store_type()) + ":" +
-              std::to_string(store.id()) + " " + pb::common::StoreState_Name(store.state()) + " <a href=http://" +
-              store.server_location().host() + ":" + std::to_string(store.server_location().port()) +
-              "> server:" + store.server_location().host() + ":" + std::to_string(store.server_location().port()) +
-              "</a> <a href=http://" + store.raft_location().host() + ":" +
-              std::to_string(store.raft_location().port()) + "/raft_stat> raft:" + store.raft_location().host() + ":" +
-              std::to_string(store.raft_location().port()) + "</a></p>";
+    pb::common::StoreMap store_map;
+    controller_->GetStoreMap(store_map);
+
+    for (const auto& store : store_map.stores()) {
+      os << "<p style=\"text-align: center; \">" + std::to_string(store.id()) + " (" +
+                pb::common::StoreType_Name(store.store_type()) + ") " + pb::common::StoreState_Name(store.state()) +
+                " <a href=http://" + store.server_location().host() + ":" +
+                std::to_string(store.server_location().port()) + "> server:" + store.server_location().host() + ":" +
+                std::to_string(store.server_location().port()) + "</a> <a href=http://" + store.raft_location().host() +
+                ":" + std::to_string(store.raft_location().port()) +
+                "/raft_stat> raft:" + store.raft_location().host() + ":" +
+                std::to_string(store.raft_location().port()) + "</a></p>";
+    }
+  } else {
+    os << "(Follower) Leader is <a href=http://" + coordinator_leader_location.host() + ":" +
+              std::to_string(coordinator_leader_location.port()) + "/dingo>" + coordinator_leader_location.host() +
+              ":" + std::to_string(coordinator_leader_location.port()) + "</a></p>";
   }
 
   // 1. Get All Schema

@@ -886,15 +886,20 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
     *location = member_location;
   }
 
-  // get autoincrement leader location
-  pb::common::Location auto_increment_leader_location;
-  auto_increment_control_->GetLeaderLocation(auto_increment_leader_location);
-  *(response->mutable_auto_increment_leader_location()) = auto_increment_leader_location;
+  // get kv leader location
+  pb::common::Location kv_leader_location;
+  kv_control_->GetLeaderLocation(kv_leader_location);
+  *(response->mutable_kv_leader_location()) = kv_leader_location;
 
   // get tso leader location
   pb::common::Location tso_leader_location;
   tso_control_->GetLeaderLocation(tso_leader_location);
   *(response->mutable_tso_leader_location()) = tso_leader_location;
+
+  // get autoincrement leader location
+  pb::common::Location auto_increment_leader_location;
+  auto_increment_control_->GetLeaderLocation(auto_increment_leader_location);
+  *(response->mutable_auto_increment_leader_location()) = auto_increment_leader_location;
 }
 
 // Region services
