@@ -163,6 +163,8 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
 
 // tso
 void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendResetTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendUpdateTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // gc
 void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
