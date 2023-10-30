@@ -216,7 +216,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -275,7 +275,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -334,7 +334,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -393,7 +393,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -452,7 +452,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -511,7 +511,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -558,7 +558,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -617,7 +617,7 @@ TEST_F(ScanWithCoprocessor, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -944,7 +944,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 TEST_F(ScanWithCoprocessor, KvDeleteRange) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine->NewWriter(cf_name);
+  auto writer = raw_rocks_engine->Writer();
 
   // ok
   {
@@ -962,7 +962,7 @@ TEST_F(ScanWithCoprocessor, KvDeleteRange) {
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -970,9 +970,9 @@ TEST_F(ScanWithCoprocessor, KvDeleteRange) {
     std::string end_key = Helper::PrefixNext(my_max_key);
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine->NewReader(cf_name);
+    auto reader = raw_rocks_engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"

@@ -144,7 +144,7 @@ static dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::strin
 
 TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   // Ready data
-  auto writer = SplitCheckerTest::engine->NewWriter(kDefaultCf);
+  auto writer = SplitCheckerTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
   for (int i = 0; i < (1 * 1000 * 1000); ++i) {
@@ -152,7 +152,7 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
     kv.set_value(GenRandomString(256));
-    writer->KvPut(kv);
+    writer->KvPut(kDefaultCf, kv);
   }
 
   // Get split key
@@ -167,13 +167,13 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   auto split_key = split_checker->SplitKey(region, count);
   std::cout << "split_key: " << split_key << std::endl;
 
-  auto reader = SplitCheckerTest::engine->NewReader(kDefaultCf);
+  auto reader = SplitCheckerTest::engine->Reader();
 
   int64_t left_count = 0;
-  reader->KvCount(region->InnerRegion().definition().range().start_key(), split_key, left_count);
+  reader->KvCount(kDefaultCf, region->InnerRegion().definition().range().start_key(), split_key, left_count);
 
   int64_t right_count = 0;
-  reader->KvCount(split_key, region->InnerRegion().definition().range().end_key(), right_count);
+  reader->KvCount(kDefaultCf, split_key, region->InnerRegion().definition().range().end_key(), right_count);
 
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} right_count: {}",
                            region->InnerRegion().definition().range().start_key(),
@@ -187,7 +187,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   float split_ratio = 0.5;
   auto split_checker = std::make_shared<SizeSplitChecker>(SplitCheckerTest::engine, split_threshold_size, split_ratio);
 
-  auto writer = SplitCheckerTest::engine->NewWriter(kDefaultCf);
+  auto writer = SplitCheckerTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
   for (int i = 0; i < (1 * 1000); ++i) {
@@ -195,7 +195,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
     kv.set_value(GenRandomString(256));
-    writer->KvPut(kv);
+    writer->KvPut(kDefaultCf, kv);
   }
 
   uint32_t count = 0;
@@ -206,10 +206,10 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
 
   EXPECT_EQ(true, !split_key.empty());
 
-  auto reader = SplitCheckerTest::engine->NewReader(kDefaultCf);
+  auto reader = SplitCheckerTest::engine->Reader();
 
   int64_t left_count = 0;
-  reader->KvCount(region->InnerRegion().definition().range().start_key(), split_key, left_count);
+  reader->KvCount(kDefaultCf, region->InnerRegion().definition().range().start_key(), split_key, left_count);
 
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} left_size: {}",
                            region->InnerRegion().definition().range().start_key(),
@@ -223,7 +223,7 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   float split_key_ratio = 0.5;
   auto split_checker = std::make_shared<KeysSplitChecker>(SplitCheckerTest::engine, split_key_number, split_key_ratio);
 
-  auto writer = SplitCheckerTest::engine->NewWriter(kDefaultCf);
+  auto writer = SplitCheckerTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
   for (int i = 0; i < (1 * 1000); ++i) {
@@ -231,7 +231,7 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
     kv.set_value(GenRandomString(256));
-    writer->KvPut(kv);
+    writer->KvPut(kDefaultCf, kv);
   }
 
   uint32_t count = 0;
@@ -241,10 +241,10 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   std::cout << "split_key: " << split_key << std::endl;
   EXPECT_EQ(true, !split_key.empty());
 
-  auto reader = SplitCheckerTest::engine->NewReader(kDefaultCf);
+  auto reader = SplitCheckerTest::engine->Reader();
 
   int64_t left_count = 0;
-  reader->KvCount(region->InnerRegion().definition().range().start_key(), split_key, left_count);
+  reader->KvCount(kDefaultCf, region->InnerRegion().definition().range().start_key(), split_key, left_count);
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {}",
                            region->InnerRegion().definition().range().start_key(),
                            region->InnerRegion().definition().range().end_key(), split_key, count, left_count);

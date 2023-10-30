@@ -71,12 +71,12 @@ TYPED_TEST(RawRocksEngineBugTest, test) {
 
   {
     const std::string &cf_name = "default";
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine.NewReader(cf_name);
+    auto reader = raw_rocks_engine.Reader();
 
     const std::string &key = "key";
     std::string value;
 
-    butil::Status ok = reader->KvGet(key, value);
+    butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -86,9 +86,9 @@ TYPED_TEST(RawRocksEngineBugTest, test) {
     kv.set_value("value");
 
     const std::string &cf_name = "default";
-    std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine.NewWriter(cf_name);
+    auto writer = raw_rocks_engine.Writer();
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 }

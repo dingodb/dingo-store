@@ -140,7 +140,7 @@ dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft
 
 TEST_F(StoreRegionMetricsTest, GetRegionMinKey) {
   // Ready data
-  auto writer = StoreRegionMetricsTest::engine->NewWriter(kDefaultCf);
+  auto writer = StoreRegionMetricsTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
   for (int i = 0; i < (1 * 1000 * 1000); ++i) {
@@ -148,13 +148,13 @@ TEST_F(StoreRegionMetricsTest, GetRegionMinKey) {
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
     kv.set_value(GenRandomString(256));
-    writer->KvPut(kv);
+    writer->KvPut(kDefaultCf, kv);
   }
 
   dingodb::pb::common::Range range;
   range.set_start_key("cc");
   range.set_end_key("ee");
-  writer->KvDeleteRange(range);
+  writer->KvDeleteRange(kDefaultCf, range);
 
   std::shared_ptr<dingodb::Engine> engine;
 

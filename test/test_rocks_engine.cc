@@ -227,59 +227,6 @@ TEST_F(RawRocksEngineTest, CastValue) {
   }
 }
 
-TEST_F(RawRocksEngineTest, GenColumnFamilyByDefaultConfig) {
-  std::vector<std::string> column_family_names = {"default", "meta"};
-  auto column_family_map = RawRocksEngine::GenColumnFamilyByDefaultConfig(column_family_names);
-  EXPECT_EQ(2, column_family_map.size());
-  for (const auto &cf_name : column_family_names) {
-    EXPECT_EQ(cf_name, column_family_map[cf_name]->Name());
-  }
-
-  {
-    auto column_family = column_family_map["default"];
-    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
-    EXPECT_EQ("67108864", column_family->GetConfItem("target_file_size_base"));
-  }
-  {
-    auto column_family = column_family_map["meta"];
-    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
-    EXPECT_EQ("67108864", column_family->GetConfItem("target_file_size_base"));
-  }
-}
-
-TEST_F(RawRocksEngineTest, SetColumnFamilyCustomConfig) {
-  std::vector<std::string> column_family_names = {"default", "meta"};
-  auto column_family_map = RawRocksEngine::GenColumnFamilyByDefaultConfig(column_family_names);
-  RawRocksEngine::SetColumnFamilyCustomConfig(RawRocksEngineTest::config, column_family_map);
-
-  {
-    auto column_family = column_family_map["default"];
-    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
-    EXPECT_EQ("4194304", column_family->GetConfItem("target_file_size_base"));
-    EXPECT_EQ("4", column_family->GetConfItem("max_write_buffer_number"));
-  }
-  {
-    auto column_family = column_family_map["meta"];
-    EXPECT_EQ("131072", column_family->GetConfItem("block_size"));
-    EXPECT_EQ("4194304", column_family->GetConfItem("target_file_size_base"));
-    EXPECT_EQ("3", column_family->GetConfItem("max_write_buffer_number"));
-  }
-}
-
-TEST_F(RawRocksEngineTest, GenRcoksDBColumnFamilyOptions) {
-  std::vector<std::string> column_family_names = {"default", "meta"};
-  auto column_family_map = RawRocksEngine::GenColumnFamilyByDefaultConfig(column_family_names);
-  RawRocksEngine::SetColumnFamilyCustomConfig(RawRocksEngineTest::config, column_family_map);
-
-  auto column_family = column_family_map["default"];
-  auto column_family_options = RawRocksEngine::GenRcoksDBColumnFamilyOptions(column_family);
-  EXPECT_EQ(67108864, column_family_options.arena_block_size);
-  EXPECT_EQ(4, column_family_options.min_write_buffer_number_to_merge);
-  EXPECT_EQ(4, column_family_options.max_write_buffer_number);
-  EXPECT_EQ(134217728, column_family_options.max_compaction_bytes);
-  EXPECT_EQ(67108864, column_family_options.write_buffer_size);
-}
-
 TEST_F(RawRocksEngineTest, GetName) {
   std::string name = RawRocksEngineTest::engine->GetName();
   EXPECT_EQ(name, "RAW_ENG_ROCKSDB");
@@ -305,27 +252,21 @@ TEST_F(RawRocksEngineTest, Flush) {
 TEST_F(RawRocksEngineTest, NewReader) {
   // cf empty
   {
-    const std::string &cf_name = "";
-
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     EXPECT_EQ(reader.get(), nullptr);
   }
 
   // cf not exist
   {
-    const std::string &cf_name = "12345";
-
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     EXPECT_EQ(reader.get(), nullptr);
   }
 
   // ok
   {
-    const std::string &cf_name = kDefaultCf;
-
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     EXPECT_NE(reader.get(), nullptr);
   }
@@ -336,7 +277,7 @@ TEST_F(RawRocksEngineTest, NewWriter) {
   {
     const std::string &cf_name = "";
 
-    std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+    auto writer = RawRocksEngineTest::engine->Writer();
 
     EXPECT_EQ(writer.get(), nullptr);
   }
@@ -345,7 +286,7 @@ TEST_F(RawRocksEngineTest, NewWriter) {
   {
     const std::string &cf_name = "12345";
 
-    std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+    auto writer = RawRocksEngineTest::engine->Writer();
 
     EXPECT_EQ(writer.get(), nullptr);
   }
@@ -353,7 +294,7 @@ TEST_F(RawRocksEngineTest, NewWriter) {
   // ok
   {
     const std::string &cf_name = kDefaultCf;
-    std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+    auto writer = RawRocksEngineTest::engine->Writer();
 
     EXPECT_NE(writer.get(), nullptr);
   }
@@ -361,13 +302,13 @@ TEST_F(RawRocksEngineTest, NewWriter) {
 
 TEST_F(RawRocksEngineTest, KvPut) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key empty
   {
     pb::common::KeyValue kv;
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -376,7 +317,7 @@ TEST_F(RawRocksEngineTest, KvPut) {
     pb::common::KeyValue kv;
     kv.set_key("key1");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -385,7 +326,7 @@ TEST_F(RawRocksEngineTest, KvPut) {
     kv.set_key("key1");
     kv.set_value("value1");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -394,7 +335,7 @@ TEST_F(RawRocksEngineTest, KvPut) {
     kv.set_key("key2");
     kv.set_value("value2");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -403,20 +344,20 @@ TEST_F(RawRocksEngineTest, KvPut) {
     kv.set_key("key3");
     kv.set_value("value3");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
 TEST_F(RawRocksEngineTest, KvBatchPut) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key empty
   {
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -428,7 +369,7 @@ TEST_F(RawRocksEngineTest, KvBatchPut) {
     kv.set_value("value1");
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -449,7 +390,7 @@ TEST_F(RawRocksEngineTest, KvBatchPut) {
     kv.set_value("value3");
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -469,22 +410,22 @@ TEST_F(RawRocksEngineTest, KvBatchPut) {
     kv.set_value("value3");
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value1;
     std::string value2;
     std::string value3;
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
-    ok = reader->KvGet("key1", value1);
+    auto reader = RawRocksEngineTest::engine->Reader();
+    ok = reader->KvGet(cf_name, "key1", value1);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value1", value1);
 
-    ok = reader->KvGet("key2", value2);
+    ok = reader->KvGet(cf_name, "key2", value2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value2", value2);
 
-    ok = reader->KvGet("key3", value3);
+    ok = reader->KvGet(cf_name, "key3", value3);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value3", value3);
   }
@@ -492,14 +433,14 @@ TEST_F(RawRocksEngineTest, KvBatchPut) {
 
 TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key empty failed
   {
     std::vector<pb::common::KeyValue> kv_puts;
     std::vector<pb::common::KeyValue> kv_deletes;
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -512,7 +453,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value1");
     kv_puts.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -529,7 +470,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value1");
     kv_deletes.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -551,7 +492,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value3");
     kv_puts.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -573,7 +514,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value3");
     kv_deletes.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -599,25 +540,25 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value3");
     kv_deletes.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value0;
     std::string value1;
     std::string value2;
     std::string value3;
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
-    ok = reader->KvGet("not_found_key", value1);
+    ok = reader->KvGet(cf_name, "not_found_key", value1);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
-    ok = reader->KvGet("key1", value1);
+    ok = reader->KvGet(cf_name, "key1", value1);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
-    ok = reader->KvGet("key2", value2);
+    ok = reader->KvGet(cf_name, "key2", value2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
-    ok = reader->KvGet("key3", value3);
+    ok = reader->KvGet(cf_name, "key3", value3);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -652,7 +593,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_key("key3");
     kv_deletes.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value0;
@@ -660,18 +601,18 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     std::string value2;
     std::string value3;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
-    ok = reader->KvGet("key1", value1);
+    ok = reader->KvGet(cf_name, "key1", value1);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
-    ok = reader->KvGet("key2", value2);
+    ok = reader->KvGet(cf_name, "key2", value2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
-    ok = reader->KvGet("key3", value3);
+    ok = reader->KvGet(cf_name, "key3", value3);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
-    ok = reader->KvGet("key99", value0);
+    ok = reader->KvGet(cf_name, "key99", value0);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value99", value0);
   }
@@ -693,22 +634,22 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value3");
     kv_puts.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value1;
     std::string value2;
     std::string value3;
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
-    ok = reader->KvGet("key1", value1);
+    auto reader = RawRocksEngineTest::engine->Reader();
+    ok = reader->KvGet(cf_name, "key1", value1);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value1", value1);
 
-    ok = reader->KvGet("key2", value2);
+    ok = reader->KvGet(cf_name, "key2", value2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value2", value2);
 
-    ok = reader->KvGet("key3", value3);
+    ok = reader->KvGet(cf_name, "key3", value3);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value3", value3);
   }
@@ -716,14 +657,14 @@ TEST_F(RawRocksEngineTest, KvBatchPutAndDelete) {
 
 TEST_F(RawRocksEngineTest, KvGet) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+  auto reader = RawRocksEngineTest::engine->Reader();
 
   // key empty
   {
     std::string key;
     std::string value;
 
-    butil::Status ok = reader->KvGet(key, value);
+    butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -731,14 +672,14 @@ TEST_F(RawRocksEngineTest, KvGet) {
     const std::string &key = "key1";
     std::string value;
 
-    butil::Status ok = reader->KvGet(key, value);
+    butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
 TEST_F(RawRocksEngineTest, KvCompareAndSet) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key empty
   {
@@ -746,7 +687,7 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     std::string value = "value123456";
     bool key_state;
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
+    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -757,7 +698,7 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     std::string value = "value";
     bool key_state;
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
+    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -768,7 +709,7 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     std::string value = "value123456";
     bool key_state;
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
+    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -780,14 +721,14 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     const std::string &value = "value1_modify";
     bool key_state;
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
+    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
     std::string key = kv.key();
     std::string value_another;
-    ok = reader->KvGet(key, value_another);
+    ok = reader->KvGet(cf_name, key, value_another);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, value_another);
   }
@@ -800,14 +741,14 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     const std::string &value = "";
     bool key_state;
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
+    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
     std::string key = kv.key();
     std::string value_another;
-    ok = reader->KvGet(key, value_another);
+    ok = reader->KvGet(cf_name, key, value_another);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, value_another);
   }
@@ -819,14 +760,14 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
     const std::string &value = "value1";
     bool key_state;
 
-    butil::Status ok = writer->KvCompareAndSet(kv, value, key_state);
+    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
     std::string key = kv.key();
     std::string value_another;
-    ok = reader->KvGet(key, value_another);
+    ok = reader->KvGet(cf_name, key, value_another);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, value_another);
   }
@@ -840,7 +781,7 @@ TEST_F(RawRocksEngineTest, KvCompareAndSet) {
 // Not available internally, only for RPC use
 TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // keys empty expect_values emtpy
   {
@@ -848,7 +789,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     std::vector<std::string> expect_values;
     std::vector<bool> key_states;
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -861,7 +802,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     pb::common::KeyValue kv;
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -876,7 +817,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
 
     expect_values.resize(1);
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -893,14 +834,14 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
 
     expect_values.resize(1);
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string key = "KeyBatchCompareAndSet";
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -918,17 +859,17 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
 
     expect_values.resize(1);
 
-    ok = writer->KvPut(kv);
+    ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string key = "KeyBatchCompareAndSet";
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -947,20 +888,20 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     expect_values.resize(1);
 
     kv.set_value("KeyBatchCompareAndSetValue");
-    ok = writer->KvPut(kv);
+    ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string key = "KeyBatchCompareAndSet";
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = writer->KvDelete(kv.key());
+    ok = writer->KvDelete(cf_name, kv.key());
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -979,15 +920,15 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
 
     expect_values.resize(3);
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     for (size_t i = 0; i < 3; i++) {
       std::string key = "KeyBatchCompareAndSet" + std::to_string(i);
       std::string value;
-      ok = reader->KvGet(key, value);
+      ok = reader->KvGet(cf_name, key, value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
       EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(i), value);
       EXPECT_EQ(key_states[i], true);
@@ -1027,28 +968,28 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
       expect_values.emplace_back("");
     }
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string key = "KeyBatchCompareAndSet" + std::to_string(0);
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     key = "KeyBatchCompareAndSet" + std::to_string(1);
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("ValueBatchCompareAndSet------" + std::to_string(1), value);
 
     key = "KeyBatchCompareAndSet" + std::to_string(2);
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(2), value);
 
     key = "KeyBatchCompareAndSet" + std::to_string(3);
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(3), value);
 
@@ -1072,7 +1013,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
       expect_values.emplace_back("");
     }
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, true);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (size_t i = 0; i < 4; i++) {
@@ -1083,7 +1024,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     range.set_start_key("KeyBatchCompareAndSet");
     range.set_end_key("KeyBatchCompareAndSeu");
 
-    ok = writer->KvDeleteRange(range);
+    ok = writer->KvDeleteRange(cf_name, range);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1103,15 +1044,15 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
 
     expect_values.resize(4);
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, false);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     for (size_t i = 0; i < 4; i++) {
       std::string key = "KeyBatchCompareAndSet" + std::to_string(i);
       std::string value;
-      ok = reader->KvGet(key, value);
+      ok = reader->KvGet(cf_name, key, value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
       EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(i), value);
     }
@@ -1150,28 +1091,28 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
       expect_values.emplace_back("");
     }
 
-    butil::Status ok = writer->KvBatchCompareAndSet(kvs, expect_values, key_states, false);
+    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string key = "KeyBatchCompareAndSet" + std::to_string(0);
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     key = "KeyBatchCompareAndSet" + std::to_string(1);
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("ValueBatchCompareAndSet------" + std::to_string(1), value);
 
     key = "KeyBatchCompareAndSet" + std::to_string(2);
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(2), value);
 
     key = "KeyBatchCompareAndSet" + std::to_string(3);
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(3), value);
 
@@ -1185,7 +1126,7 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
     range.set_start_key("KeyBatchCompareAndSet");
     range.set_end_key("KeyBatchCompareAndSeu");
 
-    ok = writer->KvDeleteRange(range);
+    ok = writer->KvDeleteRange(cf_name, range);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -1194,14 +1135,14 @@ TEST_F(RawRocksEngineTest, KvBatchCompareAndSet) {
 TEST_F(RawRocksEngineTest, KvBatchGet) {
 
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+  auot reader = RawRocksEngineTest::engine->Reader();
 
   // key all empty
   {
     std::vector<std::string> keys;
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    butil::Status ok = reader->KvBatchGet(cf_name, keys, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1210,7 +1151,7 @@ TEST_F(RawRocksEngineTest, KvBatchGet) {
     std::vector<std::string> keys{"key1", "", "key"};
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    butil::Status ok = reader->KvBatchGet(cf_name, keys, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1219,7 +1160,7 @@ TEST_F(RawRocksEngineTest, KvBatchGet) {
     std::vector<std::string> keys{"key1", "key2", "key", "key4"};
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    butil::Status ok = reader->KvBatchGet(cf_name, keys, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
   }
 
@@ -1228,7 +1169,7 @@ TEST_F(RawRocksEngineTest, KvBatchGet) {
     std::vector<std::string> keys{"key1", "key"};
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvBatchGet(keys, kvs);
+    butil::Status ok = reader->KvBatchGet(cf_name, keys, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -1236,14 +1177,14 @@ TEST_F(RawRocksEngineTest, KvBatchGet) {
 
 TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key empty
   {
     pb::common::KeyValue kv;
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1253,7 +1194,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1263,7 +1204,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_key("key1");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1274,7 +1215,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_value("value10");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1285,7 +1226,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_value("value10");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1296,7 +1237,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_value("");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1307,7 +1248,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_value("");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1318,7 +1259,7 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_value("value11");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1329,14 +1270,14 @@ TEST_F(RawRocksEngineTest, KvPutIfAbsent) {
     kv.set_value("");
 
     bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
 TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key all empty
   {
@@ -1344,7 +1285,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     std::vector<pb::common::KeyValue> kvs;
     std::vector<bool> key_states;
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1365,7 +1306,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    butil::Status status = writer->KvBatchPutIfAbsent(kvs, key_states, true);
+    butil::Status status = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
     EXPECT_TRUE((status.error_code() == pb::error::Errno::EKEY_EMPTY) ||
                 (status.error_code() == pb::error::Errno::EINTERNAL));
   }
@@ -1394,13 +1335,13 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
     EXPECT_EQ(kvs.size(), key_states.size());
 
     std::string value;
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
-    ok = reader->KvGet("key111", value);
+    auto reader = RawRocksEngineTest::engine->Reader();
+    ok = reader->KvGet(cf_name, "key111", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -1428,30 +1369,30 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentAtomic) {
     kv.set_value("value104");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, true);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
-    ok = reader->KvGet("key101", value);
+    ok = reader->KvGet(cf_name, "key101", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key102", value);
+    ok = reader->KvGet(cf_name, "key102", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key103", value);
+    ok = reader->KvGet(cf_name, "key103", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key104", value);
+    ok = reader->KvGet(cf_name, "key104", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
 TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key all empty
   {
@@ -1459,7 +1400,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     std::vector<pb::common::KeyValue> kvs;
     std::vector<bool> key_states;
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1478,7 +1419,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value2");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1506,23 +1447,23 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
-    ok = reader->KvGet("key1111", value);
+    ok = reader->KvGet(cf_name, "key1111", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key1", value);
+    ok = reader->KvGet(cf_name, "key1", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key2", value);
+    ok = reader->KvGet(cf_name, "key2", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key", value);
+    ok = reader->KvGet(cf_name, "key", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1550,23 +1491,23 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
-    ok = reader->KvGet("key201", value);
+    ok = reader->KvGet(cf_name, "key201", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key202", value);
+    ok = reader->KvGet(cf_name, "key202", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key203", value);
+    ok = reader->KvGet(cf_name, "key203", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key204", value);
+    ok = reader->KvGet(cf_name, "key204", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1594,7 +1535,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value204");
     kvs.push_back(kv);
 
-    butil::Status ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(kvs.size(), key_states.size());
   }
@@ -1606,7 +1547,7 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value205");
     bool key_state = false;
 
-    butil::Status ok = writer->KvPutIfAbsent(kv, key_state);
+    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<std::string> keys;
@@ -1629,30 +1570,30 @@ TEST_F(RawRocksEngineTest, KvBatchPutIfAbsentNonAtomic) {
     kv.set_value("value208");
     kvs.push_back(kv);
 
-    ok = writer->KvBatchPutIfAbsent(kvs, key_states, false);
+    ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(kvs.size(), key_states.size());
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
-    ok = reader->KvGet("key205", value);
+    ok = reader->KvGet(cf_name, "key205", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key206", value);
+    ok = reader->KvGet(cf_name, "key206", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key207", value);
+    ok = reader->KvGet(cf_name, "key207", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = reader->KvGet("key208", value);
+    ok = reader->KvGet(cf_name, "key208", value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
 TEST_F(RawRocksEngineTest, KvScan) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+  auto reader = RawRocksEngineTest::engine->Reader();
 
   // start_key empty error
   {
@@ -1660,7 +1601,7 @@ TEST_F(RawRocksEngineTest, KvScan) {
     std::string end_key;
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1670,7 +1611,7 @@ TEST_F(RawRocksEngineTest, KvScan) {
     std::string end_key;
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1680,7 +1621,7 @@ TEST_F(RawRocksEngineTest, KvScan) {
     std::string end_key = "key199";
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     std::cout << "start_key : " << start_key << " "
@@ -1696,7 +1637,7 @@ TEST_F(RawRocksEngineTest, KvScan) {
     std::string end_key = "key204";
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = reader->KvScan(start_key, end_key, kvs);
+    butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -1709,7 +1650,7 @@ TEST_F(RawRocksEngineTest, KvScan) {
 
 TEST_F(RawRocksEngineTest, KvCount) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+  auto reader = RawRocksEngineTest::engine->Reader();
 
   // start_key empty error
   {
@@ -1717,7 +1658,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
     std::string end_key;
     int64_t count = 0;
 
-    butil::Status ok = reader->KvCount(start_key, end_key, count);
+    butil::Status ok = reader->KvCount(cf_name, start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1727,7 +1668,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
     std::string end_key;
     int64_t count = 0;
 
-    butil::Status ok = reader->KvCount(start_key, end_key, count);
+    butil::Status ok = reader->KvCount(cf_name, start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1737,7 +1678,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
     std::string end_key = "key204";
     int64_t count = 0;
 
-    butil::Status ok = reader->KvCount(start_key, end_key, count);
+    butil::Status ok = reader->KvCount(cf_name, start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -1745,7 +1686,7 @@ TEST_F(RawRocksEngineTest, KvCount) {
 
     std::vector<pb::common::KeyValue> kvs;
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(count, kvs.size());
   }
@@ -1753,13 +1694,13 @@ TEST_F(RawRocksEngineTest, KvCount) {
 
 TEST_F(RawRocksEngineTest, KvDelete) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key empty
   {
     std::string key;
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1767,7 +1708,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "not_exist_key";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1776,13 +1717,13 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key1";
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
-    butil::Status ok = reader->KvGet(key, value);
+    butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = writer->KvDelete(key);
+    ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1791,14 +1732,14 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key1";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -1806,7 +1747,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1815,7 +1756,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key1";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1824,7 +1765,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key2";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1833,7 +1774,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key3";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1842,7 +1783,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key10";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1851,7 +1792,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key1111";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1860,7 +1801,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key101";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1869,7 +1810,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key102";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1878,7 +1819,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key103";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1887,7 +1828,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key104";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1896,7 +1837,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key201";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1905,7 +1846,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key202";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1914,7 +1855,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key203";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1923,7 +1864,7 @@ TEST_F(RawRocksEngineTest, KvDelete) {
   {
     const std::string &key = "key204";
 
-    butil::Status ok = writer->KvDelete(key);
+    butil::Status ok = writer->KvDelete(cf_name, key);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1931,13 +1872,13 @@ TEST_F(RawRocksEngineTest, KvDelete) {
 
 TEST_F(RawRocksEngineTest, KvBatchDelete) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // keys empty failed
   {
     std::vector<std::string> keys;
 
-    butil::Status ok = writer->KvBatchDelete(keys);
+    butil::Status ok = writer->KvBatchDelete(cf_name, keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1947,7 +1888,7 @@ TEST_F(RawRocksEngineTest, KvBatchDelete) {
     keys.emplace_back("key");
     keys.emplace_back("");
 
-    butil::Status ok = writer->KvBatchDelete(keys);
+    butil::Status ok = writer->KvBatchDelete(cf_name, keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -1962,14 +1903,14 @@ TEST_F(RawRocksEngineTest, KvBatchDelete) {
       kvs.emplace_back(std::move(kv));
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
     for (int i = 0; i < 10; i++) {
-      ok = reader->KvGet(kvs[i].key(), value);
+      ok = reader->KvGet(cf_name, kvs[i].key(), value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
       EXPECT_EQ(value, kvs[i].value());
     }
@@ -1980,11 +1921,11 @@ TEST_F(RawRocksEngineTest, KvBatchDelete) {
       keys.emplace_back(kv.key());
     }
 
-    ok = writer->KvBatchDelete(keys);
+    ok = writer->KvBatchDelete(cf_name, keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (int i = 0; i < 10; i++) {
-      ok = reader->KvGet(kvs[i].key(), value);
+      ok = reader->KvGet(cf_name, kvs[i].key(), value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
     }
   }
@@ -1992,13 +1933,13 @@ TEST_F(RawRocksEngineTest, KvBatchDelete) {
 
 TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // key  empty failed
   {
     pb::common::KeyValue kv;
 
-    butil::Status ok = writer->KvDeleteIfEqual(kv);
+    butil::Status ok = writer->KvDeleteIfEqual(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -2008,7 +1949,7 @@ TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
     kv.set_key("key598");
     kv.set_value("value598");
 
-    butil::Status ok = writer->KvDeleteIfEqual(kv);
+    butil::Status ok = writer->KvDeleteIfEqual(cf_name, kv);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -2023,21 +1964,20 @@ TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
       kvs.emplace_back(std::move(kv));
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
-
+    auto reader = RawRocksEngineTest::engine->Reader();
     std::string value;
     for (int i = 0; i < 1; i++) {
-      ok = reader->KvGet(kvs[i].key(), value);
+      ok = reader->KvGet(cf_name, kvs[i].key(), value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
       EXPECT_EQ(value, kvs[i].value());
     }
 
     for (auto &kv : kvs) {
       kv.set_value("243fgdfgd");
-      ok = writer->KvDeleteIfEqual(kv);
+      ok = writer->KvDeleteIfEqual(cf_name, kv);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
     }
   }
@@ -2053,25 +1993,25 @@ TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
       kvs.emplace_back(std::move(kv));
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string value;
     for (int i = 0; i < 10; i++) {
-      ok = reader->KvGet(kvs[i].key(), value);
+      ok = reader->KvGet(cf_name, kvs[i].key(), value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
       EXPECT_EQ(value, kvs[i].value());
     }
 
     for (const auto &kv : kvs) {
-      ok = writer->KvDeleteIfEqual(kv);
+      ok = writer->KvDeleteIfEqual(cf_name, kv);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     }
 
     for (int i = 0; i < 10; i++) {
-      ok = reader->KvGet(kvs[i].key(), value);
+      ok = reader->KvGet(cf_name, kvs[i].key(), value);
       EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
     }
   }
@@ -2079,7 +2019,7 @@ TEST_F(RawRocksEngineTest, KvDeleteIfEqual) {
 
 TEST_F(RawRocksEngineTest, KvDeleteRange) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // write key -> key999
   {
@@ -2093,7 +2033,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2101,7 +2041,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
   {
     pb::common::Range range;
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
@@ -2110,7 +2050,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     pb::common::Range range;
     range.set_start_key("key");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -2121,7 +2061,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("key100");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
@@ -2129,9 +2069,9 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     std::string end_key = "key100";
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2142,11 +2082,11 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
 
     std::string key = "key";
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     key = "key100";
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2156,7 +2096,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     range.set_start_key("key100");
     range.set_end_key("key200");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
@@ -2164,9 +2104,9 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     std::string end_key = "key200";
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2177,11 +2117,11 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
 
     std::string key = "key100";
     std::string value;
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     key = "key200";
-    ok = reader->KvGet(key, value);
+    ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2191,7 +2131,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("key99999");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
@@ -2199,9 +2139,9 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     std::string end_key = "key99999";
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2214,7 +2154,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
 
 TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // write KEY -> KEY10
   {
@@ -2228,7 +2168,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2238,27 +2178,27 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     range.set_start_key("KEX");
     range.set_end_key("KEY10");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string key1 = "KEY0";
     std::string value1;
-    ok = reader->KvGet(key1, value1);
+    ok = reader->KvGet(cf_name, key1, value1);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     std::string key2 = "KEY1";
     std::string value2;
-    ok = reader->KvGet(key2, value2);
+    ok = reader->KvGet(cf_name, key2, value2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
 
     std::string start_key = "KEY";
     std::string end_key = "KEZ";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2274,17 +2214,17 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     range.set_start_key("KEY");
     range.set_end_key("KEY");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string start_key = "KEY";
     std::string end_key = "KEZ";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2308,7 +2248,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2324,7 +2264,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2334,17 +2274,17 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     range.set_start_key("KEY");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string start_key = "KEY";
     std::string end_key = "KF0";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2362,17 +2302,17 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     range.set_start_key("KEY");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string start_key = "KEY";
     std::string end_key = "KF0";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2396,7 +2336,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2412,7 +2352,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2422,7 +2362,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     range.set_start_key("KEY");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -2433,17 +2373,17 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     range.set_start_key("KEX");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string start_key = "KEY";
     std::string end_key = "KF0";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2458,7 +2398,7 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
 
 TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<RawEngine::Writer> writer = RawRocksEngineTest::engine->NewWriter(cf_name);
+  auto writer = RawRocksEngineTest::engine->Writer();
 
   // write KEY -> KEY10
   {
@@ -2472,14 +2412,14 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // key empty failed
   {
     pb::common::Range range;
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
@@ -2489,7 +2429,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
 
     range.set_start_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -2500,7 +2440,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
 
     range.set_end_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -2512,7 +2452,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("Key");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -2524,7 +2464,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -2536,7 +2476,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -2560,17 +2500,17 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
       ranges.emplace_back(range);
     }
 
-    butil::Status ok = writer->KvBatchDeleteRange(ranges);
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, ranges);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string start_key = "KEY";
     std::string end_key = "KEZ";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2583,7 +2523,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
 
     start_key = "KEZ";
     end_key = "KE[";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2607,7 +2547,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2623,7 +2563,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(kvs);
+    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -2633,7 +2573,7 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("KEY");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -2644,17 +2584,17 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("KEX");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<pb::common::KeyValue> kvs;
 
-    std::shared_ptr<RawEngine::Reader> reader = RawRocksEngineTest::engine->NewReader(cf_name);
+    auto reader = RawRocksEngineTest::engine->Reader();
 
     std::string start_key = "KEY";
     std::string end_key = "KF0";
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "
@@ -2674,23 +2614,23 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key(std::string(array, std::size(array)));
     range.set_end_key(std::string(array, std::size(array)));
 
-    butil::Status ok = writer->KvBatchDeleteRange({range});
+    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 }
 
 TEST_F(RawRocksEngineTest, Iterator) {
-  auto writer = RawRocksEngineTest::engine->NewWriter(kDefaultCf);
+  auto writer = RawRocksEngineTest::engine->Writer();
   pb::common::KeyValue kv;
   kv.set_key("bbbbbbbbbbbbb");
   kv.set_value(GenRandomString(256));
-  writer->KvPut(kv);
+  writer->KvPut(kDefaultCf, kv);
 
   int count = 0;
   IteratorOptions options;
   options.upper_bound = "cccc";
-  auto iter = RawRocksEngineTest::engine->NewIterator(kDefaultCf, options);
+  auto iter = RawRocksEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
   for (iter->Seek("aaaaaaaaaa"); iter->Valid(); iter->Next()) {
     ++count;
   }
@@ -2699,13 +2639,13 @@ TEST_F(RawRocksEngineTest, Iterator) {
 }
 
 // TEST_F(RawRocksEngineTest, Checkpoint) {
-//   auto writer = RawRocksEngineTest::engine->NewWriter(kDefaultCf);
+//   auto writer = RawRocksEngineTest::engine->Writer();
 
 //   pb::common::KeyValue kv;
 //   for (int i = 0; i < 10000; ++i) {
 //     kv.set_key(GenRandomString(32));
 //     kv.set_value(GenRandomString(256));
-//     writer->KvPut(kv);
+//     writer->KvPut(kDefaultCf, kv);
 //   }
 
 //   auto checkpoint = RawRocksEngineTest::engine->NewCheckpoint();
@@ -2723,8 +2663,8 @@ TEST_F(RawRocksEngineTest, Iterator) {
 // }
 
 // TEST_F(RawRocksEngineTest, Ingest) {
-//   auto reader = RawRocksEngineTest::engine->NewReader(kDefaultCf);
-//   auto writer = RawRocksEngineTest::engine->NewWriter(kDefaultCf);
+//   auto reader = RawRocksEngineTest::engine->Reader();
+//   auto writer = RawRocksEngineTest::engine->Writer();
 
 //   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
 //   pb::common::KeyValue kv;
@@ -2762,17 +2702,17 @@ TEST_F(RawRocksEngineTest, Iterator) {
 //   }
 
 //   int64_t count = 0;
-//   reader->KvCount(range.start_key(), range.end_key(), count);
+//   reader->KvCount(kDefaultCf, range.start_key(), range.end_key(), count);
 //   std::cout << "count before delete: " << count << '\n';
 
-//   writer->KvDeleteRange(range);
+//   writer->KvDeleteRange(kDefaultCf, range);
 
-//   reader->KvCount(range.start_key(), range.end_key(), count);
+//   reader->KvCount(kDefaultCf, range.start_key(), range.end_key(), count);
 //   std::cout << "count after delete: " << count << '\n';
 
 //   RawRocksEngineTest::engine->IngestExternalFile(kDefaultCf, files);
 
-//   reader->KvCount(range.start_key(), range.end_key(), count);
+//   reader->KvCount(kDefaultCf, range.start_key(), range.end_key(), count);
 //   std::cout << "count after ingest: " << count << '\n';
 // }
 
