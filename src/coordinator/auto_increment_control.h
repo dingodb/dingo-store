@@ -96,6 +96,8 @@ class AutoIncrementControl : public MetaControl {
   static void AsyncSendUpdateAutoIncrementInternal(int64_t table_id, int64_t auto_increment);
   static void AsyncSendDeleteAutoIncrementInternal(int64_t table_id);
 
+  void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
+
  private:
   static int64_t GetGenerateEndId(int64_t start_id, uint32_t count, uint32_t increment, uint32_t offset);
   static int64_t GetRealStartId(int64_t start_id, uint32_t auto_increment_increment, uint32_t auto_increment_offset);

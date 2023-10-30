@@ -495,4 +495,14 @@ void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(int64_t table_id
   bth.Run(delete_function);
 }
 
+void AutoIncrementControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_info) {
+  // compute size
+  {
+    BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+    memory_info.set_auto_increment_map_count(auto_increment_map_.size());
+    memory_info.set_auto_increment_map_size(auto_increment_map_.size() * sizeof(int64_t) * 2);
+    memory_info.set_total_size(memory_info.total_size() + memory_info.auto_increment_map_size());
+  }
+}
+
 }  // namespace dingodb

@@ -23,7 +23,7 @@
 #include "brpc/server.h"
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
-#include "coordinator/coordinator_control.h"
+#include "coordinator/kv_control.h"
 #include "engine/engine.h"
 #include "google/protobuf/stubs/callback.h"
 #include "proto/version.pb.h"
@@ -89,7 +89,7 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   template <typename T>
   void RedirectResponse(T response) {
     pb::common::Location leader_location;
-    this->coordinator_control_->GetLeaderLocation(leader_location);
+    this->kv_control_->GetLeaderLocation(leader_location);
 
     auto* error_in_response = response->mutable_error();
     *(error_in_response->mutable_leader_location()) = leader_location;
@@ -109,7 +109,7 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
 
     // GetServerLocation
     pb::common::Location leader_server_location;
-    coordinator_control_->GetServerLocation(leader_raft_location, leader_server_location);
+    kv_control_->GetServerLocation(leader_raft_location, leader_server_location);
 
     auto* error_in_response = response->mutable_error();
     *(error_in_response->mutable_leader_location()) = leader_server_location;
@@ -117,9 +117,7 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
-  void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
-    this->coordinator_control_ = coordinator_control;
-  };
+  void SetControl(std::shared_ptr<KvControl> coordinator_control) { this->kv_control_ = coordinator_control; };
 
   void GetNewVersion(google::protobuf::RpcController* cntl_base, const GetNewVersionRequest* request,
                      GetNewVersionResponse* response, google::protobuf::Closure* done) override {
@@ -171,8 +169,12 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   void Watch(google::protobuf::RpcController* controller, const pb::version::WatchRequest* request,
              pb::version::WatchResponse* response, google::protobuf::Closure* done) override;
 
+  // hello
+  void Hello(google::protobuf::RpcController* controller, const pb::version::HelloRequest* request,
+             pb::version::HelloResponse* response, google::protobuf::Closure* done) override;
+
  private:
-  std::shared_ptr<CoordinatorControl> coordinator_control_;
+  std::shared_ptr<KvControl> kv_control_;
   std::shared_ptr<Engine> engine_;
 };
 

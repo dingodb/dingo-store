@@ -215,12 +215,28 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
+    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
 
     // set raft_meta_engine to coordinator_control
-    coordinator_control_->SetKvEngine(engine_);
+    coordinator_control_->SetKvEngine(raft_engine_);
 
-    // 2.init AutoIncrementController
+    // 2.init KvController
+    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(raw_engine_),
+                                              std::make_shared<MetaWriter>(raw_engine_), raw_engine_);
+
+    if (!kv_control_->Recover()) {
+      DINGO_LOG(ERROR) << "kv_control_->Recover Failed";
+      return false;
+    }
+    if (!kv_control_->Init()) {
+      DINGO_LOG(ERROR) << "kv_control_->Init Failed";
+      return false;
+    }
+
+    // set raft_meta_engine to coordinator_control
+    kv_control_->SetKvEngine(raft_engine_);
+
+    // 3.init AutoIncrementController
     auto_increment_control_ = std::make_shared<AutoIncrementControl>();
     if (!auto_increment_control_->Recover()) {
       DINGO_LOG(ERROR) << "auto_increment_control_->Recover Failed";
@@ -231,7 +247,7 @@ bool Server::InitEngine() {
       return false;
     }
 
-    // 3.init TsoController
+    // 4.init TsoController
     tso_control_ = std::make_shared<TsoControl>();
     if (!tso_control_->Recover()) {
       DINGO_LOG(ERROR) << "tso_control_->Recover Failed";
@@ -243,11 +259,11 @@ bool Server::InitEngine() {
     }
 
     // set raft_meta_engine to tso_control
-    tso_control_->SetKvEngine(engine_);
+    tso_control_->SetKvEngine(raft_engine_);
 
   } else {
-    engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
-    if (!engine_->Init(config)) {
+    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
+    if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
@@ -265,14 +281,13 @@ butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config, std
   return raft_engine->AddNode(region, coordinator_control_, false);
 }
 
-butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config,
-                                               std::shared_ptr<Engine>& kv_engine) {
+butil::Status Server::StartKvRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine) {
   // std::shared_ptr<Context> ctx = std::make_shared<Context>();
   std::shared_ptr<pb::common::RegionDefinition> region =
-      CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName /*, ctx*/);
+      CreateCoordinatorRegion(config, Constant::kKvRegionId, Constant::kKvRegionName /*, ctx*/);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
-  return raft_engine->AddNode(region, auto_increment_control_, true);
+  return raft_engine->AddNode(region, kv_control_, false);
 }
 
 butil::Status Server::StartTsoRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine) {
@@ -282,6 +297,16 @@ butil::Status Server::StartTsoRegion(const std::shared_ptr<Config>& config, std:
 
   auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
   return raft_engine->AddNode(region, tso_control_, true);
+}
+
+butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& config,
+                                               std::shared_ptr<Engine>& kv_engine) {
+  // std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  std::shared_ptr<pb::common::RegionDefinition> region =
+      CreateCoordinatorRegion(config, Constant::kAutoIncrementRegionId, Constant::kAutoIncrementRegionName /*, ctx*/);
+
+  auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
+  return raft_engine->AddNode(region, auto_increment_control_, true);
 }
 
 bool Server::InitCoordinatorInteraction() {
@@ -319,7 +344,7 @@ bool Server::InitLogStorageManager() {
 }
 
 bool Server::InitStorage() {
-  storage_ = std::make_shared<Storage>(engine_);
+  storage_ = std::make_shared<Storage>(raft_engine_);
   return true;
 }
 
@@ -448,6 +473,15 @@ bool Server::InitCrontabManager() {
       [](void*) { Heartbeat::TriggerCoordinatorRecycleOrphan(nullptr); },
   });
 
+  // Add recycle orphan crontab
+  crontab_configs_.push_back({
+      "REMOVE_WATCH",
+      {pb::common::COORDINATOR},
+      GetInterval(config, "coordinator.remove_watch_interval_s", Constant::kRemoveWatchIntervalS) * 1000,
+      false,
+      [](void*) { Heartbeat::TriggerKvRemoveOneTimeWatch(nullptr); },
+  });
+
   // Add lease crontab
   crontab_configs_.push_back({
       "LEASE",
@@ -509,8 +543,8 @@ bool Server::InitRegionCommandManager() {
 }
 
 bool Server::InitStoreMetricsManager() {
-  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(raw_engine_, std::make_shared<MetaReader>(raw_engine_),
-                                                                 std::make_shared<MetaWriter>(raw_engine_), engine_);
+  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(
+      raw_engine_, std::make_shared<MetaReader>(raw_engine_), std::make_shared<MetaWriter>(raw_engine_), raft_engine_);
   return store_metrics_manager_->Init();
 }
 
@@ -531,8 +565,8 @@ bool Server::InitPreSplitChecker() {
 bool Server::Recover() {
   if (this->role_ == pb::common::STORE) {
     // Recover engine state.
-    if (!engine_->Recover()) {
-      DINGO_LOG(ERROR) << "Recover engine failed, engine " << engine_->GetName();
+    if (!raft_engine_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();
       return false;
     }
 
@@ -542,8 +576,8 @@ bool Server::Recover() {
     }
   } else if (this->role_ == pb::common::INDEX) {
     // Recover engine state.
-    if (!engine_->Recover()) {
-      DINGO_LOG(ERROR) << "Recover engine failed, engine " << engine_->GetName();
+    if (!raft_engine_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();
       return false;
     }
 

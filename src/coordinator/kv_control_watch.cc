@@ -29,22 +29,22 @@
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/logging.h"
-#include "coordinator/coordinator_control.h"
+#include "coordinator/kv_control.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/version.pb.h"
 
 namespace dingodb {
 
-void WatchCancelCallback(CoordinatorControl* coordinator_control, google::protobuf::Closure* done) {
+void WatchCancelCallback(KvControl* kv_control, google::protobuf::Closure* done) {
   DINGO_LOG(INFO) << "WatchCancelCallback, done:" << done;
 
-  coordinator_control->CancelOneTimeWatchClosure(done);
+  kv_control->CancelOneTimeWatchClosure(done);
 }
 
-butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, int64_t start_revision, bool no_put_event,
-                                               bool no_delete_event, bool need_prev_kv, bool wait_on_not_exist_key,
-                                               google::protobuf::Closure* done, pb::version::WatchResponse* response,
-                                               [[maybe_unused]] brpc::Controller* cntl) {
+butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t start_revision, bool no_put_event,
+                                      bool no_delete_event, bool need_prev_kv, bool wait_on_not_exist_key,
+                                      google::protobuf::Closure* done, pb::version::WatchResponse* response,
+                                      [[maybe_unused]] brpc::Controller* cntl) {
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(INFO) << "OneTimeWatch, watch_key:" << watch_key << ", start_revision:" << start_revision
@@ -63,7 +63,7 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, int
   // check if need to send back immediately
   std::vector<pb::version::Kv> kvs_temp;
   int64_t total_count_in_range = 0;
-  this->KvRange(watch_key, std::string(), 1, false, false, kvs_temp, total_count_in_range);
+  KvRange(watch_key, std::string(), 1, false, false, kvs_temp, total_count_in_range);
 
   // if key is not exists, and no wait, send response
   if (kvs_temp.empty() && !wait_on_not_exist_key) {
@@ -94,12 +94,11 @@ butil::Status CoordinatorControl::OneTimeWatch(const std::string& watch_key, int
 }
 
 // caller must hold one_time_watch_map_mutex_
-butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, int64_t start_revision,
-                                                  bool no_put_event, bool no_delete_event, bool need_prev_kv,
-                                                  google::protobuf::Closure* done,
-                                                  pb::version::WatchResponse* response) {
+butil::Status KvControl::AddOneTimeWatch(const std::string& watch_key, int64_t start_revision, bool no_put_event,
+                                         bool no_delete_event, bool need_prev_kv, google::protobuf::Closure* done,
+                                         pb::version::WatchResponse* response) {
   // add to watch
-  WatchNode watch_node(done, response, start_revision, no_put_event, no_delete_event, need_prev_kv);
+  KvWatchNode watch_node(done, response, start_revision, no_put_event, no_delete_event, need_prev_kv);
 
   DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key:" << watch_key << ", start_revision:" << start_revision
                   << ", no_put_event:" << no_put_event << ", no_delete_event:" << no_delete_event
@@ -107,7 +106,7 @@ butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, 
 
   auto it = one_time_watch_map_.find(watch_key);
   if (it == one_time_watch_map_.end()) {
-    std::map<google::protobuf::Closure*, WatchNode> watch_node_map;
+    std::map<google::protobuf::Closure*, KvWatchNode> watch_node_map;
     watch_node_map.insert_or_assign(done, watch_node);
     one_time_watch_map_.insert_or_assign(watch_key, watch_node_map);
     DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key not found, insert, watch_key:" << watch_key;
@@ -122,7 +121,7 @@ butil::Status CoordinatorControl::AddOneTimeWatch(const std::string& watch_key, 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::RemoveOneTimeWatchWithLock(google::protobuf::Closure* done) {
+butil::Status KvControl::RemoveOneTimeWatchWithLock(google::protobuf::Closure* done) {
   auto it = one_time_watch_closure_map_.find(done);
   if (it == one_time_watch_closure_map_.end()) {
     DINGO_LOG(INFO) << "RemoveOneTimeWatch not found, done:" << done;
@@ -161,7 +160,7 @@ butil::Status CoordinatorControl::RemoveOneTimeWatchWithLock(google::protobuf::C
 }
 
 // this function is called by crontab
-butil::Status CoordinatorControl::RemoveOneTimeWatch() {
+butil::Status KvControl::RemoveOneTimeWatch() {
   DINGO_LOG(INFO) << "RemoveOneTimeWatch";
 
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
@@ -196,14 +195,14 @@ butil::Status CoordinatorControl::RemoveOneTimeWatch() {
 }
 
 // this function is called by WatchCancelCallback
-butil::Status CoordinatorControl::CancelOneTimeWatchClosure(google::protobuf::Closure* done) {
+butil::Status KvControl::CancelOneTimeWatchClosure(google::protobuf::Closure* done) {
   DINGO_LOG(INFO) << "CancelOneTimeWatchClosure, done:" << done;
   one_time_watch_closure_status_map_.Put(done, true);
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::TriggerOneWatch(const std::string& key, pb::version::Event::EventType event_type,
-                                                  pb::version::Kv& new_kv, pb::version::Kv& prev_kv) {
+butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Event::EventType event_type,
+                                         pb::version::Kv& new_kv, pb::version::Kv& prev_kv) {
   DINGO_LOG(INFO) << "TriggerOneWatch, key:" << key << ", event_type:" << event_type
                   << ", new_kv:" << new_kv.ShortDebugString() << ", prev_kv:" << prev_kv.ShortDebugString();
 

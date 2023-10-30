@@ -673,12 +673,12 @@ int main(int argc, char *argv[]) {
     dingo_server.SetEndpoints(GetEndpoints(config, "coordinator.peers"));
 
     coordinator_service.SetControl(dingo_server.GetCoordinatorControl());
-    coordinator_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControlReference());
+    coordinator_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControl());
     coordinator_service.SetTsoControl(dingo_server.GetTsoControl());
     meta_service.SetControl(dingo_server.GetCoordinatorControl());
-    meta_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControlReference());
+    meta_service.SetAutoIncrementControl(dingo_server.GetAutoIncrementControl());
     meta_service.SetTsoControl(dingo_server.GetTsoControl());
-    version_service.SetControl(dingo_server.GetCoordinatorControl());
+    version_service.SetControl(dingo_server.GetKvControl());
 
     // the Engine should be init success
     auto engine = dingo_server.GetEngine();
@@ -714,7 +714,7 @@ int main(int argc, char *argv[]) {
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
 
-    // start meta region
+    // start coordinator/meta region
     butil::Status status = dingo_server.StartMetaRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Meta RaftNode and StateMachine Failed:" << status;
@@ -722,19 +722,29 @@ int main(int argc, char *argv[]) {
     }
     DINGO_LOG(INFO) << "Meta region start";
 
-    status = dingo_server.StartAutoIncrementRegion(config, engine);
+    // start kv region
+    status = dingo_server.StartKvRegion(config, engine);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "Init Auto Increment RaftNode and StateMachine Failed:" << status;
+      DINGO_LOG(ERROR) << "Init Kv RaftNode and StateMachine Failed:" << status;
       return -1;
     }
-    DINGO_LOG(INFO) << "Auto Increment region start";
+    DINGO_LOG(INFO) << "Kv region start";
 
+    // start tso regioon
     status = dingo_server.StartTsoRegion(config, engine);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Init Tso RaftNode and StateMachine Failed:" << status;
       return -1;
     }
     DINGO_LOG(INFO) << "Tso region start";
+
+    // start auto-increment region
+    status = dingo_server.StartAutoIncrementRegion(config, engine);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "Init Auto Increment RaftNode and StateMachine Failed:" << status;
+      return -1;
+    }
+    DINGO_LOG(INFO) << "Auto Increment region start";
 
     // build in-memory meta cache
     // TODO: load data from kv engine into maps

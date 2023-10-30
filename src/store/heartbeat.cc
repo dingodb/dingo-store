@@ -250,8 +250,24 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   coordinator_control->RecycleOrphanRegionOnCoordinator();
 
   coordinator_control->RecycleDeletedTableAndIndex();
+}
 
-  coordinator_control->RemoveOneTimeWatch();
+static std::atomic<bool> g_remove_one_time_watch_running(false);
+void KvRemoveOneTimeWatchTask::KvRemoveOneTimeWatch(std::shared_ptr<KvControl> kv_control) {
+  if (!kv_control->IsLeader()) {
+    DINGO_LOG(DEBUG) << "KvRemoveOneTimeWatch ... this is follower";
+    return;
+  }
+  DINGO_LOG(DEBUG) << "KvRemoveOneTimeWatch... this is leader";
+
+  if (g_remove_one_time_watch_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "KvRemoveOneTimeWatch... g_remove_one_time_watch_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_remove_one_time_watch_running);
+
+  kv_control->RemoveOneTimeWatch();
 }
 
 // this is for coordinator
@@ -682,8 +698,8 @@ void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<Coordinato
 
 // this is for coordinator
 static std::atomic<bool> g_coordinator_lease_running(false);
-void LeaseTask::ExecLeaseTask(std::shared_ptr<CoordinatorControl> coordinator_control) {
-  if (!coordinator_control->IsLeader()) {
+void LeaseTask::ExecLeaseTask(std::shared_ptr<KvControl> kv_control) {
+  if (!kv_control->IsLeader()) {
     // DINGO_LOG(INFO) << "ExecLeaseTask... this is follower";
     return;
   }
@@ -696,13 +712,13 @@ void LeaseTask::ExecLeaseTask(std::shared_ptr<CoordinatorControl> coordinator_co
 
   AtomicGuard guard(g_coordinator_lease_running);
 
-  coordinator_control->LeaseTask();
+  kv_control->LeaseTask();
 }
 
 // this is for coordinator
 static std::atomic<bool> g_coordinator_compaction_running(false);
-void CompactionTask::ExecCompactionTask(std::shared_ptr<CoordinatorControl> coordinator_control) {
-  if (!coordinator_control->IsLeader()) {
+void CompactionTask::ExecCompactionTask(std::shared_ptr<KvControl> kv_control) {
+  if (!kv_control->IsLeader()) {
     // DINGO_LOG(INFO) << "ExecCompactionTask... this is follower";
     return;
   }
@@ -715,7 +731,7 @@ void CompactionTask::ExecCompactionTask(std::shared_ptr<CoordinatorControl> coor
 
   AtomicGuard guard(g_coordinator_compaction_running);
 
-  coordinator_control->CompactionTask();
+  kv_control->CompactionTask();
 }
 
 // this is for index
@@ -763,6 +779,12 @@ void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
+void Heartbeat::TriggerKvRemoveOneTimeWatch(void*) {
+  // Free at ExecuteRoutine()
+  auto task = std::make_shared<KvRemoveOneTimeWatchTask>(Server::GetInstance().GetKvControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
 void Heartbeat::TriggerCalculateTableMetrics(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<CalculateTableMetricsTask>(Server::GetInstance().GetCoordinatorControl());
@@ -771,13 +793,13 @@ void Heartbeat::TriggerCalculateTableMetrics(void*) {
 
 void Heartbeat::TriggerLeaseTask(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<LeaseTask>(Server::GetInstance().GetCoordinatorControl());
+  auto task = std::make_shared<LeaseTask>(Server::GetInstance().GetKvControl());
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerCompactionTask(void*) {
   // Free at ExecuteRoutine()
-  auto task = std::make_shared<CompactionTask>(Server::GetInstance().GetCoordinatorControl());
+  auto task = std::make_shared<CompactionTask>(Server::GetInstance().GetKvControl());
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 

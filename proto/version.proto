@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "error.proto";
 import "common.proto";
+import "coordinator.proto";
 
 package dingodb.pb.version;
 
@@ -455,7 +456,20 @@ message GetRawKvRevResponse {
   KvRevInternal kvRev = 3;
 }
 
+message HelloRequest {
+  int64 hello = 1;
+  bool get_memory_info = 2;
+}
+
+message HelloResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 2;
+}
+
 service VersionService {
+  // Hello
+  rpc Hello(HelloRequest) returns (HelloResponse);
+
   rpc GetCurrVersion(GetCurrVersionRequest) returns (GetCurrVersionResponse) {}
 
   rpc GetNewVersion(GetNewVersionRequest) returns (GetNewVersionResponse) {}
