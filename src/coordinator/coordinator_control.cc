@@ -302,19 +302,6 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover deleted_table_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 7.store_metrics map
-  if (!meta_reader_->Scan(store_metrics_meta_->Prefix(), kvs)) {
-    return false;
-  }
-  {
-    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    if (!store_metrics_meta_->Recover(kvs)) {
-      return false;
-    }
-  }
-  DINGO_LOG(INFO) << "Recover store_metrics_meta, count=" << kvs.size();
-  kvs.clear();
-
   // 8.table_metrics map
   if (!meta_reader_->Scan(table_metrics_meta_->Prefix(), kvs)) {
     return false;
@@ -419,42 +406,6 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover index_metrics_meta, count=" << kvs.size();
   kvs.clear();
 
-  // // 14.lease map
-  // if (!meta_reader_->Scan(lease_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-  // {
-  //   if (!lease_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-  // }
-  // DINGO_LOG(INFO) << "Recover lease_meta, count=" << kvs.size();
-  // kvs.clear();
-
-  // // 15.kv_index map
-  // if (!meta_reader_->Scan(kv_index_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-  // {
-  //   if (!kv_index_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-  // }
-  // DINGO_LOG(INFO) << "Recover kv_index_meta, count=" << kvs.size();
-  // kvs.clear();
-
-  // // 16.kv_rev map
-  // if (!meta_reader_->Scan(kv_rev_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-  // {
-  //   if (!kv_rev_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-  // }
-  // DINGO_LOG(INFO) << "Recover kv_rev_meta, count=" << kvs.size();
-  // kvs.clear();
-
   // 50.table_index map
   if (!meta_reader_->Scan(table_index_meta_->Prefix(), kvs)) {
     return false;
@@ -468,16 +419,6 @@ bool CoordinatorControl::Recover() {
 
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
-
-  // // build version_lease_to_key_map_temp_
-  // BuildLeaseToKeyMap();
-  // DINGO_LOG(INFO) << "Recover lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
-
-  // std::map<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map;
-  // kv_rev_map_.GetRawMapCopy(kv_rev_map);
-  // for (auto& kv : kv_rev_map) {
-  //   DINGO_LOG(INFO) << "kv_rev_map key=" << Helper::StringToHex(kv.first) << " value=" << kv.second.DebugString();
-  // }
 
   return true;
 }
@@ -497,12 +438,6 @@ bool CoordinatorControl::Init() {
     GenerateRootSchemas(root_schema, meta_schema, dingo_schema, mysql_schema, information_schema);
 
     // add the initial schemas to schema_map_
-    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::ROOT_SCHEMA, root_schema));    // raft_kv_put
-    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::META_SCHEMA, meta_schema));    // raft_kv_put
-    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, dingo_schema));  // raft_kv_put
-    // schema_map_.insert(std::make_pair(pb::meta::ReservedSchemaIds::MYSQL_SCHEMA, mysql_schema));  // raft_kv_put
-    // schema_map_.insert(
-    //     std::make_pair(pb::meta::ReservedSchemaIds::INFORMATION_SCHEMA, information_schema));  // raft_kv_put
     schema_map_.Put(pb::meta::ReservedSchemaIds::ROOT_SCHEMA, root_schema);                // raft_kv_put
     schema_map_.Put(pb::meta::ReservedSchemaIds::META_SCHEMA, meta_schema);                // raft_kv_put
     schema_map_.Put(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, dingo_schema);              // raft_kv_put

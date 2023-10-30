@@ -3126,95 +3126,6 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
   return butil::Status::OK();
 }
 
-// UpdateRegionMap
-// int64_t CoordinatorControl::UpdateRegionMap(std::vector<pb::common::Region>& regions,
-//                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
-//   int64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
-
-//   bool need_to_get_next_epoch = false;
-//   {
-//     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-//     for (const auto& region : regions) {
-//       pb::coordinator_internal::RegionInternal region_to_update;
-//       int ret = region_map_.Get(region.id(), region_to_update);
-//       if (ret > 0) {
-//         DINGO_LOG(INFO) << " update region to region_map in heartbeat, region_id=" << region.id();
-
-//         // if state not change, just update leader_store_id
-//         if (region_to_update.state() == region.state()) {
-//           continue;
-//         } else {
-//           // state not equal, need to update region data and apply raft
-//           DINGO_LOG(INFO) << "REGION STATUS CHANGE region_id = " << region.id()
-//                           << " old status = " << region_to_update.state() << " new status = " << region.state();
-//           // maybe need to build a state machine here
-//           // if a region is set to DELETE, it will never be updated to
-//           // other normal state
-//           const auto& region_delete_state_name =
-//               dingodb::pb::common::RegionState_Name(pb::common::RegionState::REGION_DELETE);
-//           const auto& region_state_in_map = dingodb::pb::common::RegionState_Name(region_to_update.state());
-//           const auto& region_state_in_req = dingodb::pb::common::RegionState_Name(region.state());
-
-//           // if store want to update a region state from DELETE_* to other
-//           // NON DELETE_* state, it is illegal
-//           if (region_state_in_map.rfind(region_delete_state_name, 0) == 0 &&
-//               region_state_in_req.rfind(region_delete_state_name, 0) != 0) {
-//             DINGO_LOG(INFO) << "illegal intend to update region state from "
-//                                "REGION_DELETE to "
-//                             << region_state_in_req << " region_id=" << region.id();
-//             continue;
-//           }
-//         }
-
-//         // update meta_increment
-//         auto* region_increment = meta_increment.add_regions();
-//         region_increment->set_id(region.id());
-//         region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-
-//         auto* region_increment_region = region_increment->mutable_region();
-//         *region_increment_region = region;
-
-//         need_to_get_next_epoch = true;
-
-//         // on_apply
-//         // region_map_[region.id()] = region;  // raft_kv_put
-//         // region_map_epoch++;                 // raft_kv_put
-//       } else if (region.id() == 0) {
-//         DINGO_LOG(INFO) << " found illegal null region in heartbeat, region_id=0"
-//                         << " name=" << region.definition().name() << " leader_store_id=" <<
-//                         region.leader_store_id()
-//                         << " state=" << region.state();
-//       } else {
-//         DINGO_LOG(INFO) << " found illegal region in heartbeat, region_id=" << region.id()
-//                         << " name=" << region.definition().name() << " leader_store_id=" <<
-//                         region.leader_store_id()
-//                         << " state=" << region.state();
-
-//         auto* region_increment = meta_increment.add_regions();
-//         region_increment->set_id(region.id());
-//         region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-//         auto* region_increment_region = region_increment->mutable_region();
-//         *region_increment_region = region;
-//         region_increment_region->set_state(::dingodb::pb::common::RegionState::REGION_ILLEGAL);
-
-//         need_to_get_next_epoch = true;
-
-//         // region_map_.insert(std::make_pair(region.id(), region));  //
-//         // raft_kv_put
-//       }
-//     }
-//   }
-
-//   if (need_to_get_next_epoch) {
-//     region_map_epoch = GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
-//   }
-
-//   DINGO_LOG(INFO) << "UpdateRegionMapMulti epoch=" << region_map_epoch;
-
-//   return region_map_epoch;
-// }
-
 void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   int64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
@@ -3896,38 +3807,6 @@ int64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& s
     } else {
       store_metrics_map_.insert(store_metrics.id(), store_metrics);
     }
-
-    // if (store_metrics_map_.seek(store_metrics.id()) != nullptr) {
-    //   DINGO_LOG(DEBUG) << "STORE METIRCS UPDATE store_metrics.id = " <<
-    //   store_metrics.id();
-
-    //   // update meta_increment
-    //   auto* store_metrics_increment =
-    //   meta_increment.add_store_metrics();
-    //   store_metrics_increment->set_id(store_metrics.id());
-    //   store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-
-    //   auto* store_metrics_increment_store =
-    //   store_metrics_increment->mutable_store_metrics();
-    //   *store_metrics_increment_store = store_metrics;
-
-    //   // set is_partial_region_metrics
-    //   if (store_metrics.is_partial_region_metrics()) {
-    //     store_metrics_increment->set_is_partial_region_metrics(store_metrics.is_partial_region_metrics());
-    //   }
-    // } else {
-    //   DINGO_LOG(INFO) << "NEED ADD NEW STORE store_metrics.id = " <<
-    //   store_metrics.id();
-
-    //   // update meta_increment
-    //   auto* store_metrics_increment =
-    //   meta_increment.add_store_metrics();
-    //   store_metrics_increment->set_id(store_metrics.id());
-    //   store_metrics_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-
-    //   auto* store_metrics_increment_store =
-    //   store_metrics_increment->mutable_store_metrics();
-    // }
   }
 
   // mbvar store

@@ -126,18 +126,6 @@ void CoordinatorControl::OnLeaderStart(int64_t term) {
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
 
-  // build lease_to_key_map_temp_
-  // BuildLeaseToKeyMap();
-
-  // clear one time watch map
-  // {
-  //   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
-  //   one_time_watch_map_.clear();
-  // }
-
-  // DINGO_LOG(INFO) << "OnLeaderStart init lease_to_key_map_temp_ finished, term=" << term
-  //                 << " count=" << lease_to_key_map_temp_.size();
-
   coordinator_bvar_.SetValue(1);
   DINGO_LOG(INFO) << "OnLeaderStart finished, term=" << term;
 }
@@ -154,23 +142,6 @@ void CoordinatorControl::OnLeaderStop() {
 
   // clear all index_metrics on follower
   index_metrics_map_.Clear();
-
-  // clear one time watch map
-  // {
-  //   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
-  //   for (auto& it : one_time_watch_map_) {
-  //     auto& closure_to_reposne_map = it.second;
-  //     for (auto& ctrm : closure_to_reposne_map) {
-  //       auto* done = ctrm.first;
-  //       if (done) {
-  //         done->Run();
-  //       }
-  //     }
-  //   }
-
-  //   one_time_watch_map_.clear();
-  //   one_time_watch_closure_map_.clear();
-  // }
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
@@ -295,18 +266,6 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot deleted_table_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 7.store_metrics map
-  // if (!meta_reader_->Scan(snapshot, store_metrics_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-
-  // for (const auto& kv : kvs) {
-  //   auto* snapshot_file_kv = meta_snapshot_file.add_store_metrics_map_kvs();
-  //   *snapshot_file_kv = kv;
-  // }
-  // DINGO_LOG(INFO) << "Snapshot store_metrics_meta, count=" << kvs.size();
-  // kvs.clear();
-
   // 8.table_metrics map
   if (!meta_reader_->Scan(snapshot, table_metrics_meta_->Prefix(), kvs)) {
     return false;
@@ -401,42 +360,6 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   }
   DINGO_LOG(INFO) << "Snapshot index_metrics_meta, count=" << kvs.size();
   kvs.clear();
-
-  // // 14.lease_map_
-  // if (!meta_reader_->Scan(snapshot, lease_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-
-  // for (const auto& kv : kvs) {
-  //   auto* snapshot_file_kv = meta_snapshot_file.add_lease_map_kvs();
-  //   *snapshot_file_kv = kv;
-  // }
-  // DINGO_LOG(INFO) << "Snapshot lease_map_, count=" << kvs.size();
-  // kvs.clear();
-
-  // // 15.kv_index_map_
-  // if (!meta_reader_->Scan(snapshot, kv_index_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-
-  // for (const auto& kv : kvs) {
-  //   auto* snapshot_file_kv = meta_snapshot_file.add_kv_index_map_kvs();
-  //   *snapshot_file_kv = kv;
-  // }
-  // DINGO_LOG(INFO) << "Snapshot kv_index_map_, count=" << kvs.size();
-  // kvs.clear();
-
-  // // 16.version_kv_rev_map_
-  // if (!meta_reader_->Scan(snapshot, kv_rev_meta_->Prefix(), kvs)) {
-  //   return false;
-  // }
-
-  // for (const auto& kv : kvs) {
-  //   auto* snapshot_file_kv = meta_snapshot_file.add_kv_rev_map_kvs();
-  //   *snapshot_file_kv = kv;
-  // }
-  // DINGO_LOG(INFO) << "Snapshot version_kv_rev_map_, count=" << kvs.size();
-  // kvs.clear();
 
   // 50.table_index map
   if (!meta_reader_->Scan(snapshot, table_index_meta_->Prefix(), kvs)) {
@@ -710,34 +633,6 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot deleted_table_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 7.store_metrics map
-  // kvs.reserve(meta_snapshot_file.store_metrics_map_kvs_size());
-  // for (int i = 0; i < meta_snapshot_file.store_metrics_map_kvs_size(); i++) {
-  //   kvs.push_back(meta_snapshot_file.store_metrics_map_kvs(i));
-  // }
-  // {
-  //   BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-  //   if (!store_metrics_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-  // }
-  // {  // remove data in rocksdb
-  //   if (!meta_writer_->DeletePrefix(store_metrics_meta_->internal_prefix)) {
-  //     DINGO_LOG(ERROR) << "Coordinator delete store_metrics_meta_ range failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator delete range store_metrics_meta_ success in LoadMetaFromSnapshotFile";
-
-  //   // write data to rocksdb
-  //   if (!meta_writer_->Put(kvs)) {
-  //     DINGO_LOG(ERROR) << "Coordinator write store_metrics_meta_ failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator put store_metrics_meta_ success in LoadMetaFromSnapshotFile";
-  // }
-  // DINGO_LOG(INFO) << "LoadSnapshot store_metrics_meta, count=" << kvs.size();
-  // kvs.clear();
-
   // 8.table_metrics map
   kvs.reserve(meta_snapshot_file.table_metrics_map_kvs_size());
   for (int i = 0; i < meta_snapshot_file.table_metrics_map_kvs_size(); i++) {
@@ -959,88 +854,6 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   }
   DINGO_LOG(INFO) << "LoadSnapshot index_metrics_meta, count=" << kvs.size();
   kvs.clear();
-
-  // // 14.lease_map_
-  // kvs.reserve(meta_snapshot_file.lease_map_kvs_size());
-  // for (int i = 0; i < meta_snapshot_file.lease_map_kvs_size(); i++) {
-  //   kvs.push_back(meta_snapshot_file.lease_map_kvs(i));
-  // }
-  // {
-  //   // BAIDU_SCOPED_LOCK(lease_map_mutex_);
-  //   if (!lease_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-
-  //   // remove data in rocksdb
-  //   if (!meta_writer_->DeletePrefix(lease_meta_->internal_prefix)) {
-  //     DINGO_LOG(ERROR) << "Coordinator delete lease_meta_ range failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator delete range lease_meta_ success in LoadMetaFromSnapshotFile";
-
-  //   // write data to rocksdb
-  //   if (!meta_writer_->Put(kvs)) {
-  //     DINGO_LOG(ERROR) << "Coordinator write lease_meta_ failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator put lease_meta_ success in LoadMetaFromSnapshotFile";
-  // }
-  // DINGO_LOG(INFO) << "LoadSnapshot version_lease_meta, count=" << kvs.size();
-  // kvs.clear();
-
-  // // 15.kv_index_map_
-  // kvs.reserve(meta_snapshot_file.kv_index_map_kvs_size());
-  // for (int i = 0; i < meta_snapshot_file.kv_index_map_kvs_size(); i++) {
-  //   kvs.push_back(meta_snapshot_file.kv_index_map_kvs(i));
-  // }
-  // {
-  //   if (!kv_index_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-
-  //   // remove data in rocksdb
-  //   if (!meta_writer_->DeletePrefix(kv_index_meta_->internal_prefix)) {
-  //     DINGO_LOG(ERROR) << "Coordinator delete kv_index_meta_ range failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator delete range kv_index_meta_ success in LoadMetaFromSnapshotFile";
-
-  //   // write data to rocksdb
-  //   if (!meta_writer_->Put(kvs)) {
-  //     DINGO_LOG(ERROR) << "Coordinator write kv_index_meta_ failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator put kv_index_meta_ success in LoadMetaFromSnapshotFile";
-  // }
-  // DINGO_LOG(INFO) << "LoadSnapshot version_kv_meta, count=" << kvs.size();
-  // kvs.clear();
-
-  // // 16.kv_rev_map_
-  // kvs.reserve(meta_snapshot_file.kv_rev_map_kvs_size());
-  // for (int i = 0; i < meta_snapshot_file.kv_rev_map_kvs_size(); i++) {
-  //   kvs.push_back(meta_snapshot_file.kv_rev_map_kvs(i));
-  // }
-  // {
-  //   if (!kv_rev_meta_->Recover(kvs)) {
-  //     return false;
-  //   }
-
-  //   // remove data in rocksdb
-  //   if (!meta_writer_->DeletePrefix(kv_rev_meta_->internal_prefix)) {
-  //     DINGO_LOG(ERROR) << "Coordinator delete kv_rev_meta_ range failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator delete range kv_rev_meta_ success in LoadMetaFromSnapshotFile";
-
-  //   // write data to rocksdb
-  //   if (!meta_writer_->Put(kvs)) {
-  //     DINGO_LOG(ERROR) << "Coordinator write kv_rev_meta_ failed in LoadMetaFromSnapshotFile";
-  //     return false;
-  //   }
-  //   DINGO_LOG(INFO) << "Coordinator put kv_rev_meta_ success in LoadMetaFromSnapshotFile";
-  // }
-  // DINGO_LOG(INFO) << "LoadSnapshot version_kv_rev_meta, count=" << kvs.size();
-  // kvs.clear();
 
   // 50.table_index map
   kvs.reserve(meta_snapshot_file.table_index_map_kvs_size());
