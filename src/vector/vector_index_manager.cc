@@ -515,7 +515,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   options.upper_bound = end_key;
 
   auto raw_engine = Server::GetInstance().GetRawEngine();
-  auto iter = raw_engine->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
 
   // Note: This is iterated 2 times for the following reasons:
   // ivf_flat must train first before adding data

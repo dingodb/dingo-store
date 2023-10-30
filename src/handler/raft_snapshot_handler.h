@@ -34,7 +34,7 @@ class RaftSnapshot {
  public:
   RaftSnapshot(std::shared_ptr<RawEngine> engine, bool need_engine_snapshot = false) : engine_(engine) {
     if (need_engine_snapshot) {
-      engine_snapshot_ = engine->NewSnapshot();
+      engine_snapshot_ = engine->GetSnapshot();
     }
   }
   ~RaftSnapshot() = default;

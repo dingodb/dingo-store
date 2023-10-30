@@ -288,7 +288,7 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   for (const auto& name : column_family_names) {
     IteratorOptions options;
     options.upper_bound = range.end_key();
-    auto iter = raw_engine->NewIterator(name, options);
+    auto iter = raw_engine->Reader()->NewIterator(name, options);
     int32_t temp_key_count = 0;
     for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
       size += iter->Key().size() + iter->Value().size();

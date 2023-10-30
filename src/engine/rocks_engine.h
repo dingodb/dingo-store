@@ -46,7 +46,7 @@ class RocksEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc write_cb) override;
 
-  std::shared_ptr<Engine::Reader> NewReader(const std::string& cf_name) override;
+  std::shared_ptr<Engine::Reader> NewReader() override;
 };
 
 }  // namespace dingodb

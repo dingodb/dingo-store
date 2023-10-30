@@ -59,6 +59,6 @@ butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, std::sha
   return butil::Status();
 }
 
-std::shared_ptr<Engine::Reader> RocksEngine::NewReader(const std::string& /*cf_name*/) { return nullptr; }
+std::shared_ptr<Engine::Reader> RocksEngine::NewReader() { return nullptr; }
 
 }  // namespace dingodb

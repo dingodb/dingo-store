@@ -33,14 +33,14 @@ bool MetaReader::Scan(const std::string& prefix, std::vector<pb::common::KeyValu
 
 // Get with specific snapshot
 std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> snapshot, const std::string& key) {
-  auto reader = engine_->NewReader(Constant::kStoreMetaCF);
+  auto reader = engine_->Reader();
   std::string value;
 
   butil::Status status;
   if (snapshot) {
-    status = reader->KvGet(snapshot, key, value);
+    status = reader->KvGet(Constant::kStoreMetaCF, snapshot, key, value);
   } else {
-    status = reader->KvGet(key, value);
+    status = reader->KvGet(Constant::kStoreMetaCF, key, value);
   }
   if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
     DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
@@ -58,13 +58,13 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> 
 // Scan with specific snapshot
 bool MetaReader::Scan(std::shared_ptr<Snapshot> snapshot, const std::string& prefix,
                       std::vector<pb::common::KeyValue>& kvs) {
-  auto reader = engine_->NewReader(Constant::kStoreMetaCF);
+  auto reader = engine_->Reader();
   const std::string prefix_next = Helper::PrefixNext(prefix);
   butil::Status status;
   if (snapshot) {
-    status = reader->KvScan(snapshot, prefix, prefix_next, kvs);
+    status = reader->KvScan(Constant::kStoreMetaCF, snapshot, prefix, prefix_next, kvs);
   } else {
-    status = reader->KvScan(prefix, prefix_next, kvs);
+    status = reader->KvScan(Constant::kStoreMetaCF, prefix, prefix_next, kvs);
   }
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "Meta scan failed, errcode: " << status.error_code() << " " << status.error_str();

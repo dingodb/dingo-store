@@ -59,14 +59,14 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
     }
   }
 
-  auto writer = engine->NewWriter(request.cf_name());
+  auto writer = engine->Writer();
   if (!writer) {
     DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
   }
   if (request.kvs().size() == 1) {
-    status = writer->KvPut(request.kvs().Get(0));
+    status = writer->KvPut(request.cf_name(), request.kvs().Get(0));
   } else {
-    status = writer->KvBatchPut(Helper::PbRepeatedToVector(request.kvs()));
+    status = writer->KvBatchPut(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()));
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -106,15 +106,16 @@ int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
 
   std::vector<bool> key_states;  // NOLINT
   bool key_state;
-  auto writer = engine->NewWriter(request.cf_name());
+  auto writer = engine->Writer();
   if (!writer) {
     DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
   }
   bool const is_write_batch = (request.kvs().size() != 1);
   if (!is_write_batch) {
-    status = writer->KvPutIfAbsent(request.kvs().Get(0), key_state);
+    status = writer->KvPutIfAbsent(request.cf_name(), request.kvs().Get(0), key_state);
   } else {
-    status = writer->KvBatchPutIfAbsent(Helper::PbRepeatedToVector(request.kvs()), key_states, request.is_atomic());
+    status = writer->KvBatchPutIfAbsent(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()), key_states,
+                                        request.is_atomic());
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -173,12 +174,12 @@ int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
 
   std::vector<bool> key_states;  // NOLINT
 
-  auto writer = engine->NewWriter(request.cf_name());
+  auto writer = engine->Writer();
   if (!writer) {
     DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
   }
   bool const is_write_batch = (request.kvs().size() != 1);
-  status = writer->KvBatchCompareAndSet(Helper::PbRepeatedToVector(request.kvs()),
+  status = writer->KvBatchCompareAndSet(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()),
                                         Helper::PbRepeatedToVector(request.expect_values()), key_states,
                                         request.is_atomic());
 
@@ -256,28 +257,22 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
     }
   }
 
-  auto reader = engine->NewReader(request.cf_name());
-  if (!reader) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewReader failed";
-  }
-  auto writer = engine->NewWriter(request.cf_name());
-  if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
-  }
+  auto reader = engine->Reader();
+  auto writer = engine->Writer();
   int64_t delete_count = 0;
   if (1 == request.ranges().size()) {
     int64_t internal_delete_count = 0;
     const auto &range = request.ranges()[0];
-    status = reader->KvCount(range.start_key(), range.end_key(), internal_delete_count);
+    status = reader->KvCount(request.cf_name(), range.start_key(), range.end_key(), internal_delete_count);
     if (status.ok() && 0 != internal_delete_count) {
-      status = writer->KvDeleteRange(range);
+      status = writer->KvDeleteRange(request.cf_name(), range);
     }
     delete_count = internal_delete_count;
   } else {
     auto snapshot = engine->GetSnapshot();
     for (const auto &range : request.ranges()) {
       int64_t internal_delete_count = 0;
-      status = reader->KvCount(snapshot, range.start_key(), range.end_key(), internal_delete_count);
+      status = reader->KvCount(request.cf_name(), snapshot, range.start_key(), range.end_key(), internal_delete_count);
       if (!status.ok()) {
         delete_count = 0;
         break;
@@ -286,7 +281,7 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
     }
 
     if (status.ok() && 0 != delete_count) {
-      status = writer->KvBatchDeleteRange(Helper::PbRepeatedToVector(request.ranges()));
+      status = writer->KvBatchDeleteRange(request.cf_name(), Helper::PbRepeatedToVector(request.ranges()));
     }
   }
 
@@ -325,30 +320,27 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
     }
   }
 
-  auto reader = engine->NewReader(request.cf_name());
-  if (!reader) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewReader failed";
-  }
+  auto reader = engine->Reader();
   std::vector<bool> key_states(request.keys().size(), false);
   auto snapshot = engine->GetSnapshot();
   size_t i = 0;
   for (const auto &key : request.keys()) {
     std::string value;
-    status = reader->KvGet(snapshot, key, value);
+    status = reader->KvGet(request.cf_name(), snapshot, key, value);
     if (status.ok()) {
       key_states[i] = true;
     }
     i++;
   }
 
-  auto writer = engine->NewWriter(request.cf_name());
+  auto writer = engine->Writer();
   if (!writer) {
     DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
   }
   if (request.keys().size() == 1) {
-    status = writer->KvDelete(request.keys().Get(0));
+    status = writer->KvDelete(request.cf_name(), request.keys().Get(0));
   } else {
-    status = writer->KvBatchDelete(Helper::PbRepeatedToVector(request.keys()));
+    status = writer->KvBatchDelete(request.cf_name(), Helper::PbRepeatedToVector(request.keys()));
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -889,13 +881,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
   // Store vector
   if (!kv_puts_with_cf.empty() && status.ok()) {
-    // auto writer = engine->NewWriter(request.cf_name());
-    auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
-    if (!writer) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
-                       << ")] NewWriter failed";
-    }
-    // status = writer->KvBatchPut(kvs);
+    auto writer = engine->Writer();
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
       DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id()
@@ -954,11 +940,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
     }
   }
 
-  auto reader = engine->NewReader(request.cf_name());
-  if (!reader) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
-                     << ")] NewReader failed";
-  }
+  auto reader = engine->Reader();
   auto snapshot = engine->GetSnapshot();
   if (!snapshot) {
     DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
@@ -990,7 +972,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
     VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), key);
 
     std::string value;
-    auto ret = reader->KvGet(snapshot, key, value);
+    auto ret = reader->KvGet(request.cf_name(), snapshot, key, value);
     if (ret.ok()) {
       kv_deletes_default.push_back(key);
 
@@ -1049,12 +1031,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
   // Delete vector and write wal
   if (!kv_deletes_with_cf.empty() && status.ok()) {
-    // auto writer = engine->NewWriter(request.cf_name());
-    auto writer = engine->NewMultiCfWriter(Helper::GetColumnFamilyNames());
-    if (!writer) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
-    }
-    // status = writer->KvBatchDelete(keys);
+    auto writer = engine->Writer();
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
       DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id()

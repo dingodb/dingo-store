@@ -188,7 +188,7 @@ std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
                                  Helper::StringToHex(region->Range().end_key()));
   IteratorOptions options;
   options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
 
   if (!iter->Valid()) {
@@ -205,7 +205,7 @@ std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
                                  Helper::StringToHex(region->Range().end_key()));
   IteratorOptions options;
   options.lower_bound = region->Range().start_key();
-  auto iter = raw_engine_->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->SeekForPrev(region->Range().end_key());
 
   if (!iter->Valid()) {
@@ -217,10 +217,8 @@ std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
 }
 
 int64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
-  auto reader = raw_engine_->NewReader(Constant::kStoreDataCF);
-
   int64_t count = 0;
-  reader->KvCount(region->Range().start_key(), region->Range().end_key(), count);
+  raw_engine_->Reader()->KvCount(Constant::kStoreDataCF, region->Range().start_key(), region->Range().end_key(), count);
 
   return count;
 }
@@ -391,7 +389,7 @@ bool StoreRegionMetrics::CollectMetrics() {
         vector_index_wrapper->GetDeletedCount(deleted_count);
         region_metrics->SetVectorDeletedCount(deleted_count);
 
-        auto reader = engine_->NewVectorReader(Constant::kStoreDataCF);
+        auto reader = engine_->NewVectorReader();
         int64_t max_id = 0;
 
         reader->VectorGetBorderId(region->Range(), false, max_id);
