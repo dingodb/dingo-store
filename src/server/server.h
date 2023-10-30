@@ -26,6 +26,7 @@
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
+#include "coordinator/kv_control.h"
 #include "coordinator/tso_control.h"
 #include "crontab/crontab.h"
 #include "engine/raw_engine.h"
@@ -110,10 +111,9 @@ class Server {
   bool InitPreSplitChecker();
 
   butil::Status StartMetaRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
-
-  butil::Status StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
-
+  butil::Status StartKvRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
   butil::Status StartTsoRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
+  butil::Status StartAutoIncrementRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
 
   // Recover server state, include store/region/raft.
   bool Recover();
@@ -138,7 +138,7 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr() { return coordinator_interaction_incr_; }
 
-  std::shared_ptr<Engine> GetEngine() { return engine_; }
+  std::shared_ptr<Engine> GetEngine() { return raft_engine_; }
   std::shared_ptr<RawEngine> GetRawEngine() { return raw_engine_; }
 
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine() {
@@ -166,8 +166,9 @@ class Server {
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
   VectorIndexManagerPtr GetVectorIndexManager() { return vector_index_manager_; }
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
-  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControlReference() { return auto_increment_control_; }
+  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControl() { return auto_increment_control_; }
   std::shared_ptr<TsoControl> GetTsoControl() { return tso_control_; }
+  std::shared_ptr<KvControl> GetKvControl() { return kv_control_; }
 
   void SetEndpoints(const std::vector<butil::EndPoint> endpoints) { endpoints_ = endpoints; }
 
@@ -241,7 +242,7 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_incr_;
 
   // All store engine, include MemEngine/RaftStoreEngine/RocksEngine
-  std::shared_ptr<Engine> engine_;
+  std::shared_ptr<Engine> raft_engine_;
   std::shared_ptr<RawEngine> raw_engine_;
 
   // Meta reader
@@ -273,6 +274,9 @@ class Server {
 
   // This is manage coordinator meta data, like store state and region state.
   std::shared_ptr<CoordinatorControl> coordinator_control_;
+
+  // This is manage kv data
+  std::shared_ptr<KvControl> kv_control_;
 
   // This is store and coordinator heartbeat.
   std::shared_ptr<Heartbeat> heartbeat_;

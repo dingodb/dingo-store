@@ -14,8 +14,9 @@
 
 syntax = "proto3";
 
-import "common.proto";
 import "error.proto";
+import "common.proto";
+import "coordinator.proto";
 
 package dingodb.pb.meta;
 
@@ -702,7 +703,20 @@ message CleanDeletedIndexResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message HelloRequest {
+  int64 hello = 1;
+  bool get_memory_info = 2;
+}
+
+message HelloResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 2;
+}
+
 service MetaService {
+  // Hello
+  rpc Hello(HelloRequest) returns (HelloResponse);
+
   // GetSchemas
   // in: schema_id
   // out: List<Schema>

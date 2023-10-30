@@ -26,11 +26,10 @@
 #include <utility>
 #include <vector>
 
-#include "brpc/callback.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "coordinator/coordinator_control.h"
+#include "coordinator/kv_control.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -44,7 +43,7 @@ DEFINE_uint32(max_kv_value_size, 8192, "max kv put count");
 DEFINE_uint32(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
 DEFINE_bool(auto_compaction, false, "auto compaction on/off");
 
-std::string CoordinatorControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
+std::string KvControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
   Buf buf(17);
   buf.WriteLong(revision.main());
   buf.Write('_');
@@ -56,7 +55,7 @@ std::string CoordinatorControl::RevisionToString(const pb::coordinator_internal:
   return result;
 }
 
-pb::coordinator_internal::RevisionInternal CoordinatorControl::StringToRevision(const std::string &input_string) {
+pb::coordinator_internal::RevisionInternal KvControl::StringToRevision(const std::string &input_string) {
   pb::coordinator_internal::RevisionInternal revision;
   if (input_string.size() != 17) {
     DINGO_LOG(ERROR) << "StringToRevision failed, input_strint size is not 17, value:[" << input_string << "]";
@@ -71,9 +70,8 @@ pb::coordinator_internal::RevisionInternal CoordinatorControl::StringToRevision(
   return revision;
 }
 
-butil::Status CoordinatorControl::GetRawKvIndex(const std::string &key,
-                                                pb::coordinator_internal::KvIndexInternal &kv_index) {
-  auto ret = this->kv_index_map_.Get(key, kv_index);
+butil::Status KvControl::GetRawKvIndex(const std::string &key, pb::coordinator_internal::KvIndexInternal &kv_index) {
+  auto ret = kv_index_map_.Get(key, kv_index);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetRawKvIndex not found, key:[" << key << "]";
     return butil::Status(EINVAL, "GetRawKvIndex not found");
@@ -81,9 +79,8 @@ butil::Status CoordinatorControl::GetRawKvIndex(const std::string &key,
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::RangeRawKvIndex(
-    const std::string &key, const std::string &range_end,
-    std::vector<pb::coordinator_internal::KvIndexInternal> &kv_index_values) {
+butil::Status KvControl::RangeRawKvIndex(const std::string &key, const std::string &range_end,
+                                         std::vector<pb::coordinator_internal::KvIndexInternal> &kv_index_values) {
   // scan kv_index for legal keys
   std::string lower_bound = key;
   std::string upper_bound = range_end;
@@ -94,7 +91,7 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
     upper_bound = Helper::PrefixNext(key);
   }
 
-  auto ret = this->kv_index_map_.GetRangeValues(
+  auto ret = kv_index_map_.GetRangeValues(
       kv_index_values, lower_bound, upper_bound, nullptr,
       [&key, &range_end](const pb::coordinator_internal::KvIndexInternal &version_kv) -> bool {
         auto generation_count = version_kv.generations_size();
@@ -116,27 +113,6 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
         }
       });
 
-  // auto ret = this->kv_index_map_.GetAllValues(
-  //     kv_index_values, [&key, &range_end](pb::coordinator_internal::KvIndexInternal version_kv) -> bool {
-  //       auto generation_count = version_kv.generations_size();
-  //       if (generation_count == 0) {
-  //         return false;
-  //       }
-
-  //       const auto &latest_generation = version_kv.generations(generation_count - 1);
-  //       if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
-  //         return false;
-  //       }
-
-  //       if (range_end.empty()) {
-  //         return key == version_kv.id();
-  //       } else if (range_end == std::string(1, '\0')) {
-  //         return version_kv.id().compare(key) >= 0;
-  //       } else {
-  //         return version_kv.id().compare(key) >= 0 && version_kv.id().compare(range_end) < 0;
-  //       }
-  //     });
-
   if (ret < 0) {
     DINGO_LOG(WARNING) << "RangeRawKvIndex failed, key:[" << key << "]";
     return butil::Status(EINVAL, "RangeRawKvIndex failed");
@@ -145,9 +121,9 @@ butil::Status CoordinatorControl::RangeRawKvIndex(
   }
 }
 
-butil::Status CoordinatorControl::PutRawKvIndex(const std::string &key,
-                                                const pb::coordinator_internal::KvIndexInternal &kv_index) {
-  auto ret = this->kv_index_map_.Put(key, kv_index);
+butil::Status KvControl::PutRawKvIndex(const std::string &key,
+                                       const pb::coordinator_internal::KvIndexInternal &kv_index) {
+  auto ret = kv_index_map_.Put(key, kv_index);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "PutRawKvIndex failed, key:[" << key << "]";
   }
@@ -159,9 +135,9 @@ butil::Status CoordinatorControl::PutRawKvIndex(const std::string &key,
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DeleteRawKvIndex(const std::string &key,
-                                                   const pb::coordinator_internal::KvIndexInternal &kv_index) {
-  auto ret = this->kv_index_map_.Erase(key);
+butil::Status KvControl::DeleteRawKvIndex(const std::string &key,
+                                          const pb::coordinator_internal::KvIndexInternal &kv_index) {
+  auto ret = kv_index_map_.Erase(key);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "DeleteRawKvIndex failed, key:[" << key << "]";
   }
@@ -172,9 +148,9 @@ butil::Status CoordinatorControl::DeleteRawKvIndex(const std::string &key,
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::GetRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
-                                              pb::coordinator_internal::KvRevInternal &kv_rev) {
-  auto ret = this->kv_rev_map_.Get(RevisionToString(revision), kv_rev);
+butil::Status KvControl::GetRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                                     pb::coordinator_internal::KvRevInternal &kv_rev) {
+  auto ret = kv_rev_map_.Get(RevisionToString(revision), kv_rev);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetRawKvRev not found, revision:[" << revision.ShortDebugString() << "]";
     return butil::Status(EINVAL, "GetRawKvRev not found");
@@ -182,9 +158,9 @@ butil::Status CoordinatorControl::GetRawKvRev(const pb::coordinator_internal::Re
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::PutRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
-                                              const pb::coordinator_internal::KvRevInternal &kv_rev) {
-  auto ret = this->kv_rev_map_.Put(RevisionToString(revision), kv_rev);
+butil::Status KvControl::PutRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                                     const pb::coordinator_internal::KvRevInternal &kv_rev) {
+  auto ret = kv_rev_map_.Put(RevisionToString(revision), kv_rev);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "PutRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
   }
@@ -201,9 +177,9 @@ butil::Status CoordinatorControl::PutRawKvRev(const pb::coordinator_internal::Re
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
-                                                 const pb::coordinator_internal::KvRevInternal &kv_rev) {
-  auto ret = this->kv_rev_map_.Erase(RevisionToString(revision));
+butil::Status KvControl::DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
+                                        const pb::coordinator_internal::KvRevInternal &kv_rev) {
+  auto ret = kv_rev_map_.Erase(RevisionToString(revision));
   if (ret < 0) {
     DINGO_LOG(WARNING) << "DeleteRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
   }
@@ -222,9 +198,8 @@ butil::Status CoordinatorControl::DeleteRawKvRev(const pb::coordinator_internal:
 // in:  count_only
 // out: kv
 // return: errno
-butil::Status CoordinatorControl::KvRange(const std::string &key, const std::string &range_end, int64_t limit,
-                                          bool keys_only, bool count_only, std::vector<pb::version::Kv> &kv,
-                                          int64_t &total_count_in_range) {
+butil::Status KvControl::KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
+                                 bool count_only, std::vector<pb::version::Kv> &kv, int64_t &total_count_in_range) {
   DINGO_LOG(INFO) << "KvRange, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only;
 
@@ -236,7 +211,7 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
 
   if (range_end.empty()) {
     pb::coordinator_internal::KvIndexInternal kv_index;
-    auto ret = this->GetRawKvIndex(key, kv_index);
+    auto ret = GetRawKvIndex(key, kv_index);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvRange GetRawKvIndex not found, key: " << key << ", error: " << ret.error_str();
       return butil::Status::OK();
@@ -315,13 +290,13 @@ butil::Status CoordinatorControl::KvRange(const std::string &key, const std::str
 // in:  range_end
 // out: keys
 // return: errno
-butil::Status CoordinatorControl::KvRangeRawKeys(const std::string &key, const std::string &range_end,
-                                                 std::vector<std::string> &keys) {
+butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::string &range_end,
+                                        std::vector<std::string> &keys) {
   std::vector<pb::coordinator_internal::KvIndexInternal> kv_index_values;
 
   if (range_end.empty()) {
     pb::coordinator_internal::KvIndexInternal kv_index;
-    auto ret = this->GetRawKvIndex(key, kv_index);
+    auto ret = GetRawKvIndex(key, kv_index);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvRange GetRawKvIndex not found, key: " << key << ", error: " << ret.error_str();
       return butil::Status::OK();
@@ -356,10 +331,10 @@ butil::Status CoordinatorControl::KvRangeRawKeys(const std::string &key, const s
 // in and out:  sub_revision
 // out:  prev_kv
 // return: errno
-butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv,
-                                        bool igore_value, bool ignore_lease, int64_t main_revision,
-                                        int64_t &sub_revision, pb::version::Kv &prev_kv, int64_t &lease_grant_id,
-                                        pb::coordinator_internal::MetaIncrement &meta_increment) {
+butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv,
+                               bool igore_value, bool ignore_lease, int64_t main_revision, int64_t &sub_revision,
+                               pb::version::Kv &prev_kv, int64_t &lease_grant_id,
+                               pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
                   << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << igore_value
                   << ", ignore_lease: " << ignore_lease;
@@ -396,7 +371,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
     int64_t granted_ttl = 0;
     int64_t remaining_ttl = 0;
 
-    auto ret = this->LeaseQuery(lease_id, false, granted_ttl, remaining_ttl, keys);
+    auto ret = LeaseQuery(lease_id, false, granted_ttl, remaining_ttl, keys);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvPut LeaseQuery failed, lease_id: " << lease_id << ", error: " << ret.error_str();
       return ret;
@@ -409,7 +384,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
   lease_grant_id = lease_id;
 
   int64_t total_count_in_range = 0;
-  this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
+  KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
   if (ignore_lease) {
     if (!kvs_temp.empty()) {
       // if ignore_lease, get the lease of the key
@@ -434,7 +409,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
   if (lease_grant_id != 0) {
     std::set<std::string> keys;
     keys.insert(key_value_in.key());
-    auto ret = this->LeaseAddKeys(lease_grant_id, keys);
+    auto ret = LeaseAddKeys(lease_grant_id, keys);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvPut LeaseAddKeys failed, lease_id: " << lease_grant_id << ", key: " << key_value_in.key()
                        << ", error: " << ret.error_str();
@@ -448,7 +423,7 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
   if (need_prev_kv) {
     if (kvs_temp.empty()) {
       int64_t total_count_in_range = 0;
-      this->KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
+      KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
     }
     if (!kvs_temp.empty()) {
       prev_kv = kvs_temp[0];
@@ -491,11 +466,10 @@ butil::Status CoordinatorControl::KvPut(const pb::common::KeyValue &key_value_in
 // out: deleted_count
 // out:  prev_kvs
 // return: errno
-butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
-                                                int64_t main_revision, int64_t &sub_revision,
-                                                bool need_lease_remove_keys, int64_t &deleted_count,
-                                                std::vector<pb::version::Kv> &prev_kvs,
-                                                pb::coordinator_internal::MetaIncrement &meta_increment) {
+butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
+                                       int64_t main_revision, int64_t &sub_revision, bool need_lease_remove_keys,
+                                       int64_t &deleted_count, std::vector<pb::version::Kv> &prev_kvs,
+                                       pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", need_prev: " << need_prev_kv;
 
   std::vector<pb::version::Kv> kvs_to_delete;
@@ -558,10 +532,9 @@ butil::Status CoordinatorControl::KvDeleteRange(const std::string &key, const st
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::KvPutApply(const std::string &key,
-                                             const pb::coordinator_internal::RevisionInternal &op_revision,
-                                             bool ignore_lease, int64_t lease_id, bool ignore_value,
-                                             const std::string &value) {
+butil::Status KvControl::KvPutApply(const std::string &key,
+                                    const pb::coordinator_internal::RevisionInternal &op_revision, bool ignore_lease,
+                                    int64_t lease_id, bool ignore_value, const std::string &value) {
   DINGO_LOG(INFO) << "KvPutApply, key: " << key << ", op_revision: " << op_revision.ShortDebugString()
                   << ", ignore_lease: " << ignore_lease << ", lease_id: " << lease_id
                   << ", ignore_value: " << ignore_value << ", value: " << value;
@@ -577,7 +550,7 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   pb::version::Kv prev_kv;
   pb::version::Kv new_kv;
 
-  auto ret = this->GetRawKvIndex(key, kv_index);
+  auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex not found, will create key: " << key << ", error: " << ret.error_str();
     kv_index.set_id(key);
@@ -666,13 +639,13 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   }
 
   // do real write to state machine
-  ret = this->PutRawKvIndex(key, kv_index);
+  ret = PutRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
   }
   DINGO_LOG(INFO) << "KvPutApply PutRawKvIndex success, key: " << key << ", kv_index: " << kv_index.ShortDebugString();
 
-  ret = this->PutRawKvRev(op_revision, kv_rev);
+  ret = PutRawKvRev(op_revision, kv_rev);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvPutApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
                      << ", error: " << ret.error_str();
@@ -682,9 +655,9 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
                   << ", kv_rev: " << kv_rev.ShortDebugString();
 
   // trigger watch
-  if (!this->one_time_watch_map_.empty()) {
+  if (!one_time_watch_map_.empty()) {
     DINGO_LOG(INFO) << "KvPutApply one_time_watch_map_ is not empty, will trigger watch, key: " << key
-                    << ", watch size: " << this->one_time_watch_map_.size();
+                    << ", watch size: " << one_time_watch_map_.size();
 
     if (prev_kv.create_revision() > 0) {
       prev_kv.set_lease(kv_rev_last.kv().lease());
@@ -708,8 +681,8 @@ butil::Status CoordinatorControl::KvPutApply(const std::string &key,
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
-                                                const pb::coordinator_internal::RevisionInternal &op_revision) {
+butil::Status KvControl::KvDeleteApply(const std::string &key,
+                                       const pb::coordinator_internal::RevisionInternal &op_revision) {
   DINGO_LOG(INFO) << "KvDeleteApply, key: " << key << ", revision: " << op_revision.ShortDebugString();
 
   // get kv_index and generate new kv_index
@@ -723,7 +696,7 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   pb::version::Kv prev_kv;
   pb::version::Kv new_kv;
 
-  auto ret = this->GetRawKvIndex(key, kv_index);
+  auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex not found, no need to delete: " << key
                     << ", error: " << ret.error_str();
@@ -794,12 +767,12 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   kv->set_is_deleted(true);
 
   // do real write to state machine
-  ret = this->PutRawKvIndex(key, kv_index);
+  ret = PutRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
   }
 
-  ret = this->PutRawKvRev(op_revision, kv_rev);
+  ret = PutRawKvRev(op_revision, kv_rev);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
                      << ", error: " << ret.error_str();
@@ -809,9 +782,9 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   DINGO_LOG(INFO) << "KvDeleteApply success, key: " << key << ", revision: " << op_revision.ShortDebugString();
 
   // trigger watch
-  if (!this->one_time_watch_map_.empty()) {
+  if (!one_time_watch_map_.empty()) {
     DINGO_LOG(INFO) << "KvDeleteApply one_time_watch_map_ is not empty, will trigger watch, key: " << key
-                    << ", watch size: " << this->one_time_watch_map_.size();
+                    << ", watch size: " << one_time_watch_map_.size();
 
     if (prev_kv.create_revision() > 0) {
       prev_kv.set_lease(kv_rev_last.kv().lease());
@@ -834,7 +807,7 @@ butil::Status CoordinatorControl::KvDeleteApply(const std::string &key,
   return butil::Status::OK();
 }
 
-void CoordinatorControl::CompactionTask() {
+void KvControl::CompactionTask() {
   DINGO_LOG(INFO) << "compaction task start";
 
   if (!FLAGS_auto_compaction) {
@@ -895,8 +868,8 @@ void CoordinatorControl::CompactionTask() {
 
 static void Done(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }
 
-butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys,
-                                            const pb::coordinator_internal::RevisionInternal &compact_revision) {
+butil::Status KvControl::KvCompact(const std::vector<std::string> &keys,
+                                   const pb::coordinator_internal::RevisionInternal &compact_revision) {
   DINGO_LOG(INFO) << "KvCompact, keys size: " << keys.size() << ", revision: " << compact_revision.ShortDebugString();
 
   if (keys.empty()) {
@@ -922,7 +895,7 @@ butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys
 
   // auto *closure = brpc::NewCallback(Done, &done);
 
-  // auto ret = this->SubmitMetaIncrementAsync(closure, meta_increment);
+  // auto ret = SubmitMetaIncrementAsync(closure, meta_increment);
   // if (!ret.ok()) {
   //   DINGO_LOG(ERROR) << "KvCompact SubmitMetaIncrement failed, error: " << ret.error_str();
   //   return ret;
@@ -935,7 +908,7 @@ butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys
   //   bthread_usleep(1000);
   // }
 
-  auto ret = this->SubmitMetaIncrementSync(meta_increment);
+  auto ret = SubmitMetaIncrementSync(meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvCompact SubmitMetaIncrement failed, error: " << ret.error_str();
     return ret;
@@ -944,13 +917,13 @@ butil::Status CoordinatorControl::KvCompact(const std::vector<std::string> &keys
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::KvCompactApply(const std::string &key,
-                                                 const pb::coordinator_internal::RevisionInternal &compact_revision) {
+butil::Status KvControl::KvCompactApply(const std::string &key,
+                                        const pb::coordinator_internal::RevisionInternal &compact_revision) {
   DINGO_LOG(INFO) << "KvCompactApply, key: " << key << ", revision: " << compact_revision.ShortDebugString();
 
   // get kv_index
   pb::coordinator_internal::KvIndexInternal kv_index;
-  auto ret = this->GetRawKvIndex(key, kv_index);
+  auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvCompactApply GetRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
     return ret;

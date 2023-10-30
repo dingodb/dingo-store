@@ -176,6 +176,10 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void CleanDeletedIndex(google::protobuf::RpcController* controller, const pb::meta::CleanDeletedIndexRequest* request,
                          pb::meta::CleanDeletedIndexResponse* response, google::protobuf::Closure* done) override;
 
+  // hello
+  void Hello(google::protobuf::RpcController* controller, const pb::meta::HelloRequest* request,
+             pb::meta::HelloResponse* response, google::protobuf::Closure* done) override;
+
  private:
   // table and index definition convertor
   static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,

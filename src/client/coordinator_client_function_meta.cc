@@ -49,6 +49,21 @@ DECLARE_int64(def_version);
 
 DEFINE_bool(is_updating_index, false, "is index");
 
+// meta hello
+void SendMetaHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::HelloRequest request;
+  dingodb::pb::meta::HelloResponse response;
+
+  std::string const key = "Hello";
+  // const char* op = nullptr;
+  request.set_hello(0);
+  request.set_get_memory_info(true);
+
+  auto status = coordinator_interaction->SendRequest("Hello", request, response);
+  DINGO_LOG(INFO) << "SendRequest status: " << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::GetSchemasRequest request;
   dingodb::pb::meta::GetSchemasResponse response;

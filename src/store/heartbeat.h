@@ -24,6 +24,7 @@
 #include "common/runnable.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
+#include "coordinator/kv_control.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -130,6 +131,23 @@ class CoordinatorRecycleOrphanTask : public TaskRunnable {
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
+class KvRemoveOneTimeWatchTask : public TaskRunnable {
+ public:
+  KvRemoveOneTimeWatchTask(std::shared_ptr<KvControl> kv_control) : kv_control_(kv_control) {}
+  ~KvRemoveOneTimeWatchTask() override = default;
+
+  std::string Type() override { return "KV_REMOVE_ONE_TIME_WATCH"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "start process KvRemoveOneTimeWatch";
+    KvRemoveOneTimeWatch(kv_control_);
+  }
+
+ private:
+  static void KvRemoveOneTimeWatch(std::shared_ptr<KvControl> kv_control);
+  std::shared_ptr<KvControl> kv_control_;
+};
+
 class CalculateTableMetricsTask : public TaskRunnable {
  public:
   CalculateTableMetricsTask(std::shared_ptr<CoordinatorControl> coordinator_control)
@@ -150,36 +168,36 @@ class CalculateTableMetricsTask : public TaskRunnable {
 
 class LeaseTask : public TaskRunnable {
  public:
-  LeaseTask(std::shared_ptr<CoordinatorControl> coordinator_control) : coordinator_control_(coordinator_control) {}
+  LeaseTask(std::shared_ptr<KvControl> kv_control) : kv_control_(kv_control) {}
   ~LeaseTask() override = default;
 
   std::string Type() override { return "LEASE"; }
 
   void Run() override {
     DINGO_LOG(DEBUG) << "start process LeaseTask";
-    ExecLeaseTask(coordinator_control_);
+    ExecLeaseTask(kv_control_);
   }
 
  private:
-  static void ExecLeaseTask(std::shared_ptr<CoordinatorControl> coordinator_control);
-  std::shared_ptr<CoordinatorControl> coordinator_control_;
+  static void ExecLeaseTask(std::shared_ptr<KvControl> kv_control);
+  std::shared_ptr<KvControl> kv_control_;
 };
 
 class CompactionTask : public TaskRunnable {
  public:
-  CompactionTask(std::shared_ptr<CoordinatorControl> coordinator_control) : coordinator_control_(coordinator_control) {}
+  CompactionTask(std::shared_ptr<KvControl> kv_control) : kv_control_(kv_control) {}
   ~CompactionTask() override = default;
 
   std::string Type() override { return "COMPACTION"; }
 
   void Run() override {
     DINGO_LOG(DEBUG) << "start process CompactionTask";
-    ExecCompactionTask(coordinator_control_);
+    ExecCompactionTask(kv_control_);
   }
 
  private:
-  static void ExecCompactionTask(std::shared_ptr<CoordinatorControl> coordinator_control);
-  std::shared_ptr<CoordinatorControl> coordinator_control_;
+  static void ExecCompactionTask(std::shared_ptr<KvControl> kv_control);
+  std::shared_ptr<KvControl> kv_control_;
 };
 
 class VectorIndexScrubTask : public TaskRunnable {
@@ -210,6 +228,7 @@ class Heartbeat {
   static void TriggerCoordinatorUpdateState(void*);
   static void TriggerCoordinatorTaskListProcess(void*);
   static void TriggerCoordinatorRecycleOrphan(void*);
+  static void TriggerKvRemoveOneTimeWatch(void*);
   static void TriggerCalculateTableMetrics(void*);
   static void TriggerScrubVectorIndex(void*);
   static void TriggerLeaseTask(void*);

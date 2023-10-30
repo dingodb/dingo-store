@@ -41,6 +41,7 @@ void SendRaftResetPeer();
 
 // coordinator service functions
 void SendHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendKvHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetExecutorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetCoordinatorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
@@ -91,6 +92,7 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // meta service functions
+void SendMetaHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

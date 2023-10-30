@@ -25,12 +25,12 @@ class Constant {
  public:
   // Define Global Region Id for Coordinator(As only One)
   static const int64_t kCoordinatorRegionId = 0;
-
-  // Define Global Region Id for auto increment
-  static const int64_t kAutoIncrementRegionId = 1;
-
+  // Define Global Region Id for Kv
+  static const int64_t kKvRegionId = 1;
   // Define Global Region Id for tso
   static const int64_t kTsoRegionId = 2;
+  // Define Global Region Id for auto increment
+  static const int64_t kAutoIncrementRegionId = 3;
 
   // Define Global TableID for Coordinator(As only one)
   static const int64_t kCoordinatorTableId = 0;
@@ -132,8 +132,9 @@ class Constant {
   inline static const std::string kStoreScanScanIntervalS = "scan_interval_s";
 
   inline static const std::string kMetaRegionName = "0-COORDINATOR";
-  inline static const std::string kAutoIncrementRegionName = "1-AUTO_INCREMENT";
+  inline static const std::string kKvRegionName = "1-KV";
   inline static const std::string kTsoRegionName = "2-TSO";
+  inline static const std::string kAutoIncrementRegionName = "3-AUTO_INCREMENT";
 
   // segment log
   static const uint32_t kSegmentLogDefaultMaxSegmentSize = 8 * 1024 * 1024;  // 8M
@@ -187,6 +188,7 @@ class Constant {
   static const int32_t kTaskListIntervalS = 1;
   static const int32_t kCalcMetricsIntervalS = 60;
   static const int32_t kRecycleOrphanIntervalS = 60;
+  static const int32_t kRemoveWatchIntervalS = 60;
   static const int32_t kLeaseIntervalS = 60;
   static const int32_t kCompactionIntervalS = 300;
   static const int32_t kScrubVectorIndexIntervalS = 60;

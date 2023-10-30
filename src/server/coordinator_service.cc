@@ -37,6 +37,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 
 namespace dingodb {
 
@@ -106,7 +107,12 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateExecutor AsyncWrite failed:  executor_id=" << request->executor().id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *controller,
@@ -150,7 +156,12 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DeleteExecutor AsyncWrite failed:  executor_id=" << request->executor().id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController *controller,
@@ -197,7 +208,12 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateExecutorUser AsyncWrite failed:  executor_id=" << request->executor_user().user();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController *controller,
@@ -242,7 +258,12 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "UpdateExecutorUser AsyncWrite failed:  executor_id=" << request->executor_user().user();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController *controller,
@@ -287,7 +308,12 @@ void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController 
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DeleteExecutorUser AsyncWrite failed:  executor_id=" << request->executor_user().user();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::GetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
@@ -358,7 +384,12 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateStore AsyncWrite failed:  store_id=" << store_id << ", keyring=" << keyring;
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *controller,
@@ -409,7 +440,12 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DeleteStore AsyncWrite failed:  store_id=" << store_id << ", keyring=" << keyring;
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *controller,
@@ -451,7 +487,13 @@ void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "UpdateStore AsyncWrite failed:  store_id=" << request->store_id()
+                     << ", keyring=" << request->keyring();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *controller,
@@ -511,7 +553,12 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ExecutorHeartbeat AsyncWrite failed:  executor_id=" << request->executor().id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *controller,
@@ -591,7 +638,12 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "StoreHeartbeat AsyncWrite failed:  store_id=" << request->store().id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController * /*controller*/,
@@ -898,7 +950,12 @@ void CoordinatorServiceImpl::CreateRegionId(google::protobuf::RpcController *con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateRegionId AsyncWrite failed:  count=" << request->count();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "CreateRegionId Success region_id_count =" << request->count();
 }
@@ -999,7 +1056,12 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateRegion AsyncWrite failed:  region_name=" << request->region_name();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *controller,
@@ -1043,7 +1105,12 @@ void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *control
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropRegion AsyncWrite failed:  region_id=" << request->region_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcController *controller,
@@ -1086,7 +1153,12 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropRegionPermanently AsyncWrite failed:  region_id=" << request->region_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *controller,
@@ -1137,7 +1209,13 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "SplitRegion AsyncWrite failed:  split_from_region_id="
+                     << request->split_request().split_from_region_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *controller,
@@ -1186,7 +1264,13 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "MergeRegion AsyncWrite failed:  merge_from_region_id="
+                     << request->merge_request().merge_from_region_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *controller,
@@ -1251,7 +1335,13 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion AsyncWrite failed:  region_id="
+                     << request->change_peer_request().region_definition().id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcController *controller,
@@ -1300,7 +1390,12 @@ void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcControlle
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion AsyncWrite failed:  region_id=" << request->region_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController * /*controller*/,
@@ -1403,7 +1498,12 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CleanStoreOperation AsyncWrite failed:  store_id=" << request->store_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *controller,
@@ -1446,7 +1546,12 @@ void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "AddStoreOperation AsyncWrite failed:  store_id=" << request->store_operation().id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcController *controller,
@@ -1490,7 +1595,13 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "RemoveStoreOperation AsyncWrite failed:  store_id=" << request->store_id()
+                     << ", region_cmd_id=" << request->region_cmd_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::GetRegionCmd(google::protobuf::RpcController * /*controller*/,
@@ -1595,7 +1706,12 @@ void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *cont
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CleanTaskList AsyncWrite failed:  task_list_id=" << request->task_list_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 // raft control
@@ -1840,7 +1956,12 @@ void CoordinatorServiceImpl::UpdateGCSafePoint(google::protobuf::RpcController *
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "UpdateGCSafePoint AsyncWrite failed:  gc_safe_point=" << request->safe_point();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::GetGCSafePoint(google::protobuf::RpcController * /*controller*/,

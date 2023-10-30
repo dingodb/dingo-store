@@ -684,6 +684,8 @@ int CoordinatorSender() {
     SendGetRegionMetrics(coordinator_interaction);
   } else if (FLAGS_method == "DeleteRegionMetrics") {
     SendDeleteRegionMetrics(coordinator_interaction);
+  } else if (FLAGS_method == "MetaHello") {
+    SendMetaHello(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetSchemas") {  // meta control
     SendGetSchemas(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetSchema") {
@@ -794,7 +796,9 @@ int CoordinatorSender() {
   }
 
   // coordinator kv
-  else if (FLAGS_method == "GetRawKvIndex") {
+  else if (FLAGS_method == "KvHello") {
+    SendKvHello(coordinator_interaction_version);
+  } else if (FLAGS_method == "GetRawKvIndex") {
     SendGetRawKvIndex(coordinator_interaction_version);
   } else if (FLAGS_method == "GetRawKvRev") {
     SendGetRawKvRev(coordinator_interaction_version);

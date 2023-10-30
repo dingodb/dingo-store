@@ -31,6 +31,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "server/service_helper.h"
 
 namespace dingodb {
 
@@ -369,7 +370,13 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateTableId failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "CreateTableId Success in meta_service table_d =" << new_table_id;
 }
@@ -544,7 +551,13 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropSchema failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
@@ -593,7 +606,13 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateSchema failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, const pb::meta::DropTableRequest *request,
@@ -634,7 +653,13 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropTable failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GetAutoIncrements(google::protobuf::RpcController * /*controller*/,
@@ -720,8 +745,7 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "failed, " << table_id << " | " << request->start_id() << " | " << ret2.error_str();
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-    response->mutable_error()->set_errmsg(ret2.error_str());
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
 
     if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
       RedirectAutoIncrementResponse(response);
@@ -763,8 +787,7 @@ void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *contr
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "update auto increment failed, " << table_id << " | " << request->start_id() << " | "
                      << request->force();
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-    response->mutable_error()->set_errmsg(ret2.error_str());
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
 
     if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
       RedirectAutoIncrementResponse(response);
@@ -808,8 +831,7 @@ void MetaServiceImpl::GenerateAutoIncrement(google::protobuf::RpcController *con
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "generate auto increment failed, " << ret << " | " << request->ShortDebugString() << " | "
                      << ret2.error_str();
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-    response->mutable_error()->set_errmsg(ret2.error_str());
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
 
     if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
       RedirectAutoIncrementResponse(response);
@@ -848,8 +870,7 @@ void MetaServiceImpl::DeleteAutoIncrement(google::protobuf::RpcController *contr
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "delete auto increment failed, " << table_id << " | " << ret2.error_str();
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-    response->mutable_error()->set_errmsg(ret2.error_str());
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
 
     if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
       RedirectAutoIncrementResponse(response);
@@ -1079,7 +1100,13 @@ void MetaServiceImpl::CreateIndexId(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateIndexId failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "CreateIndexId Success in meta_service index_d =" << new_index_id;
 }
@@ -1319,7 +1346,13 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "UpdateIndex failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "UpdateIndex Success in meta_service index_name =" << request->new_index_definition().name();
 }
@@ -1362,7 +1395,13 @@ void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, con
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropIndex failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controller,
@@ -1402,7 +1441,13 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "GenerateTableIds failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "GenerateTableIds Success.";
 }
@@ -1715,7 +1760,13 @@ void MetaServiceImpl::DropTables(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropTables failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "DropTables Success.";
 }
@@ -1783,7 +1834,13 @@ void MetaServiceImpl::UpdateTables(google::protobuf::RpcController *controller,
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "UpdateTables failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::AddIndexOnTable(google::protobuf::RpcController *controller,
@@ -1831,7 +1888,13 @@ void MetaServiceImpl::AddIndexOnTable(google::protobuf::RpcController *controlle
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "AddIndexOnTable failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::DropIndexOnTable(google::protobuf::RpcController *controller,
@@ -1876,7 +1939,13 @@ void MetaServiceImpl::DropIndexOnTable(google::protobuf::RpcController *controll
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "DropIndexOnTable failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controller,
@@ -1912,7 +1981,13 @@ void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controlle
   ctx->SetRegionId(Constant::kCoordinatorRegionId);
 
   // this is a async operation will be block by closure
-  engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "SwitchAutoSplit failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 
   DINGO_LOG(INFO) << "SwitchAutoSplit Success.";
 }
@@ -2034,6 +2109,21 @@ void MetaServiceImpl::CleanDeletedIndex(google::protobuf::RpcController * /*cont
   }
 
   DINGO_LOG(INFO) << "CleanDeletedIndex Success.";
+}
+
+void MetaServiceImpl::Hello(google::protobuf::RpcController * /*controller*/, const pb::meta::HelloRequest *request,
+                            pb::meta::HelloResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard const done_guard(done);
+  DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
+
+  if (!this->auto_increment_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  if (request->get_memory_info()) {
+    auto *memory_info = response->mutable_memory_info();
+    this->auto_increment_control_->GetMemoryInfo(*memory_info);
+  }
 }
 
 }  // namespace dingodb

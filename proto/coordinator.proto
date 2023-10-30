@@ -280,26 +280,32 @@ message CoordinatorMemoryInfo {
   int64 index_metrics_map_count = 38;
   int64 index_metrics_map_size = 39;
 
-  int64 kv_index_map_count = 40;
-  int64 kv_index_map_size = 41;
+  int64 region_metrics_map_count = 40;
+  int64 region_metrics_map_size = 41;
 
-  int64 kv_rev_map_count = 42;
-  int64 kv_rev_map_size = 43;
+  int64 deleted_region_map_count = 42;
+  int64 deleted_region_map_size = 43;
 
-  int64 region_metrics_map_count = 44;
-  int64 region_metrics_map_size = 45;
+  int64 deleted_table_map_count = 44;
+  int64 deleted_table_map_size = 45;
 
-  int64 deleted_region_map_count = 46;
-  int64 deleted_region_map_size = 47;
+  int64 deleted_index_map_count = 46;
+  int64 deleted_index_map_size = 47;
 
-  int64 deleted_table_map_count = 48;
-  int64 deleted_table_map_size = 49;
+  int64 range_region_map_count = 48;
+  int64 range_region_map_size = 49;
 
-  int64 deleted_index_map_count = 50;
-  int64 deleted_index_map_size = 51;
+  int64 kv_lease_map_count = 60;
+  int64 kv_lease_map_size = 61;
 
-  int64 range_region_map_count = 52;
-  int64 range_region_map_size = 53;
+  int64 kv_index_map_count = 62;
+  int64 kv_index_map_size = 63;
+
+  int64 kv_rev_map_count = 64;
+  int64 kv_rev_map_size = 65;
+
+  int64 auto_increment_map_count = 70;
+  int64 auto_increment_map_size = 71;
 
   repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
 }

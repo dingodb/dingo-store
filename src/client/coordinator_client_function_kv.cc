@@ -42,6 +42,21 @@ DECLARE_bool(ignore_value);
 DECLARE_bool(ignore_lease);
 DECLARE_uint64(lease);
 
+// kv hello
+void SendKvHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::version::HelloRequest request;
+  dingodb::pb::version::HelloResponse response;
+
+  std::string const key = "Hello";
+  // const char* op = nullptr;
+  request.set_hello(0);
+  request.set_get_memory_info(true);
+
+  auto status = coordinator_interaction->SendRequest("Hello", request, response);
+  DINGO_LOG(INFO) << "SendRequest status: " << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
 void SendGetRawKvIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::version::GetRawKvIndexRequest request;
   dingodb::pb::version::GetRawKvIndexResponse response;
