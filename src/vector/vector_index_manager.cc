@@ -49,22 +49,6 @@
 
 namespace dingodb {
 
-// Check whether need hold vector index
-bool NeedHoldVectorIndex(int64_t region_id) {
-  auto config = ConfigManager::GetInstance().GetConfig();
-  if (config == nullptr) {
-    return true;
-  }
-
-  if (!config->GetBool("vector.enable_follower_hold_index")) {
-    // If follower, delete vector index.
-    if (!Server::GetInstance().IsLeader(region_id)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void RebuildVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.rebuild][index_id({})] pending tasks({}) rebuild running({}) total running({}).",
@@ -122,8 +106,8 @@ void RebuildVectorIndexTask::Run() {
   }
 
   if (force_) {
-    if (!NeedHoldVectorIndex(vector_index_wrapper_->Id())) {
-      vector_index_wrapper_->SetIsHoldVectorIndex(false);
+    vector_index_wrapper_->SetIsTempHoldVectorIndex(false);
+    if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper_->Id())) {
       vector_index_wrapper_->ClearVectorIndex();
     }
 

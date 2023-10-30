@@ -29,6 +29,7 @@
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "google/protobuf/message.h"
+#include "handler/raft_vote_handler.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
@@ -623,12 +624,41 @@ int RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawE
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot(dingo) failed.", region->Id());
       return -1;
     }
-    return 0;
+  } else {
+    if (!raft_snapshot->LoadSnapshot(reader, region)) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed.", region->Id());
+      return -1;
+    }
   }
 
-  if (!raft_snapshot->LoadSnapshot(reader, region)) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] load snapshot failed.", region->Id());
-    return -1;
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot to raw_engine success.", region->Id());
+
+  if (region->Definition().index_parameter().has_vector_index_parameter()) {
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot to vector_engine.", region->Id());
+
+    if (region == nullptr) {
+      return 0;
+    }
+
+    auto vector_index_wrapper = region->VectorIndexWrapper();
+    if (vector_index_wrapper == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] vector index wrapper is null.", region->Id());
+      return -1;
+    }
+
+    if (!vector_index_wrapper->IsPermanentHoldVectorIndex(vector_index_wrapper->Id()) &&
+        !vector_index_wrapper->IsTempHoldVectorIndex()) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] vector index is not hold, skip load.", region->Id());
+      return 0;
+    }
+
+    if (vector_index_wrapper->IsReady()) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.handle][region({})] vector index is ready, clear index and do load again.", region->Id());
+      vector_index_wrapper->ClearVectorIndex();
+    }
+
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
   }
 
   return 0;

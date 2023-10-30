@@ -118,7 +118,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       vector_index_status->set_is_build_error(vector_index_wrapper->IsBuildError());
       vector_index_status->set_is_rebuild_error(vector_index_wrapper->IsRebuildError());
       vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
-      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsHoldVectorIndex());
+      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsTempHoldVectorIndex());
       vector_index_status->set_apply_log_id(vector_index_wrapper->ApplyLogId());
       vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
     }
