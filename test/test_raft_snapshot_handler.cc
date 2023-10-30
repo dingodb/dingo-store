@@ -136,68 +136,11 @@ class RaftSnapshotTest : public testing::Test {
 
 std::shared_ptr<dingodb::RawRocksEngine> RaftSnapshotTest::engine = nullptr;
 
-// TEST_F(RaftSnapshotTest, RaftSnapshotByScan) {
-//   auto reader = RaftSnapshotTest::engine->NewReader(kDefaultCf);
-//   // Ready data
-//   auto writer = RaftSnapshotTest::engine->NewWriter(kDefaultCf);
-//   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
-//   dingodb::pb::common::KeyValue kv;
-//   for (int i = 0; i < 10000; ++i) {
-//     int pos = i % prefixs.size();
-
-//     kv.set_key(prefixs[pos] + GenRandomString(30));
-//     kv.set_value(GenRandomString(256));
-//     writer->KvPut(kv);
-//   }
-
-//   // Save snapshot
-//   std::unique_ptr<dingodb::RaftSnapshot> raft_snapshot =
-//       std::make_unique<dingodb::RaftSnapshot>(RaftSnapshotTest::engine);
-
-//   auto snapshot_storage = std::make_unique<braft::LocalSnapshotStorage>(kRaftSnapshotPath);
-//   if (snapshot_storage->init() != 0) {
-//     LOG(ERROR) << "LocalSnapshotStorage init failed";
-//   }
-
-//   dingodb::pb::common::RegionDefinition definition;
-//   definition.set_id(111);
-//   definition.set_name("test-snapshot");
-//   auto* range = definition.mutable_range();
-//   range->set_start_key("bb");
-//   range->set_end_key("cc");
-//   auto region = dingodb::store::Region::New(definition);
-
-//   auto* snapshot_writer = snapshot_storage->create();
-//   auto gen_snapshot_file_func = std::bind(&dingodb::RaftSnapshot::GenSnapshotFileByScan, raft_snapshot.get(),
-//                                           std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-//   EXPECT_EQ(true, raft_snapshot->SaveSnapshot(snapshot_writer, region, gen_snapshot_file_func));
-//   braft::SnapshotMeta meta;
-//   meta.set_last_included_index(1004);
-//   meta.set_last_included_term(14);
-//   snapshot_writer->save_meta(meta);
-//   snapshot_storage->close(snapshot_writer);
-
-//   // Count key before load snapshot
-//   int64_t count = 0;
-//   reader->KvCount(range->start_key(), range->end_key(), count);
-//   std::cout << "range key count: " << count << std::endl;
-
-//   // Load snapshot
-//   auto* snapshot_reader = snapshot_storage->open();
-//   EXPECT_EQ(true, raft_snapshot->LoadSnapshot(snapshot_reader, region));
-//   snapshot_storage->close(snapshot_reader);
-
-//   // Count key after load snapshot
-//   count = 0;
-//   reader->KvCount(range->start_key(), range->end_key(), count);
-//   std::cout << "range key count: " << count << std::endl;
-// }
-
 TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   int64_t start_time = dingodb::Helper::TimestampMs();
 
   // Ready data
-  auto writer = RaftSnapshotTest::engine->NewWriter(kDefaultCf);
+  auto writer = RaftSnapshotTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
   for (int i = 0; i < (1 * 1000 * 1000); ++i) {
@@ -205,13 +148,13 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
     kv.set_value(GenRandomString(256));
-    writer->KvPut(kv);
+    writer->KvPut(kDefaultCf, kv);
   }
 
   dingodb::pb::common::Range delete_range;
   delete_range.set_start_key("ddaf");
   delete_range.set_end_key("eeaf");
-  writer->KvDeleteRange(delete_range);
+  writer->KvDeleteRange(kDefaultCf, delete_range);
 
   std::cout << fmt::format("Rut data used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
   start_time = dingodb::Helper::TimestampMs();
@@ -247,9 +190,9 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   start_time = dingodb::Helper::TimestampMs();
 
   // Count key before load snapshot
-  auto reader = RaftSnapshotTest::engine->NewReader(kDefaultCf);
+  auto reader = RaftSnapshotTest::engine->Reader();
   int64_t expect_count = 0;
-  reader->KvCount(range->start_key(), range->end_key(), expect_count);
+  reader->KvCount(kDefaultCf, range->start_key(), range->end_key(), expect_count);
 
   std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
   start_time = dingodb::Helper::TimestampMs();
@@ -264,7 +207,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
 
   // Count key after load snapshot
   int64_t actual_count = 0;
-  reader->KvCount(range->start_key(), range->end_key(), actual_count);
+  reader->KvCount(kDefaultCf, range->start_key(), range->end_key(), actual_count);
   std::cout << fmt::format("Count expect {} actual {}", expect_count, actual_count) << std::endl;
   EXPECT_EQ(expect_count, actual_count);
 

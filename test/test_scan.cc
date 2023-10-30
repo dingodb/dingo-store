@@ -227,14 +227,14 @@ TEST_F(ScanTest, ScanBegin) {
 TEST_F(ScanTest, InsertData) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine->NewWriter(cf_name);
+  auto writer = raw_rocks_engine->Writer();
 
   {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyAA");
     kv.set_value("valueAA");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -244,7 +244,7 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyAA" + std::to_string(i));
       kv.set_value("valueAA" + std::to_string(i));
 
-      butil::Status ok = writer->KvPut(kv);
+      butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
   }
@@ -254,7 +254,7 @@ TEST_F(ScanTest, InsertData) {
     kv.set_key("keyAAA");
     kv.set_value("valueAAA");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -264,7 +264,7 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyAAA" + std::to_string(i));
       kv.set_value("valueAAA" + std::to_string(i));
 
-      butil::Status ok = writer->KvPut(kv);
+      butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
   }
@@ -274,7 +274,7 @@ TEST_F(ScanTest, InsertData) {
     kv.set_key("keyABB");
     kv.set_value("valueABB");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -284,7 +284,7 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyABB" + std::to_string(i));
       kv.set_value("valueABB" + std::to_string(i));
 
-      butil::Status ok = writer->KvPut(kv);
+      butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
   }
@@ -294,7 +294,7 @@ TEST_F(ScanTest, InsertData) {
     kv.set_key("keyABC");
     kv.set_value("valueABC");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -304,7 +304,7 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyABC" + std::to_string(i));
       kv.set_value("valueABC" + std::to_string(i));
 
-      butil::Status ok = writer->KvPut(kv);
+      butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
   }
@@ -314,7 +314,7 @@ TEST_F(ScanTest, InsertData) {
     kv.set_key("keyABD");
     kv.set_value("valueABD");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -324,7 +324,7 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyABD" + std::to_string(i));
       kv.set_value("valueABD" + std::to_string(i));
 
-      butil::Status ok = writer->KvPut(kv);
+      butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
   }
@@ -334,7 +334,7 @@ TEST_F(ScanTest, InsertData) {
     kv.set_key("keyAB");
     kv.set_value("valueAB");
 
-    butil::Status ok = writer->KvPut(kv);
+    butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
 
@@ -344,7 +344,7 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyAB" + std::to_string(i));
       kv.set_value("valueAB" + std::to_string(i));
 
-      butil::Status ok = writer->KvPut(kv);
+      butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
   }
@@ -912,7 +912,7 @@ TEST_F(ScanTest, max_times) {
 TEST_F(ScanTest, KvDeleteRange) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = raw_rocks_engine->NewWriter(cf_name);
+  auto writer = raw_rocks_engine->Writer();
 
   // ok
   {
@@ -920,7 +920,7 @@ TEST_F(ScanTest, KvDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("keyZZZ");
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -928,9 +928,9 @@ TEST_F(ScanTest, KvDeleteRange) {
     std::string end_key = "keyZZZ";
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = raw_rocks_engine->NewReader(cf_name);
+    auto reader = raw_rocks_engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     std::cout << "start_key : " << start_key << " "

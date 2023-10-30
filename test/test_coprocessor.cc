@@ -796,7 +796,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -855,7 +855,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -914,7 +914,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -973,7 +973,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -1032,7 +1032,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -1091,7 +1091,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -1138,7 +1138,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -1197,7 +1197,7 @@ TEST_F(CoprocessorTest, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -1245,14 +1245,15 @@ TEST_F(CoprocessorTest, Execute) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -1462,14 +1463,16 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -1667,14 +1670,16 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -1843,14 +1848,16 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -2003,14 +2010,16 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -2142,14 +2151,16 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -2272,14 +2283,16 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -2402,14 +2415,16 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -2557,14 +2572,16 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
   std::string my_max_key_s = StrToHex(my_max_key, " ");
   std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-  std::shared_ptr<EngineIterator> iter =
-      engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
   std::vector<pb::common::KeyValue> kvs;
 
-  iter->Start();
+  iter->Seek(my_min_key);
 
   size_t cnt = 0;
 
@@ -2578,7 +2595,7 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
 
 TEST_F(CoprocessorTest, KvDeleteRange) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = engine->NewWriter(cf_name);
+  auto writer = engine->Writer();
 
   // ok
   {
@@ -2596,7 +2613,7 @@ TEST_F(CoprocessorTest, KvDeleteRange) {
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -2604,9 +2621,9 @@ TEST_F(CoprocessorTest, KvDeleteRange) {
     std::string end_key = Helper::PrefixNext(my_max_key);
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = engine->NewReader(cf_name);
+    auto reader = engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
@@ -2700,7 +2717,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -2760,7 +2777,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -2820,7 +2837,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -2880,7 +2897,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -2940,7 +2957,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -3000,7 +3017,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -3048,7 +3065,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -3108,7 +3125,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->NewWriter(kDefaultCf)->KvPut(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
@@ -3271,14 +3288,16 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
     std::string my_max_key_s = StrToHex(my_max_key, " ");
     std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    std::shared_ptr<EngineIterator> iter =
-        engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+    IteratorOptions options;
+    options.upper_bound = Helper::PrefixNext(my_max_key);
+    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
     bool key_only = false;
     size_t max_fetch_cnt = 2;
     int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
-    iter->Start();
+    iter->Seek(my_min_key);
 
     size_t cnt = 0;
 
@@ -3395,14 +3414,16 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
     std::string my_max_key_s = StrToHex(my_max_key, " ");
     std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    std::shared_ptr<EngineIterator> iter =
-        engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+    IteratorOptions options;
+    options.upper_bound = Helper::PrefixNext(my_max_key);
+    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
     bool key_only = false;
     size_t max_fetch_cnt = 2;
     int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
-    iter->Start();
+    iter->Seek(my_min_key);
 
     size_t cnt = 0;
 
@@ -3585,14 +3606,16 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
     std::string my_max_key_s = StrToHex(my_max_key, " ");
     std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    std::shared_ptr<EngineIterator> iter =
-        engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+    IteratorOptions options;
+    options.upper_bound = Helper::PrefixNext(my_max_key);
+    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
     bool key_only = false;
     size_t max_fetch_cnt = 2;
     int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
-    iter->Start();
+    iter->Seek(my_min_key);
 
     size_t cnt = 0;
 
@@ -3798,14 +3821,16 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
     std::string my_max_key_s = StrToHex(my_max_key, " ");
     std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    std::shared_ptr<EngineIterator> iter =
-        engine->NewReader(kDefaultCf)->NewIterator(my_min_key, Helper::PrefixNext(my_max_key));
+    IteratorOptions options;
+    options.upper_bound = Helper::PrefixNext(my_max_key);
+    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
     bool key_only = false;
     size_t max_fetch_cnt = 2;
     int64_t max_bytes_rpc = 1000000000000000;
     std::vector<pb::common::KeyValue> kvs;
 
-    iter->Start();
+    iter->Seek(my_min_key);
 
     size_t cnt = 0;
 
@@ -3820,7 +3845,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
 
 TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
   const std::string &cf_name = kDefaultCf;
-  std::shared_ptr<dingodb::RawEngine::Writer> writer = engine->NewWriter(cf_name);
+  auto writer = engine->Writer();
 
   // ok
   {
@@ -3838,7 +3863,7 @@ TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
 
-    butil::Status ok = writer->KvDeleteRange(range);
+    butil::Status ok = writer->KvDeleteRange(kDefaultCf, range);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
@@ -3846,9 +3871,9 @@ TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
     std::string end_key = Helper::PrefixNext(my_max_key);
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
-    std::shared_ptr<dingodb::RawEngine::Reader> reader = engine->NewReader(cf_name);
+    auto reader = engine->Reader();
 
-    ok = reader->KvScan(start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
