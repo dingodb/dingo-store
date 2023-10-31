@@ -284,7 +284,7 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   std::string min_key, max_key;
   auto range = region->Range();
 
-  auto column_family_names = Helper::GetColumnFamilyNames();
+  auto column_family_names = Helper::GetColumnFamilyNames(range.start_key());
   for (const auto& name : column_family_names) {
     IteratorOptions options;
     options.upper_bound = range.end_key();

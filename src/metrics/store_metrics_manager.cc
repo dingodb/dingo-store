@@ -245,7 +245,7 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
     region_sizes.push_back(std::make_pair(region->Id(), 0));
   }
 
-  auto column_family_names = Helper::GetColumnFamilyNames();
+  auto column_family_names = Helper::GetColumnFamilyNamesExecptMetaByRole();
   for (const auto& name : column_family_names) {
     auto sizes = raw_engine_->GetApproximateSizes(name, ranges);
     for (int i = 0; i < sizes.size(); ++i) {

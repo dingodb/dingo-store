@@ -209,7 +209,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
   auto writer = Server::GetInstance().GetRawEngine()->Writer();
-  status = writer->KvDeleteRange(Helper::GetColumnFamilyNames(), region->Range());
+  status = writer->KvDeleteRange(Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled.", region_id);
   }

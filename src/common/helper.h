@@ -31,8 +31,6 @@
 
 namespace dingodb {
 
-extern const std::set<std::string> kCfNames;
-
 class Helper {
   using Errno = pb::error::Errno;
   using PbError = pb::error::Error;
@@ -40,6 +38,14 @@ class Helper {
  public:
   static int GetCoreNum();
   static bool IsIp(const std::string& s);
+
+  static bool IsExecutorRaw(const std::string& key);
+  static bool IsExecutorTxn(const std::string& key);
+  static bool IsClientRaw(const std::string& key);
+  static bool IsClientTxn(const std::string& key);
+
+  static pb::common::ClusterRole GetRole();
+  static std::string& GetRoleName();
 
   static butil::EndPoint GetEndPoint(const std::string& host, int port);
   static butil::EndPoint GetEndPoint(const std::string& addr);
@@ -187,10 +193,9 @@ class Helper {
   // Gen coordinator new_table_check_name
   static std::string GenNewTableCheckName(int64_t schema_id, const std::string& table_name);
 
-  // Get column family names except meta.
-  static std::vector<std::string> GetColumnFamilyNames();
-  static std::vector<std::string> GetAllColumnFamilyNames();
-  static std::vector<std::string> GetCoordinatorColumnFamilyNames();
+  static std::vector<std::string> GetColumnFamilyNamesByRole();
+  static std::vector<std::string> GetColumnFamilyNamesExecptMetaByRole();
+  static std::vector<std::string> GetColumnFamilyNames(const std::string& key);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
@@ -277,6 +282,8 @@ class Helper {
   static butil::Status DecodeTxnKey(const std::string& txn_key, std::string& key, int64_t& ts);
   // for txn, encode data/write key
   static butil::Status DecodeTxnKey(const std::string_view& txn_key, std::string& key, int64_t& ts);
+  // for txn, truncate ts
+  static std::string TruncateTxnKeyTs(const std::string& txn_key);
 
   // Upper string
   static std::string ToUpper(const std::string& str);

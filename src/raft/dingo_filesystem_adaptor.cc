@@ -71,7 +71,7 @@ std::string GetSnapshotCfName(const std::string& path) {
   auto cf_name =
       snapshot_file_name.substr(0, snapshot_file_name.size() - Constant::kRaftSnapshotRegionDateFileNameSuffix.size());
 
-  auto cf_names = Helper::GetColumnFamilyNames();
+  auto cf_names = Helper::GetColumnFamilyNamesByRole();
   for (auto& cf : cf_names) {
     if (cf == cf_name) {
       return cf_name;
