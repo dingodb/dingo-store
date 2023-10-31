@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <queue>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -41,58 +42,132 @@
 
 namespace dingodb {
 
+bool operator<(const MergedIterator::Entry& lhs, const MergedIterator::Entry& rhs) { return lhs.key < rhs.key; }
+
+MergedIterator::MergedIterator(RawEnginePtr raw_engine, const std::vector<std::string>& cf_names,
+                               const std::string& end_key)
+    : raw_engine_(raw_engine) {
+  auto snapshot = raw_engine->GetSnapshot();
+
+  for (const auto& cf_name : cf_names) {
+    IteratorOptions options;
+    options.upper_bound = end_key;
+    auto iter = raw_engine->Reader()->NewIterator(cf_name, snapshot, options);
+    iters_.push_back(iter);
+  }
+}
+
+void MergedIterator::Seek(const std::string& target) {
+  for (int i = 0; i < iters_.size(); ++i) {
+    auto iter = iters_[i];
+    iter->Seek(target);
+    Next(iter, i);
+  }
+}
+bool MergedIterator::Valid() { return !min_heap_.empty(); }
+
+void MergedIterator::Next() {
+  if (min_heap_.empty()) {
+    return;
+  }
+
+  const Entry entry = min_heap_.top();
+  min_heap_.pop();
+  auto iter = iters_[entry.iter_pos];
+  Next(iter, entry.iter_pos);
+}
+
+std::string_view MergedIterator::Key() {
+  const Entry& entry = min_heap_.top();
+  return entry.key;
+}
+
+uint32_t MergedIterator::KeyValueSize() {
+  const Entry& entry = min_heap_.top();
+  return entry.key.size() + entry.value_size;
+}
+
+void MergedIterator::Next(IteratorPtr iter, int iter_pos) {
+  if (iter->Valid()) {
+    Entry entry;
+    entry.iter_pos = iter_pos;
+    entry.key = iter->Key();
+    entry.value_size = iter->Value().size();
+    min_heap_.push(entry);
+  }
+}
+
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
+  MergedIterator iter(raw_engine_, Helper::GetColumnFamilyNames(region->Range().start_key()),
+                      region->Range().end_key());
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
-  iter->Seek(region->Range().start_key());
+  iter.Seek(region->Range().start_key());
 
   int64_t size = 0;
   int64_t chunk_size = 0;
+  std::string prev_key;
   std::vector<std::string> keys;
   bool is_split = false;
-  for (; iter->Valid(); iter->Next()) {
-    int64_t key_value_size = iter->Key().size() + iter->Value().size();
+  for (; iter.Valid(); iter.Next()) {
+    int64_t key_value_size = iter.KeyValueSize();
     size += key_value_size;
     chunk_size += key_value_size;
     if (chunk_size >= split_chunk_size_) {
       chunk_size = 0;
-      keys.push_back(std::string(iter->Key()));
+      keys.push_back(std::string(iter.Key()));
     }
     if (size >= split_threshold_size_) {
       is_split = true;
     }
+    if (prev_key != iter.Key()) {
+      prev_key = iter.Key();
+      ++count;
+    }
+  }
 
-    ++count;
+  int mid = keys.size() / 2;
+  std::string split_key = keys.empty() ? "" : keys[mid];
+
+  // Is transaction, truncate key ts.
+  if (Helper::IsClientTxn(region->Range().start_key()) || Helper::IsExecutorTxn(region->Range().start_key())) {
+    split_key = Helper::TruncateTxnKeyTs(split_key);
   }
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.check][region({})] policy(HALF) split_threshold_size({}) split_chunk_size({}) actual_size({}) count({})",
       region->Id(), split_threshold_size_, split_chunk_size_, size, count);
 
-  int mid = keys.size() / 2;
-  return !is_split || keys.empty() ? "" : keys[mid];
+  return is_split ? split_key : "";
 }
 
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
+  MergedIterator iter(raw_engine_, Helper::GetColumnFamilyNames(region->Range().start_key()),
+                      region->Range().end_key());
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
-  iter->Seek(region->Range().start_key());
+  iter.Seek(region->Range().start_key());
 
   int64_t size = 0;
+  std::string prev_key;
   std::string split_key;
   bool is_split = false;
   uint32_t split_pos = split_size_ * split_ratio_;
-  for (; iter->Valid(); iter->Next()) {
-    size += iter->Key().size() + iter->Value().size();
+  for (; iter.Valid(); iter.Next()) {
+    size += iter.KeyValueSize();
     if (split_key.empty() && size >= split_pos) {
-      split_key = iter->Key();
+      split_key = iter.Key();
     } else if (size >= split_size_) {
       is_split = true;
     }
 
-    ++count;
+    if (prev_key != iter.Key()) {
+      prev_key = iter.Key();
+      ++count;
+    }
+  }
+
+  // Is transaction, truncate key ts.
+  if (Helper::IsClientTxn(region->Range().start_key()) || Helper::IsExecutorTxn(region->Range().start_key())) {
+    split_key = Helper::TruncateTxnKeyTs(split_key);
   }
 
   DINGO_LOG(INFO) << fmt::format(
@@ -103,27 +178,36 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
 }
 
 std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
+  MergedIterator iter(raw_engine_, Helper::GetColumnFamilyNames(region->Range().start_key()),
+                      region->Range().end_key());
   IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
-  iter->Seek(region->Range().start_key());
+  iter.Seek(region->Range().start_key());
 
   int64_t size = 0;
   int64_t split_key_count = 0;
+  std::string prev_key;
   std::string split_key;
   bool is_split = false;
   uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
-  for (; iter->Valid(); iter->Next()) {
+  for (; iter.Valid(); iter.Next()) {
     ++split_key_count;
-    size += iter->Key().size() + iter->Value().size();
+    size += iter.KeyValueSize();
 
     if (split_key.empty() && split_key_count >= split_key_number) {
-      split_key = iter->Key();
+      split_key = iter.Key();
     } else if (split_key_count == split_keys_number_) {
       is_split = true;
     }
 
-    ++count;
+    if (prev_key != iter.Key()) {
+      prev_key = iter.Key();
+      ++count;
+    }
+  }
+
+  // Is transaction, truncate key ts.
+  if (Helper::IsClientTxn(region->Range().start_key()) || Helper::IsExecutorTxn(region->Range().start_key())) {
+    split_key = Helper::TruncateTxnKeyTs(split_key);
   }
 
   DINGO_LOG(INFO) << fmt::format(

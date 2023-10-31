@@ -83,11 +83,11 @@ void Region::DeSerialize(const std::string& data) {
   state_.store(inner_region_.state());
 }
 
-pb::common::RegionEpoch Region::Epoch(bool has_lock) {
-  if (has_lock) {
+pb::common::RegionEpoch Region::Epoch(bool lock) {
+  if (lock) {
+    BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_.definition().epoch();
   } else {
-    BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_.definition().epoch();
   }
 }
@@ -126,11 +126,11 @@ void Region::SetLeaderId(int64_t leader_id) {
   inner_region_.set_leader_id(leader_id);
 }
 
-pb::common::Range Region::Range(bool has_lock) {
-  if (has_lock) {
+pb::common::Range Region::Range(bool lock) {
+  if (lock) {
+    BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_.definition().range();
   } else {
-    BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_.definition().range();
   }
 }

@@ -1203,7 +1203,7 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   DINGO_LOG(INFO) << fmt::format("[rocksdb] db path: {}", db_path_);
 
   // Column family config priority custom(store.$cf_name) > custom(store.base) > default.
-  auto column_family_names = Helper::GetAllColumnFamilyNames();
+  auto column_family_names = Helper::GetColumnFamilyNamesByRole();
   auto column_families = GenColumnFamilyByDefaultConfig(column_family_names);
   SetColumnFamilyCustomConfig(config, column_families);
 

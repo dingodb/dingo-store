@@ -31,6 +31,33 @@
 
 namespace dingodb {
 
+class MergedIterator {
+ public:
+  explicit MergedIterator(RawEnginePtr raw_engine, const std::vector<std::string>& cf_names,
+                          const std::string& end_key);
+  ~MergedIterator() = default;
+
+  struct Entry {
+    int iter_pos;
+    std::string key;
+    uint32_t value_size;
+  };
+
+  void Seek(const std::string& target);
+  bool Valid();
+  void Next();
+
+  std::string_view Key();
+  uint32_t KeyValueSize();
+
+ private:
+  void Next(IteratorPtr iter, int iter_pos);
+
+  RawEnginePtr raw_engine_;
+  std::vector<IteratorPtr> iters_;
+  std::priority_queue<Entry> min_heap_;
+};
+
 class SplitChecker {
  public:
   enum class Policy {

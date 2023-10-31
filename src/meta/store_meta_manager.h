@@ -70,7 +70,7 @@ class Region {
   const std::string& Name() const { return inner_region_.definition().name(); }
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
-  pb::common::RegionEpoch Epoch(bool has_lock = false);
+  pb::common::RegionEpoch Epoch(bool lock = true);
   void SetEpochVersionAndRange(int64_t version, const pb::common::Range& range);
   void SetEpochConfVersion(int64_t version);
   void SetSnapshotEpochVersion(int64_t version);
@@ -83,8 +83,7 @@ class Region {
   int64_t LeaderId();
   void SetLeaderId(int64_t leader_id);
 
-  pb::common::Range Range(bool has_lock = false);
-
+  pb::common::Range Range(bool lock = true);
   std::string RangeToString();
   bool CheckKeyInRange(const std::string& key);
 
