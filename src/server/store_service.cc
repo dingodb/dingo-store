@@ -239,12 +239,11 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
   kvs.emplace_back(std::move(*mut_request->release_kv()));
-  status = storage->KvPut(ctx, kvs);
+  status = storage->KvPut(ctx, is_sync, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -318,10 +317,9 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
-  status = storage->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
+  status = storage->KvPut(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -396,12 +394,11 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
-  status = storage->KvPutIfAbsent(ctx, kvs, true);
+  status = storage->KvPutIfAbsent(ctx, is_sync, kvs, true);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -477,10 +474,10 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
-  status = storage->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()), request->is_atomic());
+  status = storage->KvPutIfAbsent(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_kvs()),
+                                  request->is_atomic());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -556,10 +553,9 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
-  status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
+  status = storage->KvDelete(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -642,10 +638,9 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
-  status = storage->KvDeleteRange(ctx, correction_range);
+  status = storage->KvDeleteRange(ctx, is_sync, correction_range);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -712,9 +707,8 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
-  status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true);
+  status = storage->KvCompareAndSet(ctx, is_sync, {request->kv()}, {request->expect_value()}, true);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -791,11 +785,10 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
 
-  status = storage->KvCompareAndSet(ctx, Helper::PbRepeatedToVector(mut_request->kvs()),
+  status = storage->KvCompareAndSet(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->kvs()),
                                     Helper::PbRepeatedToVector(mut_request->expect_values()), request->is_atomic());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1312,7 +1305,6 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
@@ -1408,7 +1400,6 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -1499,7 +1490,6 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
                                       request->current_ts());
@@ -1584,7 +1574,6 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -1765,7 +1754,6 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -1957,7 +1945,6 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl());
   if (!status.ok()) {
@@ -2027,7 +2014,6 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   status = storage->TxnGc(ctx, request->safe_point_ts());
   if (!status.ok()) {
@@ -2107,7 +2093,6 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   status = storage->TxnDeleteRange(ctx, request->start_key(), request->end_key());
   if (!status.ok()) {

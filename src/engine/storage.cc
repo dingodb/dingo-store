@@ -100,8 +100,8 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
   return butil::Status();
 }
 
-butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
-  if (ctx->IsSyncMode()) {
+butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<pb::common::KeyValue>& kvs) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs));
   }
 
@@ -117,9 +117,9 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
       });
 }
 
-butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
-                                     bool is_atomic) {
-  if (ctx->IsSyncMode()) {
+butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, bool is_sync,
+                                     const std::vector<pb::common::KeyValue>& kvs, bool is_atomic) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic));
   }
 
@@ -136,8 +136,8 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
                              });
 }
 
-butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
-  if (ctx->IsSyncMode()) {
+butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<std::string>& keys) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys));
   }
 
@@ -153,8 +153,8 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
       });
 }
 
-butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
-  if (ctx->IsSyncMode()) {
+butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, bool is_sync, const pb::common::Range& range) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
   }
 
@@ -170,9 +170,10 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
       });
 }
 
-butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, bool is_sync,
+                                       const std::vector<pb::common::KeyValue>& kvs,
                                        const std::vector<std::string>& expect_values, bool is_atomic) {
-  if (ctx->IsSyncMode()) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, expect_values, is_atomic));
   }
 
@@ -266,8 +267,9 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
   return status;
 }
 
-butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector<pb::common::VectorWithId>& vectors) {
-  if (ctx->IsSyncMode()) {
+butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
+                                 const std::vector<pb::common::VectorWithId>& vectors) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors));
   }
 
@@ -279,8 +281,8 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, const std::vector
                              });
 }
 
-butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, const std::vector<int64_t>& ids) {
-  if (ctx->IsSyncMode()) {
+butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
+  if (is_sync) {
     return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
   }
 

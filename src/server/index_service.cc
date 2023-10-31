@@ -399,14 +399,13 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<pb::common::VectorWithId> vectors;
   for (const auto& vector : request->vectors()) {
     vectors.push_back(vector);
   }
 
-  status = storage->VectorAdd(ctx, vectors);
+  status = storage->VectorAdd(ctx, is_sync, vectors);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -497,9 +496,8 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
-  if (is_sync) ctx->EnableSyncMode();
 
-  status = storage->VectorDelete(ctx, Helper::PbRepeatedToVector(request->ids()));
+  status = storage->VectorDelete(ctx, is_sync, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1433,7 +1431,6 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionId(request->context().region_id()).SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
-  if (is_sync) ctx->EnableSyncMode();
 
   std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
