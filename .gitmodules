@@ -64,3 +64,6 @@
 [submodule "contrib/diskann"]
 	path = contrib/diskann
 	url = https://github.com/microsoft/DiskANN
+[submodule "contrib/bdb"]
+	path = contrib/bdb
+	url = https://github.com/dingodb/bdb
