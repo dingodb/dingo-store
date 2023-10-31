@@ -40,7 +40,7 @@ namespace dingodb {
 void StoreClosure::Run() {
   // Delete self after run
   std::unique_ptr<StoreClosure> self_guard(this);
-  brpc::ClosureGuard const done_guard(ctx_->IsSyncMode() ? nullptr : ctx_->Done());
+  brpc::ClosureGuard const done_guard(ctx_->Done());
   if (!status().ok()) {
     DINGO_LOG(ERROR) << fmt::format("raft log commit failed, region[{}] {}:{}", ctx_->RegionId(), status().error_code(),
                                     status().error_str());
@@ -48,8 +48,11 @@ void StoreClosure::Run() {
     ctx_->SetStatus(butil::Status(pb::error::ERAFT_COMMITLOG, status().error_str()));
   }
 
-  if (ctx_->IsSyncMode()) {
-    ctx_->Cond()->DecreaseSignal();
+  // if sync_mode_cond exists, it means a sync mode call is in progress.
+  // now sync mode call does not support write callback function.
+  auto sync_mode_cond = ctx_->SyncModeCond();
+  if (sync_mode_cond) {
+    sync_mode_cond->DecreaseSignal();
   } else {
     if (ctx_->WriteCb()) {
       ctx_->WriteCb()(ctx_, ctx_->Status());

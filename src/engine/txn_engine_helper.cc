@@ -204,16 +204,6 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
   }
 
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // if (ctx->IsSyncMode()) {
-  //   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // }
-
-  // return raft_engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-  //                                [](std::shared_ptr<Context> ctx, butil::Status status) {
-  //                                  if (!status.ok()) {
-  //                                    Helper::SetPbMessageError(status, ctx->Response());
-  //                                  }
-  //                                });
 }
 
 butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::IsolationLevel &isolation_level,
@@ -1004,16 +994,6 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
   }
 
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // if (ctx->IsSyncMode()) {
-  //   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // }
-
-  // return raft_engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-  //                                [](std::shared_ptr<Context> ctx, butil::Status status) {
-  //                                  if (!status.ok()) {
-  //                                    Helper::SetPbMessageError(status, ctx->Response());
-  //                                  }
-  //                                });
 }
 
 butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
@@ -1234,16 +1214,6 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
   }
 
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // if (ctx->IsSyncMode()) {
-  //   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // }
-
-  // return raft_engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-  //                                [](std::shared_ptr<Context> ctx, butil::Status status) {
-  //                                  if (!status.ok()) {
-  //                                    Helper::SetPbMessageError(status, ctx->Response());
-  //                                  }
-  //                                });
 }
 
 butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
@@ -1685,16 +1655,6 @@ butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::sha
   delete_range_request->set_end_key(end_key);
 
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // if (ctx->IsSyncMode()) {
-  //   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // }
-
-  // return raft_engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-  //                                 [](std::shared_ptr<Context> ctx, butil::Status status) {
-  //                                   if (!status.ok()) {
-  //                                     Helper::SetPbMessageError(status, ctx->Response());
-  //                                   }
-  //                                 });
 }
 
 butil::Status TxnEngineHelper::Gc(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
@@ -1743,16 +1703,6 @@ butil::Status TxnEngineHelper::Gc(RawEnginePtr /*raw_engine*/, std::shared_ptr<E
   }
 
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // if (ctx->IsSyncMode()) {
-  //   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  // }
-
-  // return raft_engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(txn_raft_request),
-  //                                 [](std::shared_ptr<Context> ctx, butil::Status status) {
-  //                                   if (!status.ok()) {
-  //                                     Helper::SetPbMessageError(status, ctx->Response());
-  //                                   }
-  //                                 });
 }
 
 }  // namespace dingodb

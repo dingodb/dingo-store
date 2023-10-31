@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_CONTEXT_H_
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -32,53 +33,17 @@ using WriteCbFunc = std::function<void(std::shared_ptr<Context>, butil::Status)>
 
 class Context {
  public:
-  Context()
-      : cntl_(nullptr),
-        done_(nullptr),
-        request_(nullptr),
-        response_(nullptr),
-        region_id_(0),
-        delete_files_in_range_(false),
-        flush_(false),
-        // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {
-    bthread_mutex_init(&cond_mutex_, nullptr);
-  }
-  Context(brpc::Controller* cntl, google::protobuf::Closure* done)
-      : cntl_(cntl),
-        done_(done),
-        request_(nullptr),
-        response_(nullptr),
-        region_id_(0),
-        delete_files_in_range_(false),
-        flush_(false),
-        // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {
+  Context() { bthread_mutex_init(&cond_mutex_, nullptr); }
+  Context(brpc::Controller* cntl, google::protobuf::Closure* done) : cntl_(cntl), done_(done) {
     bthread_mutex_init(&cond_mutex_, nullptr);
   }
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, google::protobuf::Message* response)
-      : cntl_(cntl),
-        done_(done),
-        request_(nullptr),
-        response_(response),
-        region_id_(0),
-        delete_files_in_range_(false),
-        flush_(false),
-        // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {
+      : cntl_(cntl), done_(done), response_(response) {
     bthread_mutex_init(&cond_mutex_, nullptr);
   }
   Context(brpc::Controller* cntl, google::protobuf::Closure* done, const google::protobuf::Message* request,
           google::protobuf::Message* response)
-      : cntl_(cntl),
-        done_(done),
-        request_(request),
-        response_(response),
-        region_id_(0),
-        delete_files_in_range_(false),
-        flush_(false),
-        // role_(pb::common::ClusterRole::STORE),
-        enable_sync_(false) {
+      : cntl_(cntl), done_(done), request_(request), response_(response) {
     bthread_mutex_init(&cond_mutex_, nullptr);
   }
   ~Context() { bthread_mutex_destroy(&cond_mutex_); }
@@ -130,14 +95,12 @@ class Context {
   bool Flush() const { return flush_; }
   void SetFlush(bool flush) { flush_ = flush; }
 
-  void EnableSyncMode() { enable_sync_.store(true, std::memory_order_relaxed); }
-  bool IsSyncMode() const { return enable_sync_.load(std::memory_order_relaxed); }
-
-  void CreateCond() {
+  BthreadCondPtr CreateSyncModeCond() {
     BAIDU_SCOPED_LOCK(cond_mutex_);
     cond_ = std::make_shared<BthreadCond>();
+    return cond_;
   }
-  BthreadCondPtr Cond() {
+  BthreadCondPtr SyncModeCond() {
     BAIDU_SCOPED_LOCK(cond_mutex_);
     return cond_;
   }
@@ -151,31 +114,27 @@ class Context {
 
  private:
   // brpc framework free resource
-  brpc::Controller* cntl_;
-  google::protobuf::Closure* done_;
-  const google::protobuf::Message* request_;
-  google::protobuf::Message* response_;
+  brpc::Controller* cntl_{nullptr};
+  google::protobuf::Closure* done_{nullptr};
+  const google::protobuf::Message* request_{nullptr};
+  google::protobuf::Message* response_{nullptr};
 
-  int64_t region_id_;
+  int64_t region_id_{0};
   // Column family name
-  std::string cf_name_;
+  std::string cf_name_{};
   // Rocksdb delete range in files
-  bool delete_files_in_range_;
+  bool delete_files_in_range_{false};
   // Flush data to persistence.
-  bool flush_;
-  // role
-  // pb::common::ClusterRole role_;
+  bool flush_{false};
 
-  // For sync mode
-  std::atomic<bool> enable_sync_;
-  BthreadCondPtr cond_;
+  BthreadCondPtr cond_{nullptr};
   bthread_mutex_t cond_mutex_;
-  butil::Status status_;
+  butil::Status status_{};
 
-  pb::common::RegionEpoch region_epoch_;
-  pb::store::IsolationLevel isolation_level_;
+  pb::common::RegionEpoch region_epoch_{};
+  pb::store::IsolationLevel isolation_level_{};
 
-  WriteCbFunc write_cb_;
+  WriteCbFunc write_cb_{};
 };
 
 using ContextPtr = std::shared_ptr<Context>;

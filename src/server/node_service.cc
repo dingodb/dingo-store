@@ -385,8 +385,7 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
-  status = VectorIndexSnapshotManager::HandleInstallSnapshot(ctx, request->uri(), request->meta(),
+  status = VectorIndexSnapshotManager::HandleInstallSnapshot(request->uri(), request->meta(),
                                                              vector_index_wrapper->SnapshotSet());
   if (!status.ok()) {
     auto* error = response->mutable_error();
@@ -428,8 +427,7 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
     return;
   }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, nullptr, response);
-  auto status = VectorIndexSnapshotManager::HandlePullSnapshot(ctx, snapshot);
+  auto status = VectorIndexSnapshotManager::HandlePullSnapshot(response, snapshot);
   if (!status.ok()) {
     auto* error = response->mutable_error();
     error->set_errcode(static_cast<Errno>(status.error_code()));

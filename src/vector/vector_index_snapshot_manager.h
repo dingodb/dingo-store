@@ -42,8 +42,7 @@ class VectorIndexSnapshotManager {
   // Launch install snapshot at client.
   static butil::Status LaunchInstallSnapshot(const butil::EndPoint& endpoint, vector_index::SnapshotMetaPtr snapshot);
   // Handle install snapshot at server.
-  static butil::Status HandleInstallSnapshot(std::shared_ptr<Context> ctx, const std::string& uri,
-                                             const pb::node::VectorIndexSnapshotMeta& meta,
+  static butil::Status HandleInstallSnapshot(const std::string& uri, const pb::node::VectorIndexSnapshotMeta& meta,
                                              vector_index::SnapshotMetaSetPtr snapshot_set);
   // Install snapshot to all followers.
   static butil::Status InstallSnapshotToFollowers(vector_index::SnapshotMetaPtr snapshot);
@@ -52,7 +51,8 @@ class VectorIndexSnapshotManager {
   static butil::Status LaunchPullSnapshot(const butil::EndPoint& endpoint,
                                           vector_index::SnapshotMetaSetPtr snapshot_set);
   // Handle install snapshot at server.
-  static butil::Status HandlePullSnapshot(std::shared_ptr<Context> ctx, vector_index::SnapshotMetaPtr snapshot);
+  static butil::Status HandlePullSnapshot(pb::node::GetVectorIndexSnapshotResponse* response,
+                                          vector_index::SnapshotMetaPtr snapshot);
   // Pull last snapshot from peers.
   static butil::Status PullLastSnapshotFromPeers(vector_index::SnapshotMetaSetPtr snapshot_set);
 

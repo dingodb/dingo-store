@@ -194,7 +194,7 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
   return status;
 }
 
-butil::Status VectorIndexSnapshotManager::HandleInstallSnapshot(std::shared_ptr<Context>, const std::string& uri,
+butil::Status VectorIndexSnapshotManager::HandleInstallSnapshot(const std::string& uri,
                                                                 const pb::node::VectorIndexSnapshotMeta& meta,
                                                                 vector_index::SnapshotMetaSetPtr snapshot_set) {
   // auto vector_index = Server::GetInstance().GetVectorIndexManager()->GetVectorIndex(meta.vector_index_id());
@@ -275,14 +275,13 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_inde
   return butil::Status();
 }
 
-butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(std::shared_ptr<Context> ctx,
+butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(pb::node::GetVectorIndexSnapshotResponse* response,
                                                              vector_index::SnapshotMetaPtr snapshot) {
   assert(snapshot != nullptr);
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] last vector index snapshot: {}",
                                  snapshot->VectorIndexId(), snapshot->Path());
 
-  auto* response = dynamic_cast<pb::node::GetVectorIndexSnapshotResponse*>(ctx->Response());
   // Build response meta
   auto* meta = response->mutable_meta();
   meta->set_vector_index_id(snapshot->VectorIndexId());
