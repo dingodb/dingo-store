@@ -120,6 +120,7 @@ include(libunwind)
 include(libbacktrace)
 include(gperftools)
 include(hnswlib)
+include(bdb)
 
 message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -179,6 +180,7 @@ include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${GPERFTOOLS_INCLUDE_DIR})
 include_directories(${FAISS_INCLUDE_DIR})
+include_directories(${BDB_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 set(DYNAMIC_LIB
@@ -205,6 +207,7 @@ set(DYNAMIC_LIB
     ${LIBUNWIND_ARCH_LIBRARIES}
     ${LIBBACKTRACE_LIBRARIES}
     ${OPENMP_LIBRARY}
+    ${BDB_LIBRARIES}
     # rt
     dl
     Threads::Threads
@@ -229,6 +232,7 @@ set(DEPEND_LIBS
     gtest
     libunwind
     libbacktrace
+    bdb
     )
 
 if(LINK_TCMALLOC)
