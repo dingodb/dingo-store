@@ -20,14 +20,21 @@ SET(BDB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/bdb)
 SET(BDB_INCLUDE_DIR "${BDB_INSTALL_DIR}/include" CACHE PATH "bdb include directory." FORCE)
 SET(BDB_LIBRARIES "${BDB_INSTALL_DIR}/lib/libdb_cxx.a" CACHE FILEPATH "bdb library." FORCE)
 
+if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
+    set(BDB_DEBUG_FLAG "--enable-debug")
+elseif(THIRD_PARTY_BUILD_TYPE MATCHES "RelWithDebInfo")
+    set(BDB_DEBUG_FLAG "--enable-debug")
+endif()
+
+
 ExternalProject_Add(
 extern_bdb
         ${EXTERNAL_PROJECT_LOG_ARGS}
         SOURCE_DIR ${BDB_SOURCES_DIR}
         BINARY_DIR ${BDB_BINARY_DIR}
         PREFIX ${BDB_INSTALL_DIR}
-        CONFIGURE_COMMAND ${BDB_SOURCES_DIR}/dist/configure --prefix ${BDB_INSTALL_DIR} --enable-cxx --enable-shared=no
-        BUILD_COMMAND $(MAKE)
+        CONFIGURE_COMMAND ${BDB_SOURCES_DIR}/dist/configure --prefix ${BDB_INSTALL_DIR} --enable-cxx --enable-shared=no ${BDB_DEBUG_FLAG}
+        BUILD_COMMAND $(MAKE) libcxx.a
         INSTALL_COMMAND mkdir -p ${BDB_INSTALL_DIR}/lib/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/libdb_cxx.a ${BDB_INSTALL_DIR}/lib/ COMMAND mkdir ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db.h ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db_cxx.h ${BDB_INSTALL_DIR}/include/
 )
 
