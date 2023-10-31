@@ -24,7 +24,7 @@ namespace dingodb {
 class Constant {
  public:
   // Define Global Region Id for Coordinator(As only One)
-  static const int64_t kCoordinatorRegionId = 0;
+  static const int64_t kMetaRegionId = 0;
   // Define Global Region Id for Kv
   static const int64_t kKvRegionId = 1;
   // Define Global Region Id for tso

@@ -36,9 +36,9 @@ void SendLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   if (FLAGS_id.empty()) {
     DINGO_LOG(WARNING) << "id is empty, use auto generate id";
-    return;
+  } else {
+    request.set_id(std::stol(FLAGS_id));
   }
-  request.set_id(std::stol(FLAGS_id));
 
   if (FLAGS_ttl < 0) {
     DINGO_LOG(WARNING) << "ttl is negative, cannot grant lease";

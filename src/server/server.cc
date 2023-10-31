@@ -275,7 +275,7 @@ bool Server::InitEngine() {
 butil::Status Server::StartMetaRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine) {
   // std::shared_ptr<Context> ctx = std::make_shared<Context>();
   std::shared_ptr<pb::common::RegionDefinition> region =
-      CreateCoordinatorRegion(config, Constant::kCoordinatorRegionId, Constant::kMetaRegionName /*, ctx*/);
+      CreateCoordinatorRegion(config, Constant::kMetaRegionId, Constant::kMetaRegionName /*, ctx*/);
 
   auto raft_engine = std::dynamic_pointer_cast<RaftStoreEngine>(kv_engine);
   return raft_engine->AddNode(region, coordinator_control_, false);

@@ -975,7 +975,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       DINGO_LOG(WARNING)
           << "SKIP ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index=" << index
           << "][applied_index=" << applied_index << "]"
-          << "[term=" << term << "][applied_term=" << applied_term;
+          << "[term=" << term << "][applied_term=" << applied_term << "]";
       return;
     } else if (meta_increment.ByteSizeLong() > 0) {
       DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement index <= applied_index && term <<= applied_term [index=" << index
@@ -2371,7 +2371,7 @@ butil::Status CoordinatorControl::SubmitMetaIncrementAsync(google::protobuf::Clo
   LogMetaIncrementSize(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   if (done != nullptr) {
     ctx->SetDone(done);
@@ -2385,20 +2385,17 @@ butil::Status CoordinatorControl::SubmitMetaIncrementAsync(google::protobuf::Clo
   return butil::Status::OK();
 }
 
-static void SubmitMetaIncrementDone(BthreadCond* cond) { cond->DecreaseSignal(); }
-
 butil::Status CoordinatorControl::SubmitMetaIncrementSync(pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BthreadCond cond(1);
-  auto* closure = brpc::NewCallback(SubmitMetaIncrementDone, &cond);
+  LogMetaIncrementSize(meta_increment);
 
-  auto ret = SubmitMetaIncrementAsync(closure, meta_increment);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "SubmitMetaIncrementSync failed, errno=" << ret.error_code() << " errmsg=" << ret.error_str();
-    return ret;
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+
+  auto status = engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    return status;
   }
-
-  cond.Wait();
-
   return butil::Status::OK();
 }
 

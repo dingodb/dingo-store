@@ -367,7 +367,7 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -496,18 +496,6 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController * /*controller
     }
   }
 
-  // // prepare for raft process
-  // CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse> *meta_put_closure =
-  //     new CoordinatorClosure<pb::meta::CreateTableRequest, pb::meta::CreateTableResponse>(request, response,
-  //                                                                                         done_guard.release());
-
-  // std::shared_ptr<Context> ctx =
-  //     std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  // ctx->SetRegionId(Constant::kCoordinatorRegionId);
-
-  // // this is a async operation will be block by closure
-  // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-
   DINGO_LOG(INFO) << "CreateTable Success in meta_service table_name: " << request->table_definition().name()
                   << ", id: " << new_table_id << ", time_cost_ms: " << (butil::gettimeofday_ms() - start_ms);
 }
@@ -548,7 +536,7 @@ void MetaServiceImpl::DropSchema(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -603,7 +591,7 @@ void MetaServiceImpl::CreateSchema(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -650,7 +638,7 @@ void MetaServiceImpl::DropTable(google::protobuf::RpcController *controller, con
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1097,7 +1085,7 @@ void MetaServiceImpl::CreateIndexId(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1258,18 +1246,6 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController * /*controller
     }
   }
 
-  // // prepare for raft process
-  // CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse> *meta_put_closure =
-  //     new CoordinatorClosure<pb::meta::CreateIndexRequest, pb::meta::CreateIndexResponse>(request, response,
-  //                                                                                         done_guard.release());
-
-  // std::shared_ptr<Context> ctx =
-  //     std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  // ctx->SetRegionId(Constant::kCoordinatorRegionId);
-
-  // // this is a async operation will be block by closure
-  // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-
   DINGO_LOG(INFO) << "CreateIndex Success in meta_service index_name: " << request->index_definition().name()
                   << ", id: " << new_index_id << ", time_cost_ms: " << (butil::gettimeofday_ms() - start_ms);
 }
@@ -1343,7 +1319,7 @@ void MetaServiceImpl::UpdateIndex(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1392,7 +1368,7 @@ void MetaServiceImpl::DropIndex(google::protobuf::RpcController *controller, con
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1438,7 +1414,7 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1666,18 +1642,6 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController * /*controlle
     }
   }
 
-  // prepare for raft process
-  // CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse> *meta_put_closure =
-  //     new CoordinatorClosure<pb::meta::CreateTablesRequest, pb::meta::CreateTablesResponse>(request, response,
-  //                                                                                           done_guard.release());
-
-  // std::shared_ptr<Context> ctx =
-  //     std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  // ctx->SetRegionId(Constant::kCoordinatorRegionId);
-
-  // // this is a async operation will be block by closure
-  // engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-
   DINGO_LOG(INFO) << "CreateTables Success. id: " << new_table_id
                   << ", name: " << request->table_definition_with_ids(0).table_definition().name()
                   << ", time_cost_ms: " << (butil::gettimeofday_ms() - start_ms);
@@ -1757,7 +1721,7 @@ void MetaServiceImpl::DropTables(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1831,7 +1795,7 @@ void MetaServiceImpl::UpdateTables(google::protobuf::RpcController *controller,
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1885,7 +1849,7 @@ void MetaServiceImpl::AddIndexOnTable(google::protobuf::RpcController *controlle
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
 
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1936,7 +1900,7 @@ void MetaServiceImpl::DropIndexOnTable(google::protobuf::RpcController *controll
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
 
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1978,7 +1942,7 @@ void MetaServiceImpl::SwitchAutoSplit(google::protobuf::RpcController *controlle
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));

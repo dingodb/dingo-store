@@ -104,7 +104,7 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -153,7 +153,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_delete_store_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -205,7 +205,7 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -255,7 +255,7 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -305,7 +305,7 @@ void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController 
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -381,7 +381,7 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -437,7 +437,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_delete_store_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -484,7 +484,7 @@ void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -550,7 +550,7 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_executor_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -635,7 +635,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -952,7 +952,7 @@ void CoordinatorServiceImpl::CreateRegionId(google::protobuf::RpcController *con
 
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_put_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1058,7 +1058,7 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_create_region_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1107,7 +1107,7 @@ void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *control
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_drop_region_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1155,7 +1155,7 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_drop_region_permanently_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1211,7 +1211,7 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_split_region_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1266,7 +1266,7 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_merge_region_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1337,7 +1337,7 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_change_peer_region_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1392,7 +1392,7 @@ void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcControlle
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_transfer_leader_region_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1500,7 +1500,7 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_clean_store_operation_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1548,7 +1548,7 @@ void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_add_store_operation_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1597,7 +1597,7 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_remove_store_operation_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1708,7 +1708,7 @@ void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *cont
 
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_clean_task_list_closure);
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1958,7 +1958,7 @@ void CoordinatorServiceImpl::UpdateGCSafePoint(google::protobuf::RpcController *
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_update_gc_safe_point_closure);
 
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
   auto ret2 = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));

@@ -345,7 +345,7 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
     } else if (meta_increment.ByteSizeLong() > 0) {
       DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement index <= applied_index && term <<= applied_term [index=" << index
                       << "][applied_index=" << applied_index << "]"
-                      << "[term=" << term << "][applied_term=" << applied_term;
+                      << "[term=" << term << "][applied_term=" << applied_term << "]";
       KvLogMetaIncrementSize(meta_increment);
     } else {
       DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
@@ -570,7 +570,7 @@ butil::Status KvControl::SubmitMetaIncrementAsync(google::protobuf::Closure* don
   KvLogMetaIncrementSize(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
-  ctx->SetRegionId(Constant::kCoordinatorRegionId);
+  ctx->SetRegionId(Constant::kKvRegionId);
 
   if (done != nullptr) {
     ctx->SetDone(done);
@@ -584,20 +584,17 @@ butil::Status KvControl::SubmitMetaIncrementAsync(google::protobuf::Closure* don
   return butil::Status::OK();
 }
 
-static void KvSubmitMetaIncrementDone(BthreadCond* cond) { cond->DecreaseSignal(); }
-
 butil::Status KvControl::SubmitMetaIncrementSync(pb::coordinator_internal::MetaIncrement& meta_increment) {
-  BthreadCond cond(1);
-  auto* closure = brpc::NewCallback(KvSubmitMetaIncrementDone, &cond);
+  KvLogMetaIncrementSize(meta_increment);
 
-  auto ret = SubmitMetaIncrementAsync(closure, meta_increment);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "SubmitMetaIncrementSync failed, errno=" << ret.error_code() << " errmsg=" << ret.error_str();
-    return ret;
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kKvRegionId);
+
+  auto status = engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    return status;
   }
-
-  cond.Wait();
-
   return butil::Status::OK();
 }
 

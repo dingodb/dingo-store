@@ -257,8 +257,11 @@ void KvControl::LeaseTask() {
 
     // submit meta_increment with mutex locked
     // if we do this without lock, there maybe KvPut before LeaseRevoke, which will cause data inconsistency
-    if (meta_increment.leases_size() > 0) {
-      SubmitMetaIncrementSync(meta_increment);
+    if (meta_increment.ByteSizeLong() > 0) {
+      auto ret = SubmitMetaIncrementSync(meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "SubmitMetaIncrementSync failed, status: " << ret;
+      }
     }
   }
 }
