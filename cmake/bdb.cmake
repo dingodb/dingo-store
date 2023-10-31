@@ -34,7 +34,7 @@ extern_bdb
         BINARY_DIR ${BDB_BINARY_DIR}
         PREFIX ${BDB_INSTALL_DIR}
         CONFIGURE_COMMAND ${BDB_SOURCES_DIR}/dist/configure --prefix ${BDB_INSTALL_DIR} --enable-cxx --enable-shared=no ${BDB_DEBUG_FLAG}
-        BUILD_COMMAND $(MAKE) libcxx.a
+        BUILD_COMMAND $(MAKE) libdb_cxx.a
         INSTALL_COMMAND mkdir -p ${BDB_INSTALL_DIR}/lib/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/libdb_cxx.a ${BDB_INSTALL_DIR}/lib/ COMMAND mkdir ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db.h ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db_cxx.h ${BDB_INSTALL_DIR}/include/
 )
 
