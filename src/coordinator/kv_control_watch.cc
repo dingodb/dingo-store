@@ -113,7 +113,8 @@ butil::Status KvControl::AddOneTimeWatch(const std::string& watch_key, int64_t s
   } else {
     auto& exist_watch_node_map = it->second;
     exist_watch_node_map.insert_or_assign(done, watch_node);
-    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key found, insert, watch_key:" << watch_key;
+    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key found, insert, watch_key:" << watch_key
+                    << ", watch_node_map.size:" << exist_watch_node_map.size();
   }
 
   one_time_watch_closure_map_.insert_or_assign(done, watch_key);
@@ -153,8 +154,15 @@ butil::Status KvControl::RemoveOneTimeWatchWithLock(google::protobuf::Closure* d
     return butil::Status(EINVAL, "RemoveOneTimeWatch done not found");
   }
 
-  DINGO_LOG(INFO) << "RemoveOneTimeWatch, done:" << done << ", watch_key:" << watch_key;
   watch_node_map.erase(it3);
+  one_time_watch_closure_map_.erase(it);
+  done->Run();
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch, done->Run: " << done << ", watch_key:" << watch_key;
+
+  if (watch_node_map.empty()) {
+    DINGO_LOG(INFO) << "RemoveOneTimeWatch, watch_node_map is empty, watch_key:" << watch_key;
+    one_time_watch_map_.erase(it2);
+  }
 
   return butil::Status::OK();
 }
@@ -165,31 +173,30 @@ butil::Status KvControl::RemoveOneTimeWatch() {
 
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
 
-  std::map<google::protobuf::Closure*, bool> done_map;
+  std::map<google::protobuf::Closure*, bool> closure_status_map;
 
-  one_time_watch_closure_status_map_.GetRawMapCopy(done_map);
+  one_time_watch_closure_status_map_.GetRawMapCopy(closure_status_map);
 
-  if (done_map.empty()) {
+  if (closure_status_map.empty()) {
     DINGO_LOG(INFO) << "RemoveOneTimeWatch, done_map is empty";
     return butil::Status::OK();
   }
 
-  DINGO_LOG(INFO) << "RemoveOneTimeWatch, done_map.size:" << done_map.size();
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch, closure_status_map.size:" << closure_status_map.size();
 
-  for (auto& it : done_map) {
+  for (auto& it : closure_status_map) {
     auto* done = it.first;
     DINGO_LOG(INFO) << "RemoveOneTimeWatch, done:" << done;
 
     auto ret = RemoveOneTimeWatchWithLock(done);
     if (ret.ok()) {
       DINGO_LOG(INFO) << "RemoveOneTimeWatchWithLock success, do done->Run(), done:" << done;
-      done->Run();
     }
 
     one_time_watch_closure_status_map_.Erase(done);
   }
 
-  DINGO_LOG(INFO) << "RemoveOneTimeWatch finish, done_map.size:" << done_map.size();
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch finish, done_map.size:" << closure_status_map.size();
 
   return butil::Status::OK();
 }
@@ -215,6 +222,8 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
   }
 
   auto& watch_node_map = it->second;
+
+  DINGO_LOG(INFO) << "TriggerOneWatch, key:" << key << ", watch_node_map.size:" << watch_node_map.size();
 
   std::vector<google::protobuf::Closure*> done_list;
   for (auto& watch_node : watch_node_map) {
@@ -261,8 +270,10 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
   }
 
   for (auto& done : done_list) {
-    done->Run();
-    RemoveOneTimeWatchWithLock(done);
+    auto ret = RemoveOneTimeWatchWithLock(done);
+    if (ret.ok()) {
+      DINGO_LOG(INFO) << "RemoveOneTimeWatchWithLock success, do done->Run(), done:" << done;
+    }
   }
 
   return butil::Status::OK();
