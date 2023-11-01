@@ -16,6 +16,7 @@
 
 #include "bthread/bthread.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "fmt/core.h"
 #include "server/server.h"
 
@@ -54,7 +55,7 @@ void CrontabManager::AddCrontab(std::vector<CrontabConfig>& crontab_configs) {
     // Check whether should add crontab.
     bool should_add_crontab = false;
     for (auto role : crontab_config.roles) {
-      if (role == Server::GetInstance().GetRole()) {
+      if (role == GetRole()) {
         should_add_crontab = true;
       }
     }

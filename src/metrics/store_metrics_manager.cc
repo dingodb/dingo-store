@@ -24,6 +24,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -94,8 +95,7 @@ bool StoreMetrics::Init() { return CollectMetrics(); }
 bool StoreMetrics::CollectMetrics() {
   std::map<std::string, int64_t> output;
 
-  auto role = Server::GetInstance().GetRole();
-  auto config = ConfigManager::GetInstance().GetConfig(role);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // system disk capacity
   if (!Helper::GetSystemDiskCapacity(config->GetString("store.path"), output)) {

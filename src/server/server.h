@@ -48,9 +48,6 @@ class Server {
  public:
   static Server& GetInstance();
 
-  void SetRole(pb::common::ClusterRole role);
-  pb::common::ClusterRole GetRole() { return this->role_; };
-
   // Init config.
   bool InitConfig(const std::string& filename);
 
@@ -177,22 +174,22 @@ class Server {
   std::string GetCheckpointPath() { return checkpoint_path_; }
 
   std::string GetStorePath() {
-    auto config = ConfigManager::GetInstance().GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("store.path");
   }
 
   std::string GetRaftPath() {
-    auto config = ConfigManager::GetInstance().GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("raft.path");
   }
 
   std::string GetRaftLogPath() {
-    auto config = ConfigManager::GetInstance().GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("raft.log_path");
   }
 
   std::string GetIndexPath() {
-    auto config = ConfigManager::GetInstance().GetConfig(role_);
+    auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("vector.index_path");
   }
 
@@ -221,8 +218,6 @@ class Server {
   int64_t id_;
   // This is keyring, the password for this instance to join in the cluster
   std::string keyring_;
-  // Role, include store/coordinator
-  pb::common::ClusterRole role_;
   // Service ip and port.
   butil::EndPoint server_endpoint_;
   // Service ip and port.

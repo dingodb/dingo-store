@@ -25,6 +25,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "common/service_access.h"
 #include "config/config_helper.h"
 #include "config/config_manager.h"
@@ -90,11 +91,11 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   }
 
   RaftControlAble::AddNodeParameter parameter;
-  parameter.role = Server::GetInstance().GetRole();
+  parameter.role = GetRole();
   parameter.is_restart = false;
   parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   parameter.raft_path = config->GetString("raft.path");
   parameter.election_timeout_ms = 200;
   parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
@@ -215,7 +216,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   }
 
   // Index region
-  if (Server::GetInstance().GetRole() == pb::common::ClusterRole::INDEX) {
+  if (GetRole() == pb::common::ClusterRole::INDEX) {
     auto vector_index_wrapper = region->VectorIndexWrapper();
     if (vector_index_wrapper != nullptr) {
       vector_index_wrapper->Destroy();

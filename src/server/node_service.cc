@@ -26,6 +26,7 @@
 #include "butil/status.h"
 #include "common/failpoint.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "coordinator/coordinator_closure.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -54,7 +55,7 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
   auto* node_info = response->mutable_node_info();
 
   node_info->set_id(server.Id());
-  node_info->set_role(server.GetRole());
+  node_info->set_role(GetRole());
 
   // parse server location
   auto* server_location = node_info->mutable_server_location();

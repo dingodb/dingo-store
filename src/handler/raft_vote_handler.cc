@@ -14,6 +14,7 @@
 
 #include "handler/raft_vote_handler.h"
 
+#include "common/role.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -91,7 +92,7 @@ int VectorIndexFollowerStopHandler::Handle(store::RegionPtr /*region*/, const br
 
 std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStartHandler>());
   }
 
@@ -100,7 +101,7 @@ std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
 
 std::shared_ptr<HandlerCollection> LeaderStopHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStopHandler>());
   }
 
@@ -109,7 +110,7 @@ std::shared_ptr<HandlerCollection> LeaderStopHandlerFactory::Build() {
 
 std::shared_ptr<HandlerCollection> FollowerStartHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexFollowerStartHandler>());
   }
 
@@ -118,7 +119,7 @@ std::shared_ptr<HandlerCollection> FollowerStartHandlerFactory::Build() {
 
 std::shared_ptr<HandlerCollection> FollowerStopHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
-  if (Server::GetInstance().GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexFollowerStopHandler>());
   }
 

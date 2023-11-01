@@ -26,6 +26,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "common/synchronization.h"
 #include "engine/raw_engine.h"
 #include "event/store_state_machine_event.h"
@@ -567,10 +568,10 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
 
   auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
   Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   RaftControlAble::AddNodeParameter parameter;
-  parameter.role = Server::GetInstance().GetRole();
+  parameter.role = GetRole();
   parameter.is_restart = false;
   parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 

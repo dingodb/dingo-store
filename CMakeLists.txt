@@ -415,6 +415,7 @@ add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> 
 add_executable(dingodb_client
                 ${CLIENT_SRCS}
                 src/coordinator/coordinator_interaction.cc
+                src/common/role.cc
                 src/common/helper.cc
                 src/common/service_access.cc
                 src/coprocessor/utils.cc

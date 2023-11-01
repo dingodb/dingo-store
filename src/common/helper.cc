@@ -52,6 +52,7 @@
 #include "butil/strings/string_split.h"
 #include "common/constant.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
@@ -61,19 +62,10 @@
 #include "serial/buf.h"
 #include "serial/schema/long_schema.h"
 
-DECLARE_string(role);
-
 namespace dingodb {
 
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;
-
-// role map
-const std::map<std::string, pb::common::ClusterRole> kRoleMap = {
-    {Constant::kCoordinatorRoleName, pb::common::ClusterRole::COORDINATOR},
-    {Constant::kStoreRoleName, pb::common::ClusterRole::STORE},
-    {Constant::kIndexRoleName, pb::common::ClusterRole::INDEX},
-};
 
 int Helper::GetCoreNum() { return sysconf(_SC_NPROCESSORS_ONLN); }
 
@@ -107,13 +99,6 @@ std::string Helper::Ip2HostName(const std::string& ip) {
   butil::ip2hostname(ip_t, &hostname);
   return hostname;
 }
-
-pb::common::ClusterRole Helper::GetRole() {
-  auto it = kRoleMap.find(FLAGS_role);
-  return (it != kRoleMap.end()) ? it->second : pb::common::ClusterRole::ILLEGAL;
-}
-
-std::string& Helper::GetRoleName() { return FLAGS_role; }
 
 int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location) {
   // parse leader raft location from string
@@ -759,12 +744,12 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
 }
 
 std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
-  if (GetRoleName() == Constant::kCoordinatorRoleName) {
+  if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF};
-  } else if (GetRoleName() == Constant::kStoreRoleName) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
             Constant::kTxnWriteCF};
-  } else if (GetRoleName() == Constant::kIndexRoleName) {
+  } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF,    Constant::kTxnDataCF,    Constant::kTxnLockCF,
             Constant::kTxnWriteCF,  Constant::kVectorScalarCF, Constant::kVectorTableCF};
   }
@@ -773,11 +758,11 @@ std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
 }
 
 std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
-  if (GetRoleName() == Constant::kCoordinatorRoleName) {
+  if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRoleName() == Constant::kStoreRoleName) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE) {
     return {Constant::kStoreDataCF, Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
-  } else if (GetRoleName() == Constant::kIndexRoleName) {
+  } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     return {Constant::kStoreDataCF, Constant::kTxnDataCF,      Constant::kTxnLockCF,
             Constant::kTxnWriteCF,  Constant::kVectorScalarCF, Constant::kVectorTableCF};
   }
@@ -785,15 +770,15 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
   return {};
 }
 
-std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
-  if (GetRoleName() == Constant::kCoordinatorRoleName) {
+std::vector<std::string> Helper::GetColumnFamilyNamesTest(const std::string& key) {
+  if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRoleName() == Constant::kStoreRoleName) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
     }
     return {Constant::kStoreDataCF};
-  } else if (GetRoleName() == Constant::kIndexRoleName) {
+  } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF,    Constant::kTxnLockCF,      Constant::kTxnWriteCF,
               Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorTableCF};
@@ -802,6 +787,12 @@ std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   }
 
   return {};
+}
+
+std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
+  auto cf_names = GetColumnFamilyNamesTest(key);
+  DINGO_LOG(INFO) << "===cf_names: " << VectorToString(cf_names);
+  return cf_names;
 }
 
 int64_t Helper::TimestampNs() {
