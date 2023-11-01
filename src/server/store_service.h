@@ -26,6 +26,9 @@ class StoreServiceImpl : public pb::store::StoreService {
  public:
   StoreServiceImpl();
 
+  void Hello(google::protobuf::RpcController* controller, const pb::store::HelloRequest* request,
+             pb::store::HelloResponse* response, google::protobuf::Closure* done) override;
+
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
              pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 

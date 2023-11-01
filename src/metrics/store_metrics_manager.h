@@ -39,10 +39,7 @@ namespace store {
 
 class RegionMetrics {
  public:
-  RegionMetrics()
-      : last_log_index_(0), need_update_min_key_(true), need_update_max_key_(true), need_update_key_count_(true) {
-    bthread_mutex_init(&mutex_, nullptr);
-  }
+  RegionMetrics() { bthread_mutex_init(&mutex_, nullptr); }
   ~RegionMetrics() { bthread_mutex_destroy(&mutex_); }
 
   std::string Serialize();
@@ -202,13 +199,13 @@ class RegionMetrics {
 
  private:
   // update metrics until raft log index
-  int64_t last_log_index_;
+  int64_t last_log_index_{0};
   // need update region min key
-  bool need_update_min_key_;
+  bool need_update_min_key_{true};
   // need update region max key
-  bool need_update_max_key_;
+  bool need_update_max_key_{true};
   // need update region key count
-  bool need_update_key_count_;
+  bool need_update_key_count_{true};
 
   pb::common::RegionMetrics inner_region_metrics_;
   // protect inner_region_metrics_

@@ -14,6 +14,7 @@
 
 #include "server/store_service.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -2221,6 +2222,58 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnDump(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::store::HelloRequest* request,
+             dingodb::pb::store::HelloResponse* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    return;
+  }
+
+  auto regions = Server::GetInstance().GetAllAliveRegion();
+  response->set_region_count(regions.size());
+
+  int64_t leader_count = 0;
+  for (const auto& region : regions) {
+    if (raft_engine->IsLeader(region->Id())) {
+      leader_count++;
+    }
+  }
+  response->set_region_leader_count(leader_count);
+
+  if (request->get_region_metrics()) {
+    auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
+    if (store_metrics_manager == nullptr) {
+      return;
+    }
+
+    auto store_region_metrics = store_metrics_manager->GetStoreRegionMetrics();
+    if (store_region_metrics == nullptr) {
+      return;
+    }
+
+    auto region_metrics = store_region_metrics->GetAllMetrics();
+    for (const auto& region_metrics : region_metrics) {
+      auto* new_region_metrics = response->add_region_metrics();
+      *new_region_metrics = region_metrics->InnerRegionMetrics();
+    }
+  }
+}
+
+void StoreServiceImpl::Hello(google::protobuf::RpcController* controller, const pb::store::HelloRequest* request,
+                             pb::store::HelloResponse* response, google::protobuf::Closure* done) {
+  // Run in queue.
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
+  bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
