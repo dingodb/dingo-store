@@ -76,6 +76,13 @@ DEFINE_uint32(omp_num_threads, 1, "omp num threads");
 DEFINE_uint32(service_worker_num, 10, "service worker num");
 DEFINE_uint64(service_worker_max_pending_num, 0, "service worker num");
 
+DEFINE_uint32(coordinator_service_worker_num, 10, "service worker num");
+DEFINE_uint64(coordinator_service_worker_max_pending_num, 0, "service worker num");
+DEFINE_uint32(meta_service_worker_num, 10, "service worker num");
+DEFINE_uint64(meta_service_worker_max_pending_num, 0, "service worker num");
+DEFINE_uint32(version_service_worker_num, 10, "service worker num");
+DEFINE_uint64(version_service_worker_max_pending_num, 0, "service worker num");
+
 extern "C" {
 extern void omp_set_dynamic(int dynamic_threads) noexcept;  // NOLINT
 extern int omp_get_dynamic(void) noexcept;                  // NOLINT
@@ -430,6 +437,106 @@ int64_t GetServiceWorkerMaxPendingNum(std::shared_ptr<dingodb::Config> config) {
   return FLAGS_service_worker_num;
 }
 
+// Get service worker thread num used by config
+int GetCoordinatorServiceWorkerNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("server.coordinator_service_worker_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING)
+        << "server.coordinator_service_worker_num is not set, use dingodb::FLAGS_coordinator_service_worker_num";
+  } else {
+    FLAGS_coordinator_service_worker_num = num;
+    DINGO_LOG(INFO) << "server.coordinator_service_worker_num is set to " << num;
+  }
+
+  if (FLAGS_coordinator_service_worker_num > GetWorkerThreadNum(config)) {
+    DINGO_LOG(ERROR) << "server.coordinator_service_worker_num[" << FLAGS_coordinator_service_worker_num
+                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+    return -1;
+  }
+
+  return FLAGS_coordinator_service_worker_num;
+}
+
+// Get coordinator_service worker max pending num used by config
+int64_t GetCoordinatorServiceWorkerMaxPendingNum(std::shared_ptr<dingodb::Config> config) {
+  auto num = config->GetInt64("server.coordinator_service_worker_max_pending_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING) << "server.coordinator_service_worker_max_pending_num is not set, use "
+                          "dingodb::FLAGS_coordinator_service_worker_max_pending_num";
+  } else {
+    FLAGS_coordinator_service_worker_max_pending_num = num;
+    DINGO_LOG(INFO) << "server.coordinator_service_worker_max_pending_num is set to " << num;
+  }
+
+  return FLAGS_coordinator_service_worker_num;
+}
+
+// Get service worker thread num used by config
+int GetMetaServiceWorkerNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("server.meta_service_worker_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING) << "server.meta_service_worker_num is not set, use dingodb::FLAGS_meta_service_worker_num";
+  } else {
+    FLAGS_meta_service_worker_num = num;
+    DINGO_LOG(INFO) << "server.meta_service_worker_num is set to " << num;
+  }
+
+  if (FLAGS_meta_service_worker_num > GetWorkerThreadNum(config)) {
+    DINGO_LOG(ERROR) << "server.meta_service_worker_num[" << FLAGS_meta_service_worker_num
+                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+    return -1;
+  }
+
+  return FLAGS_meta_service_worker_num;
+}
+
+// Get meta_service worker max pending num used by config
+int64_t GetMetaServiceWorkerMaxPendingNum(std::shared_ptr<dingodb::Config> config) {
+  auto num = config->GetInt64("server.meta_service_worker_max_pending_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING) << "server.meta_service_worker_max_pending_num is not set, use "
+                          "dingodb::FLAGS_meta_service_worker_max_pending_num";
+  } else {
+    FLAGS_meta_service_worker_max_pending_num = num;
+    DINGO_LOG(INFO) << "server.meta_service_worker_max_pending_num is set to " << num;
+  }
+
+  return FLAGS_meta_service_worker_num;
+}
+
+// Get service worker thread num used by config
+int GetVersionServiceWorkerNum(std::shared_ptr<dingodb::Config> config) {
+  int num = config->GetInt("server.version_service_worker_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING) << "server.version_service_worker_num is not set, use dingodb::FLAGS_version_service_worker_num";
+  } else {
+    FLAGS_version_service_worker_num = num;
+    DINGO_LOG(INFO) << "server.version_service_worker_num is set to " << num;
+  }
+
+  if (FLAGS_version_service_worker_num > GetWorkerThreadNum(config)) {
+    DINGO_LOG(ERROR) << "server.version_service_worker_num[" << FLAGS_version_service_worker_num
+                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+    return -1;
+  }
+
+  return FLAGS_version_service_worker_num;
+}
+
+// Get version_service worker max pending num used by config
+int64_t GetVersionServiceWorkerMaxPendingNum(std::shared_ptr<dingodb::Config> config) {
+  auto num = config->GetInt64("server.version_service_worker_max_pending_num");
+  if (num <= 0) {
+    DINGO_LOG(WARNING) << "server.version_service_worker_max_pending_num is not set, use "
+                          "dingodb::FLAGS_version_service_worker_max_pending_num";
+  } else {
+    FLAGS_version_service_worker_max_pending_num = num;
+    DINGO_LOG(INFO) << "server.version_service_worker_max_pending_num is set to " << num;
+  }
+
+  return FLAGS_version_service_worker_num;
+}
+
 // setup default conf and coor_list
 bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
   if (FLAGS_conf.empty()) {
@@ -684,11 +791,80 @@ int main(int argc, char *argv[]) {
     // the Engine should be init success
     auto engine = dingo_server.GetEngine();
     coordinator_service.SetKvEngine(engine);
-    coordinator_service.SetWorkSet(worker_set);
     meta_service.SetKvEngine(engine);
-    meta_service.SetWorkSet(worker_set);
     version_service.SetKvEngine(engine);
-    version_service.SetWorkSet(worker_set);
+
+    // get service worker nums
+    auto coordinator_service_worker_num = GetCoordinatorServiceWorkerNum(config);
+    if (coordinator_service_worker_num < 0) {
+      DINGO_LOG(ERROR) << "GetServiceWorkerNum failed!";
+      return -1;
+    }
+
+    auto coordinator_service_worker_max_pending_num = GetCoordinatorServiceWorkerMaxPendingNum(config);
+    if (coordinator_service_worker_max_pending_num < 0) {
+      DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+      return -1;
+    }
+
+    dingodb::WorkerSetPtr coordinator_worker_set =
+        dingodb::WorkerSet::New("CoordinatorServiceWorkerSet", FLAGS_coordinator_service_worker_num,
+                                FLAGS_coordinator_service_worker_max_pending_num);
+    if (!coordinator_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init Coordinator WorkerSet failed!";
+      return -1;
+    }
+
+    auto meta_service_worker_num = GetMetaServiceWorkerNum(config);
+    if (meta_service_worker_num < 0) {
+      DINGO_LOG(ERROR) << "GetServiceWorkerNum failed!";
+      return -1;
+    }
+
+    auto meta_service_worker_max_pending_num = GetMetaServiceWorkerMaxPendingNum(config);
+    if (meta_service_worker_max_pending_num < 0) {
+      DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+      return -1;
+    }
+
+    dingodb::WorkerSetPtr meta_worker_set = dingodb::WorkerSet::New(
+        "MetaServiceWorkerSet", FLAGS_meta_service_worker_num, FLAGS_meta_service_worker_max_pending_num);
+    if (!meta_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init meta WorkerSet failed!";
+      return -1;
+    }
+
+    auto version_service_worker_num = GetVersionServiceWorkerNum(config);
+    if (version_service_worker_num < 0) {
+      DINGO_LOG(ERROR) << "GetServiceWorkerNum failed!";
+      return -1;
+    }
+
+    auto version_service_worker_max_pending_num = GetVersionServiceWorkerMaxPendingNum(config);
+    if (version_service_worker_max_pending_num < 0) {
+      DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+      return -1;
+    }
+
+    dingodb::WorkerSetPtr version_worker_set = dingodb::WorkerSet::New(
+        "VersionServiceWorkerSet", FLAGS_version_service_worker_num, FLAGS_version_service_worker_max_pending_num);
+    if (!version_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init version WorkerSet failed!";
+      return -1;
+    }
+
+    if (FLAGS_coordinator_service_worker_num + FLAGS_meta_service_worker_num + FLAGS_version_service_worker_num >=
+        options.num_threads) {
+      DINGO_LOG(ERROR) << "service_worker_num["
+                       << FLAGS_coordinator_service_worker_num + FLAGS_meta_service_worker_num +
+                              FLAGS_version_service_worker_num
+                       << "] is greater than worker_thread_num[" << options.num_threads << "]";
+      return -1;
+    }
+
+    coordinator_service.SetWorkSet(coordinator_worker_set);
+    meta_service.SetWorkSet(meta_worker_set);
+    version_service.SetWorkSet(version_worker_set);
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {

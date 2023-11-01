@@ -7,6 +7,12 @@ server:
   port: $SERVER_PORT$
   worker_thread_num: 64 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 1.0 # cpu core * ratio
+  coordinator_service_worker_num: 32 # must < server.worker_thread_num
+  coordinator_service_worker_max_pending_num: 1024 # 0 is unlimited
+  meta_service_worker_num: 16 # must < server.worker_thread_num
+  meta_service_worker_max_pending_num: 1024 # 0 is unlimited
+  version_service_worker_num: 8 # must < server.worker_thread_num
+  version_service_worker_max_pending_num: 1024 # 0 is unlimited
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
   push_interval_s: 1
