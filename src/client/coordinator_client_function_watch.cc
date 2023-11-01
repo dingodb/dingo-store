@@ -222,45 +222,12 @@ void PeriodRenwLease(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
 }
 
-void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
-  if (FLAGS_lock_name.empty()) {
-    DINGO_LOG(WARNING) << "lock_name is empty, please input lock_name";
-    return;
-  }
-
-  if (FLAGS_client_uuid.empty()) {
-    DINGO_LOG(WARNING) << "client_uuid is empty, please input client_uuid";
-    return;
-  }
-
-  std::string lock_prefix = FLAGS_lock_name + "_lock_";
-  std::string lock_key = lock_prefix + FLAGS_client_uuid;
-
-  DINGO_LOG(INFO) << "lock_key=" << lock_key;
-
-  // create lease
-  int64_t lease_id = 0;
-  int64_t ttl = 3;
-  auto ret = CoorLeaseGrant(coordinator_interaction, lease_id, ttl);
-  if (!ret.ok()) {
-    DINGO_LOG(WARNING) << "CoorLeaseGrant failed, ret=" << ret;
-    return;
-  }
-
-  // renew lease in background
-  Bthread bt(nullptr, PeriodRenwLease, coordinator_interaction, lease_id);
-
-  // write lock key
-  int64_t revision = 0;
-  ret = CoorKvPut(coordinator_interaction, lock_key, "1", lease_id, revision);
-  if (!ret.ok()) {
-    DINGO_LOG(WARNING) << "CoorKvPut failed, ret=" << ret;
-    return;
-  }
-
+void GetWatchKeyAndRevision(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
+                            const std::string& lock_prefix, const std::string& lock_key, std::string& watch_key,
+                            int64_t& watch_revision) {
   // check if lock success
   std::vector<dingodb::pb::version::Kv> kvs;
-  ret = CoorKvRange(coordinator_interaction, lock_prefix, lock_prefix + "\xFF", 0, kvs);
+  auto ret = CoorKvRange(coordinator_interaction, lock_prefix, lock_prefix + "\xFF", 0, kvs);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "CoorKvRange failed, ret=" << ret;
     return;
@@ -306,19 +273,67 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
   }
 
   int64_t min_revision = key_with_create_revisions[0].mod_revision;
-  int64_t watch_revision = key_with_create_revisions[watch_index].mod_revision;
+  watch_revision = key_with_create_revisions[watch_index].mod_revision;
+  watch_key = key_with_create_revisions[watch_index].key;
+
+  DINGO_LOG(INFO) << "min_revision=" << min_revision << ", lock_key=" << key_with_create_revisions[0].key
+                  << ", lock_value=1";
 
   if (key_with_create_revisions[0].key == lock_key) {
-    DINGO_LOG(INFO) << "min_revision=" << min_revision << ", lock_key=" << lock_key << ", lock_value=1";
     DINGO_LOG(INFO) << "Lock success";
-    bthread_usleep(600 * 1000L * 1000L);
+    watch_key = lock_key;
+  }
+}
+
+void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  if (FLAGS_lock_name.empty()) {
+    DINGO_LOG(WARNING) << "lock_name is empty, please input lock_name";
+    return;
   }
 
-  auto watch_key = key_with_create_revisions[watch_index].key;
-  DINGO_LOG(WARNING) << "Lock failed, watch for key=" << watch_key << ", watch_revision=" << watch_revision;
+  if (FLAGS_client_uuid.empty()) {
+    DINGO_LOG(WARNING) << "client_uuid is empty, please input client_uuid";
+    return;
+  }
+
+  std::string lock_prefix = FLAGS_lock_name + "_lock_";
+  std::string lock_key = lock_prefix + FLAGS_client_uuid;
+
+  DINGO_LOG(INFO) << "lock_key=" << lock_key;
+
+  // create lease
+  int64_t lease_id = 0;
+  int64_t ttl = 3;
+  auto ret = CoorLeaseGrant(coordinator_interaction, lease_id, ttl);
+  if (!ret.ok()) {
+    DINGO_LOG(WARNING) << "CoorLeaseGrant failed, ret=" << ret;
+    return;
+  }
+
+  // renew lease in background
+  Bthread bt(nullptr, PeriodRenwLease, coordinator_interaction, lease_id);
+
+  // write lock key
+  int64_t revision = 0;
+  ret = CoorKvPut(coordinator_interaction, lock_key, "1", lease_id, revision);
+  if (!ret.ok()) {
+    DINGO_LOG(WARNING) << "CoorKvPut failed, ret=" << ret;
+    return;
+  }
 
   // watch lock key
   do {
+    // check if lock success
+    std::string watch_key;
+    int64_t watch_revision = 0;
+    GetWatchKeyAndRevision(coordinator_interaction, lock_prefix, lock_key, watch_key, watch_revision);
+
+    if (watch_key == lock_key) {
+      DINGO_LOG(INFO) << "Get Lock success";
+      bthread_usleep(3600 * 1000L * 1000L);
+    }
+
+    DINGO_LOG(WARNING) << "Lock failed, watch for key=" << watch_key << ", watch_revision=" << watch_revision;
     std::vector<dingodb::pb::version::Event> events;
     ret = CoorWatch(coordinator_interaction, watch_key, watch_revision, true, false, false, false, events);
     if (!ret.ok()) {
@@ -344,24 +359,27 @@ void SendLock(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_inter
       continue;
     }
 
-    if (events[0].type() == dingodb::pb::version::Event::PUT) {
-      if (events[0].kv().mod_revision() > watch_revision) {
-        DINGO_LOG(INFO) << "Lock success";
-        bthread_usleep(600 * 1000L * 1000L);
-        break;
-      } else {
-        DINGO_LOG(INFO) << "Continue to watch, event=" << events[0].DebugString();
-        continue;
-      }
-    } else if (events[0].type() == dingodb::pb::version::Event::DELETE) {
-      DINGO_LOG(INFO) << "Lock success";
-      bthread_usleep(600 * 1000L * 1000L);
-      break;
-    } else if (events[0].type() == dingodb::pb::version::Event::NOT_EXISTS) {
-      DINGO_LOG(INFO) << "Lock success";
-      bthread_usleep(600 * 1000L * 1000L);
-      break;
-    }
+    DINGO_LOG(INFO) << "watch get event=" << events[0].DebugString();
+
+    // if (events[0].type() == dingodb::pb::version::Event::PUT) {
+    //   if (events[0].kv().mod_revision() > watch_revision) {
+    //     DINGO_LOG(INFO) << "Lock success";
+    //     bthread_usleep(600 * 1000L * 1000L);
+    //     break;
+    //   } else {
+    //     DINGO_LOG(INFO) << "Continue to watch, event=" << events[0].DebugString();
+    //     continue;
+    //   }
+    // }
+    // else if (events[0].type() == dingodb::pb::version::Event::DELETE) {
+    //   DINGO_LOG(INFO) << "Lock success";
+    //   bthread_usleep(600 * 1000L * 1000L);
+    //   break;
+    // } else if (events[0].type() == dingodb::pb::version::Event::NOT_EXISTS) {
+    //   DINGO_LOG(INFO) << "Lock success";
+    //   bthread_usleep(600 * 1000L * 1000L);
+    //   break;
+    // }
 
   } while (true);
 }
