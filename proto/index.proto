@@ -354,7 +354,21 @@ message TxnDeleteRangeResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message HelloRequest {
+  dingodb.pb.store.Context context = 1;
+  bool get_region_metrics = 2;
+}
+
+message HelloResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  int64 region_count = 2;
+  int64 region_leader_count = 3;
+  repeated dingodb.pb.common.RegionMetrics region_metrics = 4;
+}
+
 service IndexService {
+  rpc Hello(HelloRequest) returns (HelloResponse);
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
   rpc VectorBatchQuery(VectorBatchQueryRequest) returns (VectorBatchQueryResponse);
