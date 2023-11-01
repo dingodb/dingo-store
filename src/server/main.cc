@@ -684,8 +684,11 @@ int main(int argc, char *argv[]) {
     // the Engine should be init success
     auto engine = dingo_server.GetEngine();
     coordinator_service.SetKvEngine(engine);
+    coordinator_service.SetWorkSet(worker_set);
     meta_service.SetKvEngine(engine);
+    meta_service.SetWorkSet(worker_set);
     version_service.SetKvEngine(engine);
+    version_service.SetWorkSet(worker_set);
 
     // add service to brpc
     if (brpc_server.AddService(&coordinator_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {

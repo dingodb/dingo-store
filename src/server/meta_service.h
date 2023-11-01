@@ -64,16 +64,20 @@ class MetaServiceImpl : public pb::meta::MetaService {
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+  std::shared_ptr<Engine> GetKvEngine() { return engine_; };
 
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     coordinator_control_ = coordinator_control;
   };
+  std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; };
 
   void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
     auto_increment_control_ = auto_increment_control;
   };
+  std::shared_ptr<AutoIncrementControl> GetAutoIncrementControl() { return auto_increment_control_; };
 
   void SetTsoControl(std::shared_ptr<TsoControl> tso_control) { tso_control_ = tso_control; };
+  std::shared_ptr<TsoControl> GetTsoControl() { return tso_control_; };
 
   void GetSchemas(google::protobuf::RpcController* controller, const pb::meta::GetSchemasRequest* request,
                   pb::meta::GetSchemasResponse* response, google::protobuf::Closure* done) override;
@@ -180,6 +184,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void Hello(google::protobuf::RpcController* controller, const pb::meta::HelloRequest* request,
              pb::meta::HelloResponse* response, google::protobuf::Closure* done) override;
 
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
+
  private:
   // table and index definition convertor
   static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,
@@ -191,6 +197,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<TsoControl> tso_control_;
   std::shared_ptr<Engine> engine_;
+  // Run service request.
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb
