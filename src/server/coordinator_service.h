@@ -111,6 +111,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
     this->coordinator_control_ = coordinator_control;
   };
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return this->coordinator_control_; };
+  bool IsCoordinatorControlLeader() { return this->coordinator_control_->IsLeader(); };
 
   void SetKvControl(std::shared_ptr<KvControl> kv_control) { kv_control_ = kv_control; };
   std::shared_ptr<KvControl> GetKvControl() { return this->kv_control_; };

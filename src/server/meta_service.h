@@ -186,13 +186,13 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
- private:
   // table and index definition convertor
   static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,
                                                pb::meta::IndexDefinition& index_definition);
   static void IndexDefinitionToTableDefinition(const pb::meta::IndexDefinition& index_definition,
                                                pb::meta::TableDefinition& table_definition);
 
+ private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<TsoControl> tso_control_;

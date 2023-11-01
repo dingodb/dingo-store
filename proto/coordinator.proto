@@ -781,7 +781,9 @@ enum RaftControlOp {
 
 enum RaftControlNodeIndex {
   CoordinatorNodeIndex = 0;
-  AutoIncrementNodeIndex = 1;
+  KvNodeIndex = 1;
+  TsoNodeIndex = 2;
+  AutoIncrementNodeIndex = 3;
 };
 
 message RaftControlRequest {

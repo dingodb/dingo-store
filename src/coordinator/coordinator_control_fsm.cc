@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "brpc/closure_guard.h"
 #include "bthread/bthread.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
@@ -2366,24 +2367,27 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
-butil::Status CoordinatorControl::SubmitMetaIncrementAsync(google::protobuf::Closure* done,
-                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
-  LogMetaIncrementSize(meta_increment);
+// butil::Status CoordinatorControl::SubmitMetaIncrementAsync(google::protobuf::Closure* done,
+//                                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
+//   LogMetaIncrementSize(meta_increment);
 
-  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
-  ctx->SetRegionId(Constant::kMetaRegionId);
+//   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
+//   ctx->SetRegionId(Constant::kMetaRegionId);
 
-  if (done != nullptr) {
-    ctx->SetDone(done);
-  }
+//   if (done != nullptr) {
+//     ctx->SetDone(done);
+//   }
 
-  auto status = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
-    return status;
-  }
-  return butil::Status::OK();
-}
+//   auto status = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+//   if (!status.ok()) {
+//     DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" <<
+//     status.error_str(); if (done != nullptr) {
+//       brpc::ClosureGuard fail_done(done);
+//     }
+//     return status;
+//   }
+//   return butil::Status::OK();
+// }
 
 butil::Status CoordinatorControl::SubmitMetaIncrementSync(pb::coordinator_internal::MetaIncrement& meta_increment) {
   LogMetaIncrementSize(meta_increment);

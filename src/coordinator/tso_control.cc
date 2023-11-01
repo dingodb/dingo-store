@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "brpc/closure_guard.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -118,7 +119,7 @@ int TsoControl::SyncTimestamp(const pb::meta::TsoTimestamp& current_timestamp, i
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto* tso = meta_increment.add_timestamp_oracles();
   *(tso->mutable_tso_request()) = request;
-  this->SubmitMetaIncrement(c, &response, meta_increment);
+  this->SubmitMetaIncrementAsync(c, &response, meta_increment);
 
   sync_cond.Wait();
 
@@ -241,7 +242,7 @@ void TsoControl::Process(google::protobuf::RpcController* controller, const pb::
   pb::coordinator_internal::MetaIncrement meta_increment;
   auto* tso = meta_increment.add_timestamp_oracles();
   *(tso->mutable_tso_request()) = (*request);
-  this->SubmitMetaIncrement(closure, response, meta_increment);
+  this->SubmitMetaIncrementSync(closure, response, meta_increment);
 }
 
 // If request.force == false, ResetTso is equal to UpdateTso
@@ -507,10 +508,6 @@ bool TsoControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshot
 
 // SubmitMetaIncrement
 // commit meta increment to raft meta engine, with no closure
-butil::Status TsoControl::SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment) {
-  return SubmitMetaIncrement(nullptr, meta_increment);
-}
-
 void LogMetaIncrementTso(pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (meta_increment.ByteSizeLong() > 0) {
     DINGO_LOG(DEBUG) << "meta_increment byte_size=" << meta_increment.ByteSizeLong();
@@ -524,27 +521,8 @@ void LogMetaIncrementTso(pb::coordinator_internal::MetaIncrement& meta_increment
   DINGO_LOG(DEBUG) << meta_increment.DebugString();
 }
 
-butil::Status TsoControl::SubmitMetaIncrement(google::protobuf::Closure* done,
-                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
-  LogMetaIncrementTso(meta_increment);
-
-  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
-  ctx->SetRegionId(Constant::kTsoRegionId);
-
-  if (done != nullptr) {
-    ctx->SetDone(done);
-  }
-
-  auto status = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
-    return status;
-  }
-  return butil::Status::OK();
-}
-
-butil::Status TsoControl::SubmitMetaIncrement(google::protobuf::Closure* done, pb::meta::TsoResponse* response,
-                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status TsoControl::SubmitMetaIncrementAsync(google::protobuf::Closure* done, pb::meta::TsoResponse* response,
+                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   LogMetaIncrementTso(meta_increment);
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>();
@@ -561,6 +539,35 @@ butil::Status TsoControl::SubmitMetaIncrement(google::protobuf::Closure* done, p
   auto status = engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    if (done != nullptr) {
+      brpc::ClosureGuard fail_done(done);
+    }
+    return status;
+  }
+  return butil::Status::OK();
+}
+
+butil::Status TsoControl::SubmitMetaIncrementSync(google::protobuf::Closure* done, pb::meta::TsoResponse* response,
+                                                  pb::coordinator_internal::MetaIncrement& meta_increment) {
+  LogMetaIncrementTso(meta_increment);
+
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kTsoRegionId);
+
+  if (response != nullptr) {
+    ctx->SetResponse(response);
+  }
+
+  if (done != nullptr) {
+    ctx->SetDone(done);
+  }
+
+  auto status = engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "ApplyMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    if (done != nullptr) {
+      brpc::ClosureGuard fail_done(done);
+    }
     return status;
   }
   return butil::Status::OK();
