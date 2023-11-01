@@ -110,7 +110,7 @@ void DoCreateExecutor(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "CreateExecutor AsyncWrite failed:  executor_id=" << request->executor().id();
+    DINGO_LOG(ERROR) << "CreateExecutor Write failed:  executor_id=" << request->executor().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -159,7 +159,7 @@ void DoDeleteExecutor(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "DeleteExecutor AsyncWrite failed:  executor_id=" << request->executor().id();
+    DINGO_LOG(ERROR) << "DeleteExecutor Write failed:  executor_id=" << request->executor().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -213,7 +213,7 @@ void DoCreateExecutorUser(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "CreateExecutorUser AsyncWrite failed:  executor_id=" << request->executor_user().user();
+    DINGO_LOG(ERROR) << "CreateExecutorUser Write failed:  executor_id=" << request->executor_user().user();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -265,7 +265,7 @@ void DoUpdateExecutorUser(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "UpdateExecutorUser AsyncWrite failed:  executor_id=" << request->executor_user().user();
+    DINGO_LOG(ERROR) << "UpdateExecutorUser Write failed:  executor_id=" << request->executor_user().user();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -316,7 +316,7 @@ void DoDeleteExecutorUser(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "DeleteExecutorUser AsyncWrite failed:  executor_id=" << request->executor_user().user();
+    DINGO_LOG(ERROR) << "DeleteExecutorUser Write failed:  executor_id=" << request->executor_user().user();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -392,7 +392,7 @@ void DoCreateStore(google::protobuf::RpcController *controller, const pb::coordi
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "CreateStore AsyncWrite failed:  store_id=" << store_id << ", keyring=" << keyring;
+    DINGO_LOG(ERROR) << "CreateStore Write failed:  store_id=" << store_id << ", keyring=" << keyring;
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -447,7 +447,7 @@ void DoDeleteStore(google::protobuf::RpcController *controller, const pb::coordi
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "DeleteStore AsyncWrite failed:  store_id=" << store_id << ", keyring=" << keyring;
+    DINGO_LOG(ERROR) << "DeleteStore Write failed:  store_id=" << store_id << ", keyring=" << keyring;
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -494,7 +494,7 @@ void DoUpdateStore(google::protobuf::RpcController *controller, const pb::coordi
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "UpdateStore AsyncWrite failed:  store_id=" << request->store_id()
+    DINGO_LOG(ERROR) << "UpdateStore Write failed:  store_id=" << request->store_id()
                      << ", keyring=" << request->keyring();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
@@ -561,7 +561,7 @@ void DoExecutorHeartbeat(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "ExecutorHeartbeat AsyncWrite failed:  executor_id=" << request->executor().id();
+    DINGO_LOG(ERROR) << "ExecutorHeartbeat Write failed:  executor_id=" << request->executor().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
@@ -645,7 +645,7 @@ void DoStoreHeartbeat(google::protobuf::RpcController *controller,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "StoreHeartbeat AsyncWrite failed:  store_id=" << request->store().id();
+    DINGO_LOG(ERROR) << "StoreHeartbeat Write failed:  store_id=" << request->store().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;
