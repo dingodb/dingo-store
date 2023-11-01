@@ -175,6 +175,55 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
   }
 }
 
+// Wrapper brpc service closure for log.
+template <typename T, typename U>
+class CoordinatorServiceClosure : public google::protobuf::Closure {
+ public:
+  CoordinatorServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request,
+                            U* response)
+      : method_name_(method_name), done_(done), request_(request), response_(response) {
+    start_time_ = Helper::TimestampMs();
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  }
+  ~CoordinatorServiceClosure() override = default;
+
+  void Run() override;
+
+ private:
+  std::string method_name_;
+  uint64_t start_time_;
+
+  google::protobuf::Closure* done_;
+  const T* request_;
+  U* response_;
+};
+
+template <typename T, typename U>
+void CoordinatorServiceClosure<T, U>::Run() {
+  std::unique_ptr<CoordinatorServiceClosure<T, U>> self_guard(this);
+  brpc::ClosureGuard done_guard(done_);
+
+  uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+
+  if (response_->error().errcode() != 0) {
+    // Set leader redirect info(pb.Error.leader_location).
+    if (response_->error().errcode() == pb::error::ERAFT_NOTLEADER) {
+      response_->mutable_error()->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).",
+                                                         Server::GetInstance().ServerAddr(),
+                                                         response_->error().errmsg()));
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}", method_name_,
+                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  } else {
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}", method_name_,
+                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  }
+}
+
 }  // namespace dingodb
 
 #endif  // DINGODB_SERVER_SERVICE_HELPER_H_

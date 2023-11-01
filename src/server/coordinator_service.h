@@ -106,14 +106,20 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+  std::shared_ptr<Engine> GetKvEngine() { return engine_; };
   void SetControl(std::shared_ptr<CoordinatorControl> coordinator_control) {
     this->coordinator_control_ = coordinator_control;
   };
+  std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return this->coordinator_control_; };
+
   void SetKvControl(std::shared_ptr<KvControl> kv_control) { kv_control_ = kv_control; };
+  std::shared_ptr<KvControl> GetKvControl() { return this->kv_control_; };
   void SetTsoControl(std::shared_ptr<TsoControl> tso_control) { tso_control_ = tso_control; };
+  std::shared_ptr<TsoControl> GetTsoControl() { return this->tso_control_; };
   void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
     auto_increment_control_ = auto_increment_control;
   };
+  std::shared_ptr<AutoIncrementControl> GetAutoIncrementControl() { return this->auto_increment_control_; };
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
@@ -270,12 +276,16 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                       const pb::coordinator::GetGCSafePointRequest* request,
                       pb::coordinator::GetGCSafePointResponse* response, google::protobuf::Closure* done) override;
 
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
+
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
   std::shared_ptr<KvControl> kv_control_;
   std::shared_ptr<TsoControl> tso_control_;
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<Engine> engine_;
+  // Run service request.
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb

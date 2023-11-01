@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <unordered_map>
 
 #include "brpc/server.h"
@@ -117,7 +118,10 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+  std::shared_ptr<Engine> GetKvEngine() { return engine_; };
   void SetControl(std::shared_ptr<KvControl> coordinator_control) { this->kv_control_ = coordinator_control; };
+  std::shared_ptr<KvControl> GetKvControl() { return this->kv_control_; };
+  bool IsKvControlLeader() { return this->kv_control_->IsLeader(); };
 
   void GetNewVersion(google::protobuf::RpcController* cntl_base, const GetNewVersionRequest* request,
                      GetNewVersionResponse* response, google::protobuf::Closure* done) override {
@@ -173,9 +177,13 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   void Hello(google::protobuf::RpcController* controller, const pb::version::HelloRequest* request,
              pb::version::HelloResponse* response, google::protobuf::Closure* done) override;
 
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
+
  private:
   std::shared_ptr<KvControl> kv_control_;
   std::shared_ptr<Engine> engine_;
+  // Run service request.
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb
