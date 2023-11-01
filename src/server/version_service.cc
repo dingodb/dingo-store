@@ -31,6 +31,7 @@
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_closure.h"
+#include "engine/engine.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/version.pb.h"
@@ -126,15 +127,63 @@ VersionService& VersionService::GetInstance() {
   return service;
 }
 
-void DoLeaseGrant(VersionServiceProtoImpl* impl, google::protobuf::RpcController* controller,
-                  const pb::version::LeaseGrantRequest* request, pb::version::LeaseGrantResponse* response,
-                  google::protobuf::Closure* done) {
+void DoLeaseRevoke(google::protobuf::RpcController* controller, const pb::version::LeaseRevokeRequest* request,
+                   pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done,
+                   std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
+  DINGO_LOG(WARNING) << "Receive LeaseRevoke Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return kv_control->RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret = kv_control->LeaseRevoke(request->id(), meta_increment);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    DINGO_LOG(ERROR) << "LeaseRevoke failed:  lease_id=" << request->id();
+    return;
+  }
+  DINGO_LOG(INFO) << "LeaseRevoke success:  lease_id=" << request->id();
+
+  // prepare for raft process
+  CoordinatorClosure<pb::version::LeaseRevokeRequest, pb::version::LeaseRevokeResponse>* meta_closure =
+      new CoordinatorClosure<pb::version::LeaseRevokeRequest, pb::version::LeaseRevokeResponse>(request, response,
+                                                                                                done_guard.release());
+
+  std::shared_ptr<Context> const ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller*>(controller), meta_closure);
+  ctx->SetRegionId(Constant::kKvRegionId);
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "LeaseRevoke failed:  lease_id=" << request->id() << ", error=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    brpc::ClosureGuard done_guard(meta_closure);
+    return;
+  }
+}
+
+void DoLeaseGrant(google::protobuf::RpcController* controller, const pb::version::LeaseGrantRequest* request,
+                  pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done,
+                  std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(INFO) << "Receive LeaseGrant Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->ttl() <= 0) {
@@ -149,8 +198,7 @@ void DoLeaseGrant(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   int64_t granted_id = 0;
   int64_t granted_ttl_seconds = 0;
 
-  auto ret =
-      impl->GetKvControl()->LeaseGrant(request->id(), request->ttl(), granted_id, granted_ttl_seconds, meta_increment);
+  auto ret = kv_control->LeaseGrant(request->id(), request->ttl(), granted_id, granted_ttl_seconds, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -172,7 +220,7 @@ void DoLeaseGrant(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   ctx->SetRegionId(Constant::kKvRegionId);
 
   // this is a async operation will be block by closure
-  auto ret2 = impl->GetKvEngine()->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "LeaseGrant failed:  lease_id=" << granted_id << ", error=" << ret2.error_str();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
@@ -181,124 +229,15 @@ void DoLeaseGrant(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   }
 }
 
-void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* controller,
-                                         const pb::version::LeaseGrantRequest* request,
-                                         pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) {
+void DoLeaseRenew(google::protobuf::RpcController* controller, const pb::version::LeaseRenewRequest* request,
+                  pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done,
+                  std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(INFO) << "Receive LeaseGrant Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->ttl() <= 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("ttl is zero or negative");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("LeaseGrant", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoLeaseGrant(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoLeaseRevoke(VersionServiceProtoImpl* impl, google::protobuf::RpcController* controller,
-                   const pb::version::LeaseRevokeRequest* request, pb::version::LeaseRevokeResponse* response,
-                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive LeaseRevoke Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return impl->RedirectResponse(response);
-  }
-
-  if (request->id() == 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("lease id is zero");
-    return;
-  }
-
-  pb::coordinator_internal::MetaIncrement meta_increment;
-
-  auto ret = impl->GetKvControl()->LeaseRevoke(request->id(), meta_increment);
-  if (!ret.ok()) {
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-    response->mutable_error()->set_errmsg(ret.error_str());
-    DINGO_LOG(ERROR) << "LeaseRevoke failed:  lease_id=" << request->id();
-    return;
-  }
-  DINGO_LOG(INFO) << "LeaseRevoke success:  lease_id=" << request->id();
-
-  // prepare for raft process
-  CoordinatorClosure<pb::version::LeaseRevokeRequest, pb::version::LeaseRevokeResponse>* meta_closure =
-      new CoordinatorClosure<pb::version::LeaseRevokeRequest, pb::version::LeaseRevokeResponse>(request, response,
-                                                                                                done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller*>(controller), meta_closure);
-  ctx->SetRegionId(Constant::kKvRegionId);
-
-  // this is a async operation will be block by closure
-  auto ret2 = impl->GetKvEngine()->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-  if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "LeaseRevoke failed:  lease_id=" << request->id() << ", error=" << ret2.error_str();
-    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
-    return;
-  }
-}
-
-void VersionServiceProtoImpl::LeaseRevoke(google::protobuf::RpcController* controller,
-                                          const pb::version::LeaseRevokeRequest* request,
-                                          pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive LeaseRevoke Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->id() == 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("lease id is zero");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("LeaseRevoke", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoLeaseRevoke(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoLeaseRenew(VersionServiceProtoImpl* impl, google::protobuf::RpcController* controller,
-                  const pb::version::LeaseRenewRequest* request, pb::version::LeaseRenewResponse* response,
-                  google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive LeaseRenew Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->id() == 0) {
@@ -310,7 +249,7 @@ void DoLeaseRenew(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   int64_t ttl_seconds = 0;
-  auto ret = impl->GetKvControl()->LeaseRenew(request->id(), ttl_seconds, meta_increment);
+  auto ret = kv_control->LeaseRenew(request->id(), ttl_seconds, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -332,7 +271,7 @@ void DoLeaseRenew(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   ctx->SetRegionId(Constant::kKvRegionId);
 
   // this is a async operation will be block by closure
-  auto ret2 = impl->GetKvEngine()->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "LeaseRenew failed:  lease_id=" << request->id() << ", error=" << ret2.error_str();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
@@ -341,46 +280,16 @@ void DoLeaseRenew(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   }
 }
 
-void VersionServiceProtoImpl::LeaseRenew(google::protobuf::RpcController* controller,
-                                         const pb::version::LeaseRenewRequest* request,
-                                         pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done) {
+void DoLeaseQuery(google::protobuf::RpcController* /*controller*/, const pb::version::LeaseQueryRequest* request,
+                  pb::version::LeaseQueryResponse* response, google::protobuf::Closure* done,
+                  std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive LeaseRenew Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->id() == 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("lease id is zero");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("LeaseRenew", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoLeaseRenew(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoLeaseQuery(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /*controller*/,
-                  const pb::version::LeaseQueryRequest* request, pb::version::LeaseQueryResponse* response,
-                  google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive LeaseTimeToLive Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->id() == 0) {
@@ -393,8 +302,7 @@ void DoLeaseQuery(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   int64_t remaining_ttl_seconds = 0;
   std::set<std::string> keys;
 
-  auto ret = impl->GetKvControl()->LeaseQuery(request->id(), request->keys(), granted_ttl_seconde,
-                                              remaining_ttl_seconds, keys);
+  auto ret = kv_control->LeaseQuery(request->id(), request->keys(), granted_ttl_seconde, remaining_ttl_seconds, keys);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -413,51 +321,20 @@ void DoLeaseQuery(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   }
 }
 
-void VersionServiceProtoImpl::LeaseQuery(google::protobuf::RpcController* controller,
-                                         const pb::version::LeaseQueryRequest* request,
-                                         pb::version::LeaseQueryResponse* response, google::protobuf::Closure* done) {
+void DoListLeases(google::protobuf::RpcController* /*controller*/, const pb::version::ListLeasesRequest* request,
+                  pb::version::ListLeasesResponse* response, google::protobuf::Closure* done,
+                  std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive LeaseTimeToLive Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->id() == 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("lease id is zero");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("LeaseQuery", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoLeaseQuery(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoListLeases(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /*controller*/,
-                  const pb::version::ListLeasesRequest* request, pb::version::ListLeasesResponse* response,
-                  google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive ListLeases Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   std::vector<pb::coordinator_internal::LeaseInternal> leases;
 
-  auto ret = impl->GetKvControl()->ListLeases(leases);
+  auto ret = kv_control->ListLeases(leases);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -474,40 +351,16 @@ void DoListLeases(VersionServiceProtoImpl* impl, google::protobuf::RpcController
   }
 }
 
-void VersionServiceProtoImpl::ListLeases(google::protobuf::RpcController* controller,
-                                         const pb::version::ListLeasesRequest* request,
-                                         pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) {
+void DoGetRawKvIndex(google::protobuf::RpcController*, const pb::version::GetRawKvIndexRequest* request,
+                     pb::version::GetRawKvIndexResponse* response, google::protobuf::Closure* done,
+                     std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive ListLeases Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("ListLeases", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoListLeases(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoGetRawKvIndex(VersionServiceProtoImpl* impl, google::protobuf::RpcController*,
-                     const pb::version::GetRawKvIndexRequest* request, pb::version::GetRawKvIndexResponse* response,
-                     google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive GetRawKvIndex Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->key().empty()) {
@@ -517,7 +370,7 @@ void DoGetRawKvIndex(VersionServiceProtoImpl* impl, google::protobuf::RpcControl
   }
 
   pb::coordinator_internal::KvIndexInternal kv_index;
-  auto ret = impl->GetKvControl()->GetRawKvIndex(request->key(), kv_index);
+  auto ret = kv_control->GetRawKvIndex(request->key(), kv_index);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -543,48 +396,16 @@ void DoGetRawKvIndex(VersionServiceProtoImpl* impl, google::protobuf::RpcControl
   }
 }
 
-void VersionServiceProtoImpl::GetRawKvIndex(google::protobuf::RpcController* controller,
-                                            const pb::version::GetRawKvIndexRequest* request,
-                                            pb::version::GetRawKvIndexResponse* response,
-                                            google::protobuf::Closure* done) {
+void DoGetRawKvRev(google::protobuf::RpcController*, const pb::version::GetRawKvRevRequest* request,
+                   pb::version::GetRawKvRevResponse* response, google::protobuf::Closure* done,
+                   std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive GetRawKvIndex Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->key().empty()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("key is empty");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("GetRawKvIndex", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoGetRawKvIndex(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoGetRawKvRev(VersionServiceProtoImpl* impl, google::protobuf::RpcController*,
-                   const pb::version::GetRawKvRevRequest* request, pb::version::GetRawKvRevResponse* response,
-                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive GetRawKvRev Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (!request->has_revision()) {
@@ -597,7 +418,7 @@ void DoGetRawKvRev(VersionServiceProtoImpl* impl, google::protobuf::RpcControlle
   pb::coordinator_internal::RevisionInternal revision;
   revision.set_main(request->revision().main());
   revision.set_sub(request->revision().sub());
-  auto ret = impl->GetKvControl()->GetRawKvRev(revision, kv_rev);
+  auto ret = kv_control->GetRawKvRev(revision, kv_rev);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -622,47 +443,16 @@ void DoGetRawKvRev(VersionServiceProtoImpl* impl, google::protobuf::RpcControlle
   resp_kv->set_is_deleted(kv_rev.kv().is_deleted());
 }
 
-void VersionServiceProtoImpl::GetRawKvRev(google::protobuf::RpcController* controller,
-                                          const pb::version::GetRawKvRevRequest* request,
-                                          pb::version::GetRawKvRevResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive GetRawKvRev Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (!request->has_revision()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("revision is empty");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("GetRawKvRev", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoGetRawKvRev(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoKvRange(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /*controller*/,
-               const pb::version::RangeRequest* request, pb::version::RangeResponse* response,
-               google::protobuf::Closure* done) {
+void DoKvRange(google::protobuf::RpcController* /*controller*/, const pb::version::RangeRequest* request,
+               pb::version::RangeResponse* response, google::protobuf::Closure* done,
+               std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive Range Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->key().empty()) {
@@ -680,8 +470,8 @@ void DoKvRange(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /
 
   std::vector<pb::version::Kv> kvs;
   int64_t total_count_in_range = 0;
-  auto ret = impl->GetKvControl()->KvRange(request->key(), request->range_end(), real_limit, request->keys_only(),
-                                           request->count_only(), kvs, total_count_in_range);
+  auto ret = kv_control->KvRange(request->key(), request->range_end(), real_limit, request->keys_only(),
+                                 request->count_only(), kvs, total_count_in_range);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -700,46 +490,16 @@ void DoKvRange(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /
                   << ", limit=" << request->limit();
 }
 
-void VersionServiceProtoImpl::KvRange(google::protobuf::RpcController* controller,
-                                      const pb::version::RangeRequest* request, pb::version::RangeResponse* response,
-                                      google::protobuf::Closure* done) {
+void DoKvPut(google::protobuf::RpcController* controller, const pb::version::PutRequest* request,
+             pb::version::PutResponse* response, google::protobuf::Closure* done, std::shared_ptr<KvControl> kv_control,
+             std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive Range Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->key().empty()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("key is empty");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("KvRange", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [this, controller, request, response, svr_done]() { DoKvRange(this, controller, request, response, svr_done); });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoKvPut(VersionServiceProtoImpl* impl, google::protobuf::RpcController* controller,
-             const pb::version::PutRequest* request, pb::version::PutResponse* response,
-             google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive Put Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->key_value().key().empty()) {
@@ -753,13 +513,13 @@ void DoKvPut(VersionServiceProtoImpl* impl, google::protobuf::RpcController* con
 
   pb::version::Kv prev_kv;
   int64_t main_revision =
-      impl->GetKvControl()->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+      kv_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
   int64_t sub_revision = 1;
   int64_t lease_grant_id = 0;
 
-  auto ret = impl->GetKvControl()->KvPut(request->key_value(), request->lease(), request->need_prev_kv(),
-                                         request->ignore_value(), request->ignore_lease(), main_revision, sub_revision,
-                                         prev_kv, lease_grant_id, meta_increment);
+  auto ret =
+      kv_control->KvPut(request->key_value(), request->lease(), request->need_prev_kv(), request->ignore_value(),
+                        request->ignore_lease(), main_revision, sub_revision, prev_kv, lease_grant_id, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -783,7 +543,7 @@ void DoKvPut(VersionServiceProtoImpl* impl, google::protobuf::RpcController* con
   ctx->SetRegionId(Constant::kKvRegionId);
 
   // this is a async operation will be block by closure
-  auto ret2 = impl->GetKvEngine()->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "Put failed: key_valuee=" << request->key_value().ShortDebugString()
                      << ", lease_grant_id=" << lease_grant_id << ", revision=" << main_revision << "." << sub_revision
@@ -794,46 +554,17 @@ void DoKvPut(VersionServiceProtoImpl* impl, google::protobuf::RpcController* con
   }
 }
 
-void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller, const pb::version::PutRequest* request,
-                                    pb::version::PutResponse* response, google::protobuf::Closure* done) {
+void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::version::DeleteRangeRequest* request,
+                     pb::version::DeleteRangeResponse* response, google::protobuf::Closure* done,
+                     std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive Put Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->key_value().key().empty()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("key_value is empty");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("KvPut", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [this, controller, request, response, svr_done]() { DoKvPut(this, controller, request, response, svr_done); });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoKvDeleteRange(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /*controller*/,
-                     const pb::version::DeleteRangeRequest* request, pb::version::DeleteRangeResponse* response,
-                     google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->key().empty()) {
@@ -846,13 +577,12 @@ void DoKvDeleteRange(VersionServiceProtoImpl* impl, google::protobuf::RpcControl
 
   std::vector<pb::version::Kv> prev_kvs;
   int64_t main_revision =
-      impl->GetKvControl()->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
+      kv_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
   int64_t sub_revision = 1;
 
   int64_t deleted_count = 0;
-  auto ret =
-      impl->GetKvControl()->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(), main_revision,
-                                          sub_revision, true, deleted_count, prev_kvs, meta_increment);
+  auto ret = kv_control->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(), main_revision,
+                                       sub_revision, true, deleted_count, prev_kvs, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -881,7 +611,7 @@ void DoKvDeleteRange(VersionServiceProtoImpl* impl, google::protobuf::RpcControl
   ctx->SetRegionId(Constant::kKvRegionId);
 
   // this is a async operation will be block by closure
-  auto ret2 = impl->GetKvEngine()->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DeleteRange failed: key=" << request->key() << ", end_key=" << request->range_end()
                      << ", revision=" << main_revision << "." << sub_revision << ", error=" << ret2.error_str();
@@ -891,50 +621,17 @@ void DoKvDeleteRange(VersionServiceProtoImpl* impl, google::protobuf::RpcControl
   }
 }
 
-void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* controller,
-                                            const pb::version::DeleteRangeRequest* request,
-                                            pb::version::DeleteRangeResponse* response,
-                                            google::protobuf::Closure* done) {
+void DoKvCompaction(google::protobuf::RpcController* /*controller*/, const pb::version::CompactionRequest* request,
+                    pb::version::CompactionResponse* response, google::protobuf::Closure* done,
+                    std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
-  auto is_leader = this->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
                      << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->key().empty()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("key is empty");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("KvDeleteRange", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoKvDeleteRange(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoKvCompaction(VersionServiceProtoImpl* impl, google::protobuf::RpcController* /*controller*/,
-                    const pb::version::CompactionRequest* request, pb::version::CompactionResponse* response,
-                    google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-
-  auto is_leader = impl->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (request->key().empty()) {
@@ -945,7 +642,7 @@ void DoKvCompaction(VersionServiceProtoImpl* impl, google::protobuf::RpcControll
 
   std::vector<std::string> keys_to_compact;
   int64_t total_count_in_range = 0;
-  auto ret = impl->GetKvControl()->KvRangeRawKeys(request->key(), request->range_end(), keys_to_compact);
+  auto ret = kv_control->KvRangeRawKeys(request->key(), request->range_end(), keys_to_compact);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -962,7 +659,7 @@ void DoKvCompaction(VersionServiceProtoImpl* impl, google::protobuf::RpcControll
   std::vector<pb::version::Kv> prev_kvs;
 
   compact_revision.set_main(request->compact_revision());
-  ret = impl->GetKvControl()->KvCompact(keys_to_compact, compact_revision);
+  ret = kv_control->KvCompact(keys_to_compact, compact_revision);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -973,48 +670,16 @@ void DoKvCompaction(VersionServiceProtoImpl* impl, google::protobuf::RpcControll
   DINGO_LOG(INFO) << "Compaction success: key=" << request->key() << ", end_key=" << request->range_end();
 }
 
-void VersionServiceProtoImpl::KvCompaction(google::protobuf::RpcController* controller,
-                                           const pb::version::CompactionRequest* request,
-                                           pb::version::CompactionResponse* response, google::protobuf::Closure* done) {
+void DoWatch(google::protobuf::RpcController* controller, const pb::version::WatchRequest* request,
+             pb::version::WatchResponse* response, google::protobuf::Closure* done,
+             std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
-  auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
-
-  if (!is_leader) {
-    return RedirectResponse(response);
-  }
-
-  if (request->key().empty()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("key is empty");
-    return;
-  }
-
-  auto* svr_done = new CoordinatorServiceClosure("KvCompaction", done_guard.release(), request, response);
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoKvCompaction(this, controller, request, response, svr_done);
-  });
-  bool ret = worker_set_->ExecuteRR(task);
-  if (!ret) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
-  }
-}
-
-void DoWatch(VersionServiceProtoImpl* impl, google::protobuf::RpcController* controller,
-             const pb::version::WatchRequest* request, pb::version::WatchResponse* response,
-             google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
-
-  auto is_leader = impl->IsKvControlLeader();
+  auto is_leader = kv_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Watch Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
 
   if (!is_leader) {
-    return impl->RedirectResponse(response);
+    return kv_control->RedirectResponse(response);
   }
 
   if (!request->has_one_time_request()) {
@@ -1050,9 +715,333 @@ void DoWatch(VersionServiceProtoImpl* impl, google::protobuf::RpcController* con
     response->mutable_error()->set_errmsg("no put event and no delete event");
   }
 
-  impl->GetKvControl()->OneTimeWatch(one_time_req.key(), one_time_req.start_revision(), no_put_event, no_delete_event,
-                                     one_time_req.need_prev_kv(), one_time_req.wait_on_not_exist_key(),
-                                     done_guard.release(), response, static_cast<brpc::Controller*>(controller));
+  kv_control->OneTimeWatch(one_time_req.key(), one_time_req.start_revision(), no_put_event, no_delete_event,
+                           one_time_req.need_prev_kv(), one_time_req.wait_on_not_exist_key(), done_guard.release(),
+                           response, static_cast<brpc::Controller*>(controller));
+}
+
+void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* controller,
+                                         const pb::version::LeaseGrantRequest* request,
+                                         pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(INFO) << "Receive LeaseGrant Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->ttl() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("ttl is zero or negative");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoLeaseGrant(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::LeaseRevoke(google::protobuf::RpcController* controller,
+                                          const pb::version::LeaseRevokeRequest* request,
+                                          pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive LeaseRevoke Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoLeaseRevoke(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::LeaseRenew(google::protobuf::RpcController* controller,
+                                         const pb::version::LeaseRenewRequest* request,
+                                         pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive LeaseRenew Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoLeaseRenew(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::LeaseQuery(google::protobuf::RpcController* controller,
+                                         const pb::version::LeaseQueryRequest* request,
+                                         pb::version::LeaseQueryResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive LeaseTimeToLive Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->id() == 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is zero");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoLeaseQuery(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::ListLeases(google::protobuf::RpcController* controller,
+                                         const pb::version::ListLeasesRequest* request,
+                                         pb::version::ListLeasesResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive ListLeases Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoListLeases(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::GetRawKvIndex(google::protobuf::RpcController* controller,
+                                            const pb::version::GetRawKvIndexRequest* request,
+                                            pb::version::GetRawKvIndexResponse* response,
+                                            google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive GetRawKvIndex Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoGetRawKvIndex(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::GetRawKvRev(google::protobuf::RpcController* controller,
+                                          const pb::version::GetRawKvRevRequest* request,
+                                          pb::version::GetRawKvRevResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive GetRawKvRev Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (!request->has_revision()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("revision is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoGetRawKvRev(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::KvRange(google::protobuf::RpcController* controller,
+                                      const pb::version::RangeRequest* request, pb::version::RangeResponse* response,
+                                      google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive Range Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoKvRange(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller, const pb::version::PutRequest* request,
+                                    pb::version::PutResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive Put Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key_value().key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key_value is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoKvPut(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::KvDeleteRange(google::protobuf::RpcController* controller,
+                                            const pb::version::DeleteRangeRequest* request,
+                                            pb::version::DeleteRangeResponse* response,
+                                            google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoKvDeleteRange(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::KvCompaction(google::protobuf::RpcController* controller,
+                                           const pb::version::CompactionRequest* request,
+                                           pb::version::CompactionResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto is_leader = this->IsKvControlLeader();
+  DINGO_LOG(WARNING) << "Receive DeleteRange Request: IsLeader:" << is_leader
+                     << ", Request: " << request->DebugString();
+
+  if (!is_leader) {
+    return RedirectResponse(response);
+  }
+
+  if (request->key().empty()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("key is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto* svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoKvCompaction(controller, request, response, svr_done, kv_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
 }
 
 void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,
@@ -1082,8 +1071,9 @@ void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,
   auto* svr_done = new CoordinatorServiceClosure("Watch", done_guard.release(), request, response);
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [this, controller, request, response, svr_done]() { DoWatch(this, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoWatch(controller, request, response, svr_done, kv_control_, engine_);
+  });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);

@@ -110,6 +110,16 @@ class TsoControl : public MetaControl {
   TsoControl();
   ~TsoControl() override = default;
 
+  template <typename T>
+  void RedirectResponse(T response) {
+    pb::common::Location leader_location;
+    GetLeaderLocation(leader_location);
+
+    auto *error_in_response = response->mutable_error();
+    *(error_in_response->mutable_leader_location()) = leader_location;
+    error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
+  }
+
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
 
   bool Init();
@@ -146,11 +156,10 @@ class TsoControl : public MetaControl {
   // SubmitMetaIncrement
   // in:  meta_increment
   // return: 0 or -1
-  butil::Status SubmitMetaIncrement(pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status SubmitMetaIncrement(google::protobuf::Closure *done,
-                                    pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status SubmitMetaIncrement(google::protobuf::Closure *done, pb::meta::TsoResponse *response,
-                                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SubmitMetaIncrementAsync(google::protobuf::Closure *done, pb::meta::TsoResponse *response,
+                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SubmitMetaIncrementSync(google::protobuf::Closure *done, pb::meta::TsoResponse *response,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   void Process(google::protobuf::RpcController *controller, const pb::meta::TsoRequest *request,
                pb::meta::TsoResponse *response, google::protobuf::Closure *done);

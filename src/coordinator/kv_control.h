@@ -88,6 +88,16 @@ class KvControl : public MetaControl {
     return true;
   }
 
+  template <typename T>
+  void RedirectResponse(T response) {
+    pb::common::Location leader_location;
+    GetLeaderLocation(leader_location);
+
+    auto *error_in_response = response->mutable_error();
+    *(error_in_response->mutable_leader_location()) = leader_location;
+    error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
+  }
+
   // SubmitMetaIncrement
   // in:  meta_increment
   // return: 0 or -1

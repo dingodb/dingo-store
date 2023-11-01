@@ -159,6 +159,17 @@ class CoordinatorControl : public MetaControl {
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
                      std::shared_ptr<RawEngine> raw_engine_of_meta);
   ~CoordinatorControl() override;
+
+  template <typename T>
+  void RedirectResponse(T response) {
+    pb::common::Location leader_location;
+    GetLeaderLocation(leader_location);
+
+    auto *error_in_response = response->mutable_error();
+    *(error_in_response->mutable_leader_location()) = leader_location;
+    error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
+  }
+
   bool Recover();
   static void GenerateRootSchemas(pb::coordinator_internal::SchemaInternal &root_schema,
                                   pb::coordinator_internal::SchemaInternal &meta_schema,
@@ -171,8 +182,6 @@ class CoordinatorControl : public MetaControl {
   // SubmitMetaIncrement
   // in:  meta_increment
   // return: 0 or -1
-  butil::Status SubmitMetaIncrementAsync(google::protobuf::Closure *done,
-                                         pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status SubmitMetaIncrementSync(pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // GetMemoryInfo
