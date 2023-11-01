@@ -28,6 +28,7 @@
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
@@ -90,7 +91,7 @@ bool RaftStoreEngine::Recover() {
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   auto regions = store_region_meta->GetAllRegion();
 
   int count = 0;
@@ -112,7 +113,7 @@ bool RaftStoreEngine::Recover() {
       }
 
       RaftControlAble::AddNodeParameter parameter;
-      parameter.role = Server::GetInstance().GetRole();
+      parameter.role = GetRole();
       parameter.is_restart = true;
       parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
@@ -218,7 +219,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   auto state_machine = std::make_shared<MetaStateMachine>(meta_control, is_volatile);
 
   // Build log storage
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->id());
   int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;

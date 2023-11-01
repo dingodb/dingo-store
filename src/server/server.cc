@@ -28,6 +28,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "common/version.h"
 #include "config/config.h"
 #include "config/config_manager.h"
@@ -61,8 +62,6 @@ DEFINE_bool(ip2hostname, false, "resolve ip to hostname for get map api");
 DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
 DEFINE_uint32(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
-void Server::SetRole(pb::common::ClusterRole role) { role_ = role; }
-
 Server& Server::GetInstance() {
   static Server instance;
   return instance;
@@ -74,7 +73,7 @@ bool Server::InitConfig(const std::string& filename) {
     return false;
   }
 
-  ConfigManager::GetInstance().Register(role_, config);
+  ConfigManager::GetInstance().Register(GetRoleName(), config);
 
   // init ip2hostname_cache
   ip2hostname_cache_.Init(256);
@@ -102,13 +101,13 @@ pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> con
 }
 
 bool Server::InitLog() {
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   dingodb::pb::node::LogLevel const log_level = GetDingoLogLevel(config);
 
   FLAGS_log_dir = config->GetString("log.path");
-  auto role_name = pb::common::ClusterRole_Name(role_);
-  DingoLogger::InitLogger(FLAGS_log_dir, role_name, log_level);
+  auto role_name = GetRoleName();
+  DingoLogger::InitLogger(FLAGS_log_dir, GetRoleName(), log_level);
 
   DINGO_LOG(INFO) << "log_dir: " << FLAGS_log_dir << " role:" << role_name
                   << " LogLevel:" << dingodb::pb::node::LogLevel_Name(log_level);
@@ -119,14 +118,14 @@ bool Server::InitLog() {
 }
 
 bool Server::InitServerID() {
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   id_ = config->GetInt("cluster.instance_id");
   keyring_ = config->GetString("cluster.keyring");
   return id_ != 0 && (!keyring_.empty());
 }
 
 bool Server::InitDirectory() {
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // db path
   auto db_path = config->GetString("store.path");
@@ -161,7 +160,7 @@ bool Server::InitDirectory() {
   }
 
   // vector index path
-  if (role_ == pb::common::INDEX) {
+  if (GetRole() == pb::common::INDEX) {
     auto vector_index_path = config->GetString("vector.index_path");
     ret = Helper::CreateDirectories(vector_index_path);
     if (!ret.ok()) {
@@ -182,7 +181,7 @@ bool Server::InitDirectory() {
 }
 
 bool Server::InitRawEngine() {
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   raw_engine_ = std::make_shared<RawRocksEngine>();
   if (!raw_engine_->Init(config)) {
@@ -197,10 +196,10 @@ bool Server::InitRawEngine() {
 }
 
 bool Server::InitEngine() {
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // cooridnator
-  if (role_ == pb::common::ClusterRole::COORDINATOR) {
+  if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     // 1.init CoordinatorController
     coordinator_control_ = std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_engine_),
                                                                 std::make_shared<MetaWriter>(raw_engine_), raw_engine_);
@@ -312,7 +311,7 @@ butil::Status Server::StartAutoIncrementRegion(const std::shared_ptr<Config>& co
 bool Server::InitCoordinatorInteraction() {
   coordinator_interaction_ = std::make_shared<CoordinatorInteraction>();
 
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   if (!FLAGS_coor_url.empty()) {
     return coordinator_interaction_->InitByNameService(FLAGS_coor_url,
@@ -326,7 +325,7 @@ bool Server::InitCoordinatorInteraction() {
 bool Server::InitCoordinatorInteractionForAutoIncrement() {
   coordinator_interaction_incr_ = std::make_shared<CoordinatorInteraction>();
 
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   if (!FLAGS_coor_url.empty()) {
     return coordinator_interaction_incr_->InitByNameService(
@@ -362,7 +361,7 @@ static int32_t GetInterval(std::shared_ptr<Config> config, const std::string& co
 
 bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // Add heartbeat crontab
   crontab_configs_.push_back({
@@ -403,7 +402,7 @@ bool Server::InitCrontabManager() {
   });
 
   // Add scan crontab
-  if (role_ == pb::common::STORE) {
+  if (GetRole() == pb::common::STORE) {
     ScanManager::GetInstance().Init(config);
     crontab_configs_.push_back({
         "SCAN",
@@ -415,7 +414,7 @@ bool Server::InitCrontabManager() {
   }
 
   // Add split checker crontab
-  if (role_ == pb::common::STORE || role_ == pb::common::INDEX) {
+  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
     bool enable_auto_split = config->GetBool("region.enable_auto_split");
     if (enable_auto_split) {
       crontab_configs_.push_back({
@@ -492,7 +491,7 @@ bool Server::InitCrontabManager() {
   });
 
   // Add compaction crontab
-  if (role_ == pb::common::COORDINATOR) {
+  if (GetRole() == pb::common::COORDINATOR) {
     FLAGS_auto_compaction = config->GetBool("coordinator.auto_compaction");
     DINGO_LOG(INFO) << "coordinator.auto_compaction:" << FLAGS_auto_compaction;
 
@@ -555,7 +554,7 @@ bool Server::InitVectorIndexManager() {
 
 bool Server::InitPreSplitChecker() {
   pre_split_checker_ = std::make_shared<PreSplitChecker>();
-  auto config = ConfigManager::GetInstance().GetConfig(role_);
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   int split_check_concurrency = config->GetInt("region.split_check_concurrency");
   split_check_concurrency =
       split_check_concurrency > 0 ? split_check_concurrency : Constant::kDefaultSplitCheckConcurrency;
@@ -563,7 +562,7 @@ bool Server::InitPreSplitChecker() {
 }
 
 bool Server::Recover() {
-  if (this->role_ == pb::common::STORE) {
+  if (GetRole() == pb::common::STORE) {
     // Recover engine state.
     if (!raft_engine_->Recover()) {
       DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();
@@ -574,7 +573,7 @@ bool Server::Recover() {
       DINGO_LOG(ERROR) << "Recover region controller failed";
       return false;
     }
-  } else if (this->role_ == pb::common::INDEX) {
+  } else if (GetRole() == pb::common::INDEX) {
     // Recover engine state.
     if (!raft_engine_->Recover()) {
       DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();

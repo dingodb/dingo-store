@@ -164,7 +164,7 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
   // Get uri
   auto reader = std::make_shared<FileReaderWrapper>(snapshot);
   int64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   auto host = config->GetString("server.host");
   int port = config->GetInt("server.port");
   if (host.empty() || port == 0) {
@@ -291,7 +291,7 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(pb::node::GetVector
   }
 
   // Build response uri
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   auto host = config->GetString("server.host");
   int port = config->GetInt("server.port");
   if (host.empty() || port == 0) {

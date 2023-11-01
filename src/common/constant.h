@@ -23,11 +23,6 @@ namespace dingodb {
 
 class Constant {
  public:
-  // role name
-  inline static const std::string kCoordinatorRoleName = "coordinator";
-  inline static const std::string kStoreRoleName = "store";
-  inline static const std::string kIndexRoleName = "index";
-
   // Define Global Region Id for Coordinator(As only One)
   static const int64_t kMetaRegionId = 0;
   // Define Global Region Id for Kv

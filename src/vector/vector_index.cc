@@ -588,7 +588,7 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
 }
 
 bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return true;
   }

@@ -25,6 +25,7 @@
 #include "bthread/types.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "raft/dingo_filesystem_adaptor.h"
@@ -295,12 +296,12 @@ bool StoreServerMeta::Init() {
   store->set_epoch(0);
   store->set_state(pb::common::STORE_NORMAL);
 
-  if (server.GetRole() == pb::common::ClusterRole::STORE) {
+  if (GetRole() == pb::common::ClusterRole::STORE) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_STORE);
-  } else if (server.GetRole() == pb::common::ClusterRole::INDEX) {
+  } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_INDEX);
   } else {
-    DINGO_LOG(FATAL) << "unknown server role: " << server.GetRole();
+    DINGO_LOG(FATAL) << "unknown server role: " << GetRole();
   }
 
   auto* server_location = store->mutable_server_location();

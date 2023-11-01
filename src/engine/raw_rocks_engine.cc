@@ -53,6 +53,7 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
+#include "server/server.h"
 
 namespace dingodb {
 

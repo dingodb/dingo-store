@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "butil/scoped_lock.h"
+#include "common/role.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 
@@ -30,15 +31,13 @@ ConfigManager& ConfigManager::GetInstance() {
   return instance;
 }
 
-bool ConfigManager::IsExist(pb::common::ClusterRole role) {
+bool ConfigManager::IsExist(const std::string& name) {
   BAIDU_SCOPED_LOCK(mutex_);
-  auto name = pb::common::ClusterRole_Name(role);
   return configs_.find(name) != configs_.end();
 }
 
-void ConfigManager::Register(pb::common::ClusterRole role, std::shared_ptr<Config> config) {
+void ConfigManager::Register(const std::string& name, std::shared_ptr<Config> config) {
   BAIDU_SCOPED_LOCK(mutex_);
-  auto name = pb::common::ClusterRole_Name(role);
   if (configs_.find(name) != configs_.end()) {
     DINGO_LOG(WARNING) << fmt::format("[config] config {} already exist!", name);
     return;
@@ -47,22 +46,21 @@ void ConfigManager::Register(pb::common::ClusterRole role, std::shared_ptr<Confi
   configs_[name] = config;
 }
 
-std::shared_ptr<Config> ConfigManager::GetConfig(pb::common::ClusterRole role) {
+std::shared_ptr<Config> ConfigManager::GetConfig(const std::string& name) {
   BAIDU_SCOPED_LOCK(mutex_);
-  auto name = pb::common::ClusterRole_Name(role);
   auto it = configs_.find(name);
   if (it == configs_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("[config] config {} not exist!", name);
+    DINGO_LOG(FATAL) << fmt::format("[config] config {} not exist!", name);
     return nullptr;
   }
 
   return it->second;
 }
 
-std::shared_ptr<Config> ConfigManager::GetConfig() {
-  auto it = configs_.begin();
+std::shared_ptr<Config> ConfigManager::GetRoleConfig() {
+  auto it = configs_.find(GetRoleName());
   if (it == configs_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("[config] config not exist!");
+    DINGO_LOG(FATAL) << fmt::format("[config] config {} not exist!", GetRoleName());
     return nullptr;
   }
 

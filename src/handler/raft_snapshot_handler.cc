@@ -589,7 +589,7 @@ void SaveSnapshotByDingo(store::RegionPtr region, std::shared_ptr<RawEngine> /*e
 
 int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, int64_t term,
                                     int64_t log_index, braft::SnapshotWriter* writer, braft::Closure* done) {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   // std::string policy = GetSnapshotPolicy(config);
   std::string policy = FLAGS_raft_snapshot_policy;
   if (policy == "checkpoint") {

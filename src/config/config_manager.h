@@ -18,6 +18,7 @@
 #include <map>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
 
 #include "bthread/mutex.h"
 #include "common/logging.h"
@@ -32,10 +33,10 @@ class ConfigManager {
  public:
   static ConfigManager &GetInstance();
 
-  bool IsExist(pb::common::ClusterRole role);
-  void Register(pb::common::ClusterRole role, std::shared_ptr<Config> config);
-  std::shared_ptr<Config> GetConfig(pb::common::ClusterRole role);
-  std::shared_ptr<Config> GetConfig();
+  bool IsExist(const std::string &name);
+  void Register(const std::string &name, std::shared_ptr<Config> config);
+  std::shared_ptr<Config> GetConfig(const std::string &name);
+  std::shared_ptr<Config> GetRoleConfig();
 
   ConfigManager(const ConfigManager &) = delete;
   const ConfigManager &operator=(const ConfigManager &) = delete;

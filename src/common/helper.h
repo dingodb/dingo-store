@@ -24,6 +24,7 @@
 #include "braft/configuration.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
@@ -43,9 +44,6 @@ class Helper {
   static bool IsExecutorTxn(const std::string& key);
   static bool IsClientRaw(const std::string& key);
   static bool IsClientTxn(const std::string& key);
-
-  static pb::common::ClusterRole GetRole();
-  static std::string& GetRoleName();
 
   static butil::EndPoint GetEndPoint(const std::string& host, int port);
   static butil::EndPoint GetEndPoint(const std::string& addr);
@@ -142,6 +140,18 @@ class Helper {
     }
   }
 
+  template <typename T>
+  static std::string VectorToString(const std::vector<T>& vec) {
+    std::string str;
+    for (int i = 0; i < vec.size(); ++i) {
+      str += fmt::format("{}", vec[i]);
+      if (i + 1 < vec.size()) {
+        str += ",";
+      }
+    }
+    return str;
+  }
+
   static std::string PrefixNext(const std::string& input);
   static std::string PrefixNext(const std::string_view& input);
 
@@ -196,6 +206,7 @@ class Helper {
   static std::vector<std::string> GetColumnFamilyNamesByRole();
   static std::vector<std::string> GetColumnFamilyNamesExecptMetaByRole();
   static std::vector<std::string> GetColumnFamilyNames(const std::string& key);
+  static std::vector<std::string> GetColumnFamilyNamesTest(const std::string& key);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);

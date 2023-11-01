@@ -24,7 +24,7 @@
 namespace dingodb {
 
 pb::raft::SplitStrategy ConfigHelper::GetSplitStrategy() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   std::string split_strategy = config != nullptr ? config->GetString("region.split_strategy") : "";
   split_strategy = (split_strategy == "PRE_CREATE_REGION" || split_strategy == "POST_CREATE_REGION")
                        ? split_strategy
@@ -34,7 +34,7 @@ pb::raft::SplitStrategy ConfigHelper::GetSplitStrategy() {
 }
 
 uint32_t ConfigHelper::GetRegionMaxSize() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kRegionMaxSizeDefaultValue;
   }
@@ -53,7 +53,7 @@ uint32_t ConfigHelper::GetSplitCheckApproximateSize() {
 }
 
 std::string ConfigHelper::GetSplitPolicy() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kDefaultSplitPolicy;
   }
@@ -62,7 +62,7 @@ std::string ConfigHelper::GetSplitPolicy() {
 }
 
 uint32_t ConfigHelper::GetSplitChunkSize() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kSplitChunkSizeDefaultValue;
   }
@@ -76,7 +76,7 @@ uint32_t ConfigHelper::GetSplitChunkSize() {
 }
 
 float ConfigHelper::GetSplitSizeRatio() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kSplitRatioDefaultValue;
   }
@@ -90,7 +90,7 @@ float ConfigHelper::GetSplitSizeRatio() {
 }
 
 uint32_t ConfigHelper::GetSplitKeysNumber() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kSplitKeysNumberDefaultValue;
   }
@@ -104,7 +104,7 @@ uint32_t ConfigHelper::GetSplitKeysNumber() {
 }
 
 float ConfigHelper::GetSplitKeysRatio() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kSplitKeysRatioDefaultValue;
   }
@@ -118,7 +118,7 @@ float ConfigHelper::GetSplitKeysRatio() {
 }
 
 uint32_t ConfigHelper::GetElectionTimeout() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kRaftElectionTimeoutSDefaultValue;
   }
@@ -133,7 +133,7 @@ uint32_t ConfigHelper::GetElectionTimeout() {
 }
 
 uint32_t ConfigHelper::GetVectorIndexBackgroundWorkerNum() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kVectorIndexBackgroundWorkerNumDefaultValue;
   }
@@ -148,7 +148,7 @@ uint32_t ConfigHelper::GetVectorIndexBackgroundWorkerNum() {
 }
 
 int ConfigHelper::GetRocksDBBackgroundThreadNum() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kRocksdbBackgroundThreadNumDefault;
   }
@@ -165,7 +165,7 @@ int ConfigHelper::GetRocksDBBackgroundThreadNum() {
 }
 
 int ConfigHelper::GetRocksDBStatsDumpPeriodSec() {
-  auto config = ConfigManager::GetInstance().GetConfig();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kStatsDumpPeriodSecDefault;
   }

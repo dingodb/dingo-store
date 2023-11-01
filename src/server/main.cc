@@ -23,6 +23,7 @@
 #include <string>
 
 #include "butil/string_printf.h"
+#include "common/role.h"
 #include "gflags/gflags_declare.h"
 
 #endif
@@ -43,6 +44,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "common/syscheck.h"
 #include "common/version.h"
 #include "config/config.h"
@@ -63,7 +65,6 @@
 #include "server/version_service.h"
 
 DEFINE_string(conf, "", "server config");
-DEFINE_string(role, "", "server role [store|coordinator]");
 DECLARE_string(coor_url);
 
 DEFINE_uint32(h2_server_max_concurrent_streams, UINT32_MAX, "max concurrent streams");
@@ -565,7 +566,7 @@ int main(int argc, char *argv[]) {
   }
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  if (dingodb::FLAGS_show_version || FLAGS_role.empty()) {
+  if (dingodb::FLAGS_show_version || dingodb::GetRoleName().empty()) {
     dingodb::DingoShowVerion();
 
     printf(
@@ -588,23 +589,9 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  dingodb::pb::common::ClusterRole role = dingodb::pb::common::COORDINATOR;
-
-  auto is_coordinator = dingodb::Helper::IsEqualIgnoreCase(
-      FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::COORDINATOR));
-  auto is_store = dingodb::Helper::IsEqualIgnoreCase(
-      FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::STORE));
-  auto is_index = dingodb::Helper::IsEqualIgnoreCase(
-      FLAGS_role, dingodb::pb::common::ClusterRole_Name(dingodb::pb::common::ClusterRole::INDEX));
-
-  if (is_store) {
-    role = dingodb::pb::common::STORE;
-  } else if (is_coordinator) {
-    role = dingodb::pb::common::COORDINATOR;
-  } else if (is_index) {
-    role = dingodb::pb::common::INDEX;
-  } else {
-    DINGO_LOG(ERROR) << "Invalid server role[" + FLAGS_role + "]";
+  dingodb::pb::common::ClusterRole role = dingodb::GetRole();
+  if (role == dingodb::pb::common::ClusterRole::ILLEGAL) {
+    DINGO_LOG(ERROR) << "Invalid server role[" + dingodb::GetRoleName() + "]";
     return -1;
   }
 
@@ -619,13 +606,12 @@ int main(int argc, char *argv[]) {
   }
 
   auto &dingo_server = dingodb::Server::GetInstance();
-  dingo_server.SetRole(role);
   if (!dingo_server.InitConfig(FLAGS_conf)) {
     DINGO_LOG(ERROR) << "InitConfig failed!";
     return -1;
   }
 
-  auto const config = dingodb::ConfigManager::GetInstance().GetConfig(role);
+  auto const config = dingodb::ConfigManager::GetInstance().GetRoleConfig();
   auto placeholder = dingo_server.InitLog();
   if (!placeholder) {
     DINGO_LOG(ERROR) << "InitLog failed!";
@@ -771,7 +757,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if (is_coordinator) {
+  if (role == dingodb::pb::common::ClusterRole::COORDINATOR) {
     if (!dingo_server.InitCoordinatorInteractionForAutoIncrement()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteractionForAutoIncrement failed!";
       return -1;
@@ -928,7 +914,7 @@ int main(int argc, char *argv[]) {
 
     // build in-memory meta cache
     // TODO: load data from kv engine into maps
-  } else if (is_store) {
+  } else if (role == dingodb::pb::common::ClusterRole::STORE) {
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
@@ -1000,7 +986,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
-  } else if (is_index) {
+  } else if (role == dingodb::pb::common::ClusterRole::INDEX) {
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
