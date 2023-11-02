@@ -1585,7 +1585,14 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range illegal");
   }
 
-  if (start_key[0] != end_key[0]) {
+  auto max_start_key = Helper::GenMaxStartKey();
+  if (start_key[0] != end_key[0] && start_key != max_start_key) {
+    DINGO_LOG(ERROR) << "region range illegal, start_key: " << Helper::StringToHex(start_key)
+                     << ", end_key: " << Helper::StringToHex(end_key);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range illegal");
+  }
+
+  if (start_key[0] == max_start_key[0] && start_key != max_start_key) {
     DINGO_LOG(ERROR) << "region range illegal, start_key: " << Helper::StringToHex(start_key)
                      << ", end_key: " << Helper::StringToHex(end_key);
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range illegal");
@@ -1606,6 +1613,9 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
     return butil::Status::OK();
   } else if (region_prefix == Constant::kClientTxn) {
     DINGO_LOG(INFO) << "region is kClientTxn";
+    return butil::Status::OK();
+  } else if (region_prefix == max_start_key[0]) {
+    DINGO_LOG(INFO) << "region is MAX_START_KEY";
     return butil::Status::OK();
   } else {
     DINGO_LOG(ERROR) << "region prefix is not legal, start_key: " << Helper::StringToHex(start_key)
