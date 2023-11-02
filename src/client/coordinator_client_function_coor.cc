@@ -190,6 +190,10 @@ void SendRaftTransferLeader() {
   if (FLAGS_index == 0) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::CoordinatorNodeIndex);
   } else if (FLAGS_index == 1) {
+    request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::KvNodeIndex);
+  } else if (FLAGS_index == 2) {
+    request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::TsoNodeIndex);
+  } else if (FLAGS_index == 3) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
   } else {
     DINGO_LOG(ERROR) << "index is error";

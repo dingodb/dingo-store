@@ -51,7 +51,7 @@ class AutoIncrementControl : public MetaControl {
     auto *error_in_response = response->mutable_error();
     *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
-    error_in_response->set_errmsg("not leader");
+    error_in_response->set_errmsg("not leader, new leader location is " + leader_location.DebugString());
   }
 
   static bool Init();
