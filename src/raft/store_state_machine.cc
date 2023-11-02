@@ -203,18 +203,28 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
 //      2>. load snapshot files
 //      3>. applied_index = max_index
 int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
-  if (is_restart_for_load_snapshot_) {
-    is_restart_for_load_snapshot_ = false;
-    DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load, restart for load snapshot, just skip load",
-                                   region_->Id());
-    return 0;
-  }
-
   braft::SnapshotMeta meta;
   int ret = reader->load_meta(&meta);
   if (ret != 0) {
     DINGO_LOG(ERROR) << fmt::format("[raft.sm][region({})] load meta failed, ret: {}", region_->Id(), ret);
     return -1;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load snapshot({}-{}) applied_index({})",
+                                 region_->Id(), meta.last_included_term(), meta.last_included_index(), applied_index_);
+
+  if (is_restart_for_load_snapshot_) {
+    is_restart_for_load_snapshot_ = false;
+    DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load, this is first load after restart",
+                                   region_->Id());
+  }
+
+  std::string flag_filepath = reader->get_path() + "/" + Constant::kRaftSnapshotRegionMetaFileName;
+  if (!Helper::IsExistPath(flag_filepath)) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[raft.sm][region({})] on_snapshot_load, region_meta is not exists, this is a local snapshot, just skip load",
+        region_->Id());
+    return 0;
   }
 
   pb::store_internal::RaftSnapshotRegionMeta business_meta;
