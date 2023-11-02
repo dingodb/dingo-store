@@ -129,7 +129,7 @@ butil::Status KvControl::RemoveOneTimeWatchWithLock(google::protobuf::Closure* d
     return butil::Status(EINVAL, "RemoveOneTimeWatch not found");
   }
 
-  auto& watch_key = it->second;
+  auto watch_key = it->second;
   if (watch_key.empty()) {
     DINGO_LOG(ERROR) << "RemoveOneTimeWatch watch_key is empty, done:" << done
                      << ", remove from one_time_watch_closure_map_";
