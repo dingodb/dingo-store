@@ -1545,7 +1545,7 @@ uint32_t Helper::CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dime
 
 std::string Helper::GenMaxStartKey() {
   Buf buf(8);
-  buf.WriteLong(INT64_MAX);
+  buf.WriteLong(UINT64_MAX);
   return buf.GetString();
 }
 
