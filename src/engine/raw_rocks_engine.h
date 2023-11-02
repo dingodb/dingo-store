@@ -294,7 +294,7 @@ class RawRocksEngine : public RawEngine {
   pb::common::RawEngine GetID() override;
   std::string DbPath();
 
-  bool Init(std::shared_ptr<Config> config) override;
+  bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) override;
   void Close() override;
   void Destroy() override;
 

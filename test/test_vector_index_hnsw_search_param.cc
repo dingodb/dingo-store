@@ -48,7 +48,7 @@ class VectorIndexHnswSearchParamTest : public testing::Test {
     const std::string &filename = "../../conf/index.yaml";
 
     Server::GetInstance().InitConfig(filename);
-    auto config = ConfigManager::GetInstance().GetConfig();
+    auto config = ConfigManager::GetInstance().GetRoleConfig();
     int64_t hnsw_save_threshold_write_key_num = config->GetInt64("vector.hnsw_save_threshold_write_key_num");
     std::cout << "hnsw_save_threshold_write_key_num : " << hnsw_save_threshold_write_key_num << std::endl;
   }

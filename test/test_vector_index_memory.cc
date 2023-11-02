@@ -45,7 +45,12 @@ DEFINE_string(metric_type, "L2", "L2 or IP");
 
 class VectorIndexMemoryTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() {
+    data_base_.reserve(data_base_size_);
+    for (int i = 0; i < data_base_size_; ++i) {
+      data_base_.push_back((float)i / 3.0);
+    }
+  }
 
   static void TearDownTestSuite() {
     // google::ParseCommandLineFlags(&argc, &argv, false);
@@ -117,7 +122,7 @@ TEST_F(VectorIndexMemoryTest, Add) {
 
       vector_with_id.set_id(id);
       for (size_t i = 0; i < dimension_; i++) {
-        vector_with_id.mutable_vector()->add_float_values(data_base_[id * dimension_ + i]);
+        vector_with_id.mutable_vector()->add_float_values(data_base_[id]);
       }
 
       vector_with_ids.push_back(vector_with_id);

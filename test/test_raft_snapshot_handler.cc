@@ -59,27 +59,11 @@ const std::string kYamlConfigContent =
     "log:\n"
     "  path: /data/dingo-store/log\n"
     "store:\n"
-    "  path: /data/dingo-store/data/store/db\n"
-    "  base:\n"
-    "    block_size: 131072\n"
-    "    block_cache: 67108864\n"
-    "    arena_block_size: 67108864\n"
-    "    min_write_buffer_number_to_merge: 4\n"
-    "    max_write_buffer_number: 4\n"
-    "    max_compaction_bytes: 134217728\n"
-    "    write_buffer_size: 67108864\n"
-    "    prefix_extractor: 8\n"
-    "    max_bytes_for_level_base: 134217728\n"
-    "    target_file_size_base: 67108864\n"
-    "  default:\n"
-    "  instruction:\n"
-    "    max_write_buffer_number: 3\n"
-    "  column_families:\n"
-    "    - default\n"
-    "    - meta\n"
-    "    - instruction\n";
+    "  path: /data/dingo-store/data/store/db\n";
 
 static const std::string kDefaultCf = "default";
+
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
 
 const std::string kRaftSnapshotPath = "/data/dingo-store/data/store/raft/snapshot";
 
@@ -113,7 +97,7 @@ class RaftSnapshotTest : public testing::Test {
     }
 
     engine = std::make_shared<dingodb::RawRocksEngine>();
-    if (!engine->Init(config)) {
+    if (!engine->Init(config, kAllCFs)) {
       std::cout << "RawRocksEngine init failed" << std::endl;
     }
 

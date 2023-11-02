@@ -45,27 +45,11 @@ const std::string kYamlConfigContent =
     "log:\n"
     "  path: /tmp/dingo-store/log\n"
     "store:\n"
-    "  path: /tmp/rocks_example\n"
-    "  base:\n"
-    "    block_size: 131072\n"
-    "    block_cache: 67108864\n"
-    "    arena_block_size: 67108864\n"
-    "    min_write_buffer_number_to_merge: 4\n"
-    "    max_write_buffer_number: 4\n"
-    "    max_compaction_bytes: 134217728\n"
-    "    write_buffer_size: 67108864\n"
-    "    prefix_extractor: 8\n"
-    "    max_bytes_for_level_base: 41943040\n"
-    "    target_file_size_base: 4194304\n"
-    "  default:\n"
-    "  instruction:\n"
-    "    max_write_buffer_number: 3\n"
-    "  column_families:\n"
-    "    - default\n"
-    "    - meta\n"
-    "    - instruction\n";
+    "  path: /tmp/rocks_example\n";
 
 static const std::string kDefaultCf = "default";
+
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
 
 const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
                           's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
@@ -97,7 +81,7 @@ class StoreRegionMetricsTest : public testing::Test {
     }
 
     engine = std::make_shared<dingodb::RawRocksEngine>();
-    if (!engine->Init(config)) {
+    if (!engine->Init(config, kAllCFs)) {
       std::cout << "RawRocksEngine init failed" << std::endl;
     }
   }

@@ -42,8 +42,6 @@
 
 namespace dingodb {
 
-bool operator<(const MergedIterator::Entry& lhs, const MergedIterator::Entry& rhs) { return lhs.key < rhs.key; }
-
 MergedIterator::MergedIterator(RawEnginePtr raw_engine, const std::vector<std::string>& cf_names,
                                const std::string& end_key)
     : raw_engine_(raw_engine) {
@@ -94,12 +92,14 @@ void MergedIterator::Next(IteratorPtr iter, int iter_pos) {
     entry.key = iter->Key();
     entry.value_size = iter->Value().size();
     min_heap_.push(entry);
+    iter->Next();
   }
 }
 
-std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  MergedIterator iter(raw_engine_, Helper::GetColumnFamilyNames(region->Range().start_key()),
-                      region->Range().end_key());
+// base physics key, contain key of multi version.
+std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names,
+                                       uint32_t& count) {
+  MergedIterator iter(raw_engine_, cf_names, region->Range().end_key());
   iter.Seek(region->Range().start_key());
 
   int64_t size = 0;
@@ -139,9 +139,10 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   return is_split ? split_key : "";
 }
 
-std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  MergedIterator iter(raw_engine_, Helper::GetColumnFamilyNames(region->Range().start_key()),
-                      region->Range().end_key());
+// base physics key, contain key of multi version.
+std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names,
+                                       uint32_t& count) {
+  MergedIterator iter(raw_engine_, cf_names, region->Range().end_key());
   iter.Seek(region->Range().start_key());
 
   int64_t size = 0;
@@ -175,9 +176,10 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   return is_split ? split_key : "";
 }
 
-std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count) {
-  MergedIterator iter(raw_engine_, Helper::GetColumnFamilyNames(region->Range().start_key()),
-                      region->Range().end_key());
+// base logic key, ignore key of multi version.
+std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names,
+                                       uint32_t& count) {
+  MergedIterator iter(raw_engine_, cf_names, region->Range().end_key());
   iter.Seek(region->Range().start_key());
 
   int64_t size = 0;
@@ -187,18 +189,17 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, uint32_t& count)
   bool is_split = false;
   uint32_t split_key_number = split_keys_number_ * split_keys_ratio_;
   for (; iter.Valid(); iter.Next()) {
-    ++split_key_count;
+    if (prev_key != iter.Key()) {
+      prev_key = iter.Key();
+      ++split_key_count;
+      ++count;
+    }
     size += iter.KeyValueSize();
 
     if (split_key.empty() && split_key_count >= split_key_number) {
       split_key = iter.Key();
     } else if (split_key_count == split_keys_number_) {
       is_split = true;
-    }
-
-    if (prev_key != iter.Key()) {
-      prev_key = iter.Key();
-      ++count;
     }
   }
 
@@ -253,7 +254,8 @@ void SplitCheckTask::SplitCheck() {
 
   // Get split key.
   uint32_t key_count = 0;
-  std::string split_key = split_checker_->SplitKey(region_, key_count);
+  std::string split_key =
+      split_checker_->SplitKey(region_, Helper::GetColumnFamilyNames(region_->Range().start_key()), key_count);
 
   // Update region key count metrics.
   if (region_metrics_ != nullptr && key_count > 0) {
@@ -269,10 +271,6 @@ void SplitCheckTask::SplitCheck() {
       need_split = false;
       break;
     }
-    // we use multi cf now, so not need remove prefix
-    // if (region_->Type() == pb::common::INDEX_REGION) {
-    //   split_key = VectorCodec::RemoveVectorPrefix(split_key);
-    // }
     if (region_->Epoch().version() != epoch.version()) {
       reason = "region version change";
       need_split = false;
@@ -313,8 +311,13 @@ void SplitCheckTask::SplitCheck() {
   } while (false);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[split.check][region({})] split check result({}) reason({}) split_policy({}) split_key({}) elapsed time({}ms)",
+      "[split.check][region({})] split check result({}) reason({}) split_policy({}) split_key({}) epoch({}-{}) "
+      "range([{}-{})) "
+      "elapsed time({}ms)",
       region_->Id(), need_split, reason, split_checker_->GetPolicyName(), Helper::StringToHex(split_key),
+      region_->Epoch().conf_version(), region_->Epoch().version(), Helper::StringToHex(region_->Range().start_key()),
+      Helper::StringToHex(region_->Range().end_key()),
+
       Helper::TimestampMs() - start_time);
   if (!need_split) {
     return;

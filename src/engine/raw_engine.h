@@ -103,7 +103,7 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
   };
   using WriterPtr = std::shared_ptr<Writer>;
 
-  virtual bool Init(std::shared_ptr<Config> config) = 0;
+  virtual bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) = 0;
   virtual void Close() = 0;
   virtual void Destroy() = 0;
   virtual bool Recover() { return true; }

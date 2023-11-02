@@ -27,56 +27,67 @@
 #include <string>
 #include <vector>
 
+#include "bthread/bthread.h"
 #include "butil/status.h"
 #include "common/context.h"
+#include "config/config.h"
 #include "config/config_manager.h"
+#include "config/yaml_config.h"
 #include "engine/engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 
-template <typename T>
+static const std::string &kDefaultCf = "default";  // NOLINT
+
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
+
+const std::string kRootPath = "./unit_test";
+const std::string kLogPath = kRootPath + "/log";
+const std::string kStorePath = kRootPath + "/db";
+
+const std::string kYamlConfigContent =
+    "cluster:\n"
+    "  name: dingodb\n"
+    "  instance_id: 12345\n"
+    "  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192\n"
+    "  keyring: TO_BE_CONTINUED\n"
+    "server:\n"
+    "  host: 127.0.0.1\n"
+    "  port: 23000\n"
+    "log:\n"
+    "  path: " +
+    kLogPath +
+    "\n"
+    "store:\n"
+    "  path: " +
+    kStorePath + "\n";
+
 class RawRocksEngineBugTest : public testing::Test {
- public:
-  std::shared_ptr<dingodb::Config> GetConfig() { return config_; }
-
-  dingodb::RawRocksEngine &GetRawRocksEngine() { return raw_raw_rocks_engine_; }
-
  protected:  // NOLINT
-  void SetUp() override {
-    std::cout << "RawRocksEngineTest::SetUp()" << std::endl;
-    filename_ = "../../conf/store.yaml";
-    dingodb::Server::GetInstance().SetRole(dingodb::pb::common::ClusterRole::STORE);
-    dingodb::Server::GetInstance().InitConfig(filename_);
-    config_ = dingodb::ConfigManager::GetInstance().GetConfig(dingodb::pb::common::ClusterRole::STORE);
-  }
-  void TearDown() override {}
+  static void SetUpTestSuite() { dingodb::Helper::CreateDirectories(kStorePath); }
+  static void TearDownTestSuite() { dingodb::Helper::RemoveAllFileOrDirectory(kRootPath); }
 
- private:
-  std::string filename_ = "../../conf/store.yaml";
-  std::shared_ptr<dingodb::Config> config_;
-  dingodb::RawRocksEngine raw_raw_rocks_engine_;
+  void SetUp() override {}
+  void TearDown() override {}
 };
 
-using RawRocksEngineBugTestIMPL = testing::Types<void>;
-TYPED_TEST_SUITE(RawRocksEngineBugTest, RawRocksEngineBugTestIMPL);
+TEST_F(RawRocksEngineBugTest, test) {
+  auto engine = std::make_shared<dingodb::RawRocksEngine>();
 
-TYPED_TEST(RawRocksEngineBugTest, test) {
-  dingodb::RawRocksEngine &raw_rocks_engine = this->GetRawRocksEngine();
-  std::shared_ptr<dingodb::Config> config = this->GetConfig();
+  auto config = std::make_shared<dingodb::YamlConfig>();
+  EXPECT_EQ(0, config->Load(kYamlConfigContent));
 
-  bool ret = raw_rocks_engine.Init(config);
-  EXPECT_TRUE(ret);
+  EXPECT_TRUE(engine->Init(config, kAllCFs));
 
   {
-    const std::string &cf_name = "default";
-    auto reader = raw_rocks_engine.Reader();
+    auto reader = engine->Reader();
 
     const std::string &key = "key";
     std::string value;
 
-    butil::Status ok = reader->KvGet(cf_name, key, value);
+    butil::Status ok = reader->KvGet(kDefaultCf, key, value);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EKEY_NOT_FOUND);
   }
 
@@ -85,10 +96,12 @@ TYPED_TEST(RawRocksEngineBugTest, test) {
     kv.set_key("key");
     kv.set_value("value");
 
-    const std::string &cf_name = "default";
-    auto writer = raw_rocks_engine.Writer();
+    auto writer = engine->Writer();
 
-    butil::Status ok = writer->KvPut(cf_name, kv);
+    butil::Status ok = writer->KvPut(kDefaultCf, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
+
+  engine->Close();
+  engine->Destroy();
 }

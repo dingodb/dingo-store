@@ -41,6 +41,8 @@ class MergedIterator {
     int iter_pos;
     std::string key;
     uint32_t value_size;
+
+    bool operator()(const Entry& lhs, const Entry& rhs) { return lhs.key > rhs.key; }
   };
 
   void Seek(const std::string& target);
@@ -55,7 +57,7 @@ class MergedIterator {
 
   RawEnginePtr raw_engine_;
   std::vector<IteratorPtr> iters_;
-  std::priority_queue<Entry> min_heap_;
+  std::priority_queue<Entry, std::vector<Entry>, Entry> min_heap_;
 };
 
 class SplitChecker {
@@ -83,7 +85,7 @@ class SplitChecker {
   };
 
   // Calculate region split key.
-  virtual std::string SplitKey(store::RegionPtr region, uint32_t& count) = 0;
+  virtual std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) = 0;
 
  private:
   Policy policy_;
@@ -99,7 +101,8 @@ class HalfSplitChecker : public SplitChecker {
         split_chunk_size_(split_chunk_size) {}
   ~HalfSplitChecker() override = default;
 
-  std::string SplitKey(store::RegionPtr region, uint32_t& count) override;
+  // base physics key, contain key of multi version.
+  std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
   // Split region when exceed the split_threshold_size.
@@ -119,7 +122,8 @@ class SizeSplitChecker : public SplitChecker {
         split_ratio_(split_ratio) {}
   ~SizeSplitChecker() override = default;
 
-  std::string SplitKey(store::RegionPtr region, uint32_t& count) override;
+  // base physics key, contain key of multi version.
+  std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
   // Split when region exceed the split_size.
@@ -139,7 +143,8 @@ class KeysSplitChecker : public SplitChecker {
         split_keys_ratio_(split_keys_ratio) {}
   ~KeysSplitChecker() override = default;
 
-  std::string SplitKey(store::RegionPtr region, uint32_t& count) override;
+  // base logic key, ignore key of multi version.
+  std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
   // Split when region key number exceed split_key_number.

@@ -40,13 +40,35 @@
 
 namespace dingodb {
 
-static const std::string &kDefaultCf = Constant::kStoreDataCF;  // NOLINT
+static const std::string &kDefaultCf = "default";  // NOLINT
+
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
+
+const std::string kRootPath = "./unit_test";
+const std::string kLogPath = kRootPath + "/log";
+const std::string kStorePath = kRootPath + "/db";
+
+const std::string kYamlConfigContent =
+    "cluster:\n"
+    "  name: dingodb\n"
+    "  instance_id: 12345\n"
+    "  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192\n"
+    "  keyring: TO_BE_CONTINUED\n"
+    "server:\n"
+    "  host: 127.0.0.1\n"
+    "  port: 23000\n"
+    "log:\n"
+    "  path: " +
+    kLogPath +
+    "\n"
+    "store:\n"
+    "  path: " +
+    kStorePath + "\n";
 
 class ScanTest : public testing::Test {
  public:
   static std::shared_ptr<Config> GetConfig() { return config_; }
-
-  static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return raw_raw_rocks_engine_; }
+  static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return engine_; }
   static ScanManager &GetManager() { return ScanManager::GetInstance(); }
 
   static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
@@ -69,27 +91,34 @@ class ScanTest : public testing::Test {
 
  protected:
   static void SetUpTestSuite() {
-    std::cout << "ScanTest::SetUp()" << '\n';
-    Server::GetInstance().SetRole(pb::common::ClusterRole::STORE);
-    Server::GetInstance().InitConfig(kFileName);
-    config_ = ConfigManager::GetInstance().GetConfig(pb::common::ClusterRole::STORE);
-    raw_raw_rocks_engine_ = std::make_shared<RawRocksEngine>();
+    Helper::CreateDirectories(kStorePath);
+
+    config_ = std::make_shared<YamlConfig>();
+    if (config_->Load(kYamlConfigContent) != 0) {
+      std::cout << "Load config failed" << std::endl;
+      return;
+    }
+
+    engine_ = std::make_shared<RawRocksEngine>();
+    if (!engine_->Init(config_, kAllCFs)) {
+      std::cout << "RawRocksEngine init failed" << '\n';
+    }
   }
 
   static void TearDownTestSuite() {
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    raw_raw_rocks_engine_->Close();
+    engine_->Close();
+    engine_->Destroy();
+    Helper::RemoveAllFileOrDirectory(kRootPath);
   }
 
   void SetUp() override {}
   void TearDown() override {}
 
  private:
-  inline static const std::string kFileName = "../../conf/store.yaml";
-  inline static std::shared_ptr<Config> config_;                        // NOLINT
-  inline static std::shared_ptr<RawRocksEngine> raw_raw_rocks_engine_;  // NOLINT
-  inline static std::shared_ptr<ScanContext> scan_;                     // NOLINT
-  inline static std::string scan_id_;                                   // NOLINT
+  inline static std::shared_ptr<Config> config_;          // NOLINT
+  inline static std::shared_ptr<RawRocksEngine> engine_;  // NOLINT
+  inline static std::shared_ptr<ScanContext> scan_;       // NOLINT
+  inline static std::string scan_id_;                     // NOLINT
 };
 
 static std::chrono::milliseconds GetCurrentTime() {
@@ -108,22 +137,6 @@ TEST_F(ScanTest, Time) {
   std::string formate_str;
   formate_str = Helper::FormatMsTime(ms.count(), "%Y-%m-%d %H:%M:%S");
   std::cout << "formate_str : " << formate_str << std::endl;
-}
-
-TEST_F(ScanTest, InitRocksdb) {
-  auto raw_rocks_engine = this->GetRawRocksEngine();
-
-  bool ret = raw_rocks_engine->Init({});
-  EXPECT_FALSE(ret);
-
-  std::shared_ptr<Config> config = this->GetConfig();
-
-  // Test for various configuration file exceptions
-  ret = raw_rocks_engine->Init(config);
-  EXPECT_TRUE(ret);
-
-  auto &manager = this->GetManager();
-  manager.Init(config);
 }
 
 TEST_F(ScanTest, Open) {

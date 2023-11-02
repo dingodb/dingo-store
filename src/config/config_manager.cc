@@ -50,7 +50,7 @@ std::shared_ptr<Config> ConfigManager::GetConfig(const std::string& name) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = configs_.find(name);
   if (it == configs_.end()) {
-    DINGO_LOG(FATAL) << fmt::format("[config] config {} not exist!", name);
+    DINGO_LOG(ERROR) << fmt::format("[config] config {} not exist!", name);
     return nullptr;
   }
 
@@ -60,7 +60,7 @@ std::shared_ptr<Config> ConfigManager::GetConfig(const std::string& name) {
 std::shared_ptr<Config> ConfigManager::GetRoleConfig() {
   auto it = configs_.find(GetRoleName());
   if (it == configs_.end()) {
-    DINGO_LOG(FATAL) << fmt::format("[config] config {} not exist!", GetRoleName());
+    DINGO_LOG(ERROR) << fmt::format("[config] config {} not exist!", GetRoleName());
     return nullptr;
   }
 
