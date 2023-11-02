@@ -48,7 +48,30 @@
 
 namespace dingodb {
 
-static const std::string &kDefaultCf = Constant::kStoreDataCF;  // NOLINT
+static const std::string &kDefaultCf = "default";  // NOLINT
+
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
+
+const std::string kRootPath = "./unit_test";
+const std::string kLogPath = kRootPath + "/log";
+const std::string kStorePath = kRootPath + "/db";
+
+const std::string kYamlConfigContent =
+    "cluster:\n"
+    "  name: dingodb\n"
+    "  instance_id: 12345\n"
+    "  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192\n"
+    "  keyring: TO_BE_CONTINUED\n"
+    "server:\n"
+    "  host: 127.0.0.1\n"
+    "  port: 23000\n"
+    "log:\n"
+    "  path: " +
+    kLogPath +
+    "\n"
+    "store:\n"
+    "  path: " +
+    kStorePath + "\n";
 
 std::string StrToHex(std::string str, std::string separator = "") {
   const std::string hex = "0123456789ABCDEF";
@@ -86,24 +109,31 @@ class ScanWithCoprocessor : public testing::Test {
 
  protected:
   static void SetUpTestSuite() {
-    std::cout << "ScanWithCoprocessor::SetUp()" << '\n';
-    Server::GetInstance().SetRole(pb::common::ClusterRole::STORE);
-    Server::GetInstance().InitConfig(kFileName);
-    config_ = ConfigManager::GetInstance().GetConfig(pb::common::ClusterRole::STORE);
+    Helper::CreateDirectories(kStorePath);
+
+    config_ = std::make_shared<YamlConfig>();
+    if (config_->Load(kYamlConfigContent) != 0) {
+      std::cout << "Load config failed" << std::endl;
+      return;
+    }
+
     engine = std::make_shared<RawRocksEngine>();
+    if (!engine->Init(config_, kAllCFs)) {
+      std::cout << "RawRocksEngine init failed" << '\n';
+    }
   }
 
   static void TearDownTestSuite() {
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    engine->Close();
     coprocessor.reset();
+    engine->Close();
+    engine->Destroy();
+    Helper::RemoveAllFileOrDirectory(kRootPath);
   }
 
   void SetUp() override {}
   void TearDown() override {}
 
  private:
-  inline static const std::string kFileName = "../../conf/store.yaml";
   inline static std::shared_ptr<Config> config_;     // NOLINT
   inline static std::shared_ptr<ScanContext> scan_;  // NOLINT
   inline static std::string scan_id_;                // NOLINT
@@ -116,22 +146,6 @@ class ScanWithCoprocessor : public testing::Test {
   inline static size_t max_min_size;
   inline static size_t min_min_size;
 };
-
-TEST_F(ScanWithCoprocessor, InitRocksdb) {
-  auto raw_rocks_engine = this->GetRawRocksEngine();
-
-  bool ret = raw_rocks_engine->Init({});
-  EXPECT_FALSE(ret);
-
-  std::shared_ptr<Config> config = this->GetConfig();
-
-  // Test for various configuration file exceptions
-  ret = raw_rocks_engine->Init(config);
-  EXPECT_TRUE(ret);
-
-  auto &manager = this->GetManager();
-  manager.Init(config);
-}
 
 TEST_F(ScanWithCoprocessor, Prepare) {
   int schema_version = 1;

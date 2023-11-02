@@ -26,6 +26,7 @@
 
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
+#include "common/constant.h"
 #include "common/logging.h"
 #include "serial/buf.h"
 #include "vector/codec.h"
@@ -160,7 +161,8 @@ class Helper {
   }
 
   static std::string EncodeRegionRange(int64_t partition_id) {
-    dingodb::Buf buf(8);
+    dingodb::Buf buf(9);
+    buf.Write(dingodb::Constant::kClientRaw);
     buf.WriteLong(partition_id);
 
     return buf.GetString();

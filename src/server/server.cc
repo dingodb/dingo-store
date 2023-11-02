@@ -184,7 +184,7 @@ bool Server::InitRawEngine() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   raw_engine_ = std::make_shared<RawRocksEngine>();
-  if (!raw_engine_->Init(config)) {
+  if (!raw_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
     return false;
   }

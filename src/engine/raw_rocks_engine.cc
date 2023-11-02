@@ -1188,7 +1188,7 @@ static rocksdb::DB* InitDB(const std::string& db_path, rocks::ColumnFamilyMap& c
 }
 
 // load rocksdb config from config file
-bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
+bool RawRocksEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) {
   if (BAIDU_UNLIKELY(!config)) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] config empty not support!");
     return false;
@@ -1204,8 +1204,7 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config) {
   DINGO_LOG(INFO) << fmt::format("[rocksdb] db path: {}", db_path_);
 
   // Column family config priority custom(store.$cf_name) > custom(store.base) > default.
-  auto column_family_names = Helper::GetColumnFamilyNamesByRole();
-  auto column_families = GenColumnFamilyByDefaultConfig(column_family_names);
+  auto column_families = GenColumnFamilyByDefaultConfig(cf_names);
   SetColumnFamilyCustomConfig(config, column_families);
 
   rocksdb::DB* db = InitDB(db_path_, column_families);

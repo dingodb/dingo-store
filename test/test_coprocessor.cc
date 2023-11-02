@@ -54,8 +54,40 @@ namespace dingodb {
 
 static const std::string kDefaultCf = "default";
 
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
+
 const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
                           's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+
+const std::string kRootPath = "./unit_test";
+const std::string kLogPath = kRootPath + "/log";
+const std::string kStorePath = kRootPath + "/db";
+
+const std::string kYamlConfigContent =
+    "cluster:\n"
+    "  name: dingodb\n"
+    "  instance_id: 12345\n"
+    "  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192\n"
+    "  keyring: TO_BE_CONTINUED\n"
+    "server:\n"
+    "  host: 127.0.0.1\n"
+    "  port: 23000\n"
+    "log:\n"
+    "  path: " +
+    kLogPath +
+    "\n"
+    "store:\n"
+    "  path: " +
+    kStorePath + "\n";
+
+std::string StrToHex(std::string str, std::string separator = "") {
+  const std::string hex = "0123456789ABCDEF";
+  std::stringstream ss;
+
+  for (char i : str) ss << hex[(unsigned char)i >> 4] << hex[(unsigned char)i & 0xf] << separator;
+
+  return ss.str();
+}
 
 // rand string
 std::string GenRandomString(int len) {
@@ -72,56 +104,10 @@ std::string GenRandomString(int len) {
   return result;
 }
 
-const std::string kYamlConfigContent =
-    "cluster:\n"
-    "  name: dingodb\n"
-    "  instance_id: 12345\n"
-    "  coordinators: 127.0.0.1:19190,127.0.0.1:19191,127.0.0.1:19192\n"
-    "  keyring: TO_BE_CONTINUED\n"
-    "server:\n"
-    "  host: 127.0.0.1\n"
-    "  port: 23000\n"
-    "  heartbeat_interval: 10000 # ms\n"
-    "raft:\n"
-    "  host: 127.0.0.1\n"
-    "  port: 23100\n"
-    "  path: /tmp/dingo-store/data/store/raft\n"
-    "  election_timeout: 1000 # ms\n"
-    "  snapshot_interval: 3600 # s\n"
-    "log:\n"
-    "  path: /tmp/dingo-store/log\n"
-    "store:\n"
-    "  path: ./rocks_example\n"
-    "  base:\n"
-    "    block_size: 131072\n"
-    "    block_cache: 67108864\n"
-    "    arena_block_size: 67108864\n"
-    "    min_write_buffer_number_to_merge: 4\n"
-    "    max_write_buffer_number: 4\n"
-    "    max_compaction_bytes: 134217728\n"
-    "    write_buffer_size: 67108864\n"
-    "    prefix_extractor: 8\n"
-    "    max_bytes_for_level_base: 41943040\n"
-    "    target_file_size_base: 4194304\n"
-    "  default:\n"
-    "  instruction:\n"
-    "    max_write_buffer_number: 3\n"
-    "  column_families:\n"
-    "    - default\n"
-    "    - meta\n"
-    "    - instruction\n";
-
-std::string StrToHex(std::string str, std::string separator = "") {
-  const std::string hex = "0123456789ABCDEF";
-  std::stringstream ss;
-
-  for (char i : str) ss << hex[(unsigned char)i >> 4] << hex[(unsigned char)i & 0xf] << separator;
-
-  return ss.str();
-}
 class CoprocessorTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
+    dingodb::Helper::CreateDirectories(kStorePath);
     std::srand(std::time(nullptr));
 
     std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
@@ -131,7 +117,7 @@ class CoprocessorTest : public testing::Test {
     }
 
     engine = std::make_shared<RawRocksEngine>();
-    if (!engine->Init(config)) {
+    if (!engine->Init(config, kAllCFs)) {
       std::cout << "RawRocksEngine init failed" << '\n';
     }
 
@@ -141,6 +127,7 @@ class CoprocessorTest : public testing::Test {
   static void TearDownTestSuite() {
     engine->Close();
     engine->Destroy();
+    dingodb::Helper::RemoveAllFileOrDirectory(kRootPath);
   }
 
   void SetUp() override {}

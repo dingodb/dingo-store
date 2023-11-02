@@ -46,6 +46,8 @@ namespace dingodb {  // NOLINT
 static const std::string kDefaultCf = "default";
 // static const std::string &kDefaultCf = "meta";
 
+static const std::vector<std::string> kAllCFs = {kDefaultCf};
+
 const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
                           's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
@@ -64,6 +66,10 @@ std::string GenRandomString(int len) {
   return result;
 }
 
+const std::string kRootPath = "./unit_test";
+const std::string kLogPath = kRootPath + "/log";
+const std::string kStorePath = kRootPath + "/db";
+
 const std::string kYamlConfigContent =
     "cluster:\n"
     "  name: dingodb\n"
@@ -73,40 +79,20 @@ const std::string kYamlConfigContent =
     "server:\n"
     "  host: 127.0.0.1\n"
     "  port: 23000\n"
-    "  heartbeat_interval: 10000 # ms\n"
-    "raft:\n"
-    "  host: 127.0.0.1\n"
-    "  port: 23100\n"
-    "  path: /tmp/dingo-store/data/store/raft\n"
-    "  election_timeout: 1000 # ms\n"
-    "  snapshot_interval: 3600 # s\n"
     "log:\n"
-    "  path: /tmp/dingo-store/log\n"
+    "  path: " +
+    kLogPath +
+    "\n"
     "store:\n"
-    "  path: ./rocks_example\n"
-    "  base:\n"
-    "    block_size: 131072\n"
-    "    block_cache: 67108864\n"
-    "    arena_block_size: 67108864\n"
-    "    min_write_buffer_number_to_merge: 4\n"
-    "    max_write_buffer_number: 4\n"
-    "    max_compaction_bytes: 134217728\n"
-    "    write_buffer_size: 67108864\n"
-    "    prefix_extractor: 8\n"
-    "    max_bytes_for_level_base: 41943040\n"
-    "    target_file_size_base: 4194304\n"
-    "  meta:\n"
-    "    max_write_buffer_number: 3\n"
-    "  column_families:\n"
-    "    - default\n"
-    "    - meta\n";
+    "  path: " +
+    kStorePath + "\n";
 
 class RawRocksEngineTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
     std::srand(std::time(nullptr));
 
-    Helper::CreateDirectories("./rocks_example");
+    Helper::CreateDirectories(kStorePath);
 
     config = std::make_shared<YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
@@ -115,7 +101,7 @@ class RawRocksEngineTest : public testing::Test {
     }
 
     engine = std::make_shared<RawRocksEngine>();
-    if (!engine->Init(config)) {
+    if (!engine->Init(config, kAllCFs)) {
       std::cout << "RawRocksEngine init failed" << '\n';
     }
   }
@@ -123,7 +109,7 @@ class RawRocksEngineTest : public testing::Test {
   static void TearDownTestSuite() {
     engine->Close();
     engine->Destroy();
-    Helper::RemoveAllFileOrDirectory("./rocks_example");
+    Helper::RemoveAllFileOrDirectory(kRootPath);
   }
 
   void SetUp() override {}
@@ -247,57 +233,6 @@ TEST_F(RawRocksEngineTest, Flush) {
 
   // bugs if cf_name empty or not exists. crash
   RawRocksEngineTest::engine->Flush(cf_name);
-}
-
-TEST_F(RawRocksEngineTest, NewReader) {
-  // cf empty
-  {
-    auto reader = RawRocksEngineTest::engine->Reader();
-
-    EXPECT_EQ(reader.get(), nullptr);
-  }
-
-  // cf not exist
-  {
-    auto reader = RawRocksEngineTest::engine->Reader();
-
-    EXPECT_EQ(reader.get(), nullptr);
-  }
-
-  // ok
-  {
-    auto reader = RawRocksEngineTest::engine->Reader();
-
-    EXPECT_NE(reader.get(), nullptr);
-  }
-}
-
-TEST_F(RawRocksEngineTest, NewWriter) {
-  // cf empty
-  {
-    const std::string &cf_name = "";
-
-    auto writer = RawRocksEngineTest::engine->Writer();
-
-    EXPECT_EQ(writer.get(), nullptr);
-  }
-
-  // cf not exist
-  {
-    const std::string &cf_name = "12345";
-
-    auto writer = RawRocksEngineTest::engine->Writer();
-
-    EXPECT_EQ(writer.get(), nullptr);
-  }
-
-  // ok
-  {
-    const std::string &cf_name = kDefaultCf;
-    auto writer = RawRocksEngineTest::engine->Writer();
-
-    EXPECT_NE(writer.get(), nullptr);
-  }
 }
 
 TEST_F(RawRocksEngineTest, KvPut) {

@@ -770,7 +770,7 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
   return {};
 }
 
-std::vector<std::string> Helper::GetColumnFamilyNamesTest(const std::string& key) {
+std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
   } else if (GetRole() == pb::common::ClusterRole::STORE) {
@@ -787,12 +787,6 @@ std::vector<std::string> Helper::GetColumnFamilyNamesTest(const std::string& key
   }
 
   return {};
-}
-
-std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
-  auto cf_names = GetColumnFamilyNamesTest(key);
-  DINGO_LOG(INFO) << "===cf_names: " << VectorToString(cf_names);
-  return cf_names;
 }
 
 int64_t Helper::TimestampNs() {

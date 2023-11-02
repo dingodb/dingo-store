@@ -206,7 +206,6 @@ class Helper {
   static std::vector<std::string> GetColumnFamilyNamesByRole();
   static std::vector<std::string> GetColumnFamilyNamesExecptMetaByRole();
   static std::vector<std::string> GetColumnFamilyNames(const std::string& key);
-  static std::vector<std::string> GetColumnFamilyNamesTest(const std::string& key);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);

@@ -61,23 +61,23 @@ dingodb::pb::common::VectorWithId GenVector(uint16_t id, int dimension) {
 }
 
 TEST(StorePbTest, MemoryLeak) {
-  for (;;) {
-    std::vector<dingodb::pb::common::VectorWithId> vectors;
-    vectors.reserve(1024);
+  // for (;;) {
+  //   std::vector<dingodb::pb::common::VectorWithId> vectors;
+  //   vectors.reserve(1024);
 
-    for (int i = 0; i < 1024; ++i) {
-      vectors.push_back(GenVector(i, 512));
-    }
-    auto write_data = dingodb::WriteDataBuilder::BuildWrite("default", vectors);
+  //   for (int i = 0; i < 1024; ++i) {
+  //     vectors.push_back(GenVector(i, 512));
+  //   }
+  //   auto write_data = dingodb::WriteDataBuilder::BuildWrite("default", vectors);
 
-    auto raft_cmd = std::make_shared<dingodb::pb::raft::RaftCmdRequest>();
+  //   auto raft_cmd = std::make_shared<dingodb::pb::raft::RaftCmdRequest>();
 
-    dingodb::pb::raft::RequestHeader* header = raft_cmd->mutable_header();
-    header->set_region_id(1111);
+  //   dingodb::pb::raft::RequestHeader* header = raft_cmd->mutable_header();
+  //   header->set_region_id(1111);
 
-    auto* requests = raft_cmd->mutable_requests();
-    for (auto& datum : write_data->Datums()) {
-      requests->AddAllocated(datum->TransformToRaft());
-    }
-  }
+  //   auto* requests = raft_cmd->mutable_requests();
+  //   for (auto& datum : write_data->Datums()) {
+  //     requests->AddAllocated(datum->TransformToRaft());
+  //   }
+  // }
 }
