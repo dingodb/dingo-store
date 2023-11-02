@@ -226,11 +226,6 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     }
   }
 
-  if (count_only) {
-    DINGO_LOG(INFO) << "KvRange count_only, total_count_in_range: " << total_count_in_range;
-    return butil::Status::OK();
-  }
-
   // query kv_rev for values
   uint32_t limit_count = 0;
   for (const auto &kv_index_value : kv_index_values) {
@@ -247,6 +242,10 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
 
     limit_count++;
     if (limit_count > limit) {
+      break;
+    }
+
+    if (count_only) {
       continue;
     }
 

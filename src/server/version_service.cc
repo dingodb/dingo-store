@@ -482,9 +482,9 @@ void DoKvRange(google::protobuf::RpcController* /*controller*/, const pb::versio
       auto* resp_kv = response->add_kvs();
       *resp_kv = kv;
     }
-    response->set_count(total_count_in_range);
-    response->set_more(total_count_in_range > real_limit);
   }
+  response->set_more(total_count_in_range > real_limit);
+  response->set_count(total_count_in_range);
 
   DINGO_LOG(INFO) << "Range success: key=" << request->key() << ", end_key=" << request->range_end()
                   << ", limit=" << request->limit();

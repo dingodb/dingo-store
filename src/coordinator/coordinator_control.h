@@ -211,7 +211,7 @@ class CoordinatorControl : public MetaControl {
                             const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                             std::vector<pb::common::Store> &selected_stores_for_regions);
 
-  static butil::Status CheckRegionPrefix(const std::string &start_key, const std::string &end_key);
+  butil::Status CheckRegionPrefix(const std::string &start_key, const std::string &end_key);
 
   butil::Status CreateShadowRegion(const std::string &region_name, pb::common::RegionType region_type,
                                    pb::common::RawEngine raw_engine, const std::string &resource_tag,

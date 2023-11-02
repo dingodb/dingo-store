@@ -1031,6 +1031,12 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
   pb::common::RegionType region_type = request->region_type();
   pb::common::IndexParameter index_parameter = request->index_parameter();
 
+  if (!Helper::IsClientRaw(range.start_key()) && !Helper::IsClientTxn(range.start_key())) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+    response->mutable_error()->set_errmsg("This api can only create client raw/txn region");
+    return;
+  }
+
   butil::Status ret = butil::Status::OK();
   if (split_from_region_id > 0) {
     ret = coordinator_control->CreateRegionForSplit(region_name, region_type, resource_tag, range, schema_id, table_id,
