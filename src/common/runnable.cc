@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "butil/compiler_specific.h"
+#include "client/coordinator_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
@@ -125,7 +127,32 @@ WorkerSet::WorkerSet(std::string name, uint32_t worker_num, uint32_t max_pending
       max_pending_task_count_(max_pending_task_count),
       active_worker_id_(0),
       total_task_count_(fmt::format("dingo_{}_total_task_count", name)),
-      pending_task_count_(fmt::format("dingo_{}_pending_task_count", name)) {}
+      pending_task_count_(fmt::format("dingo_{}_pending_task_count", name)) {
+  if (max_pending_task_count_ > 0) {
+    bthread_need_join_ = true;
+    auto func = [this]() {
+      while (bthread_need_join_) {
+        auto pending_task_count = pending_task_count_.get_value();
+        if (pending_task_count > max_pending_task_count_) {
+          is_full_ = true;
+          LOG(INFO) << "is_full_ to true: " << pending_task_count;
+        } else if (is_full_) {
+          is_full_ = false;
+          LOG(INFO) << "is_full_ to false: " << pending_task_count;
+        }
+
+        bthread_usleep(1000 * 1000);
+      }
+    };
+
+    check_full_bthread_.Run(func);
+  }
+}
+
+WorkerSet::~WorkerSet() {
+  bthread_need_join_ = false;
+  check_full_bthread_.Join();
+}
 
 bool WorkerSet::Init() {
   for (int i = 0; i < worker_num_; ++i) {
@@ -146,7 +173,8 @@ void WorkerSet::Destroy() {
 }
 
 bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
-  if (max_pending_task_count_ > 0 && pending_task_count_.get_value() > max_pending_task_count_) {
+  if (BAIDU_UNLIKELY(is_full_)) {
+    DINGO_LOG(INFO) << "is_full_";
     return false;
   }
   auto ret = workers_[active_worker_id_.fetch_add(1) % worker_num_]->Execute(task);

@@ -25,6 +25,7 @@
 #include "braft/configuration.h"
 #include "brpc/closure_guard.h"
 #include "brpc/controller.h"
+#include "bthread/bthread.h"
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
 #include "common/constant.h"
@@ -45,15 +46,17 @@ namespace dingodb {
 
 DEFINE_uint32(max_create_id_count, 2048, "max create id count");
 DEFINE_bool(force_cluster_read_only, false, "force cluster read only");
+DEFINE_bool(async_hello, true, "async hello");
+DEFINE_uint32(hello_latency_ms, 0, "hello latency seconds");
 
-void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controller*/,
-                                   const pb::coordinator::HelloRequest *request,
-                                   pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
+void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
+             pb::coordinator::HelloResponse *response, google::protobuf::Closure *done,
+             std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
-  if (!this->IsCoordinatorControlLeader()) {
-    return coordinator_control_->RedirectResponse(response);
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
   }
 
   response->set_state(static_cast<pb::common::CoordinatorState>(0));
@@ -61,13 +64,65 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController * /*controlle
 
   if (request->get_memory_info()) {
     auto *memory_info = response->mutable_memory_info();
-    this->coordinator_control_->GetMemoryInfo(*memory_info);
+    coordinator_control->GetMemoryInfo(*memory_info);
   }
 
   // response cluster state
   auto is_read_only = Server::GetInstance().IsReadOnly();
   if (is_read_only || FLAGS_force_cluster_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+  }
+
+  if (FLAGS_hello_latency_ms > 0) {
+    bthread_usleep(FLAGS_hello_latency_ms * 1000);
+  }
+}
+
+void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
+                                   const pb::coordinator::HelloRequest *request,
+                                   pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
+  if (FLAGS_async_hello) {
+    brpc::ClosureGuard done_guard(done);
+    auto is_leader = coordinator_control_->IsLeader();
+    if (!is_leader) {
+      return coordinator_control_->RedirectResponse(response);
+    }
+
+    // Run in queue.
+    auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+    auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+      DoHello(controller, request, response, svr_done, coordinator_control_, engine_);
+    });
+    bool ret = worker_set_->ExecuteRR(task);
+    if (!ret) {
+      brpc::ClosureGuard done_guard(svr_done);
+      ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    }
+  } else {
+    brpc::ClosureGuard done_guard(done);
+    DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
+
+    if (!this->IsCoordinatorControlLeader()) {
+      return coordinator_control_->RedirectResponse(response);
+    }
+
+    response->set_state(static_cast<pb::common::CoordinatorState>(0));
+    response->set_status_detail("OK");
+
+    if (request->get_memory_info()) {
+      auto *memory_info = response->mutable_memory_info();
+      this->coordinator_control_->GetMemoryInfo(*memory_info);
+    }
+
+    // response cluster state
+    auto is_read_only = Server::GetInstance().IsReadOnly();
+    if (is_read_only || FLAGS_force_cluster_read_only) {
+      response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+    }
+
+    if (FLAGS_hello_latency_ms > 0) {
+      bthread_usleep(FLAGS_hello_latency_ms * 1000);
+    }
   }
 }
 

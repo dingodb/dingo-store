@@ -23,6 +23,7 @@
 
 #include "bthread/execution_queue.h"
 #include "common/failpoint.h"
+#include "common/synchronization.h"
 
 namespace dingodb {
 
@@ -88,7 +89,7 @@ using WorkerPtr = std::shared_ptr<Worker>;
 class WorkerSet {
  public:
   WorkerSet(std::string name, uint32_t worker_num, uint32_t max_pending_task_count);
-  ~WorkerSet() = default;
+  ~WorkerSet();
 
   static std::shared_ptr<WorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
     return std::make_shared<WorkerSet>(name, worker_num, max_pending_task_count);
@@ -115,6 +116,9 @@ class WorkerSet {
   uint32_t worker_num_;
   std::vector<WorkerPtr> workers_;
   std::atomic<uint64_t> active_worker_id_;
+  volatile bool is_full_{false};
+  volatile bool bthread_need_join_{false};
+  Bthread check_full_bthread_;
 
   // Metrics
   bvar::Adder<uint64_t> total_task_count_;
