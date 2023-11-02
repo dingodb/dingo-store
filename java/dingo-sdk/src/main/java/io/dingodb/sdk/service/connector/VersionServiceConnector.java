@@ -78,7 +78,7 @@ public class VersionServiceConnector extends ServiceConnector<VersionServiceGrpc
     @Override
     protected ManagedChannel transformToLeaderChannel(ManagedChannel channel) {
         return Optional.ofNullable(coordinatorServiceConnector.getCoordinatorMap())
-            .map(Coordinator.GetCoordinatorMapResponse::getLeaderLocation)
+            .map(Coordinator.GetCoordinatorMapResponse::getKvLeaderLocation)
             .filter(__ -> !__.getHost().isEmpty())
             .map(__ -> newChannel(__.getHost(), __.getPort()))
             .orNull();

@@ -41,7 +41,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     auto* error_in_response = response->mutable_error();
     *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
-    error_in_response->set_errmsg("not leader");
+    error_in_response->set_errmsg("not leader, new leader location is " + leader_location.DebugString());
   }
 
   template <typename T>
@@ -52,7 +52,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     auto* error_in_response = response->mutable_error();
     *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
-    error_in_response->set_errmsg("not leader");
+    error_in_response->set_errmsg("not leader, new leader location is " + leader_location.DebugString());
   }
 
   template <typename T>
@@ -63,7 +63,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
     auto* error_in_response = response->mutable_error();
     *(error_in_response->mutable_leader_location()) = leader_location;
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
-    error_in_response->set_errmsg("not leader");
+    error_in_response->set_errmsg("not leader, new leader location is " + leader_location.DebugString());
   }
 
   void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
