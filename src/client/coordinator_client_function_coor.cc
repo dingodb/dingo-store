@@ -66,6 +66,9 @@ DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
 DECLARE_uint64(limit);
 DECLARE_uint64(safe_point);
+DECLARE_uint64(replica);
+DECLARE_string(start_key);
+DECLARE_string(end_key);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1046,6 +1049,56 @@ void SendQueryRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
                   << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status());
   DINGO_LOG(INFO) << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]";
   DINGO_LOG(INFO) << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]";
+}
+
+void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(ERROR) << "name is empty";
+    return;
+  }
+
+  if (FLAGS_replica == 0) {
+    DINGO_LOG(ERROR) << "replica is empty";
+    return;
+  }
+
+  if (FLAGS_start_key.empty()) {
+    DINGO_LOG(ERROR) << "start_key is empty";
+    return;
+  }
+
+  if (FLAGS_end_key.empty()) {
+    DINGO_LOG(ERROR) << "end_key is empty";
+    return;
+  }
+
+  std::string start_key = FLAGS_start_key;
+  std::string end_key = FLAGS_end_key;
+
+  if (FLAGS_key_is_hex) {
+    DINGO_LOG(INFO) << "key is hex";
+    start_key = dingodb::Helper::HexToString(FLAGS_start_key);
+    end_key = dingodb::Helper::HexToString(FLAGS_end_key);
+  }
+
+  if (start_key > end_key) {
+    DINGO_LOG(ERROR) << "start_key must < end_key";
+    return;
+  }
+
+  dingodb::pb::coordinator::CreateRegionRequest request;
+  dingodb::pb::coordinator::CreateRegionResponse response;
+
+  request.set_region_name(FLAGS_name);
+  request.set_replica_num(FLAGS_replica);
+  request.mutable_range()->set_start_key(start_key);
+  request.mutable_range()->set_end_key(end_key);
+
+  DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
+
+  auto status2 = coordinator_interaction->SendRequest("CreateRegion", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status2;
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCreateRegionForSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

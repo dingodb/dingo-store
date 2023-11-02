@@ -1598,6 +1598,21 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range illegal");
   }
 
+  // check if range is overlaping exist region
+  std::vector<pb::coordinator_internal::RegionInternal> regions;
+  auto ret1 = ScanRegions(start_key, end_key, 0, regions);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ScanRegions failed, start_key: " << Helper::StringToHex(start_key)
+                     << ", end_key: " << Helper::StringToHex(end_key);
+    return ret1;
+  }
+
+  if (!regions.empty() && start_key != max_start_key) {
+    DINGO_LOG(ERROR) << "region range is overlaping exist region, start_key: " << Helper::StringToHex(start_key)
+                     << ", end_key: " << Helper::StringToHex(end_key);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region range is overlaping exist region");
+  }
+
   auto region_prefix = start_key[0];
   if (region_prefix == 0) {
     DINGO_LOG(INFO) << "region has no prefix, this is a legacy region";
@@ -4611,6 +4626,8 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
     upper_bound = std::string(8, '\xff');
   } else if (end_key.empty()) {
     upper_bound = Helper::PrefixNext(start_key);
+  } else {
+    upper_bound = end_key;
   }
 
   DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
