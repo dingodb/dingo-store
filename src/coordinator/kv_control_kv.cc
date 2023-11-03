@@ -331,11 +331,11 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
 // out:  prev_kv
 // return: errno
 butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv,
-                               bool igore_value, bool ignore_lease, int64_t main_revision, int64_t &sub_revision,
+                               bool ignore_value, bool ignore_lease, int64_t main_revision, int64_t &sub_revision,
                                pb::version::Kv &prev_kv, int64_t &lease_grant_id,
                                pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
-                  << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << igore_value
+                  << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << ignore_value
                   << ", ignore_lease: " << ignore_lease;
 
   // check key
@@ -352,13 +352,13 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   }
 
   // check value
-  if (!igore_value && key_value_in.value().empty()) {
+  if (!ignore_value && key_value_in.value().empty()) {
     DINGO_LOG(ERROR) << "KvPut value is empty";
     return butil::Status(EINVAL, "KvPut value is empty");
   }
 
   // check value length
-  if (!igore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
+  if (!ignore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
     DINGO_LOG(ERROR) << "KvPut value is too long, max_kv_value_size: " << FLAGS_max_kv_value_size
                      << ", key: " << key_value_in.key();
     return butil::Status(EINVAL, "KvPut value is too long");
@@ -445,11 +445,12 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
   kv_index_meta_increment->set_ignore_lease(ignore_lease);
   kv_index_meta_increment->set_lease_id(lease_grant_id);
-  if (!ignore_lease) {
-    kv_index_meta_increment->set_ignore_value(igore_value);
-  }
-  if (!igore_value) {
+  if (!ignore_value) {
+    kv_index_meta_increment->set_ignore_value(ignore_value);
     kv_index_meta_increment->set_value(key_value_in.value());
+  }
+  if (!ignore_lease) {
+    kv_index_meta_increment->set_ignore_lease(ignore_lease);
   }
 
   sub_revision++;
@@ -636,6 +637,15 @@ butil::Status KvControl::KvPutApply(const std::string &key,
     kv->set_lease(kv_rev_last.kv().lease());
   } else {
     kv->set_lease(lease_id);
+  }
+
+  // check if lease is exists before apply to state machine
+  if (kv->lease() > 0) {
+    auto ret1 = kv_lease_map_.Exists(kv->lease());
+    if (!ret1) {
+      DINGO_LOG(WARNING) << "KvPutApply kv_lease_map_.Exists failed, lease_id: " << kv->lease();
+      return butil::Status(EINVAL, "KvPutApply kv_lease_map_.Exists failed");
+    }
   }
 
   // do real write to state machine

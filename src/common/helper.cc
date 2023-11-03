@@ -47,6 +47,7 @@
 #include <utility>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "butil/strings/string_split.h"
@@ -592,17 +593,32 @@ std::vector<uint8_t> Helper::AddByteArrays(const std::vector<uint8_t>& a, const 
 }
 
 void Helper::SetPbMessageError(butil::Status status, google::protobuf::Message* message) {
+  if (BAIDU_UNLIKELY(message == nullptr)) {
+    return;
+  }
   const google::protobuf::Reflection* reflection = message->GetReflection();
   const google::protobuf::Descriptor* desc = message->GetDescriptor();
 
   const google::protobuf::FieldDescriptor* error_field = desc->FindFieldByName("error");
-  google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
-  const google::protobuf::Reflection* error_ref = error->GetReflection();
-  const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
-  const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
-  error_ref->SetEnumValue(error, errcode_field, status.error_code());
-  const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
-  error_ref->SetString(error, errmsg_field, status.error_str());
+  if (BAIDU_UNLIKELY(error_field == nullptr)) {
+    DINGO_LOG(ERROR) << "SetPbMessageError error_field is nullptr";
+    return;
+  }
+  if (BAIDU_UNLIKELY(error_field->message_type()->full_name() != "dingodb.pb.error.Error")) {
+    DINGO_LOG(ERROR) << "SetPbMessageError error_field->message_type()->full_name() is not pb::error::Errno, its_type="
+                     << error_field->message_type()->full_name();
+    return;
+  }
+  pb::error::Error* error = dynamic_cast<pb::error::Error*>(reflection->MutableMessage(message, error_field));
+  error->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+  error->set_errmsg(status.error_str());
+  // google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
+  // const google::protobuf::Reflection* error_ref = error->GetReflection();
+  // const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
+  // const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
+  // error_ref->SetEnumValue(error, errcode_field, status.error_code());
+  // const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
+  // error_ref->SetString(error, errmsg_field, status.error_str());
 }
 
 std::string Helper::MessageToJsonString(const google::protobuf::Message& message) {

@@ -32,6 +32,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/node.pb.h"
 #include "raft/raft_node.h"
@@ -325,7 +326,7 @@ void KvControl::KvLogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& 
 
 // ApplyMetaIncrement is on_apply callback
 void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta_increment, bool /*is_leader*/,
-                                   int64_t term, int64_t index, google::protobuf::Message* /*response*/) {
+                                   int64_t term, int64_t index, google::protobuf::Message* response) {
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<pb::common::KeyValue> meta_delete_to_kv;
@@ -474,7 +475,9 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
           if (ret.ok()) {
             DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,PUT [id=" << kv_index.id() << "] success";
           } else {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,PUT [id=" << kv_index.id() << "] failed";
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,PUT [id=" << kv_index.id()
+                               << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
+            Helper::SetPbMessageError(ret, response);
           }
         } else if (kv_index.event_type() == pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_DELETE) {
           // call KvDeleteApply
@@ -482,7 +485,9 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
           if (ret.ok()) {
             DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,DELETE [id=" << kv_index.id() << "] success";
           } else {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,DELETE [id=" << kv_index.id() << "] failed";
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,DELETE [id=" << kv_index.id()
+                               << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
+            Helper::SetPbMessageError(ret, response);
           }
         } else if (kv_index.event_type() ==
                    pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_COMPACTION) {
@@ -491,7 +496,9 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
           if (ret.ok()) {
             DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index UPDATE,COMPACT [id=" << kv_index.id() << "] success";
           } else {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,COMPACT [id=" << kv_index.id() << "] failed";
+            DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index UPDATE,COMPACT [id=" << kv_index.id()
+                               << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
+            Helper::SetPbMessageError(ret, response);
           }
         }
       } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
