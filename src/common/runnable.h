@@ -116,13 +116,11 @@ class WorkerSet {
   uint32_t worker_num_;
   std::vector<WorkerPtr> workers_;
   std::atomic<uint64_t> active_worker_id_;
-  volatile bool is_full_{false};
-  volatile bool bthread_need_join_{false};
-  Bthread check_full_bthread_;
 
   // Metrics
   bvar::Adder<uint64_t> total_task_count_;
   bvar::Adder<uint64_t> pending_task_count_;
+  std::atomic<uint64_t> pending_task_counter_{0};
 };
 
 using WorkerSetPtr = std::shared_ptr<WorkerSet>;
