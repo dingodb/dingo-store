@@ -365,7 +365,8 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   }
 
   // check lease is valid
-  if (!ignore_lease && lease_id != 0) {
+  // if (!ignore_lease && lease_id != 0) {
+  if (lease_id != 0) {
     std::set<std::string> keys;
     int64_t granted_ttl = 0;
     int64_t remaining_ttl = 0;
@@ -392,7 +393,7 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
       DINGO_LOG(ERROR) << "KvPut ignore_lease, but not found key: " << key_value_in.key();
       return butil::Status(EINVAL, "KvPut ignore_lease, but not found key");
     }
-  } else if (lease_id != 0) {
+  } else {
     if (!kvs_temp.empty()) {
       // if ignore_lease, get the lease of the key
       lease_grant_id = kvs_temp[0].lease();
