@@ -231,7 +231,7 @@ class KvControl : public MetaControl {
   // in and out:  sub_revision
   // out:  prev_kv
   // return: errno
-  butil::Status KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv, bool igore_value,
+  butil::Status KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv, bool ignore_value,
                       bool ignore_lease, int64_t main_revision, int64_t &sub_revision, pb::version::Kv &prev_kv,
                       int64_t &lease_grant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
