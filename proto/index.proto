@@ -255,8 +255,8 @@ message TxnScanResponse {
 
 message Mutation {
   dingodb.pb.store.Op op = 1;
-  // the key is encoded from two int64 using big-endian, the first int64 is the part id, the second
-  // int64 is the vector id. The key MUST be 16 bytes.
+  // the key is encoded from a char prefix and two int64 using big-endian, the first int64 is the part id, the second
+  // int64 is the vector id. The key MUST be 17 bytes.
   bytes key = 2;
   dingodb.pb.common.VectorWithId vector = 3;
 }
@@ -335,20 +335,6 @@ message TxnGcResponse {
   dingodb.pb.store.TxnResultInfo txn_result = 2;
 }
 
-// Delete a range of data from dingo-store.
-// All keys in the range will be deleted permanently regardless of their
-// timestamps. This means that deleted keys will not be retrievable by
-// specifying an older timestamp.
-message TxnDeleteRangeRequest {
-  dingodb.pb.store.Context context = 1;
-  // the key is encoded from two int64 using big-endian, the first int64 is the part id, the
-  // second int64 is the vector id. The key MUST be 16 bytes.
-  bytes start_key = 2;
-  // the key is encoded from two int64 using big-endian, the first int64 is the part id, the
-  // second int64 is the vector id. The key MUST be 16 bytes.
-  bytes end_key = 3;
-}
-
 message TxnDeleteRangeResponse {
   // error code
   dingodb.pb.error.Error error = 1;
@@ -390,6 +376,9 @@ service IndexService {
   rpc TxnScanLock(dingodb.pb.store.TxnScanLockRequest) returns (dingodb.pb.store.TxnScanLockResponse);
   rpc TxnDump(dingodb.pb.store.TxnDumpRequest) returns (dingodb.pb.store.TxnDumpResponse);
 
+  rpc TxnPessimisticLock(dingodb.pb.store.PessimisticLockRequest) returns (dingodb.pb.store.PessimisticLockResponse);
+  rpc TxnPessimisticRollback(dingodb.pb.store.PessimisticRollbackRequest)
+      returns (dingodb.pb.store.PessimisticRollbackResponse);
   rpc TxnPrewrite(TxnPrewriteRequest) returns (dingodb.pb.store.TxnPrewriteResponse);
   rpc TxnCommit(dingodb.pb.store.TxnCommitRequest) returns (dingodb.pb.store.TxnCommitResponse);
   rpc TxnCheckTxnStatus(dingodb.pb.store.TxnCheckTxnStatusRequest) returns (dingodb.pb.store.TxnCheckTxnStatusResponse);

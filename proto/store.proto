@@ -342,7 +342,7 @@ enum Op {
   Delete = 2;       // prewrite: do data delete, like KvDelete or VectorDelete
   PutIfAbsent = 3;  // prewrite: do insert, if id is exists, return AlreadyExist error
   Rollback = 4;     // rollback: only do rollback
-  Lock = 5;         // not used now, for future use
+  Lock = 5;         // pessimistic lock: do lock
 }
 
 message Mutation {
@@ -462,6 +462,53 @@ message TxnScanResponse {
   bytes end_key = 5;
 }
 
+// Lock a set of keys to prepare to write to them.
+message PessimisticLockRequest {
+  Context context = 1;
+  // In this case every `Op` of the mutations must be `PessimisticLock`.
+  repeated Mutation mutations = 2;
+  bytes primary_lock = 3;
+  uint64 start_ts = 4;
+  // the lock's ttl is timestamp in milisecond, it's the absolute timestamp when the lock is expired.
+  uint64 lock_ttl = 5;
+  // Each locking command in a pessimistic transaction has its own timestamp.
+  // If locking fails, then the corresponding SQL statement can be retried with a later timestamp, Executor does not
+  // need to retry the whole transaction.
+  // The name comes from the `SELECT ... FOR UPDATE` SQL statement which is a locking read. Each `SELECT ... FOR UPDATE`
+  // in a transaction will be assigned its own timestamp.
+  uint64 for_update_ts = 6;
+  // for executor to put extra data to store in lock
+  bytes extra_data = 7;
+}
+
+message PessimisticLockResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  // if there are many keys can't be locked, there will be many txn_result, each txn_result is for one key
+  // the txn_result is one of the following:
+  // 1. LockInfo: lock meet a lock and can't proceed, the lock is returned
+  // 2. WriteConflict: Write conflict with key which is already written after for_update_ts
+  //    2.1 Optimistic: in optimistic transactions.
+  //    2.2 PessimisticRetry: a lock acquisition request waits for a lock and awakes, or meets a newer version of data,
+  //                           let Executor retry.
+  //    2.3 SelfRolledBack: the transaction itself has been rolled back when it tries to prewrite.
+  repeated TxnResultInfo txn_result = 2;
+}
+
+// Unlock keys locked using `PessimisticLockRequest`.
+message PessimisticRollbackRequest {
+  Context context = 1;
+  uint64 start_ts = 2;
+  uint64 for_update_ts = 3;
+  repeated bytes keys = 4;
+}
+
+message PessimisticRollbackResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+  repeated TxnResultInfo txn_result = 2;
+}
+
 message TxnPrewriteRequest {
   Context context = 1;
   // The data to be written to the database.
@@ -476,10 +523,11 @@ message TxnPrewriteRequest {
   int64 txn_size = 6;
   // When the transaction involves only one region, it's possible to commit the
   // transaction directly with 1PC protocol.
-  bool try_one_pc = 7;
+  bool try_one_pc = 7;  // NOT IMPLEMENTED
   // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
   // schema change. This field is unused now.
-  int64 max_commit_ts = 8;
+  int64 max_commit_ts = 8;  // NOT IMPLEMENTED
+  int64 for_update_ts = 9;  // for pessimistic transaction
 }
 
 message TxnPrewriteResponse {
@@ -489,22 +537,20 @@ message TxnPrewriteResponse {
   // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
   // 2. WriteConflict: Write conflict with key which is already written after start_ts
   //    2.1 Optimistic: in optimistic transactions.
-  //    2.2  PessimisticRetry: a lock acquisition request waits for a lock and awakes, or meets a newer version of data,
-  //                           let Executor retry.
-  //    2.3 SelfRolledBack: the transaction itself has been rolled back when it tries to prewrite.
+  //    2.2 SelfRolledBack: the transaction itself has been rolled back when it tries to prewrite.
   // 3. otherwise, txn_result is empty
   // for success prewrite, txn_result is empty
   // for failure prewrite, txn_result is not empty
   // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
   // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
-  TxnResultInfo txn_result = 2;
+  repeated TxnResultInfo txn_result = 2;
   // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
   repeated AlreadyExist keys_already_exist = 3;
   // When the transaction is successfully committed with 1PC protocol, this
   // field will be set to the commit ts of the transaction. Otherwise, if dingo-store
   // failed to commit it with 1PC or the transaction is not 1PC, the value will
   // be 0.
-  int64 one_pc_commit_ts = 4;
+  int64 one_pc_commit_ts = 4;  // NOT IMPLEMENTED
 }
 
 message TxnCommitRequest {
@@ -521,10 +567,11 @@ message TxnCommitResponse {
   // error code
   dingodb.pb.error.Error error = 1;
   // the txn_result is one of the following:
-  // 1. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
+  // 1. LockInfo: Commit meets a lock and can't proceed, the lock is returned
+  // 2. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
   // committing primary key meet this error, the transaction may be rolled back. If committing secondary key meet this,
   // Executor can think its lock is resolved, and continue to commit.
-  // 2. otherwise, txn_result is empty
+  // 3. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
   // The commit_ts of the transaction.
   int64 commit_ts = 3;
@@ -622,6 +669,9 @@ message TxnBatchRollbackRequest {
 message TxnBatchRollbackResponse {
   // error code
   dingodb.pb.error.Error error = 1;
+  // the txn_result is one of the following:
+  // 1. LockInfo: Commit meets a lock and can't proceed, the lock is returned
+  // 2. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
 }
 
@@ -796,6 +846,8 @@ service StoreService {
   rpc TxnScan(TxnScanRequest) returns (TxnScanResponse);
   rpc TxnDump(TxnDumpRequest) returns (TxnDumpResponse);
 
+  rpc TxnPessimisticLock(PessimisticLockRequest) returns (PessimisticLockResponse);
+  rpc TxnPessimisticRollback(PessimisticRollbackRequest) returns (PessimisticRollbackResponse);
   rpc TxnPrewrite(TxnPrewriteRequest) returns (TxnPrewriteResponse);
   rpc TxnCommit(TxnCommitRequest) returns (TxnCommitResponse);
   rpc TxnCheckTxnStatus(TxnCheckTxnStatusRequest) returns (TxnCheckTxnStatusResponse);
