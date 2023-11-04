@@ -1142,8 +1142,8 @@ void IndexSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& regio
 }
 
 void IndexSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnDeleteRangeRequest request;
-  dingodb::pb::index::TxnDeleteRangeResponse response;
+  dingodb::pb::store::TxnDeleteRangeRequest request;
+  dingodb::pb::store::TxnDeleteRangeResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());

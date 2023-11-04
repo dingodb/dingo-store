@@ -782,7 +782,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                      << ", response is nullptr";
   }
   auto *error = response->mutable_error();
-  auto *txn_result = response->mutable_txn_result();
+  // auto *txn_result = response->mutable_txn_result();
 
   auto reader = raw_engine->Reader();
   // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
@@ -814,12 +814,16 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id()) << ", key: " << mutation.key()
                         << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
 
-        // set txn_result for response
+        // add txn_result for response
         // setup lock_info
-        *txn_result->mutable_locked() = lock_info;
+        *response->add_txn_result()->mutable_locked() = lock_info;
+
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                        << ", lock_conflict, key: " << mutation.key()
+                        << ", lock_info: " << lock_info.ShortDebugString();
 
         // need response to client
-        return butil::Status::OK();
+        continue;
       }
     }
 
@@ -840,15 +844,21 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                       << ", write_info: " << write_info.ShortDebugString();
 
       // prewrite meet write_conflict here
-      // set txn_result for response
+      // add txn_result for response
       // setup write_conflict ( this may not be necessary, when lock_info is set)
+      auto *txn_result = response->add_txn_result();
       auto *write_conflict = txn_result->mutable_write_conflict();
       write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_SelfRolledBack);
       write_conflict->set_start_ts(start_ts);
       write_conflict->set_conflict_ts(start_ts);
       write_conflict->set_key(mutation.key());
       // write_conflict->set_primary_key(lock_info.primary_lock());
-      return butil::Status::OK();
+
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                      << ", write_conflict, start_ts: " << start_ts
+                      << ", write_info: " << write_info.ShortDebugString();
+
+      continue;
     }
 
     // 2.2 check commit
@@ -867,15 +877,21 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                       << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
 
       // prewrite meet write_conflict here
-      // set txn_result for response
+      // add txn_result for response
       // setup write_conflict ( this may not be necessary, when lock_info is set)
+      auto *txn_result = response->add_txn_result();
       auto *write_conflict = txn_result->mutable_write_conflict();
       write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_PessimisticRetry);
       write_conflict->set_start_ts(start_ts);
       write_conflict->set_conflict_ts(commit_ts);
       write_conflict->set_key(mutation.key());
       // write_conflict->set_primary_key(lock_info.primary_lock());
-      return butil::Status::OK();
+
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                      << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
+                      << ", write_info: " << write_info.ShortDebugString();
+
+      continue;
     }
 
     // 3.do Put/Delete/PutIfAbsent
@@ -975,6 +991,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     }
   }
 
+  if (response->txn_result_size() > 0) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
+                    << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                    << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
+
   // after all mutations is processed, write into raft engine
   pb::raft::TxnRaftRequest txn_raft_request;
   auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
@@ -1045,52 +1069,57 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
       return ret;
     }
 
-    // if lock is not exist, return TxnNotFound
-    if (lock_info.primary_lock().empty()) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+    // // if lock is not exist, return TxnNotFound
+    // if (lock_info.primary_lock().empty()) {
+    //   DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+    //   start_ts,
+    //                                     commit_ts)
+    //                      << ", txn_not_found with lock_info empty, key: " << key << ", start_ts: " << start_ts;
+
+    //   auto *txn_not_found = txn_result->mutable_txn_not_found();
+    //   txn_not_found->set_start_ts(start_ts);
+
+    //   return butil::Status::OK();
+    // }
+
+    // if lock is exists, check if lock_ts is equal to start_ts
+    // if not equal, means this key is locked by other txn, return LockInfo
+    if (lock_info.lock_ts() != 0) {
+      // if lock is exists but start_ts is not equal to lock_ts, return locked
+      if (lock_info.lock_ts() != start_ts) {
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: " << key
+                           << ", lock_info: " << lock_info.ShortDebugString();
+
+        auto *locked = txn_result->mutable_locked();
+        *locked = lock_info;
+
+        return butil::Status::OK();
+      }
+    } else {
+      // check if the key is already committed, if it is committed can skip it
+      pb::store::WriteInfo write_info;
+      int64_t prev_commit_ts = 0;
+      auto ret2 = TxnEngineHelper::GetWriteInfo(raw_engine, start_ts, Constant::kMaxVer, start_ts, key, false, true,
+                                                true, write_info, prev_commit_ts);
+      if (!ret2.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
                                         commit_ts)
-                         << ", txn_not_found with lock_info empty, key: " << key << ", start_ts: " << start_ts;
+                         << ", get write info failed, key: " << Helper::StringToHex(key)
+                         << ", status: " << ret2.error_str();
+        error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+        error->set_errmsg(ret2.error_str());
+        return ret2;
+      }
 
-      auto *txn_not_found = txn_result->mutable_txn_not_found();
-      txn_not_found->set_start_ts(start_ts);
-
-      return butil::Status::OK();
-    }
-
-    // if lock is exists but start_ts is not equal to lock_ts, return TxnNotFound
-    if (lock_info.lock_ts() != start_ts) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                        commit_ts)
-                         << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: " << key
-                         << ", lock_info: " << lock_info.ShortDebugString();
-
-      auto *txn_not_found = txn_result->mutable_txn_not_found();
-      txn_not_found->set_start_ts(start_ts);
-
-      return butil::Status::OK();
-    }
-
-    // check if the key is already committed, if it is committed can skip it
-    pb::store::WriteInfo write_info;
-    int64_t prev_commit_ts = 0;
-    auto ret2 = TxnEngineHelper::GetWriteInfo(raw_engine, start_ts, Constant::kMaxVer, start_ts, key, false, true, true,
-                                              write_info, prev_commit_ts);
-    if (!ret2.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                      commit_ts)
-                       << ", get write info failed, key: " << Helper::StringToHex(key)
-                       << ", status: " << ret2.error_str();
-      error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-      error->set_errmsg(ret2.error_str());
-      return ret2;
-    }
-
-    // if commit_ts > 0, means this key of start_ts is already committed, can skip it
-    if (prev_commit_ts > 0) {
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                     commit_ts)
-                      << ", key: " << key << " is already committed, prev_commit_ts: " << prev_commit_ts;
-      continue;
+      // if prev_commit_ts == commit_ts, means this key of start_ts is already committed, can skip it
+      if (prev_commit_ts == commit_ts) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                       commit_ts)
+                        << ", key: " << key << " is already committed, prev_commit_ts: " << prev_commit_ts;
+        continue;
+      }
     }
 
     // now txn is match, prepare to commit
@@ -1411,7 +1440,11 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
       DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
                          << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: " << key
                          << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
-      continue;
+
+      // it's not a legal rollback, return lock_info
+      auto *locked = txn_result->mutable_locked();
+      *locked = lock_info;
+      return butil::Status::OK();
     }
 
     if (lock_info.short_value().empty()) {
