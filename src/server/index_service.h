@@ -69,6 +69,13 @@ class IndexServiceImpl : public pb::index::IndexService {
                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) override;
 
   // txn write
+  void TxnPessimisticLock(google::protobuf::RpcController* controller,
+                          const pb::store::TxnPessimisticLockRequest* request,
+                          pb::store::TxnPessimisticLockResponse* response, google::protobuf::Closure* done) override;
+  void TxnPessimisticRollback(google::protobuf::RpcController* controller,
+                              const pb::store::TxnPessimisticRollbackRequest* request,
+                              pb::store::TxnPessimisticRollbackResponse* response,
+                              google::protobuf::Closure* done) override;
   void TxnPrewrite(google::protobuf::RpcController* controller, const pb::index::TxnPrewriteRequest* request,
                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) override;
   void TxnCommit(google::protobuf::RpcController* controller, const pb::store::TxnCommitRequest* request,
