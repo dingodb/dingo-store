@@ -88,7 +88,7 @@ class Storage {
   // txn writer
   butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                   int64_t for_update_ts, std::string extra_data);
+                                   int64_t for_update_ts);
   butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
                                        const std::vector<std::string>& keys);
   butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,

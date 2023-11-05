@@ -70,7 +70,7 @@ class TxnEngineHelper {
   static butil::Status PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                        std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                        const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                       int64_t for_update_ts, std::string extra_data);
+                                       int64_t for_update_ts);
 
   static butil::Status PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,

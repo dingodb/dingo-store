@@ -1315,7 +1315,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnPessimisticLock(ctx, mutations, request->primary_lock(), request->start_ts(),
-                                       request->lock_ttl(), request->for_update_ts(), request->extra_data());
+                                       request->lock_ttl(), request->for_update_ts());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

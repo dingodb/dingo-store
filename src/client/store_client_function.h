@@ -155,8 +155,6 @@ void SendTxnDump(uint64_t region_id);
 
 void StoreSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnPessimisticLock(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnPessimisticRollback(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region);
@@ -171,8 +169,6 @@ void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& reg
 
 void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnPessimisticLock(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnPessimisticRollback(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region);

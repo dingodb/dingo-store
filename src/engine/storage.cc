@@ -555,18 +555,17 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
 butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
                                           const std::vector<pb::store::Mutation>& mutations,
                                           const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                          int64_t for_update_ts, std::string extra_data) {
+                                          int64_t for_update_ts) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
   DINGO_LOG(INFO) << "TxnPessimisticLock mutations size : " << mutations.size() << " primary_lock : " << primary_lock
-                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts
-                  << " extra_data : " << extra_data;
+                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
 
   auto writer = engine_->NewTxnWriter(engine_);
-  status = writer->TxnPessimisticLock(ctx, mutations, primary_lock, start_ts, lock_ttl, for_update_ts, extra_data);
+  status = writer->TxnPessimisticLock(ctx, mutations, primary_lock, start_ts, lock_ttl, for_update_ts);
   if (!status.ok()) {
     return status;
   }
@@ -790,10 +789,6 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
                   << " txn_lock_values size : " << txn_lock_values.size()
                   << " txn_data_keys size : " << txn_data_keys.size()
                   << " txn_data_values size : " << txn_data_values.size();
-  auto snapshot = engine_->GetSnapshot();
-  if (snapshot == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "get snapshot failed");
-  }
 
   auto data_reader = engine_->NewReader();
   auto lock_reader = engine_->NewReader();
@@ -801,19 +796,17 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
   // scan [start_key, end_key) for data
   std::vector<pb::common::KeyValue> data_kvs;
-  Buf buf_start(8);
-  buf_start.WriteLong(start_ts);
-  Buf buf_end(8);
-  buf_end.WriteLong(end_ts);
 
   ctx->SetCfName(Constant::kTxnDataCF);
-  auto ret = data_reader->KvScan(ctx, start_key + buf_start.GetString(), end_key + buf_end.GetString(), data_kvs);
+  auto ret = data_reader->KvScan(ctx, Helper::EncodeTxnKey(start_key, end_ts), Helper::EncodeTxnKey(end_key, start_ts),
+                                 data_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
   }
   for (const auto& kv : data_kvs) {
-    if (kv.key().length() < 16) {
+    // the min key len is : 1 byte region prefix + 8 byte start_ts + >=1 byte key
+    if (kv.key().length() < 10) {
       DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "data_reader->KvScan failed");
     }
@@ -835,14 +828,16 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   // scan [start_key, end_key) for lock
   std::vector<pb::common::KeyValue> lock_kvs;
   ctx->SetCfName(Constant::kTxnLockCF);
-  ret = lock_reader->KvScan(ctx, start_key, end_key, lock_kvs);
+  ret = lock_reader->KvScan(ctx, Helper::EncodeTxnKey(start_key, Constant::kLockVer),
+                            Helper::EncodeTxnKey(end_key, Constant::kLockVer), lock_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
   }
 
   for (const auto& kv : lock_kvs) {
-    if (kv.key().length() < 16) {
+    // the min key len is : 1 byte region prefix + 8 byte start_ts + >=1 byte key
+    if (kv.key().length() < 10) {
       DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "lock_reader->KvScan failed");
     }
@@ -858,14 +853,16 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   // scan [start_key, end_key) for write
   std::vector<pb::common::KeyValue> write_kvs;
   ctx->SetCfName(Constant::kTxnWriteCF);
-  ret = write_reader->KvScan(ctx, start_key + buf_start.GetString(), end_key + buf_end.GetString(), write_kvs);
+  ret = write_reader->KvScan(ctx, Helper::EncodeTxnKey(start_key, end_ts), Helper::EncodeTxnKey(end_key, start_ts),
+                             write_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
   }
 
   for (const auto& kv : write_kvs) {
-    if (kv.key().length() < 16) {
+    // the min key len is : 1 byte region prefix + 8 byte start_ts + >=1 byte key
+    if (kv.key().length() < 10) {
       DINGO_LOG(ERROR) << fmt::format("write_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "write_reader->KvScan failed");
     }
