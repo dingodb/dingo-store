@@ -52,7 +52,7 @@ class Server {
   bool InitConfig(const std::string& filename);
 
   // Init log.
-  bool InitLog();
+  static bool InitLog();
 
   // Valiate coordinator is connected and valid.
   static bool ValiateCoordinator() { return true; }
@@ -173,22 +173,22 @@ class Server {
 
   std::string GetCheckpointPath() { return checkpoint_path_; }
 
-  std::string GetStorePath() {
+  static std::string GetStorePath() {
     auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("store.path");
   }
 
-  std::string GetRaftPath() {
+  static std::string GetRaftPath() {
     auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("raft.path");
   }
 
-  std::string GetRaftLogPath() {
+  static std::string GetRaftLogPath() {
     auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("raft.log_path");
   }
 
-  std::string GetIndexPath() {
+  static std::string GetIndexPath() {
     auto config = ConfigManager::GetInstance().GetRoleConfig();
     return config == nullptr ? "" : config->GetString("vector.index_path");
   }

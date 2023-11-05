@@ -320,14 +320,16 @@ enum Action {
 }
 
 message LockInfo {
-  bytes primary_lock = 1;  // the primary lock of the transaction
-  int64 lock_ts = 2;       // the start_ts of the transaction
-  bytes key = 3;           // the key of the lock
-  int64 lock_ttl = 4;      // the lock ttl timestamp in milisecond
-  int64 txn_size = 5;      // the number of keys involved in the transaction
-  Op lock_type = 6;        // the type of the lock, it can be put, delete, lock
-  bytes short_value = 7;   // the short value will persist to lock_info, and do not write data, commit will set it to
-                           // write_info.short_value
+  bytes primary_lock = 1;   // the primary lock of the transaction
+  bytes key = 2;            // the key of the lock
+  int64 lock_ts = 3;        // the start_ts of the transaction
+  int64 for_update_ts = 4;  // the for_update_ts of the pessimistic lock
+  int64 lock_ttl = 5;       // the lock ttl timestamp in milisecond
+  int64 txn_size = 6;       // the number of keys involved in the transaction
+  Op lock_type = 7;         // the type of the lock, it can be put, delete, lock
+  bytes short_value = 8;    // the short value will persist to lock_info, and do not write data, commit will set it to
+                            // write_info.short_value
+  bytes extra_data = 9;     // the extra_data executor want to store in lock
 }
 
 message WriteInfo {
@@ -347,8 +349,14 @@ enum Op {
 
 message Mutation {
   Op op = 1;
-  bytes key = 2;
-  bytes value = 3;
+  bytes key = 2;    // for put/putifabsent, key is the key to be put
+                    // for delete, key is the key to be deleted
+                    // for rollback, key is the key to be rollbacked
+                    // for lock, key is the key to be locked
+  bytes value = 3;  // for put/putifabsent, value is the value to be put
+                    // for delete, value is empty
+                    // for rollback, value is empty
+                    // for lock, value is the extra_data executor want to store in lock
 }
 
 message WriteConflict {
@@ -477,8 +485,6 @@ message TxnPessimisticLockRequest {
   // The name comes from the `SELECT ... FOR UPDATE` SQL statement which is a locking read. Each `SELECT ... FOR UPDATE`
   // in a transaction will be assigned its own timestamp.
   uint64 for_update_ts = 6;
-  // for executor to put extra data to store in lock
-  bytes extra_data = 7;
 }
 
 message TxnPessimisticLockResponse {
