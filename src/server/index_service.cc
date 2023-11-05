@@ -135,7 +135,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
                                         const pb::index::VectorBatchQueryRequest* request,
                                         pb::index::VectorBatchQueryResponse* response,
                                         google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorBatchQuery", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorBatchQuery(storage_, controller, request, response, svr_done);
@@ -269,7 +269,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
 void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
                                     const pb::index::VectorSearchRequest* request,
                                     pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorSearch", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_search) {
     return DoVectorSearch(storage_, controller, request, response, svr_done);
@@ -416,7 +416,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
 void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
                                  const pb::index::VectorAddRequest* request, pb::index::VectorAddResponse* response,
                                  google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorAdd", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_add) {
     return DoVectorAdd(storage_, controller, request, response, svr_done, false);
@@ -508,7 +508,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
 void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
                                     const pb::index::VectorDeleteRequest* request,
                                     pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorDelete", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_delete) {
     return DoVectorDelete(storage_, controller, request, response, svr_done, false);
@@ -582,7 +582,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
                                          const pb::index::VectorGetBorderIdRequest* request,
                                          pb::index::VectorGetBorderIdResponse* response,
                                          google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorGetBorderId", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorGetBorderId(storage_, controller, request, response, svr_done);
@@ -687,7 +687,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
 void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controller,
                                        const pb::index::VectorScanQueryRequest* request,
                                        pb::index::VectorScanQueryResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorScanQuery", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorScanQuery(storage_, controller, request, response, svr_done);
@@ -771,7 +771,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
                                               const pb::index::VectorGetRegionMetricsRequest* request,
                                               pb::index::VectorGetRegionMetricsResponse* response,
                                               google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorGetRegionMetrics", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorGetRegionMetrics(storage_, controller, request, response, svr_done);
@@ -881,7 +881,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
 void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
                                    const pb::index::VectorCountRequest* request,
                                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorCount", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_count) {
     return DoVectorCount(storage_, controller, request, response, svr_done);
@@ -1032,7 +1032,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
                                          const pb::index::VectorSearchDebugRequest* request,
                                          pb::index::VectorSearchDebugResponse* response,
                                          google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("VectorSearchDebug", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_search) {
     return DoVectorSearchDebug(storage_, controller, request, response, svr_done);
@@ -1132,7 +1132,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
 
 void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
                               pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnGet", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnGet(storage_, controller, request, response, svr_done);
@@ -1260,7 +1260,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
 void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
                                pb::index::TxnScanResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnScan", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnScan(storage_, controller, request, response, svr_done);
@@ -1452,7 +1452,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    const pb::index::TxnPrewriteRequest* request,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnPrewrite", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnPrewrite(storage_, controller, request, response, svr_done, false);
@@ -1512,7 +1512,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
 void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
                                  google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnCommit", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnCommit(storage_, controller, request, response, svr_done, false);
@@ -1572,7 +1572,7 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          const pb::store::TxnCheckTxnStatusRequest* request,
                                          pb::store::TxnCheckTxnStatusResponse* response,
                                          google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnCheckTxnStatus", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, false);
@@ -1630,7 +1630,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
 void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controller,
                                       const pb::store::TxnResolveLockRequest* request,
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnResolveLock", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnResolveLock(storage_, controller, request, response, svr_done, false);
@@ -1739,7 +1739,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    const pb::store::TxnBatchGetRequest* request,
                                    pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnBatchGet", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnBatchGet(storage_, controller, request, response, svr_done);
@@ -1795,7 +1795,7 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         const pb::store::TxnBatchRollbackRequest* request,
                                         pb::store::TxnBatchRollbackResponse* response,
                                         google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnBatchRollback", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnBatchRollback(storage_, controller, request, response, svr_done, false);
@@ -1864,7 +1864,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
 void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    const pb::store::TxnScanLockRequest* request,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnScanLock", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnScanLock(storage_, controller, request, response, svr_done);
@@ -1919,7 +1919,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
 void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     const pb::store::TxnHeartBeatRequest* request,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnHeartBeat", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnHeartBeat(storage_, controller, request, response, svr_done, false);
@@ -1957,7 +1957,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, co
 
 void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnGc", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnGc(storage_, controller, request, response, svr_done, false);
@@ -2008,7 +2008,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
 void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controller,
                                       const pb::store::TxnDeleteRangeRequest* request,
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnDeleteRange", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnDeleteRange(storage_, controller, request, response, svr_done, false);
@@ -2063,7 +2063,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
 
 void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure("TxnDump", done, request, response);
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoTxnDump(storage_, controller, request, response, svr_done);
