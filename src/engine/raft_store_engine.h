@@ -173,6 +173,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     TxnWriter(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RaftStoreEngine> raft_engine)
         : raw_engine_(raw_engine), raft_engine_(raft_engine) {}
 
+    butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
+                                     const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                     int64_t for_update_ts, std::string extra_data) override;
+    butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
+                                         const std::vector<std::string>& keys) override;
     butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                               const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
                               bool try_one_pc, int64_t max_commit_ts) override;

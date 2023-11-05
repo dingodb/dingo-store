@@ -552,6 +552,47 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
   return butil::Status();
 }
 
+butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
+                                          const std::vector<pb::store::Mutation>& mutations,
+                                          const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                          int64_t for_update_ts, std::string extra_data) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnPessimisticLock mutations size : " << mutations.size() << " primary_lock : " << primary_lock
+                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts
+                  << " extra_data : " << extra_data;
+
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnPessimisticLock(ctx, mutations, primary_lock, start_ts, lock_ttl, for_update_ts, extra_data);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
+                                              const std::vector<std::string>& keys) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "TxnPessimisticRollback start_ts : " << start_ts << " for_update_ts : " << for_update_ts
+                  << " keys size : " << keys.size();
+
+  auto writer = engine_->NewTxnWriter(engine_);
+  status = writer->TxnPessimisticRollback(ctx, start_ts, for_update_ts, keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
                                    int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {

@@ -486,6 +486,21 @@ std::shared_ptr<Engine::TxnWriter> RaftStoreEngine::NewTxnWriter(std::shared_ptr
   return std::make_shared<RaftStoreEngine::TxnWriter>(raw_engine_, std::dynamic_pointer_cast<RaftStoreEngine>(engine));
 }
 
+butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
+                                                             const std::vector<pb::store::Mutation>& mutations,
+                                                             const std::string& primary_lock, int64_t start_ts,
+                                                             int64_t lock_ttl, int64_t for_update_ts,
+                                                             std::string extra_data) {
+  return TxnEngineHelper::PessimisticLock(raw_engine_, raft_engine_, ctx, mutations, primary_lock, start_ts, lock_ttl,
+                                          for_update_ts, extra_data);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                                 int64_t for_update_ts,
+                                                                 const std::vector<std::string>& keys) {
+  return TxnEngineHelper::PessimisticRollback(raw_engine_, raft_engine_, ctx, start_ts, for_update_ts, keys);
+}
+
 butil::Status RaftStoreEngine::TxnWriter::TxnPrewrite(std::shared_ptr<Context> ctx,
                                                       const std::vector<pb::store::Mutation>& mutations,
                                                       const std::string& primary_lock, int64_t start_ts,

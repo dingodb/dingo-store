@@ -37,6 +37,7 @@
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
+#include "proto/store.pb.h"
 #include "serial/buf.h"
 
 const int kBatchSize = 1000;
@@ -53,6 +54,8 @@ DEFINE_uint64(end_ts, 0, "end_ts");
 DEFINE_uint64(commit_ts, 0, "start_ts");
 DEFINE_uint64(lock_ts, 0, "start_ts");
 DEFINE_uint64(lock_ttl, 0, "lock_ttl");
+DEFINE_uint64(for_update_ts, 0, "for_update_ts");
+DEFINE_string(extra_data, "", "extra_data");
 DEFINE_uint64(safe_point_ts, 0, "safe_point_ts");
 DEFINE_uint64(txn_size, 0, "txn_size");
 DEFINE_string(primary_lock, "", "primary_lock");
@@ -66,7 +69,7 @@ DEFINE_uint64(max_commit_ts, 0, "max_commit_ts");
 DEFINE_bool(key_only, false, "key_only");
 DEFINE_bool(with_start, true, "with_start");
 DEFINE_bool(with_end, false, "with_end");
-DEFINE_string(mutation_op, "", "mutation_op");
+DEFINE_string(mutation_op, "", "mutation_op, [put, delete, putifabsent, lock]");
 DEFINE_string(key2, "", "key2");
 DEFINE_bool(rc, false, "read commited");
 DECLARE_int64(dimension);
@@ -207,6 +210,114 @@ void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& reg
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnScan", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
+void StoreSendTxnPessimisticLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
+  dingodb::pb::store::TxnPessimisticLockRequest request;
+  dingodb::pb::store::TxnPessimisticLockResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_primary_lock.empty()) {
+    DINGO_LOG(ERROR) << "primary_lock is empty";
+    return;
+  }
+  request.set_primary_lock(FLAGS_primary_lock);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_lock_ttl == 0) {
+    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    return;
+  }
+  request.set_lock_ttl(FLAGS_lock_ttl);
+
+  if (FLAGS_for_update_ts == 0) {
+    DINGO_LOG(ERROR) << "for_update_ts is empty";
+    return;
+  }
+  request.set_for_update_ts(FLAGS_for_update_ts);
+
+  if (FLAGS_extra_data.empty()) {
+    DINGO_LOG(ERROR) << "extra_data is empty";
+    return;
+  }
+  request.set_extra_data(FLAGS_extra_data);
+
+  if (FLAGS_mutation_op.empty()) {
+    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    return;
+  }
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  if (FLAGS_mutation_op == "lock") {
+    if (FLAGS_value.empty()) {
+      DINGO_LOG(ERROR) << "value is empty";
+      return;
+    }
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::Lock);
+    mutation->set_key(FLAGS_key);
+    mutation->set_value(FLAGS_value);
+  } else {
+    DINGO_LOG(ERROR) << "mutation_op MUST be [lock]";
+    return;
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnPessimisticLock", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
+void StoreSendTxnPessimisticRollback(uint64_t region_id, const dingodb::pb::common::Region& region) {
+  dingodb::pb::store::TxnPessimisticRollbackRequest request;
+  dingodb::pb::store::TxnPessimisticRollbackResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_for_update_ts == 0) {
+    DINGO_LOG(ERROR) << "for_update_ts is empty";
+    return;
+  }
+  request.set_for_update_ts(FLAGS_for_update_ts);
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  *request.add_keys() = FLAGS_key;
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnPessimisticRollback", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
@@ -733,6 +844,114 @@ void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& reg
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
+void IndexSendTxnPessimisticLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
+  dingodb::pb::store::TxnPessimisticLockRequest request;
+  dingodb::pb::store::TxnPessimisticLockResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_primary_lock.empty()) {
+    DINGO_LOG(ERROR) << "primary_lock is empty";
+    return;
+  }
+  request.set_primary_lock(FLAGS_primary_lock);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_lock_ttl == 0) {
+    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    return;
+  }
+  request.set_lock_ttl(FLAGS_lock_ttl);
+
+  if (FLAGS_for_update_ts == 0) {
+    DINGO_LOG(ERROR) << "for_update_ts is empty";
+    return;
+  }
+  request.set_for_update_ts(FLAGS_for_update_ts);
+
+  if (FLAGS_extra_data.empty()) {
+    DINGO_LOG(ERROR) << "extra_data is empty";
+    return;
+  }
+  request.set_extra_data(FLAGS_extra_data);
+
+  if (FLAGS_mutation_op.empty()) {
+    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    return;
+  }
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  if (FLAGS_mutation_op == "lock") {
+    if (FLAGS_value.empty()) {
+      DINGO_LOG(ERROR) << "value is empty";
+      return;
+    }
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::Lock);
+    mutation->set_key(FLAGS_key);
+    mutation->set_value(FLAGS_value);
+  } else {
+    DINGO_LOG(ERROR) << "mutation_op MUST be [lock]";
+    return;
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnPessimisticLock", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
+void IndexSendTxnPessimisticRollback(uint64_t region_id, const dingodb::pb::common::Region& region) {
+  dingodb::pb::store::TxnPessimisticRollbackRequest request;
+  dingodb::pb::store::TxnPessimisticRollbackResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_for_update_ts == 0) {
+    DINGO_LOG(ERROR) << "for_update_ts is empty";
+    return;
+  }
+  request.set_for_update_ts(FLAGS_for_update_ts);
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  *request.add_keys() = FLAGS_key;
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnPessimisticRollback", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::index::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
@@ -1244,6 +1463,38 @@ void SendTxnScan(uint64_t region_id) {
     StoreSendTxnScan(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
     IndexSendTxnScan(region_id, region);
+  } else {
+    DINGO_LOG(ERROR) << "region_type is invalid";
+  }
+}
+
+void SendTxnPessimisticLock(uint64_t region_id) {
+  dingodb::pb::common::Region region;
+  if (!TxnGetRegion(region_id, region)) {
+    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    return;
+  }
+
+  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
+    StoreSendTxnPessimisticLock(region_id, region);
+  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
+    IndexSendTxnPessimisticLock(region_id, region);
+  } else {
+    DINGO_LOG(ERROR) << "region_type is invalid";
+  }
+}
+
+void SendTxnPessimisticRollback(uint64_t region_id) {
+  dingodb::pb::common::Region region;
+  if (!TxnGetRegion(region_id, region)) {
+    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    return;
+  }
+
+  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
+    StoreSendTxnPessimisticRollback(region_id, region);
+  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION) {
+    IndexSendTxnPessimisticRollback(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
