@@ -1125,10 +1125,6 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
                               pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnGet(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnGet(storage, controller, request, response, svr_done); });
@@ -1221,10 +1217,6 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
                                pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnScan(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnScan(storage, controller, request, response, svr_done); });
@@ -1278,6 +1270,14 @@ static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store:
       return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
     }
     keys.push_back(mutation.key());
+
+    if (mutation.value().size() > 8192) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "value size is too large, max=8192");
+    }
+
+    if (mutation.op() != pb::store::Op::Lock) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "op is not Lock");
+    }
   }
   status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
   if (!status.ok()) {
@@ -1328,10 +1328,6 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
                                           pb::store::TxnPessimisticLockResponse* response,
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnPessimisticLock(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1424,10 +1420,6 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
                                               pb::store::TxnPessimisticRollbackResponse* response,
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1532,10 +1524,6 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnPrewrite(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -1627,10 +1615,6 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnCommit(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -1711,10 +1695,6 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          pb::store::TxnCheckTxnStatusResponse* response,
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1800,10 +1780,6 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                       const pb::store::TxnResolveLockRequest* request,
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnResolveLock(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1895,10 +1871,6 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnBatchGet(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnBatchGet(storage, controller, request, response, svr_done); });
@@ -1980,10 +1952,6 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         pb::store::TxnBatchRollbackResponse* response,
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnBatchRollback(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2082,10 +2050,6 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnScanLock(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnScanLock(storage, controller, request, response, svr_done); });
@@ -2166,10 +2130,6 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnHeartBeat(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -2232,10 +2192,6 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
 void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnGc(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2312,10 +2268,6 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                       const pb::store::TxnDeleteRangeRequest* request,
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnDeleteRange(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2418,10 +2370,6 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
 void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_store_operation) {
-    return DoTxnDump(storage_, controller, request, response, svr_done);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;

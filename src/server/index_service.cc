@@ -1134,10 +1134,6 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
                               pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnGet(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnGet(storage, controller, request, response, svr_done); });
@@ -1262,16 +1258,60 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
                                pb::index::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnScan(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnScan(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store::TxnPessimisticLockRequest* request);
+
+void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* controller,
+                          const dingodb::pb::store::TxnPessimisticLockRequest* request,
+                          dingodb::pb::store::TxnPessimisticLockResponse* response, google::protobuf::Closure* done,
+                          bool is_sync);
+
+void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* controller,
+                                          const pb::store::TxnPessimisticLockRequest* request,
+                                          pb::store::TxnPessimisticLockResponse* response,
+                                          google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task = std::make_shared<ServiceTask>(
+      [=]() { DoTxnPessimisticLock(storage, controller, request, response, svr_done, true); });
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+butil::Status ValidateTxnPessimisticRollbackRequest(const dingodb::pb::store::TxnPessimisticRollbackRequest* request);
+
+void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcController* controller,
+                              const dingodb::pb::store::TxnPessimisticRollbackRequest* request,
+                              dingodb::pb::store::TxnPessimisticRollbackResponse* response,
+                              google::protobuf::Closure* done, bool is_sync);
+
+void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* controller,
+                                              const pb::store::TxnPessimisticRollbackRequest* request,
+                                              pb::store::TxnPessimisticRollbackResponse* response,
+                                              google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task = std::make_shared<ServiceTask>(
+      [=]() { DoTxnPessimisticRollback(storage, controller, request, response, svr_done, true); });
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1454,10 +1494,6 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnPrewrite(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -1513,10 +1549,6 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnCommit(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1574,10 +1606,6 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
@@ -1631,10 +1659,6 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                       const pb::store::TxnResolveLockRequest* request,
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnResolveLock(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1741,10 +1765,6 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnBatchGet(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnBatchGet(storage, controller, request, response, svr_done); });
@@ -1796,10 +1816,6 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         pb::store::TxnBatchRollbackResponse* response,
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnBatchRollback(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1866,10 +1882,6 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnScanLock(storage_, controller, request, response, svr_done);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnScanLock(storage, controller, request, response, svr_done); });
@@ -1921,10 +1933,6 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnHeartBeat(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -1958,10 +1966,6 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, co
 void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnGc(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2009,10 +2013,6 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                       const pb::store::TxnDeleteRangeRequest* request,
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnDeleteRange(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2064,10 +2064,6 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
 void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_operation) {
-    return DoTxnDump(storage_, controller, request, response, svr_done);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
