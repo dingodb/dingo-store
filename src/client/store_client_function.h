@@ -139,6 +139,8 @@ std::string HexToVectorPrefix(const std::string& hex);
 bool TxnGetRegion(uint64_t region_id, dingodb::pb::common::Region& region);
 void SendTxnGet(uint64_t region_id);
 void SendTxnScan(uint64_t region_id);
+void SendTxnPessimisticLock(uint64_t region_id);
+void SendTxnPessimisticRollback(uint64_t region_id);
 void SendTxnPrewrite(uint64_t region_id);
 void SendTxnCommit(uint64_t region_id);
 void SendTxnCheckTxnStatus(uint64_t region_id);
@@ -153,6 +155,8 @@ void SendTxnDump(uint64_t region_id);
 
 void StoreSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnPessimisticLock(uint64_t region_id, const dingodb::pb::common::Region& region);
+void StoreSendTxnPessimisticRollback(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region);
@@ -167,6 +171,8 @@ void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& reg
 
 void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnPessimisticLock(uint64_t region_id, const dingodb::pb::common::Region& region);
+void IndexSendTxnPessimisticRollback(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region);

@@ -323,6 +323,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendTxnGet(FLAGS_region_id);
     } else if (method == "TxnScan") {
       client::SendTxnScan(FLAGS_region_id);
+    } else if (method == "TxnPessimisticLock") {
+      client::SendTxnPessimisticLock(FLAGS_region_id);
+    } else if (method == "TxnPessimisticRollback") {
+      client::SendTxnPessimisticRollback(FLAGS_region_id);
     } else if (method == "TxnPrewrite") {
       client::SendTxnPrewrite(FLAGS_region_id);
     } else if (method == "TxnCommit") {

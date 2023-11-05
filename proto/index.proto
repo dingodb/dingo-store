@@ -376,9 +376,10 @@ service IndexService {
   rpc TxnScanLock(dingodb.pb.store.TxnScanLockRequest) returns (dingodb.pb.store.TxnScanLockResponse);
   rpc TxnDump(dingodb.pb.store.TxnDumpRequest) returns (dingodb.pb.store.TxnDumpResponse);
 
-  rpc TxnPessimisticLock(dingodb.pb.store.PessimisticLockRequest) returns (dingodb.pb.store.PessimisticLockResponse);
-  rpc TxnPessimisticRollback(dingodb.pb.store.PessimisticRollbackRequest)
-      returns (dingodb.pb.store.PessimisticRollbackResponse);
+  rpc TxnPessimisticLock(dingodb.pb.store.TxnPessimisticLockRequest)
+      returns (dingodb.pb.store.TxnPessimisticLockResponse);
+  rpc TxnPessimisticRollback(dingodb.pb.store.TxnPessimisticRollbackRequest)
+      returns (dingodb.pb.store.TxnPessimisticRollbackResponse);
   rpc TxnPrewrite(TxnPrewriteRequest) returns (dingodb.pb.store.TxnPrewriteResponse);
   rpc TxnCommit(dingodb.pb.store.TxnCommitRequest) returns (dingodb.pb.store.TxnCommitResponse);
   rpc TxnCheckTxnStatus(dingodb.pb.store.TxnCheckTxnStatusRequest) returns (dingodb.pb.store.TxnCheckTxnStatusResponse);

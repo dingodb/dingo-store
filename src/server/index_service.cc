@@ -52,7 +52,7 @@ DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation"
 
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
-DEFINE_uint32(max_prewrite_count, 1024, "max prewrite count");
+DECLARE_uint32(max_prewrite_count);
 DECLARE_uint32(max_scan_lock_limit);
 
 IndexServiceImpl::IndexServiceImpl() = default;

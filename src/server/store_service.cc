@@ -41,7 +41,7 @@ namespace dingodb {
 DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
 DEFINE_uint32(max_scan_lock_limit, 5000, "Max scan lock limit");
-DECLARE_uint32(max_prewrite_count);
+DEFINE_uint32(max_prewrite_count, 1024, "max prewrite count");
 
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
@@ -1231,6 +1231,211 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store::TxnPessimisticLockRequest* request) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return status;
+  }
+
+  if (request->mutations_size() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations is empty");
+  }
+
+  if (request->mutations_size() > FLAGS_max_prewrite_count) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations size is too large, max=1024");
+  }
+
+  if (request->primary_lock().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "primary_lock is empty");
+  }
+
+  if (request->start_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
+  }
+
+  if (request->lock_ttl() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "lock_ttl is 0");
+  }
+
+  if (request->for_update_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "for_update_ts is 0");
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  std::vector<std::string_view> keys;
+  for (const auto& mutation : request->mutations()) {
+    if (mutation.key().empty()) {
+      return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
+    }
+    keys.push_back(mutation.key());
+  }
+  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* controller,
+                          const dingodb::pb::store::TxnPessimisticLockRequest* request,
+                          dingodb::pb::store::TxnPessimisticLockResponse* response, google::protobuf::Closure* done,
+                          bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  int64_t region_id = request->context().region_id();
+
+  auto status = ValidateTxnPessimisticLockRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    return;
+  }
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+
+  std::vector<pb::store::Mutation> mutations;
+  for (const auto& mutation : request->mutations()) {
+    mutations.emplace_back(mutation);
+  }
+
+  std::vector<pb::common::KeyValue> kvs;
+  status = storage->TxnPessimisticLock(ctx, mutations, request->primary_lock(), request->start_ts(),
+                                       request->lock_ttl(), request->for_update_ts(), request->extra_data());
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    if (!is_sync) done->Run();
+  }
+}
+
+void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* controller,
+                                          const pb::store::TxnPessimisticLockRequest* request,
+                                          pb::store::TxnPessimisticLockResponse* response,
+                                          google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoTxnPessimisticLock(storage_, controller, request, response, svr_done, false);
+  }
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task = std::make_shared<ServiceTask>(
+      [=]() { DoTxnPessimisticLock(storage, controller, request, response, svr_done, true); });
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+static butil::Status ValidateTxnPessimisticRollbackRequest(
+    const dingodb::pb::store::TxnPessimisticRollbackRequest* request) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
+    return status;
+  }
+
+  if (request->keys_size() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "keys is empty");
+  }
+
+  if (request->keys_size() > FLAGS_max_prewrite_count) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "keys size is too large, max=1024");
+  }
+
+  if (request->start_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
+  }
+
+  if (request->for_update_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "for_update_ts is 0");
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  std::vector<std::string_view> keys;
+  for (const auto& key : request->keys()) {
+    if (key.empty()) {
+      return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
+    }
+    keys.push_back(key);
+  }
+  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcController* controller,
+                              const dingodb::pb::store::TxnPessimisticRollbackRequest* request,
+                              dingodb::pb::store::TxnPessimisticRollbackResponse* response,
+                              google::protobuf::Closure* done, bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  int64_t region_id = request->context().region_id();
+
+  auto status = ValidateTxnPessimisticRollbackRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    return;
+  }
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+
+  status = storage->TxnPessimisticRollback(ctx, request->start_ts(), request->for_update_ts(),
+                                           Helper::PbRepeatedToVector(request->keys()));
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    if (!is_sync) done->Run();
+  }
+}
+
+void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* controller,
+                                              const pb::store::TxnPessimisticRollbackRequest* request,
+                                              pb::store::TxnPessimisticRollbackResponse* response,
+                                              google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, false);
+  }
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task = std::make_shared<ServiceTask>(
+      [=]() { DoTxnPessimisticRollback(storage, controller, request, response, svr_done, true); });
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }

@@ -152,6 +152,12 @@ class Engine {
     TxnWriter() = default;
     virtual ~TxnWriter() = default;
 
+    virtual butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx,
+                                             const std::vector<pb::store::Mutation>& mutations,
+                                             const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                             int64_t for_update_ts, std::string extra_data) = 0;
+    virtual butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
+                                                 const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                       const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
                                       int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) = 0;

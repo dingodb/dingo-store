@@ -757,6 +757,42 @@ butil::Status TxnEngineHelper::GetRollbackInfo(RawEngine::ReaderPtr reader, int6
   return butil::Status::OK();
 }
 
+butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                               std::shared_ptr<Context> ctx,
+                                               const std::vector<pb::store::Mutation> &mutations,
+                                               const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                               int64_t for_update_ts, std::string extra_data) {
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                  << ", mutations_size: " << mutations.size() << ", primary_lock: " << primary_lock
+                  << ", lock_ttl: " << lock_ttl << ", for_update_ts: " << for_update_ts
+                  << ", extra_data: " << extra_data;
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                   std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                   int64_t for_update_ts, const std::vector<std::string> &keys) {
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
+                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
+                  << ", keys_size: " << keys.size();
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                         std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                         const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
