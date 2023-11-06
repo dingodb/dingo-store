@@ -35,4 +35,5 @@ public class IvfPqParam {
     private Integer nsubvector;
     private Integer bucketInitSize;
     private Integer bucketMaxSize;
+    private Integer nbitsPerIdx;
 }

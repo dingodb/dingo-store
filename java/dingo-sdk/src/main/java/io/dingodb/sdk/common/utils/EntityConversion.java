@@ -431,7 +431,11 @@ public class EntityConversion {
                                             pqParam.getNcentroids(),
                                             pqParam.getNsubvector(),
                                             pqParam.getBucketInitSize(),
-                                            pqParam.getBucketMaxSize())));
+                                            pqParam.getBucketMaxSize(),
+                                            pqParam.getNbitsPerIdx()
+                                    )
+                            )
+                    );
                 case VECTOR_INDEX_TYPE_HNSW:
                     Common.CreateHnswParam hnswParam = vectorParam.getHnswParameter();
                     return new IndexParameter(
@@ -496,6 +500,7 @@ public class EntityConversion {
                             .setNcentroids(ivfPqParam.getNcentroids())
                             .setBucketInitSize(ivfPqParam.getBucketInitSize())
                             .setBucketMaxSize(ivfPqParam.getBucketMaxSize())
+                            .setNbitsPerIdx(ivfPqParam.getNbitsPerIdx())
                             .build());
                     break;
                 case VECTOR_INDEX_TYPE_HNSW:

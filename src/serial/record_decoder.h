@@ -40,7 +40,11 @@ namespace dingodb {
 
 class RecordDecoder {
  private:
-  int codec_version_ = 0;
+  bool CheckPrefix(Buf* buf) const;
+  bool CheckReverseTag(Buf* buf) const;
+  bool CheckSchemaVersion(Buf* buf) const;
+
+  int codec_version_ = 1;
   int schema_version_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas_;
   long common_id_;

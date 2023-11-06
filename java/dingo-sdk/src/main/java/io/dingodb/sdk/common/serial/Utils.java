@@ -47,7 +47,8 @@ public final class Utils {
     }
 
     public static int[] getApproPerRecordSize(List<DingoSchema> schemas) {
-        int keySize = 8 + 4;
+        // prefix is namespace(1) and common id(8), codec version(1) and other(3)
+        int keySize = 1 + 8 + 4;
         int valueSize = 4;
         for (DingoSchema schema : schemas) {
             if (schema.isKey()) {

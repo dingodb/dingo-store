@@ -21,6 +21,7 @@ import io.dingodb.common.Common;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.service.connector.VersionServiceConnector;
 import io.dingodb.version.Version;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
@@ -49,8 +50,8 @@ public class LockService {
         this(servers, 30);
     }
 
-    public LockService(String servers, String resource) {
-        this(servers, resource, 30);
+    public LockService(String resource, String servers) {
+        this(resource, servers, 30);
     }
 
     public LockService(String servers, int leaseTtl) {
@@ -88,7 +89,10 @@ public class LockService {
 
         private final Consumer<Lock> onReset;
 
+        @Getter
         private int locked = 0;
+        @Getter
+        private long revision;
 
         public Lock(Consumer<Lock> onReset) {
             this.onReset = onReset;
@@ -135,6 +139,7 @@ public class LockService {
                         .min(Comparator.comparingLong(Version.Kv::getModRevision))
                         .get();
                     if (current.getModRevision() == revision) {
+                        this.revision = revision;
                         if (log.isDebugEnabled()) {
                             log.debug("Lock {} success.", resourceKey);
                         }
@@ -172,7 +177,6 @@ public class LockService {
             }
             Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
             long revision = response.getHeader().getRevision();
-
             try {
                 Optional<Version.Kv> current = connector.exec(stub -> stub.kvRange(rangeRequest()))
                     .getKvsList().stream()

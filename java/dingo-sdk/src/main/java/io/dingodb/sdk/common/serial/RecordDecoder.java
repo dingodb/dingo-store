@@ -23,34 +23,68 @@ import java.util.Arrays;
 import java.util.List;
 
 public class RecordDecoder {
-    private final int codecVersion = 0;
     private final int schemaVersion;
     private List<DingoSchema> schemas;
-    private final long commonId;
+    private final long id;
 
-    public RecordDecoder(int schemaVersion, List<DingoSchema> schemas, long commonId) {
+    public RecordDecoder(int schemaVersion, List<DingoSchema> schemas, long id) {
         this.schemaVersion = schemaVersion;
         this.schemas = schemas;
-        this.commonId = commonId;
+        this.id = id;
+    }
+
+    private void checkPrefix(Buf buf) {
+        // TODO for 0.7.1 check default namespace 'r' for not txn region
+        if (buf.read() != 'r') {
+            throw new RuntimeException("Namespace not support, please check data or upgrade.");
+        }
+
+        long keyId = buf.readLong();
+        if (keyId != id) {
+            throw new RuntimeException("Invalid prefix id, codec prefix id: " + id + ", key prefix id " + keyId);
+        }
+    }
+
+    private void checkTag(Buf buf) {
+        int codecVer = buf.reverseRead();
+        if (codecVer > Config.CODEC_VERSION) {
+            throw new RuntimeException(
+                "Invalid codec version, codec version: " + Config.CODEC_VERSION + ", key codec version " + codecVer
+            );
+        }
+
+        buf.reverseSkip(3);
+    }
+
+    private void checkSchemaVersion(Buf buf) {
+        int schemaVer = buf.readInt();
+        if (schemaVer > this.schemaVersion) {
+            throw new RuntimeException(
+                "Invalid schema version, schema version: " + this.schemaVersion + ", key schema version " + schemaVer
+            );
+        }
+    }
+
+    private void checkKeyValue(Buf keyBuf, Buf valueBuf) {
+        checkTag(keyBuf);
+        checkPrefix(keyBuf);
+        checkSchemaVersion(valueBuf);
     }
 
     public Object[] decode(KeyValue keyValue) {
         Buf keyBuf = new BufImpl(keyValue.getKey());
         Buf valueBuf = new BufImpl(keyValue.getValue());
-        if (keyBuf.readLong() != commonId) {
-            throw new RuntimeException("Wrong Common Id");
-        }
-        if (keyBuf.reverseReadInt() != codecVersion) {
-            throw new RuntimeException("Wrong Codec Version");
-        }
-        if (valueBuf.readInt() != schemaVersion) {
-            throw new RuntimeException("Wrong Schema Version");
-        }
+
+        checkKeyValue(keyBuf, valueBuf);
+
         Object[] record = new Object[schemas.size()];
-        for (DingoSchema schema : schemas) {
+        for (DingoSchema<?> schema : schemas) {
             if (schema.isKey()) {
                 record[schema.getIndex()] = schema.decodeKey(keyBuf);
             } else {
+                if (valueBuf.isEnd()) {
+                    continue;
+                }
                 record[schema.getIndex()] = schema.decodeValue(valueBuf);
             }
         }
@@ -60,28 +94,22 @@ public class RecordDecoder {
     public Object[] decode(KeyValue keyValue, int[] columnIndexes) {
         Buf keyBuf = new BufImpl(keyValue.getKey());
         Buf valueBuf = new BufImpl(keyValue.getValue());
-        if (keyBuf.readLong() != commonId) {
-            throw new RuntimeException("Wrong Common Id");
-        }
-        if (keyBuf.reverseReadInt() != codecVersion) {
-            throw new RuntimeException("Wrong Codec Version");
-        }
-        if (valueBuf.readInt() != schemaVersion) {
-            throw new RuntimeException("Wrong Schema Version");
-        }
+
+        checkKeyValue(keyBuf, valueBuf);
+
         Object[] record = new Object[columnIndexes.length];
         int i = 0;
-        for (DingoSchema schema : schemas) {
+        for (DingoSchema<?> schema : schemas) {
             if (Arrays.binarySearch(columnIndexes, schema.getIndex()) < 0) {
                 if (schema.isKey()) {
                     schema.skipKey(keyBuf);
-                } else {
+                } else if (!valueBuf.isEnd()) {
                     schema.skipValue(valueBuf);
                 }
             } else {
                 if (schema.isKey()) {
                     record[i] = schema.decodeKey(keyBuf);
-                } else {
+                } else if (!valueBuf.isEnd()) {
                     record[i] = schema.decodeValue(valueBuf);
                 }
                 i++;
@@ -92,11 +120,17 @@ public class RecordDecoder {
 
     public Object[] decodeKeyPrefix(byte[] keyPrefix) {
         Buf keyPrefixBuf = new BufImpl(keyPrefix);
-        if (keyPrefixBuf.readLong() != commonId) {
+
+        // TODO for 0.7.1 check namespace 'r' for not txn region
+        if (keyPrefixBuf.peek() != 0 && keyPrefixBuf.read() != 'r') {
+            throw new RuntimeException("Namespace not support, please check data or upgrade.");
+        }
+
+        if (keyPrefixBuf.readLong() != id) {
             throw new RuntimeException("Wrong Common Id");
         }
         Object[] record = new Object[schemas.size()];
-        for (DingoSchema schema : schemas) {
+        for (DingoSchema<?> schema : schemas) {
             if (keyPrefixBuf.isEnd()) {
                 break;
             }
@@ -109,11 +143,14 @@ public class RecordDecoder {
 
     public Object[] decodeValue(KeyValue keyValue, int[] columnIndexes) {
         Buf valueBuf = new BufImpl(keyValue.getValue());
-        if (valueBuf.readInt() != schemaVersion) {
+        if (valueBuf.readInt() > schemaVersion) {
             throw new RuntimeException("Wrong Schema Version");
         }
         Object[] record = new Object[schemas.size()];
-        for (DingoSchema schema : schemas) {
+        for (DingoSchema<?> schema : schemas) {
+            if (valueBuf.isEnd()) {
+                break;
+            }
             if (!schema.isKey()) {
                 if (Arrays.binarySearch(columnIndexes, schema.getIndex()) < 0) {
                     schema.skipValue(valueBuf);

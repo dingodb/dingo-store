@@ -50,6 +50,11 @@ class Buf {
   void WriteLongWithNegation(int64_t l);
   void ReverseWrite(uint8_t b);
   void ReverseWriteInt(int32_t i);
+
+  uint8_t Peek();
+  int32_t PeekInt();
+  int64_t PeekLong();
+
   uint8_t Read();
   int32_t ReadInt();
   int64_t ReadLong();
@@ -63,6 +68,7 @@ class Buf {
   int GetBytes(std::string& s);
   std::string GetString();
   bool IsLe() const;
+  bool IsEnd() const;
 };
 
 }  // namespace dingodb

@@ -159,6 +159,43 @@ void Buf::ReverseWriteInt(int32_t i) {
   }
 }
 
+uint8_t Buf::Peek() { return buf_.at(forward_pos_); }
+
+int32_t Buf::PeekInt() {
+  if (this->le_) {
+    return 
+      (
+          ( buf_.at(forward_pos_    ) & 0xFF) << 24) 
+        | ((buf_.at(forward_pos_ + 1) & 0xFF) << 16) 
+        | ((buf_.at(forward_pos_ + 2) & 0xFF) << 8 ) 
+        | ( buf_.at(forward_pos_ + 3) & 0xFF
+      );
+  } else {
+    return
+      (
+          ( buf_.at(forward_pos_    ) & 0xFF)
+        | ((buf_.at(forward_pos_ + 1) & 0xFF) << 8 ) 
+        | ((buf_.at(forward_pos_ + 2) & 0xFF) << 16) 
+        | ((buf_.at(forward_pos_ + 3) & 0xFF) << 24)
+      );
+  }
+}
+
+int64_t Buf::PeekLong() {
+  uint64_t l = (buf_.at(forward_pos_)) & 0xFF;
+  if (this->le_) {
+    for (int i = 0; i < 7; i++) {
+      l <<= 8;
+      l |= (buf_.at(forward_pos_ + i + 1)) & 0xFF;
+    }
+  } else {
+    for (int i = 1; i < 8; i++) {
+      l |= (((uint64_t)(buf_.at(forward_pos_ + i)) & 0xFF) << (8 * i));
+    }
+  }
+  return l;
+}
+
 uint8_t Buf::Read() { return buf_.at(forward_pos_++); }
 
 int32_t Buf::ReadInt() {
@@ -272,5 +309,9 @@ std::string Buf::GetString() {
 }
 
 bool Buf::IsLe() const { return this->le_; }
+
+bool Buf::IsEnd() const {
+  return (reverse_pos_ - forward_pos_ + 1) == 0;
+}
 
 }  // namespace dingodb

@@ -31,4 +31,26 @@ public interface DingoCommonId {
         ENTITY_TYPE_INDEX,
         ENTITY_TYPE_REGION;
     }
+
+    static boolean equals(DingoCommonId id1, DingoCommonId id2) {
+        if (id1 == id2) {
+            return true;
+        }
+
+        if (id1.parentId() != id2.parentId()) {
+            return false;
+        }
+        if (id1.entityId() != id2.entityId()) {
+            return false;
+        }
+        return id1.type() == id2.type();
+    }
+
+    static int hashCode(DingoCommonId id) {
+        int result = id.type().hashCode();
+        result = 31 * result + (int) (id.parentId() ^ (id.parentId() >>> 32));
+        result = 31 * result + (int) (id.entityId() ^ (id.entityId() >>> 32));
+        return result;
+    }
+
 }
