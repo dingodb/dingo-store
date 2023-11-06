@@ -658,7 +658,7 @@ void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& reg
 // index
 void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnGetRequest request;
-  dingodb::pb::index::TxnGetResponse response;
+  dingodb::pb::store::TxnGetResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
@@ -689,7 +689,7 @@ void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& regi
 
 void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnScanRequest request;
-  dingodb::pb::index::TxnScanResponse response;
+  dingodb::pb::store::TxnScanResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
@@ -736,7 +736,7 @@ void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& reg
 }
 
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnPrewriteRequest request;
+  dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
   request.mutable_context()->set_region_id(region_id);
@@ -969,7 +969,7 @@ void IndexSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Regi
 
 void IndexSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnBatchGetRequest request;
-  dingodb::pb::index::TxnBatchGetResponse response;
+  dingodb::pb::store::TxnBatchGetResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
@@ -1082,8 +1082,8 @@ void IndexSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region&
 }
 
 void IndexSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnHeartBeatRequest request;
-  dingodb::pb::index::TxnHeartBeatResponse response;
+  dingodb::pb::store::TxnHeartBeatRequest request;
+  dingodb::pb::store::TxnHeartBeatResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
@@ -1119,8 +1119,8 @@ void IndexSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region
 }
 
 void IndexSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnGcRequest request;
-  dingodb::pb::index::TxnGcResponse response;
+  dingodb::pb::store::TxnGcRequest request;
+  dingodb::pb::store::TxnGcResponse response;
 
   request.mutable_context()->set_region_id(region_id);
   request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
