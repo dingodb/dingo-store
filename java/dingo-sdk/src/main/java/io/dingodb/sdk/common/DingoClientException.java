@@ -47,6 +47,13 @@ public class DingoClientException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
+
+    public static final class RequestErrorException extends DingoClientException {
+        public RequestErrorException(int errorCode, String message) {
+            super(errorCode, message);
+        }
+    }
+
     public static final class RetryException extends DingoClientException {
         public RetryException(String message) {
             super(message);

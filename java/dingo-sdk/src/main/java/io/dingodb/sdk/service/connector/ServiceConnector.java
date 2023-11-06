@@ -17,7 +17,8 @@
 package io.dingodb.sdk.service.connector;
 
 import io.dingodb.error.ErrorOuterClass;
-import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
+import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
 import io.dingodb.sdk.common.DingoClientException.RetryException;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
@@ -53,6 +54,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
     public static final int RETRY_TIMES = 30;
     private static Map<Class, ResponseBuilder> responseBuilders = new ConcurrentHashMap<>();
+    private static ThreadLocal<Map<String, Integer>> ERR_MSGS = ThreadLocal.withInitial(HashMap::new);
 
     @Getter
     @AllArgsConstructor
@@ -135,7 +137,8 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     ) {
         S stub = null;
         boolean connected = false;
-        Map<String, Integer> errMsgs = new HashMap<>();
+        Map<String, Integer> errMsgs = ERR_MSGS.get();
+        errMsgs.clear();
 
         while (retryTimes-- > 0) {
             try {
@@ -171,7 +174,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                                     "Exec {} error, store: [{}], code: [{}], message: {}.",
                                     function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
                             );
-                            throw new DingoClientException(errCode, error.getErrmsg());
+                            throw new RequestErrorException(errCode, error.getErrmsg());
                         case REFRESH:
                             if (log.isDebugEnabled()) {
                                 log.warn(
@@ -181,7 +184,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                             }
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
-                            throw new DingoClientException.InvalidRouteTableException(response.error.getErrmsg());
+                            throw new InvalidRouteTableException(response.error.getErrmsg());
                         case IGNORE:
                             if (log.isDebugEnabled()) {
                                 log.warn(
@@ -196,6 +199,9 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 }
                 return response;
             } catch (Exception e) {
+                if (e instanceof RequestErrorException || e instanceof InvalidRouteTableException) {
+                    throw e;
+                }
                 if (log.isDebugEnabled()) {
                     log.warn("Exec {} failed: {}.", function.getClass(), e.getMessage());
                 }
