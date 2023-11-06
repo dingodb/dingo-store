@@ -22,14 +22,18 @@ public interface Buf {
     void write(byte[] b);
     void write(byte[] b, int pos, int length);
     void writeInt(int i);
-
     void writeLong(long l);
+
+    byte peek();
+    int peekInt();
+    long peekLong();
+
     byte read();
     byte[] read(int length);
     void read(byte[] b, int pos, int length);
     int readInt();
-
     long readLong();
+
     void reverseWrite(byte b);
     byte reverseRead();
     void reverseWriteInt(int i);

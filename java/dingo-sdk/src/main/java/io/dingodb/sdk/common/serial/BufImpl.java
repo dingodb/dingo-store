@@ -72,6 +72,31 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public byte peek() {
+        return buf[forwardPos];
+    }
+
+    @Override
+    public int peekInt() {
+        return (
+            ((buf[forwardPos]     & 0xFF) << 24)
+          | ((buf[forwardPos + 1] & 0xFF) << 16)
+          | ((buf[forwardPos + 2] & 0xFF) << 8 )
+          | ( buf[forwardPos + 3] & 0xFF       )
+        );
+    }
+
+    @Override
+    public long peekLong() {
+        long l = buf[forwardPos] & 0xFF;
+        for (int i = 0; i < 7; i++) {
+            l <<= 8;
+            l |= buf[forwardPos + i + 1] & 0xFF;
+        }
+        return l;
+    }
+
+    @Override
     public byte read() {
         return buf[forwardPos++];
     }

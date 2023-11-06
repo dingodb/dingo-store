@@ -32,6 +32,7 @@ import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_SPLITING_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_STATE_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_UNAVAILABLE_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EREGION_VERSION_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.EREQUEST_FULL_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_NOT_FOUND_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ETABLE_NOT_FOUND_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EVECTOR_INDEX_NOT_READY_VALUE;
@@ -62,7 +63,8 @@ public class ErrorCodeUtils {
         EREGION_UNAVAILABLE_VALUE,
         EREGION_PEER_CHANGEING_VALUE,
         EREGION_STATE_VALUE,
-        EVECTOR_INDEX_NOT_READY_VALUE
+        EVECTOR_INDEX_NOT_READY_VALUE,
+        EREQUEST_FULL_VALUE
     );
 
     public static final List<Integer> ignoreCode = Arrays.asList(

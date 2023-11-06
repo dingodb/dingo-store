@@ -23,27 +23,43 @@ import java.util.Arrays;
 import java.util.List;
 
 public class RecordEncoder {
-    private final int codecVersion = 0;
     private final int schemaVersion;
     private List<DingoSchema> schemas;
-    private final long commonId;
+    private final long id;
     private int keyBufSize;
     private int valueBufSize;
 
-    public RecordEncoder(int schemaVersion, List<DingoSchema> schemas, long commonId) {
+    public RecordEncoder(int schemaVersion, List<DingoSchema> schemas, long id) {
         this.schemaVersion = schemaVersion;
         this.schemas = schemas;
-        this.commonId = commonId;
+        this.id = id;
         int[] size = Utils.getApproPerRecordSize(schemas);
         this.keyBufSize = size[0];
         this.valueBufSize = size[1];
     }
 
-    public RecordEncoder(int schemaVersion, long commonId) {
+    public RecordEncoder(int schemaVersion, long id) {
         this.schemaVersion = schemaVersion;
-        this.commonId = commonId;
+        this.id = id;
     }
 
+    private void encodePrefix(Buf buf) {
+        // TODO for 0.7.1, set default namespace 'r' for not txn region
+        buf.write((byte) 'r');
+
+        buf.writeLong(id);
+    }
+
+    private void encodeTag(Buf buf) {
+        buf.reverseWrite(Config.CODEC_VERSION);
+        buf.reverseWrite((byte) 0);
+        buf.reverseWrite((byte) 0);
+        buf.reverseWrite((byte) 0);
+    }
+
+    private void encodeSchemaVersion(Buf buf) {
+        buf.writeInt(schemaVersion);
+    }
 
     public KeyValue encode(Object[] record) {
         KeyValue kv = new KeyValue(null, null);
@@ -54,8 +70,10 @@ public class RecordEncoder {
 
     public byte[] encodeKey(Object[] record) {
         Buf keyBuf = new BufImpl(keyBufSize);
-        keyBuf.writeLong(commonId);
-        keyBuf.reverseWriteInt(codecVersion);
+
+        encodeTag(keyBuf);
+        encodePrefix(keyBuf);
+
         for (DingoSchema schema : schemas) {
             if (schema.isKey()) {
                 schema.encodeKey(keyBuf, record[schema.getIndex()]);
@@ -66,7 +84,7 @@ public class RecordEncoder {
 
     public byte[] encodeValue(Object[] record) {
         Buf valueBuf = new BufImpl(valueBufSize);
-        valueBuf.writeInt(schemaVersion);
+        encodeSchemaVersion(valueBuf);
         for (DingoSchema schema : schemas) {
             if (!schema.isKey()) {
                 schema.encodeValue(valueBuf, record[schema.getIndex()]);
@@ -76,23 +94,24 @@ public class RecordEncoder {
     }
 
     public byte[] encodeMinKeyPrefix() {
-        Buf keyBuf = new BufImpl(8);
-        keyBuf.writeLong(commonId);
+        Buf keyBuf = new BufImpl(9);
+        encodePrefix(keyBuf);
         return keyBuf.getBytes();
     }
 
     public byte[] encodeMaxKeyPrefix() {
-        if (commonId == Long.MAX_VALUE) {
+        if (id == Long.MAX_VALUE) {
             throw new RuntimeException("CommonId reach max! Cannot generate Max Key Prefix");
         }
-        Buf keyBuf = new BufImpl(8);
-        keyBuf.writeLong(commonId+1);
+        Buf keyBuf = new BufImpl(9);
+        keyBuf.write((byte) 'r');
+        keyBuf.writeLong(id + 1);
         return keyBuf.getBytes();
     }
 
     public byte[] encodeKeyPrefix(Object[] record, int columnCount) {
         Buf keyBuf = new BufImpl(keyBufSize);
-        keyBuf.writeLong(commonId);
+        encodePrefix(keyBuf);
         for (DingoSchema schema : schemas) {
             if (schema.isKey()) {
                 if (columnCount-- > 0) {
@@ -123,7 +142,9 @@ public class RecordEncoder {
     }
 
     public byte[] resetKeyPrefix(byte[] key, long prefix) {
-        new BufImpl(key).writeLong(prefix);
+        BufImpl buf = new BufImpl(key);
+        buf.skip(1);
+        buf.writeLong(prefix);
         return key;
     }
 

@@ -39,7 +39,11 @@ namespace dingodb {
 
 class RecordEncoder {
  private:
-  int codec_version_ = 0;
+  void EncodePrefix(Buf* buf) const;
+  void EncodeReverseTag(Buf* buf) const;
+  void EncodeSchemaVersion(Buf* buf) const;
+
+  uint8_t codec_version_ = 1;
   int schema_version_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas_;
   long common_id_;

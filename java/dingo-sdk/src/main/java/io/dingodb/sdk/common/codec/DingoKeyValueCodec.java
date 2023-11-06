@@ -25,7 +25,6 @@ import io.dingodb.sdk.common.table.Table;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class DingoKeyValueCodec implements KeyValueCodec {
@@ -34,18 +33,30 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     RecordEncoder re;
     RecordDecoder rd;
 
-    public DingoKeyValueCodec(long commonId, List<DingoSchema> schemas) {
+    public DingoKeyValueCodec(long id, List<DingoSchema> schemas) {
+        this(1, id, schemas);
+    }
+
+    public DingoKeyValueCodec(int schemaVersion, long id, List<DingoSchema> schemas) {
         this.schemas = schemas;
-        re = new RecordEncoder(0, schemas, commonId);
-        rd = new RecordDecoder(0, schemas, commonId);
+        re = new RecordEncoder(schemaVersion, schemas, id);
+        rd = new RecordDecoder(schemaVersion, schemas, id);
     }
 
     public static DingoKeyValueCodec of(long id, Table table) {
-        return of(id, table.getColumns());
+        return of(table.getVersion(), id, table.getColumns());
     }
 
     public static DingoKeyValueCodec of(long id, List<Column> columns) {
-        return new DingoKeyValueCodec(id, CodecUtils.createSchemaForColumns(columns));
+        return new DingoKeyValueCodec(1, id, CodecUtils.createSchemaForColumns(columns));
+    }
+
+    public static DingoKeyValueCodec of(int schemaVersion,long id, Table table) {
+        return of(schemaVersion, id, table.getColumns());
+    }
+
+    public static DingoKeyValueCodec of(int schemaVersion, long id, List<Column> columns) {
+        return new DingoKeyValueCodec(schemaVersion, id, CodecUtils.createSchemaForColumns(columns));
     }
 
     @Override

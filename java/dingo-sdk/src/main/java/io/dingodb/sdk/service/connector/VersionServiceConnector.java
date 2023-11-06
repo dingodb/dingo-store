@@ -17,6 +17,7 @@
 package io.dingodb.sdk.service.connector;
 
 import io.dingodb.coordinator.Coordinator;
+import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
@@ -87,6 +88,15 @@ public class VersionServiceConnector extends ServiceConnector<VersionServiceGrpc
     @Override
     protected VersionServiceGrpc.VersionServiceBlockingStub newStub(ManagedChannel channel) {
         VersionServiceGrpc.VersionServiceBlockingStub stub = VersionServiceGrpc.newBlockingStub(channel);
+
+        if (
+            stub.leaseQuery(
+                Version.LeaseQueryRequest.newBuilder().setID(lease.get()).build()
+            ).getError().getErrcode() == ErrorOuterClass.Errno.OK
+        ) {
+            return stub;
+        }
+
         Version.LeaseGrantResponse response = stub.leaseGrant(
             Version.LeaseGrantRequest.newBuilder().setID(System.currentTimeMillis()).setTTL(leaseTtl).build()
         );
