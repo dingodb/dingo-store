@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "butil/compiler_specific.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -25,31 +26,34 @@
 namespace dingodb {
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result) {
-  if (prefix == 0) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
     // Buf buf(16);
-    Buf buf(Constant::kVectorKeyMaxLen);
-    buf.WriteLong(partition_id);
-    DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-    buf.GetBytes(result);
-  } else {
-    // Buf buf(17);
-    Buf buf(Constant::kVectorKeyMaxLenWithPrefix);
-    buf.WriteLong(partition_id);
-    DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-    buf.GetBytes(result);
+    // Buf buf(Constant::kVectorKeyMaxLen);
+    // buf.WriteLong(partition_id);
+    // DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+    // buf.GetBytes(result);
+
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "], vector_id:["
+                     << vector_id << "]";
   }
+
+  // Buf buf(17);
+  Buf buf(Constant::kVectorKeyMaxLenWithPrefix);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+  buf.GetBytes(result);
 }
 
 int64_t VectorCodec::DecodeVectorId(const std::string& value) {
   Buf buf(value);
   if (value.size() == Constant::kVectorKeyMaxLenWithPrefix) {
     buf.Skip(9);
-  } else if (value.size() == Constant::kVectorKeyMaxLen) {
-    buf.Skip(8);
-  } else if (value.size() == Constant::kVectorKeyMinLen || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
+  } else if (value.size() == Constant::kVectorKeyMinLenWithPrefix) {
     return 0;
   } else {
-    DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:[" << Helper::StringToHex(value)
+    DINGO_LOG(FATAL) << "Decode vector id failed, value size is not 9 or 17, value:[" << Helper::StringToHex(value)
                      << "]";
     return 0;
   }
@@ -71,8 +75,7 @@ int64_t VectorCodec::DecodePartitionId(const std::string& value) {
 
 bool VectorCodec::IsValidKey(const std::string& key) {
   // return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
-  return (key.size() == Constant::kVectorKeyMinLen || key.size() == Constant::kVectorKeyMinLenWithPrefix ||
-          key.size() == Constant::kVectorKeyMaxLen || key.size() == Constant::kVectorKeyMaxLenWithPrefix);
+  return (key.size() == Constant::kVectorKeyMinLenWithPrefix || key.size() == Constant::kVectorKeyMaxLenWithPrefix);
 }
 
 }  // namespace dingodb
