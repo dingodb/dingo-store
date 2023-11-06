@@ -1615,8 +1615,9 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
 
   auto region_prefix = start_key[0];
   if (region_prefix == 0) {
-    DINGO_LOG(INFO) << "region has no prefix, this is a legacy region";
-    return butil::Status::OK();
+    DINGO_LOG(ERROR) << "region has no prefix, this is a legacy region, and is not allowed now, start_key: "
+                     << Helper::StringToHex(start_key) << ", end_key: " << Helper::StringToHex(end_key);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "region has no prefix, this is a legacy region");
   } else if (region_prefix == Constant::kExecutorRaw) {
     DINGO_LOG(INFO) << "region is kExecutorRaw";
     return butil::Status::OK();
@@ -1681,9 +1682,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
 
     // validate vector index region range
     // range's start_key and end_key must be less than 16 bytes
-    if (region_range.start_key().size() != Constant::kVectorKeyMinLen &&
-        region_range.start_key().size() != Constant::kVectorKeyMaxLen &&
-        region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+    if (region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
         region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
                        << Helper::StringToHex(region_range.start_key());
@@ -1691,9 +1690,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
                            "vector index region range start_key size is not 8 or 16 bytes");
     }
 
-    if (region_range.end_key().size() != Constant::kVectorKeyMinLen &&
-        region_range.end_key().size() != Constant::kVectorKeyMaxLen &&
-        region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+    if (region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
         region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
                        << Helper::StringToHex(region_range.end_key());
@@ -1842,9 +1839,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
 
     // validate vector index region range
     // range's start_key and end_key must be less than 16 bytes
-    if (region_range.start_key().size() != Constant::kVectorKeyMinLen &&
-        region_range.start_key().size() != Constant::kVectorKeyMaxLen &&
-        region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+    if (region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
         region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
                        << Helper::StringToHex(region_range.start_key());
@@ -1852,9 +1847,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
                            "vector index region range start_key size is not 8 or 16 bytes");
     }
 
-    if (region_range.end_key().size() != Constant::kVectorKeyMinLen &&
-        region_range.end_key().size() != Constant::kVectorKeyMaxLen &&
-        region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+    if (region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
         region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
       DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
                        << Helper::StringToHex(region_range.end_key());

@@ -63,9 +63,7 @@ class Constant {
   inline static const char kClientTxn = 'x';
 
   // vector key len
-  inline static const uint32_t kVectorKeyMinLen = 8;
   inline static const uint32_t kVectorKeyMinLenWithPrefix = 9;
-  inline static const uint32_t kVectorKeyMaxLen = 16;
   inline static const uint32_t kVectorKeyMaxLenWithPrefix = 17;
 
   // Define store meta prefix.
@@ -166,7 +164,7 @@ class Constant {
   static constexpr int32_t kCreateIvfPqParamNbitsPerIdx = 8;
   static constexpr int32_t kCreateIvfPqParamNbitsPerIdxMaxWarning = 16;
 
-   static constexpr int32_t kSearchIvfPqParamNprobe = 80;
+  static constexpr int32_t kSearchIvfPqParamNprobe = 80;
 
   // split region
   static constexpr int kSplitDoSnapshotRetryTimes = 5;
