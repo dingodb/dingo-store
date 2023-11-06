@@ -455,6 +455,9 @@ target_link_libraries(dingodb_client
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
 
+add_subdirectory(src/sdk)
+add_subdirectory(src/example)
+
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)
 endif()
