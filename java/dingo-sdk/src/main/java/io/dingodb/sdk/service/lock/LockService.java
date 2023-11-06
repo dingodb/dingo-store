@@ -70,7 +70,10 @@ public class LockService {
     }
 
     public void close() {
-        connector.exec(stub -> stub.kvDeleteRange(deleteAllRangeRequest(resourcePrefix)));
+        try {
+            connector.exec(stub -> stub.kvDeleteRange(deleteAllRangeRequest(resourcePrefix)));
+        } catch (Exception ignore) {
+        }
         connector.close();
     }
 
@@ -141,7 +144,10 @@ public class LockService {
                     if (current.getModRevision() == revision) {
                         this.revision = revision;
                         if (log.isDebugEnabled()) {
-                            log.debug("Lock {} success.", resourceKey);
+                            log.debug(
+                                "Lock {} success use {} revision, current locks: {}.",
+                                resourceKey, revision, rangeResponse.getKvsList()
+                            );
                         }
                         locked++;
                         watchLock(current);
