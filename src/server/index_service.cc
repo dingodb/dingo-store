@@ -1072,8 +1072,9 @@ static butil::Status ValidateTxnGetRequest(const pb::store::TxnGetRequest* reque
   return butil::Status();
 }
 
-void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
-              pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
+void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                    const pb::store::TxnGetRequest* request, pb::store::TxnGetResponse* response,
+                    google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1131,12 +1132,13 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
 }
 
 void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
-                              pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
+                              pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGet(storage, controller, request, response, svr_done); });
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoTxnGetVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
@@ -1184,9 +1186,9 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
   return butil::Status();
 }
 
-void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
-               const pb::store::TxnScanRequest* request, pb::index::TxnScanResponse* response,
-               google::protobuf::Closure* done) {
+void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                     const pb::store::TxnScanRequest* request, pb::store::TxnScanResponse* response,
+                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1255,12 +1257,13 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 }
 
 void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
-                               pb::index::TxnScanResponse* response, google::protobuf::Closure* done) {
+                               pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScan(storage, controller, request, response, svr_done); });
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoTxnScanVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
@@ -1316,7 +1319,7 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   }
 }
 
-static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::index::TxnPrewriteRequest* request) {
+static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::store::TxnPrewriteRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1452,9 +1455,9 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::in
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
-void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::index::TxnPrewriteRequest* request, pb::store::TxnPrewriteResponse* response,
-                   google::protobuf::Closure* done, bool is_sync) {
+void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const pb::store::TxnPrewriteRequest* request, pb::store::TxnPrewriteResponse* response,
+                         google::protobuf::Closure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1490,14 +1493,14 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 }
 
 void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
-                                   const pb::index::TxnPrewriteRequest* request,
+                                   const pb::store::TxnPrewriteRequest* request,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnPrewrite(storage, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>(
+      [=]() { DoTxnPrewriteVector(storage, controller, request, response, svr_done, true); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1703,9 +1706,9 @@ static butil::Status ValidateTxnBatchGetRequest(const pb::store::TxnBatchGetRequ
   return butil::Status();
 }
 
-void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::store::TxnBatchGetRequest* request, pb::index::TxnBatchGetResponse* response,
-                   google::protobuf::Closure* done) {
+void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const pb::store::TxnBatchGetRequest* request, pb::store::TxnBatchGetResponse* response,
+                         google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1762,12 +1765,13 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 
 void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    const pb::store::TxnBatchGetRequest* request,
-                                   pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
+                                   pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnBatchGet(storage, controller, request, response, svr_done); });
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoTxnBatchGetVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);

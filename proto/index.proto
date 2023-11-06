@@ -213,133 +213,6 @@ message VectorGetParameter {
   bool without_table_data = 4;        // Default false, if true, response without table data.
 }
 
-message TxnGetResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // A value could not be retrieved due to the state of the database for the
-  // requested key.
-  // the txn_result is one of the following:
-  // 1. LockInfo: Read conflict with key which is locked by another transaction. The client should backoff or cleanup
-  // the lock then retry.
-  // 2. otherwise, txn_result is empty
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // The vector value associated with the key, if not found, is empty and error is NOT_FOUND
-  // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
-  dingodb.pb.common.VectorWithId vector = 3;
-  // True if the key does not exist in the database.
-  // bool not_found = 4;
-}
-
-// TxnScan can be partially success
-// if kvs is not null, and has_more is true, means scan is not finished, client should continue to scan from end_key.
-// if txn_result is not null, the kvs may not null, client can use kvs as a partial result, and should continue to scan
-// after resolve lock.
-message TxnScanResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // This txn_result exists when some key is locked but we cannot check locks of
-  // all keys. In this case, `kvs` should be empty and the client should redo
-  // scanning all the keys after resolving the lock.
-  // the txn_result is one of the following:
-  // 1. LockInfo: Read conflict with key which is locked by another transaction.
-  // 2. otherwise, txn_result is empty
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // vectors is the return value of the scan request
-  repeated dingodb.pb.common.VectorWithId vectors = 3;
-  // if scan is not finished, has_more is true, otherwise false
-  bool has_more = 4;
-  // the last iteratered key of this scan response.
-  // if end_key is null, means scan do not successfully iterate any key.
-  bytes end_key = 5;
-}
-
-message Mutation {
-  dingodb.pb.store.Op op = 1;
-  // the key is encoded from a char prefix and two int64 using big-endian, the first int64 is the part id, the second
-  // int64 is the vector id. The key MUST be 17 bytes.
-  bytes key = 2;
-  dingodb.pb.common.VectorWithId vector = 3;
-}
-
-message TxnPrewriteRequest {
-  dingodb.pb.store.Context context = 1;
-  // The data to be written to the database.
-  repeated Mutation mutations = 2;
-  // The primary lock of the transaction is setup by client
-  bytes primary_lock = 3;
-  // Identifies the transaction being written.
-  int64 start_ts = 4;
-  // the lock's ttl is timestamp in milisecond.
-  int64 lock_ttl = 5;
-  // the number of keys involved in the transaction
-  int64 txn_size = 6;
-  // When the transaction involves only one region, it's possible to commit the
-  // transaction directly with 1PC protocol.
-  bool try_one_pc = 7;
-  // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
-  // schema change. This field is unused now.
-  int64 max_commit_ts = 8;
-}
-
-message TxnBatchGetResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // This txn_result exists when some key is locked but we cannot check locks of
-  // all keys. In this case, `kvs` should be empty and the client should redo
-  // batch get all the keys after resolving the lock.
-  // the txn_result is one of the following:
-  // 1. LockInfo: Read conflict with key which is locked by another transaction. The client should backoff or cleanup
-  // the lock then retry.
-  // 2. otherwise, txn_result is empty
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // When some key is locked but we cannot check locks of
-  // all keys. In this case, `vectors` should be empty and the client should redo
-  // batch get all the keys after resolving the lock.
-  repeated dingodb.pb.common.VectorWithId vectors = 3;
-}
-
-// Update the lock_ttl of a large transaction to
-// prevent it from been killed.
-message TxnHeartBeatRequest {
-  dingodb.pb.store.Context context = 1;
-  // The key of the lock to update.
-  bytes primary_lock = 2;
-  // Start timestamp of the large transaction.
-  int64 start_ts = 3;
-  // The new TTL the sender would like.
-  // The advise_lock_ttl is the timestamp of milisecond.
-  int64 advise_lock_ttl = 4;
-}
-
-message TxnHeartBeatResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  // the txn_result is one of the following:
-  // 1. PrimaryMismatch: Heartbeat is sent to a lock that's not the primary.
-  // 2. TxnNotFound: Txn not found when heartbeat.
-  // 3. otherwise, txn_result is empty
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-  // The TTL actually set on the requested lock.
-  int64 lock_ttl = 3;
-}
-
-// Request dingo-store to garbage collect all non-current data older than `safe_point_ts`.
-message TxnGcRequest {
-  dingodb.pb.store.Context context = 1;
-  int64 safe_point_ts = 2;
-}
-
-message TxnGcResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-  dingodb.pb.store.TxnResultInfo txn_result = 2;
-}
-
-message TxnDeleteRangeResponse {
-  // error code
-  dingodb.pb.error.Error error = 1;
-}
-
 message HelloRequest {
   dingodb.pb.store.Context context = 1;
   bool get_region_metrics = 2;
@@ -370,9 +243,9 @@ service IndexService {
   rpc VectorSearchDebug(VectorSearchDebugRequest) returns (VectorSearchDebugResponse);
 
   // txn rpcs
-  rpc TxnGet(dingodb.pb.store.TxnGetRequest) returns (TxnGetResponse);
-  rpc TxnBatchGet(dingodb.pb.store.TxnBatchGetRequest) returns (TxnBatchGetResponse);
-  rpc TxnScan(dingodb.pb.store.TxnScanRequest) returns (TxnScanResponse);
+  rpc TxnGet(dingodb.pb.store.TxnGetRequest) returns (dingodb.pb.store.TxnGetResponse);
+  rpc TxnBatchGet(dingodb.pb.store.TxnBatchGetRequest) returns (dingodb.pb.store.TxnBatchGetResponse);
+  rpc TxnScan(dingodb.pb.store.TxnScanRequest) returns (dingodb.pb.store.TxnScanResponse);
   rpc TxnScanLock(dingodb.pb.store.TxnScanLockRequest) returns (dingodb.pb.store.TxnScanLockResponse);
   rpc TxnDump(dingodb.pb.store.TxnDumpRequest) returns (dingodb.pb.store.TxnDumpResponse);
 
@@ -380,7 +253,7 @@ service IndexService {
       returns (dingodb.pb.store.TxnPessimisticLockResponse);
   rpc TxnPessimisticRollback(dingodb.pb.store.TxnPessimisticRollbackRequest)
       returns (dingodb.pb.store.TxnPessimisticRollbackResponse);
-  rpc TxnPrewrite(TxnPrewriteRequest) returns (dingodb.pb.store.TxnPrewriteResponse);
+  rpc TxnPrewrite(dingodb.pb.store.TxnPrewriteRequest) returns (dingodb.pb.store.TxnPrewriteResponse);
   rpc TxnCommit(dingodb.pb.store.TxnCommitRequest) returns (dingodb.pb.store.TxnCommitResponse);
   rpc TxnCheckTxnStatus(dingodb.pb.store.TxnCheckTxnStatusRequest) returns (dingodb.pb.store.TxnCheckTxnStatusResponse);
   rpc TxnResolveLock(dingodb.pb.store.TxnResolveLockRequest) returns (dingodb.pb.store.TxnResolveLockResponse);
