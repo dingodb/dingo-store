@@ -38,6 +38,70 @@ DECLARE_uint32(max_short_value_in_write_cf);
 DEFINE_uint32(max_scan_line_count, 10000, "max scan line count");
 DEFINE_uint32(max_scan_memory_size, 32 * 1024 * 1024, "max scan memory size");
 
+bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
+                                        int64_t start_ts, pb::store::TxnResultInfo &txn_result_info) {
+  if (lock_info.lock_ts() > 0) {
+    if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
+      // for pessimistic, check for_update_ts
+      if (lock_info.for_update_ts() > 0) {
+        if (lock_info.for_update_ts() < start_ts) {
+          DINGO_LOG(INFO) << "[txn]CheckLockConflict SI lock_info.for_update_ts() > 0, it's conflict, lock_info: "
+                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          // for_update_ts < start_ts, return lock_info
+          *(txn_result_info.mutable_locked()) = lock_info;
+          return true;
+        }
+      } else {
+        if (lock_info.lock_ts() < start_ts) {
+          DINGO_LOG(INFO) << "[txn]CheckLockConflict SI lock_info.for_update_ts() == 0, it's conflict, lock_info: "
+                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          // lock_ts < start_ts, return lock_info
+          *(txn_result_info.mutable_locked()) = lock_info;
+          return true;
+        }
+      }
+      return false;
+
+    } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
+      // for pessimistic lock, if just on lock stage, there is no confict
+      // if on prewrite stage, need to check the for_update_ts
+      // for optimistic lock, need to check the lock_ts
+      if (lock_info.for_update_ts() > 0) {
+        if (lock_info.lock_type() == pb::store::Lock) {
+          DINGO_LOG(INFO)
+              << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, but only on LOCK stage, it's ok, lock_info: "
+              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          return false;
+        }
+
+        if (lock_info.for_update_ts() < start_ts) {
+          DINGO_LOG(INFO) << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, on PREWRITE stage, it's "
+                             "conflict, lock_info: "
+                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          // for_update_ts < start_ts, return lock_info
+          *(txn_result_info.mutable_locked()) = lock_info;
+          return true;
+        }
+        return false;
+
+      } else {
+        if (lock_info.lock_ts() < start_ts) {
+          DINGO_LOG(INFO) << "[txn]CheckLockConflict RC lock_info.for_update_ts() == 0, it's conflict, lock_info: "
+                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          // lock_ts < start_ts, return lock_info
+          *(txn_result_info.mutable_locked()) = lock_info;
+          return true;
+        }
+        return false;
+      }
+    } else {
+      DINGO_LOG(FATAL) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
+    }
+  }
+
+  return false;
+}
+
 butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key,
                                            pb::store::LockInfo &lock_info) {
   std::string lock_value;
@@ -175,10 +239,11 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       DINGO_LOG(FATAL) << "[txn]BatchGet GetLockInfo failed, key: " << key << ", status: " << ret.error_str();
     }
 
-    // if lock_info is exists, check if lock_ts < start_ts
-    if (lock_info.lock_ts() > 0 && lock_info.lock_ts() < start_ts) {
-      // lock_ts < start_ts, return lock_info
-      *(txn_result_info.mutable_locked()) = lock_info;
+    auto is_lock_conflict = CheckLockConflict(lock_info, isolation_level, start_ts, txn_result_info);
+    if (is_lock_conflict) {
+      DINGO_LOG(WARNING) << "[txn]BatchGet CheckLockConflict return conflict, key: " << key
+                         << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
       return butil::Status::OK();
     }
 
@@ -241,6 +306,7 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
 
 butil::Status TxnEngineHelper::ScanGetNextKeyValue(RawEngine::ReaderPtr reader, std::shared_ptr<Iterator> write_iter,
                                                    std::shared_ptr<Iterator> lock_iter, int64_t start_ts,
+                                                   const pb::store::IsolationLevel &isolation_level,
                                                    const std::string &start_iter_key, std::string &last_lock_key,
                                                    std::string &last_write_key,
                                                    pb::store::TxnResultInfo &txn_result_info, std::string &iter_key,
@@ -309,9 +375,11 @@ butil::Status TxnEngineHelper::ScanGetNextKeyValue(RawEngine::ReaderPtr reader, 
                        << ", lock_value(hex): " << Helper::StringToHex(lock_value);
     }
 
-    if (lock_info.lock_ts() < start_ts) {
-      // lock_ts < start_ts, return lock_info
-      *(txn_result_info.mutable_locked()) = lock_info;
+    auto is_lock_conflict = CheckLockConflict(lock_info, isolation_level, start_ts, txn_result_info);
+    if (is_lock_conflict) {
+      DINGO_LOG(WARNING) << "[txn]BatchGet CheckLockConflict return conflict, key: "
+                         << Helper::StringToHex(lock_info.key()) << ", isolation_level: " << isolation_level
+                         << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
       return butil::Status::OK();
     }
 
@@ -516,8 +584,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   while (true) {
     data_value.clear();
     iter_key.clear();
-    auto ret = ScanGetNextKeyValue(reader, write_iter, lock_iter, start_ts, start_iter_key, last_lock_key,
-                                   last_write_key, txn_result_info, iter_key, data_value);
+    auto ret = ScanGetNextKeyValue(reader, write_iter, lock_iter, start_ts, isolation_level, start_iter_key,
+                                   last_lock_key, last_write_key, txn_result_info, iter_key, data_value);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "[txn]Scan ScanGetNextKeyValue failed, start_ts: " << start_ts
                        << ", status: " << ret.error_str();
@@ -1202,7 +1270,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                       << ", write_conflict, start_ts: " << start_ts
                       << ", write_info: " << write_info.ShortDebugString();
 
-      continue;
+      break;
     }
 
     // 2.2 check commit
@@ -1235,7 +1303,15 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                       << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
                       << ", write_info: " << write_info.ShortDebugString();
 
-      continue;
+      break;
+    }
+
+    if (response->txn_result_size() > 0) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
+                      << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+                      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                      << ", mutations_size: " << mutations.size();
+      return butil::Status::OK();
     }
 
     // 3.do Put/Delete/PutIfAbsent
@@ -1336,14 +1412,6 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                        << ", op: " << mutation.op();
       return butil::Status(pb::error::Errno::EINTERNAL, "invalid op");
     }
-  }
-
-  if (response->txn_result_size() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
-                    << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                    << ", mutations_size: " << mutations.size();
-    return butil::Status::OK();
   }
 
   if (kv_puts_data.empty() && kv_puts_lock.empty()) {
@@ -1719,6 +1787,22 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
       return butil::Status::OK();
     }
 
+    // for pessimistic lock, we just return lock_info, let executor decide to backoff or unlock
+    if (lock_info.lock_type() == pb::store::Op::Lock) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                         << ", pessimistic lock, return locked for executor, primary_key: " << primary_key
+                         << ", lock_ts: " << lock_ts << ", lock_info: " << lock_info.ShortDebugString();
+      *txn_result->mutable_locked() = lock_info;
+      return butil::Status::OK();
+    } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+               lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                       << ", invalid lock_type, key: " << lock_info.key() << ", caller_start_ts: " << caller_start_ts
+                       << ", current_ts: " << current_ts << ", lock_info: " << lock_info.ShortDebugString();
+      *txn_result->mutable_locked() = lock_info;
+      return butil::Status::OK();
+    }
+
     int64_t current_ms = current_ts >> 18;
 
     DINGO_LOG(INFO) << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString()
@@ -1867,6 +1951,25 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
       // it's not a legal rollback, return lock_info
       auto *locked = txn_result->mutable_locked();
       *locked = lock_info;
+      return butil::Status::OK();
+    }
+
+    // if the lock is a pessimistic lock, can't do rollback
+    if (lock_info.lock_type() == pb::store::Op::Lock) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                       << ", pessimistic lock, can't do rollback, key: " << key << ", start_ts: " << start_ts
+                       << ", lock_info: " << lock_info.ShortDebugString();
+
+      // it's not a legal rollback, return lock_info
+      auto *locked = txn_result->mutable_locked();
+      *locked = lock_info;
+      return butil::Status::OK();
+    } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+               lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                       << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
+                       << ", lock_info: " << lock_info.ShortDebugString();
+      *txn_result->mutable_locked() = lock_info;
       return butil::Status::OK();
     }
 
@@ -2044,6 +2147,22 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
         continue;
       }
 
+      // if the lock is a pessimistic lock, can't do resolvelock
+      if (lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                         << ", pessimistic lock, can't do resolvelock, key: " << key << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                         << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+
       // prepare to do rollback or commit
       if (commit_ts > 0) {
         // do commit
@@ -2069,6 +2188,22 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
     }
 
     for (const auto &lock_info : tmp_lock_infos) {
+      // if the lock is a pessimistic lock, can't do resolvelock
+      if (lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                         << ", pessimistic lock, can't do resolvelock, key: " << lock_info.key()
+                         << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                         << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+
       // prepare to do rollback or commit
       const std::string &key = lock_info.key();
       if (commit_ts > 0) {
