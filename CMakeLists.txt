@@ -343,8 +343,7 @@ file(GLOB METRICS_SRCS ${PROJECT_SOURCE_DIR}/src/metrics/*.cc)
 file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
 file(GLOB SERIAL1_SRCS ${PROJECT_SOURCE_DIR}/src/serial/*.cc)
 file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/src/serial/schema/*.cc)
-file(GLOB EXPR_SRCS ${PROJECT_SOURCE_DIR}/src/expr/*.cc)
-file(GLOB EXPR_CALC_SRCS ${PROJECT_SOURCE_DIR}/src/expr/calc/*.cc)
+file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
 
@@ -372,8 +371,7 @@ add_library(DINGODB_OBJS
             ${SERIAL1_SRCS}
             ${SERIAL2_SRCS}
             ${COPROCESSOR_SRCS}
-            ${EXPR_SRCS}
-            ${EXPR_CALC_SRCS}
+            ${LIBEXPR_SRCS}
             )
 
 # bin output dir
@@ -456,8 +454,6 @@ target_link_libraries(dingodb_client
                       "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
                       "-Xlinker \"-)\"")
-
-add_subdirectory(src)
 
 if(BUILD_UNIT_TESTS)
     add_subdirectory(test)
