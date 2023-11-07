@@ -69,4 +69,4 @@
 	url = https://github.com/dingodb/bdb
 [submodule "src/libexpr"]
 	path = src/libexpr
-	url = git@github.com:dingodb/dingo-libexpr.git
+	url = https://github.com/dingodb/dingo-libexpr.git
