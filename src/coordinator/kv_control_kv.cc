@@ -365,8 +365,7 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   }
 
   // check lease is valid
-  // if (!ignore_lease && lease_id != 0) {
-  if (lease_id != 0) {
+  if (!ignore_lease && lease_id != 0) {
     std::set<std::string> keys;
     int64_t granted_ttl = 0;
     int64_t remaining_ttl = 0;
@@ -376,12 +375,12 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
       DINGO_LOG(ERROR) << "KvPut LeaseQuery failed, lease_id: " << lease_id << ", error: " << ret.error_str();
       return ret;
     }
+
+    lease_grant_id = lease_id;
   }
 
   // temp value for ignore_lease and need_prev_kv
   std::vector<pb::version::Kv> kvs_temp;
-
-  lease_grant_id = lease_id;
 
   int64_t total_count_in_range = 0;
   KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
