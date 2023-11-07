@@ -130,7 +130,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     pb::raft::Request raft_request_for_vector_add;
     for (const auto &vector : vector_add.vectors()) {
       auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
-      new_vector->CopyFrom(vector);
+      *new_vector = vector;
     }
     handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
     if (!add_ctx->Status().ok()) {

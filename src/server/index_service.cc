@@ -1128,7 +1128,7 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
       response->mutable_vector()->Swap(&vector_with_id);
     }
   }
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
 }
 
 void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
@@ -1250,7 +1250,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   if (txn_result_info.ByteSizeLong() > 0) {
-    response->mutable_txn_result()->CopyFrom(txn_result_info);
+    *response->mutable_txn_result() = txn_result_info;
   }
   response->set_end_key(end_key);
   response->set_has_more(has_more);
@@ -1774,7 +1774,7 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
       response->add_vectors()->Swap(&vector_with_id);
     }
   }
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
 }
 
 void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
@@ -1875,13 +1875,13 @@ static butil::Status ValidateTxnScanLockRequest(const pb::store::TxnScanLockRequ
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_key is empty");
   }
 
+  if (request->start_key() >= request->end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key >= end_key");
+  }
+
   std::vector<std::string_view> keys;
   keys.push_back(request->start_key());
-
-  std::string str(1, '\x01');
-  std::string end_key = Helper::StringSubtractRightAlign(request->end_key(), str);
-
-  keys.push_back(end_key);
+  keys.push_back(request->end_key());
 
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
   if (!status.ok()) {
