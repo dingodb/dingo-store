@@ -1509,9 +1509,21 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
     mutations.emplace_back(mutation);
   }
 
+  std::map<int32_t, int64_t> for_update_ts_checks;
+  for (const auto& for_update_ts_check : request->for_update_ts_checks()) {
+    for_update_ts_checks.insert_or_assign(for_update_ts_check.index(), for_update_ts_check.expected_for_update_ts());
+  }
+
+  std::map<int32_t, std::string> lock_extra_datas;
+  for (const auto& lock_extra_data : request->lock_extra_datas()) {
+    lock_extra_datas.insert_or_assign(lock_extra_data.index(), lock_extra_data.extra_data());
+  }
+
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnPrewrite(ctx, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
-                                request->txn_size(), request->try_one_pc(), request->max_commit_ts());
+                                request->txn_size(), request->try_one_pc(), request->max_commit_ts(),
+                                Helper::PbRepeatedToVector(request->pessimistic_checks()), for_update_ts_checks,
+                                lock_extra_datas);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

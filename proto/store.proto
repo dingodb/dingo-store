@@ -549,9 +549,19 @@ message TxnPrewriteRequest {
   // for_update_ts that should be checked when prewriting a pessimistic transaction.
   message ForUpdateTsCheck {
     // The index of key in the prewrite request that should be checked.
-    uint32 index = 1;
+    int32 index = 1;
     // The expected for_update_ts of the pessimistic lock of the key.
-    uint64 expected_for_update_ts = 2;
+    int64 expected_for_update_ts = 2;
+  }
+
+  // The extra_data executor want to store in lock when doing prewrite
+  // if there is extra_data in a pessimistic lock, and no extra_data in the corresponding prewrite request, the
+  // extra_data in lock will not update, else the new extra_data will replace previous extra_data in lock
+  message LockExtraData {
+    // The index of key in the prewrite request that will store extra_data to lock
+    int32 index = 1;
+    // The extra_data to store in lock
+    bytes extra_data = 2;
   }
 
   Context context = 1;
@@ -578,6 +588,9 @@ message TxnPrewriteRequest {
   // fo pessimistic transaction
   // for_update_ts constriants that should be checked when prewriting a pessimistic transaction.
   repeated ForUpdateTsCheck for_update_ts_checks = 10;
+  // for both pessimistic and optimistic transaction
+  // the extra_data executor want to store in lock
+  repeated LockExtraData lock_extra_datas = 11;
 }
 
 message TxnPrewriteResponse {

@@ -30,6 +30,7 @@
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 
 namespace dingodb {
 
@@ -700,6 +701,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   std::vector<pb::common::KeyValue> kv_puts_lock;
@@ -732,7 +734,8 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
     if (!ret.ok()) {
       // Now we need to fatal exit to prevent data inconsistency between raft peers
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
-                       << ", get lock info failed, key: " << mutation.key() << ", status: " << ret.error_str();
+                       << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
+                       << ", status: " << ret.error_str();
 
       error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
       error->set_errmsg(ret.error_str());
@@ -745,7 +748,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       if (lock_info.for_update_ts() == 0) {
         // this is a optimistic lock, return lock_info
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                         << ", key: " << mutation.key()
+                         << ", key: " << Helper::StringToHex(mutation.key())
                          << " is locked by optimistic lock, lock_info: " << lock_info.ShortDebugString();
         // return lock_info
         *response->add_txn_result()->mutable_locked() = lock_info;
@@ -754,7 +757,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         if (lock_info.for_update_ts() == for_update_ts) {
           // this is same pessimistic lock request, just do nothing.
           DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                          << ", key: " << mutation.key()
+                          << ", key: " << Helper::StringToHex(mutation.key())
                           << " is locked by self, lock_info: " << lock_info.ShortDebugString();
           continue;
         } else if (lock_info.for_update_ts() < for_update_ts) {
@@ -776,7 +779,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         } else {
           // lock_info.for_update_ts() > for_update_ts, this is a illegal request, we return lock_info
           DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                           << ", key: " << mutation.key()
+                           << ", key: " << Helper::StringToHex(mutation.key())
                            << " is locked by pessimistic with larger for_update_ts, lock_info: "
                            << lock_info.ShortDebugString();
 
@@ -787,7 +790,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       } else {
         // this is a lock conflict, return lock_info
         DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                        << ", key: " << mutation.key()
+                        << ", key: " << Helper::StringToHex(mutation.key())
                         << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
 
         // add txn_result for response
@@ -795,7 +798,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         *response->add_txn_result()->mutable_locked() = lock_info;
 
         DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                        << ", lock_conflict, key: " << mutation.key()
+                        << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
                         << ", lock_info: " << lock_info.ShortDebugString();
 
         // need response to client
@@ -809,8 +812,8 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
                                write_info, commit_ts);
       if (!ret2.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                         << ", get write info failed, key: " << mutation.key() << ", start_ts: " << start_ts
-                         << ", status: " << ret2.error_str();
+                         << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
+                         << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
         error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
         error->set_errmsg(ret2.error_str());
         return ret2;
@@ -902,6 +905,7 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   std::vector<std::string> kv_dels_lock;
@@ -1007,17 +1011,33 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                         std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                         const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                        int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {
+                                        int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
+                                        const std::vector<int32_t> &pessimistic_checks,
+                                        const std::map<int32_t, int64_t> &for_update_ts_checks,
+                                        const std::map<int32_t, std::string> &lock_extra_datas) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                   << ", mutations_size: " << mutations.size() << ", primary_lock: " << primary_lock
                   << ", lock_ttl: " << lock_ttl << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc
-                  << ", max_commit_ts: " << max_commit_ts;
+                  << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
+                  << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
+                  << ", lock_extra_datas_size: " << lock_extra_datas.size();
+
+  if (!pessimistic_checks.empty()) {
+    if (mutations.size() != pessimistic_checks.size()) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
+                       << ", mutations_size: " << mutations.size()
+                       << ", pessimistic_checks_size: " << pessimistic_checks.size()
+                       << ", mutations_size != pessimistic_checks_size";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "mutations_size != pessimistic_checks_size");
+    }
+  }
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   std::vector<pb::common::KeyValue> kv_puts_data;
@@ -1027,22 +1047,25 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
   if (response == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
                      << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
   }
   auto *error = response->mutable_error();
-  // auto *txn_result = response->mutable_txn_result();
 
   auto reader = raw_engine->Reader();
   // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
-  for (const auto &mutation : mutations) {
+  for (int32_t i = 0; i < mutations.size(); i++) {
+    const auto &mutation = mutations[i];
+
     // 1.check if the key is locked
     //   if the key is locked, return LockInfo
-    pb::store::LockInfo lock_info;
-    auto ret = GetLockInfo(reader, mutation.key(), lock_info);
+    pb::store::LockInfo prev_lock_info;
+    auto ret = GetLockInfo(reader, mutation.key(), prev_lock_info);
     if (!ret.ok()) {
       // TODO: do read before write to raft state machine
       // Now we need to fatal exit to prevent data inconsistency between raft peers
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                       << ", get lock info failed, key: " << mutation.key() << ", status: " << ret.error_str();
+                       << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
+                       << ", status: " << ret.error_str();
 
       error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
       error->set_errmsg(ret.error_str());
@@ -1051,26 +1074,100 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       return ret;
     }
 
-    if (!lock_info.primary_lock().empty()) {
-      if (lock_info.lock_ts() == start_ts) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id()) << ", key: " << mutation.key()
-                        << " is locked by self, lock_info: " << lock_info.ShortDebugString();
-        // go to next key
+    // if need to check pessimistic lock
+    bool need_check_pessimistic_lock = false;
+    if (!pessimistic_checks.empty() && pessimistic_checks[i] == 1) {
+      need_check_pessimistic_lock = true;
+    }
+
+    // for optimistic prewrite
+    if (!need_check_pessimistic_lock) {
+      if (prev_lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                        << ", optimistic prewrite meet pessimistic lock, key: " << Helper::StringToHex(mutation.key())
+                        << ", lock_info: " << prev_lock_info.ShortDebugString();
+        *response->add_txn_result()->mutable_locked() = prev_lock_info;
         continue;
-      } else {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id()) << ", key: " << mutation.key()
-                        << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+      }
 
-        // add txn_result for response
-        // setup lock_info
-        *response->add_txn_result()->mutable_locked() = lock_info;
+      if (!prev_lock_info.primary_lock().empty()) {
+        if (prev_lock_info.lock_ts() == start_ts) {
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", key: " << Helper::StringToHex(mutation.key())
+                          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+                          << prev_lock_info.ShortDebugString();
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                        << ", lock_conflict, key: " << mutation.key()
-                        << ", lock_info: " << lock_info.ShortDebugString();
+          // go to next key
+          continue;
+        } else {
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", key: " << Helper::StringToHex(mutation.key())
+                          << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
 
-        // need response to client
-        continue;
+          // add txn_result for response
+          // setup lock_info
+          *response->add_txn_result()->mutable_locked() = prev_lock_info;
+
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+                          << ", lock_info: " << prev_lock_info.ShortDebugString();
+
+          // need response to client
+          continue;
+        }
+      }
+    }
+    // for pessimistic prewrite
+    else {
+      if (!prev_lock_info.primary_lock().empty()) {
+        if (prev_lock_info.lock_ts() == start_ts) {
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", key: " << Helper::StringToHex(mutation.key())
+                          << " is locked by same start_ts, lock_info: " << prev_lock_info.ShortDebugString();
+
+          if (prev_lock_info.lock_type() != pb::store::Op::Lock) {
+            DINGO_LOG(INFO)
+                << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                << ", pessimistic prewrite meet optimistic lock, this is a repeated prewrite, skip it, key: "
+                << Helper::StringToHex(mutation.key()) << ", lock_info: " << prev_lock_info.ShortDebugString();
+            continue;
+          }
+
+          // do pessimistic check
+          if (for_update_ts_checks.find(i) != for_update_ts_checks.end()) {
+            if (prev_lock_info.for_update_ts() != for_update_ts_checks.at(i)) {
+              DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                              << ", key: " << Helper::StringToHex(mutation.key())
+                              << " is locked by same start_ts, but for_update_ts is not equal, lock_info: "
+                              << prev_lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts_checks.at(i);
+
+              // add txn_result for response
+              // setup lock_info
+              *response->add_txn_result()->mutable_locked() = prev_lock_info;
+
+              // need response to client
+              continue;
+            }
+          }
+
+          // go to next key
+          continue;
+        } else {
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", key: " << Helper::StringToHex(mutation.key())
+                          << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
+
+          // add txn_result for response
+          // setup lock_info
+          *response->add_txn_result()->mutable_locked() = prev_lock_info;
+
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+                          << ", lock_info: " << prev_lock_info.ShortDebugString();
+
+          // need response to client
+          continue;
+        }
       }
     }
 
@@ -1082,8 +1179,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     auto ret1 = GetRollbackInfo(reader, start_ts, mutation.key(), write_info);
     if (!ret1.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                       << ", get rollback info failed, key: " << mutation.key() << ", start_ts: " << start_ts
-                       << ", status: " << ret1.error_str();
+                       << ", get rollback info failed, key: " << Helper::StringToHex(mutation.key())
+                       << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
     }
 
     if (write_info.start_ts() == start_ts) {
@@ -1115,8 +1212,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                              commit_ts);
     if (!ret2.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                       << ", get write info failed, key: " << mutation.key() << ", start_ts: " << start_ts
-                       << ", status: " << ret2.error_str();
+                       << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
+                       << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
     }
 
     if (commit_ts > start_ts) {
@@ -1158,7 +1255,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         pb::common::KeyValue kv;
         kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
 
-        pb::store::LockInfo lock_info;
+        pb::store::LockInfo lock_info = prev_lock_info;
         lock_info.set_primary_lock(primary_lock);
         lock_info.set_lock_ts(start_ts);
         lock_info.set_key(mutation.key());
@@ -1167,6 +1264,9 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         lock_info.set_lock_type(pb::store::Op::Put);
         if (mutation.value().length() < FLAGS_max_short_value_in_write_cf) {
           lock_info.set_short_value(mutation.value());
+        }
+        if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
+          lock_info.set_extra_data(lock_extra_datas.at(i));
         }
         kv.set_value(lock_info.SerializeAsString());
 
@@ -1232,7 +1332,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
     } else {
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                       << ", invalid op, key: " << mutation.key() << ", start_ts: " << start_ts
+                       << ", invalid op, key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
                        << ", op: " << mutation.op();
       return butil::Status(pb::error::Errno::EINTERNAL, "invalid op");
     }
@@ -1293,6 +1393,7 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   // create reader and writer
@@ -1354,10 +1455,25 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
                            << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: " << key
                            << ", lock_info: " << lock_info.ShortDebugString();
 
-        auto *locked = txn_result->mutable_locked();
-        *locked = lock_info;
-
+        *txn_result->mutable_locked() = lock_info;
         return butil::Status::OK();
+      } else {
+        if (lock_info.lock_type() == pb::store::Op::Lock) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", meet a pessimistic lock, there must BUG in executor, key: " << key
+                           << ", lock_info: " << lock_info.ShortDebugString();
+          *txn_result->mutable_locked() = lock_info;
+          return butil::Status::OK();
+        } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                   lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", meet a invalid lock_type, there must BUG in executor, key: " << key
+                           << ", lock_info: " << lock_info.ShortDebugString();
+          *txn_result->mutable_locked() = lock_info;
+          return butil::Status::OK();
+        }
       }
     } else {
       // check if the key is already committed, if it is committed can skip it
@@ -1381,6 +1497,37 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
                                        commit_ts)
                         << ", key: " << key << " is already committed, prev_commit_ts: " << prev_commit_ts;
         continue;
+      }
+
+      // check if the key is already rollbacked, if it is rollbacked, return WriteConflict
+      // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
+      auto ret1 = TxnEngineHelper::GetRollbackInfo(reader, start_ts, key, write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", get rollback info failed, key: " << Helper::StringToHex(key)
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
+
+      if (write_info.start_ts() == start_ts) {
+        DINGO_LOG(INFO) << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
+                        << ", write_info: " << write_info.ShortDebugString();
+
+        // prewrite meet write_conflict here
+        // add txn_result for response
+        // setup write_conflict ( this may not be necessary, when lock_info is set)
+        auto *write_conflict = txn_result->mutable_write_conflict();
+        write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_SelfRolledBack);
+        write_conflict->set_start_ts(start_ts);
+        write_conflict->set_conflict_ts(start_ts);
+        write_conflict->set_key(key);
+        // write_conflict->set_primary_key(lock_info.primary_lock());
+
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit,", region->Id())
+                        << ", meet key is rollbacked, return write_conflict, start_ts: " << start_ts
+                        << ", write_info: " << write_info.ShortDebugString();
+
+        return butil::Status::OK();
       }
     }
 
@@ -1535,6 +1682,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   // create reader and writer
@@ -1665,6 +1813,7 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   // create reader and writer
@@ -1834,6 +1983,7 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   // if commit_ts = 0, do rollback else do commit
@@ -1966,6 +2116,7 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   auto *response = dynamic_cast<pb::store::TxnHeartBeatResponse *>(ctx->Response());
@@ -2034,6 +2185,7 @@ butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::sha
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   auto *response = dynamic_cast<pb::store::TxnDeleteRangeResponse *>(ctx->Response());
@@ -2065,6 +2217,7 @@ butil::Status TxnEngineHelper::Gc(RawEnginePtr /*raw_engine*/, std::shared_ptr<E
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Gc", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   auto *response = dynamic_cast<pb::store::TxnGcResponse *>(ctx->Response());
