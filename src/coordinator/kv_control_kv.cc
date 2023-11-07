@@ -274,7 +274,7 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     kv.push_back(kv_temp);
   }
 
-  total_count_in_range = limit_count;
+  total_count_in_range = kv.size();
 
   DINGO_LOG(INFO) << "KvRange finish, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only << ", kv size: " << kv.size()
