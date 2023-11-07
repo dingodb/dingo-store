@@ -79,7 +79,9 @@ class TxnEngineHelper {
   static butil::Status Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                 std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                 const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
-                                bool try_one_pc, int64_t max_commit_ts);
+                                bool try_one_pc, int64_t max_commit_ts, const std::vector<int32_t> &pessimistic_checks,
+                                const std::map<int32_t, int64_t> &for_update_ts_checks,
+                                const std::map<int32_t, std::string> &lock_extra_datas);
 
   static butil::Status Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine, std::shared_ptr<Context> ctx,
                               int64_t start_ts, int64_t commit_ts, const std::vector<std::string> &keys);

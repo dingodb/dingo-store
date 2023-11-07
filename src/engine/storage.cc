@@ -594,7 +594,10 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int6
 
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {
+                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
+                                   const std::vector<int>& pessimistic_checks,
+                                   const std::map<int32_t, int64_t>& for_update_ts_checks,
+                                   const std::map<int32_t, std::string>& lock_extra_datas) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -605,7 +608,8 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
                   << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
 
   auto writer = engine_->NewTxnWriter(engine_);
-  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts);
+  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts,
+                               pessimistic_checks, for_update_ts_checks, lock_extra_datas);
   if (!status.ok()) {
     return status;
   }
