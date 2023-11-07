@@ -1118,7 +1118,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   if (!kvs.empty()) {
     response->set_value(kvs[0].value());
   }
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
 }
 
 void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
@@ -1207,7 +1207,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   if (txn_result_info.ByteSizeLong() > 0) {
-    response->mutable_txn_result()->CopyFrom(txn_result_info);
+    *response->mutable_txn_result() = txn_result_info;
   }
   response->set_end_key(end_key);
   response->set_has_more(has_more);
@@ -1872,10 +1872,10 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 
   if (!kvs.empty()) {
     for (const auto& kv : kvs) {
-      response->add_kvs()->CopyFrom(kv);
+      *response->add_kvs() = kv;
     }
   }
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
 }
 
 void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
@@ -2004,13 +2004,13 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_key is empty");
   }
 
+  if (request->start_key() >= request->end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key >= end_key");
+  }
+
   std::vector<std::string_view> keys;
   keys.push_back(request->start_key());
-
-  std::string str(1, '\x01');
-  std::string end_key = Helper::StringSubtractRightAlign(request->end_key(), str);
-
-  keys.push_back(end_key);
+  keys.push_back(request->end_key());
 
   status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
   if (!status.ok()) {
@@ -2051,9 +2051,9 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
   for (const auto& lock : locks) {
-    response->add_locks()->CopyFrom(lock);
+    *response->add_locks() = lock;
   }
 }
 
@@ -2358,7 +2358,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
   for (auto& key : txn_write_keys) {
     response->add_write_keys()->Swap(&key);
   }

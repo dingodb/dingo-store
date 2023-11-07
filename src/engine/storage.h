@@ -76,7 +76,7 @@ class Storage {
                         std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key);
   butil::Status TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const std::string& start_key, int64_t limit,
                             const std::string& end_key, pb::store::TxnResultInfo& txn_result_info,
-                            std::vector<pb::store::LockInfo>& locks);
+                            std::vector<pb::store::LockInfo>& lock_infos);
   butil::Status TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
                         int64_t start_ts, int64_t end_ts, pb::store::TxnResultInfo& txn_result_info,
                         std::vector<pb::store::TxnWriteKey>& txn_write_keys,

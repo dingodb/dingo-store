@@ -156,29 +156,13 @@ void SendTxnDump(uint64_t region_id);
 void StoreSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnBatchRollback(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region);
 
 void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnBatchRollback(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region);
 
 // region
