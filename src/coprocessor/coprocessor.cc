@@ -32,7 +32,7 @@
 #include "serial/record_encoder.h"
 
 // Must be after proto, otherwise it will cause naming collision. such as TYPE_STRING
-#include "expr/runner.h"
+#include "libexpr/src/runner.h"
 
 namespace dingodb {
 
@@ -291,10 +291,11 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
     expr::Runner runner;
 
     try {
-      runner.Decode(reinterpret_cast<const expr::byte*>(coprocessor_.expression().c_str()),
+      runner.Decode(reinterpret_cast<const expr::Byte*>(coprocessor_.expression().c_str()),
                     coprocessor_.expression().length());
-
-      expr::wrap<bool> ok = runner.Run<bool>(reinterpret_cast<const expr::Tuple*>(&original_record));
+      runner.BindTuple(reinterpret_cast<const expr::Tuple*>(&original_record));
+      runner.Run();
+      expr::Wrap<bool> ok = runner.GetResult<bool>();
       is_key_value_reserve = ok.has_value() && ok.value();
     } catch (const std::exception& my_exception) {
       std::string error_message = fmt::format("expr::Runner Decode or Run failed. exception : {}", my_exception.what());

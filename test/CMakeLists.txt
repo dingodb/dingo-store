@@ -18,5 +18,3 @@ foreach(TEST_SRC ${TEST_SRCS})
                         "-Xlinker \"-)\""
                         )
 endforeach()
-
-add_subdirectory(expr)
