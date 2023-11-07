@@ -15,6 +15,8 @@
 #ifndef DINGODB_TXN_ENGINE_HELPER_H_
 #define DINGODB_TXN_ENGINE_HELPER_H_
 
+#include <sys/stat.h>
+
 #include <memory>
 #include <vector>
 
@@ -28,6 +30,8 @@ namespace dingodb {
 
 class TxnEngineHelper {
  public:
+  static bool CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
+                                int64_t start_ts, pb::store::TxnResultInfo &txn_result_info);
   static butil::Status GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key, pb::store::LockInfo &lock_info);
 
   static butil::Status ScanLockInfo(RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
@@ -40,6 +44,7 @@ class TxnEngineHelper {
 
   static butil::Status ScanGetNextKeyValue(RawEngine::ReaderPtr reader, std::shared_ptr<Iterator> write_iter,
                                            std::shared_ptr<Iterator> lock_iter, int64_t start_ts,
+                                           const pb::store::IsolationLevel &isolation_level,
                                            const std::string &start_iter_key, std::string &last_lock_key,
                                            std::string &last_write_key, pb::store::TxnResultInfo &txn_result_info,
                                            std::string &iter_key, std::string &data_value);
