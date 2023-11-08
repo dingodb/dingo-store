@@ -205,6 +205,12 @@ class VectorIndex {
                                [[maybe_unused]] bool reconstruct = false,
                                [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) = 0;
 
+  virtual butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                                    std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                                    bool reconstruct = false,
+                                    const pb::common::VectorSearchParameter& parameter = {}) = 0;
+
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
   virtual butil::Status Train(const std::vector<float>& train_datas) = 0;
@@ -405,6 +411,12 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
                        std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
                        const pb::common::VectorSearchParameter& parameter = {});
+
+  butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                            const pb::common::Range& region_range,
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {});
 
   static butil::Status SetVectorIndexFilter(
       VectorIndexPtr vector_index,

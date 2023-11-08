@@ -134,7 +134,7 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
   // build state machine
   auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
   auto state_machine =
-      std::make_shared<dingodb::StoreStateMachine>(nullptr, region, raft_meta, nullptr, nullptr, false);
+      std::make_shared<dingodb::StoreStateMachine>(nullptr, region, raft_meta, nullptr, nullptr);
   if (!state_machine->Init()) {
     std::cout << "Init state machine failed";
     return nullptr;

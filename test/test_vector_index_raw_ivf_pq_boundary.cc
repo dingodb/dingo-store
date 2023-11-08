@@ -46,7 +46,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
   static void TearDownTestSuite() {
     vector_index_raw_ivf_pq_l2.reset();
     vector_index_raw_ivf_pq_ip.reset();
-    vector_index_raw_ivf_pq_consine.reset();
+    vector_index_raw_ivf_pq_cosine.reset();
   }
 
   static void ReCreate() {
@@ -89,7 +89,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_consine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
     }
   }
 
@@ -99,7 +99,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
 
   inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_l2;
   inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_ip;
-  inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_consine;
+  inline static std::shared_ptr<VectorIndex> vector_index_raw_ivf_pq_cosine;
   inline static faiss::idx_t dimension = 4096;
   // inline static int data_base_size = 100000;
   inline static int data_base_size = 10000;
@@ -146,11 +146,11 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
 
           std::array<std::pair<std::string, bool>, 3> error_flags{std::pair<std::string, bool>{"l2", false},
                                                                   std::pair<std::string, bool>{"ip", false},
-                                                                  std::pair<std::string, bool>{"consine", false}};
+                                                                  std::pair<std::string, bool>{"cosine", false}};
 
           std::shared_ptr<VectorIndex> raw_ivf_pq_l2;
           std::shared_ptr<VectorIndex> raw_ivf_pq_ip;
-          std::shared_ptr<VectorIndex> raw_ivf_pq_consine;
+          std::shared_ptr<VectorIndex> raw_ivf_pq_cosine;
 
           // valid param IP
           {
@@ -191,7 +191,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_consine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+            raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
           }
 
           if (data_base.empty()) {
@@ -287,7 +287,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
 
           vt_train_threads.emplace_back(lambda_train, "l2", raw_ivf_pq_l2);
           vt_train_threads.emplace_back(lambda_train, "ip", raw_ivf_pq_ip);
-          vt_train_threads.emplace_back(lambda_train, "consine", raw_ivf_pq_consine);
+          vt_train_threads.emplace_back(lambda_train, "cosine", raw_ivf_pq_cosine);
 
           for (auto &t : vt_train_threads) {
             t.join();
@@ -331,7 +331,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
 
           vt_add_threads.emplace_back(lambda_add, "l2", raw_ivf_pq_l2);
           vt_add_threads.emplace_back(lambda_add, "ip", raw_ivf_pq_ip);
-          vt_add_threads.emplace_back(lambda_add, "consine", raw_ivf_pq_consine);
+          vt_add_threads.emplace_back(lambda_add, "cosine", raw_ivf_pq_cosine);
 
           for (auto &t : vt_add_threads) {
             t.join();
@@ -386,7 +386,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
 
           vt_search_threads.emplace_back(lambda_search, "l2", raw_ivf_pq_l2);
           vt_search_threads.emplace_back(lambda_search, "ip", raw_ivf_pq_ip);
-          vt_search_threads.emplace_back(lambda_search, "consine", raw_ivf_pq_consine);
+          vt_search_threads.emplace_back(lambda_search, "cosine", raw_ivf_pq_cosine);
 
           for (auto &t : vt_search_threads) {
             t.join();

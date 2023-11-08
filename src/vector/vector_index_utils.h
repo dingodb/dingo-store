@@ -20,10 +20,13 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/logging.h"
+#include "faiss/Index.h"
+#include "faiss/impl/AuxIndexStructures.h"
 #include "proto/index.pb.h"
 
 namespace dingodb {
@@ -176,6 +179,27 @@ class VectorIndexUtils {
 
   static void NormalizeVectorForFaiss(float* x, int32_t d);
   static void NormalizeVectorForHnsw(const float* data, uint32_t dimension, float* norm_array);
+
+  static std::pair<std::unique_ptr<faiss::idx_t[]>, butil::Status> CopyVectorId(const std::vector<int64_t>& delete_ids);
+
+  static std::pair<std::unique_ptr<faiss::idx_t[]>, butil::Status> CheckAndCopyVectorId(
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension);
+
+  static std::pair<std::unique_ptr<float[]>, butil::Status> CopyVectorData(
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize);
+
+  static std::pair<std::unique_ptr<float[]>, butil::Status> CheckAndCopyVectorData(
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize);
+
+  static butil::Status FillSearchResult(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                                        const std::vector<faiss::Index::distance_t>& distances,
+                                        const std::vector<faiss::idx_t>& labels, pb::common::MetricType metric_type,
+                                        faiss::idx_t dimension,
+                                        std::vector<pb::index::VectorWithDistanceResult>& results);  // NOLINT
+
+  static butil::Status FillRangeSearchResult(const std::unique_ptr<faiss::RangeSearchResult>& range_search_result,
+                                             pb::common::MetricType metric_type, faiss::idx_t dimension,
+                                             std::vector<pb::index::VectorWithDistanceResult>& results);  // NOLINT
 };
 
 }  // namespace dingodb

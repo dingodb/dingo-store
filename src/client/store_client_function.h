@@ -98,6 +98,9 @@ dingodb::pb::store::Context GetRegionContext(int64_t region_id);
 void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn);
 void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, uint32_t topn,
                            uint32_t batch_count, const std::string& key, const std::string& value);
+void SendVectorRangeSearch(int64_t region_id, uint32_t dimension, double radius);
+void SendVectorRangeSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, double radius,
+                                uint32_t batch_count, const std::string& key, const std::string& value);
 void SendVectorBatchSearch(int64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count);
 void SendVectorBatchQuery(int64_t region_id, std::vector<int64_t> vector_ids);
 void SendVectorAddRetry(std::shared_ptr<Context> ctx);

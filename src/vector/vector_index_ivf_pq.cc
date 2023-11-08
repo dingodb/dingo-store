@@ -159,6 +159,27 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
   return butil::Status::OK();
 }
 
+butil::Status VectorIndexIvfPq::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                                            bool reconstruct, const pb::common::VectorSearchParameter& parameter) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  butil::Status status =
+      InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch, false,
+                             vector_with_ids, radius, filters, results, reconstruct, parameter);
+  if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
+    DINGO_LOG(ERROR) << "VectorIndexIvfPq::RangeSearch failed " << status.error_cstr();
+    return status;
+  }
+
+  if (pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code()) {
+    for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+      auto& result = results.emplace_back();
+    }
+  }
+  return butil::Status::OK();
+}
+
 void VectorIndexIvfPq::LockWrite() { bthread_mutex_lock(&mutex_); }
 
 void VectorIndexIvfPq::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
@@ -166,6 +187,11 @@ void VectorIndexIvfPq::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 bool VectorIndexIvfPq::SupportSave() { return true; }
 
 butil::Status VectorIndexIvfPq::Save(const std::string& path) {
+  // Warning : read me first !!!!
+  // Currently, the save function is executed in the fork child process.
+  // When calling glog,
+  // the child process will hang.
+  // Remove glog temporarily.
   // The outside has been locked. Remove the locking operation here.
   // BAIDU_SCOPED_LOCK(mutex_);
   butil::Status status =

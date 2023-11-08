@@ -136,6 +136,12 @@ class VectorReader {
       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
       const std::vector<int64_t>& vector_ids);
 
+  static butil::Status SearchAndRangeSearchWrapper(
+      VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+      std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, uint32_t topk,  // NOLINT
+      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
+
   RawEngine::ReaderPtr reader_;
 };
 

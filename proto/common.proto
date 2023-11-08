@@ -588,6 +588,10 @@ message VectorSearchParameter {
                                       // if this parameter is null, all scalar data will be returned.
   bool without_table_data = 5;        // Default false, if true, response without table data
 
+  bool enable_range_search = 6;  // Whether to enable range search. true : enable , false disable.
+                                 // if enable_range_search = true. top_n disabled.
+  float radius = 7;              // Query the target value of the vector. if enable_range_search = true. use this.
+
   // The search method to use.
   oneof search {
     SearchFlatParam flat = 11;

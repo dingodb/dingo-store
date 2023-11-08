@@ -94,6 +94,11 @@ class VectorIndexFlat : public VectorIndex {
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
                        [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
 
+  butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {}) override;
+
   void LockWrite() override;
   void UnlockWrite() override;
   bool SupportSave() override;
@@ -117,6 +122,11 @@ class VectorIndexFlat : public VectorIndex {
                                                                    faiss::idx_t k, faiss::Index::distance_t* distances,
                                                                    faiss::idx_t* labels,
                                                                    std::shared_ptr<FlatIDSelector> filters);
+
+  void DoRangeSearch(faiss::idx_t n, const faiss::Index::component_t* x, faiss::Index::distance_t radius,
+                     faiss::RangeSearchResult* result,
+                     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
+
   // Dimension of the elements
   faiss::idx_t dimension_;
 

@@ -165,6 +165,7 @@ DEFINE_int64(tso_new_physical, 0, "new tso physical");
 DEFINE_int64(tso_new_logical, 0, "new tso logical");
 DEFINE_int32(nsubvector, 8, "ivf pq default subvector nums 8");
 DEFINE_int32(nbits_per_idx, 8, "ivf pq default nbits_per_idx 8");
+DEFINE_double(radius, 10.1, "range search radius");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -362,6 +363,11 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorSearchDebug") {
       client::SendVectorSearchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn, FLAGS_batch_count,
                                     FLAGS_key, FLAGS_value);
+    } else if (method == "VectorRangeSearch") {
+      client::SendVectorRangeSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_radius);
+    } else if (method == "VectorRangeSearchDebug") {
+      client::SendVectorRangeSearchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_radius,
+                                         FLAGS_batch_count, FLAGS_key, FLAGS_value);
     } else if (method == "VectorBatchSearch") {
       client::SendVectorBatchSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn, FLAGS_batch_count);
     } else if (method == "VectorBatchQuery") {
@@ -402,7 +408,6 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
                                      FLAGS_right_vector_size, FLAGS_is_return_normlize);
     } else if (method == "VectorCount") {
       client::SendVectorCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
-
     } else if (method == "CountVectorTable") {
       ctx->table_id = FLAGS_table_id;
       client::CountVectorTable(ctx);
@@ -444,11 +449,9 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->table_id = FLAGS_table_id;
       ctx->key = FLAGS_key;
       client::CheckTableDistribution(ctx);
-
     } else if (method == "CheckIndexDistribution") {
       ctx->table_id = FLAGS_table_id;
       client::CheckIndexDistribution(ctx);
-
     } else if (method == "DumpDb") {
       ctx->table_id = FLAGS_table_id;
       ctx->index_id = FLAGS_index_id;
