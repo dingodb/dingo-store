@@ -23,6 +23,7 @@
 #include "butil/endpoint.h"
 #include "butil/iobuf.h"
 #include "butil/status.h"
+#include "proto/common.pb.h"
 #include "proto/file_service.pb.h"
 #include "proto/node.pb.h"
 
@@ -49,6 +50,8 @@ class ServiceAccess {
   static pb::node::NodeInfo GetNodeInfo(const butil::EndPoint& endpoint);
   static pb::node::NodeInfo GetNodeInfo(const std::string& host, int port);
 
+  static pb::common::BRaftStatus GetRaftStatus(int64_t region_id, const butil::EndPoint& endpoint);
+
   static butil::Status InstallVectorIndexSnapshot(const pb::node::InstallVectorIndexSnapshotRequest& request,
                                                   const butil::EndPoint& endpoint,
                                                   pb::node::InstallVectorIndexSnapshotResponse& response);
@@ -65,6 +68,8 @@ class ServiceAccess {
 
   static std::shared_ptr<pb::fileservice::GetFileResponse> GetFile(const pb::fileservice::GetFileRequest& request,
                                                                    const butil::EndPoint& endpoint, butil::IOBuf* buf);
+
+  static butil::Status CommitMerge(const pb::node::CommitMergeRequest& request, const butil::EndPoint& endpoint);
 
  private:
   ServiceAccess() = default;

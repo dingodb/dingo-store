@@ -312,14 +312,10 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   assert(snapshot_set != nullptr);
 
   int64_t start_time = Helper::TimestampMs();
-  auto engine = Server::GetInstance().GetEngine();
-  if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
-    return butil::Status(pb::error::EINTERNAL, "Not raft store engine.");
-  }
 
   int64_t vector_index_id = snapshot_set->VectorIndexId();
-  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-  auto raft_node = raft_kv_engine->GetNode(vector_index_id);
+  auto engine = Server::GetInstance().GetRaftStoreEngine();
+  auto raft_node = engine->GetNode(vector_index_id);
   if (raft_node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node.");
   }

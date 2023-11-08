@@ -93,6 +93,8 @@ pb::common::RegionEpoch Region::Epoch(bool lock) {
   }
 }
 
+std::string Region::EpochToString() { return Helper::RegionEpochToString(Epoch()); }
+
 void Region::LockRegionMeta() { bthread_mutex_lock(&mutex_); }
 
 void Region::UnlockRegionMeta() { bthread_mutex_unlock(&mutex_); }
@@ -285,6 +287,16 @@ std::shared_ptr<RawEngine> Region::GetRawEngine() {
   }
 }
 
+void Region::SetMergeState(const pb::store_internal::MergeState& merge_state) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  *inner_region_.mutable_merge_state() = merge_state;
+}
+
+pb::store_internal::MergeState Region::MergeState() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.merge_state();
+}
+
 }  // namespace store
 
 bool StoreServerMeta::Init() {
@@ -460,7 +472,7 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
     case pb::common::StoreRegionState::NORMAL:
       if (new_state == pb::common::StoreRegionState::STANDBY || new_state == pb::common::StoreRegionState::SPLITTING ||
           new_state == pb::common::StoreRegionState::MERGING || new_state == pb::common::StoreRegionState::DELETING ||
-          new_state == pb::common::StoreRegionState::ORPHAN) {
+          new_state == pb::common::StoreRegionState::ORPHAN || new_state == pb::common::StoreRegionState::TOMBSTONE) {
         region->SetState(new_state);
         successed = true;
       }
@@ -608,6 +620,13 @@ void StoreRegionMeta::UpdateTemporaryDisableChange(store::RegionPtr region, bool
   assert(region != nullptr);
 
   region->SetTemporaryDisableChange(disable_change);
+  meta_writer_->Put(TransformToKv(region));
+}
+
+void StoreRegionMeta::UpdateMergeState(store::RegionPtr region, const pb::store_internal::MergeState& merge_state) {
+  assert(region != nullptr);
+
+  region->SetMergeState(merge_state);
   meta_writer_->Put(TransformToKv(region));
 }
 

@@ -32,6 +32,8 @@ class NodeServiceImpl : public pb::node::NodeService {
 
   void GetNodeInfo(google::protobuf::RpcController* controller, const pb::node::GetNodeInfoRequest* request,
                    pb::node::GetNodeInfoResponse* response, google::protobuf::Closure* done) override;
+  void GetRaftStatus(google::protobuf::RpcController* controller, const pb::node::GetRaftStatusRequest* request,
+                     pb::node::GetRaftStatusResponse* response, google::protobuf::Closure* done) override;
   void GetLogLevel(google::protobuf::RpcController* controller, const pb::node::GetLogLevelRequest* request,
                    pb::node::GetLogLevelResponse* response, google::protobuf::Closure* done) override;
   void ChangeLogLevel(google::protobuf::RpcController* controller, const pb::node::ChangeLogLevelRequest* request,
@@ -57,6 +59,9 @@ class NodeServiceImpl : public pb::node::NodeService {
 
   void CheckVectorIndex(google::protobuf::RpcController* controller, const pb::node::CheckVectorIndexRequest* request,
                         pb::node::CheckVectorIndexResponse* response, google::protobuf::Closure* done) override;
+
+  void CommitMerge(google::protobuf::RpcController* controller, const pb::node::CommitMergeRequest* request,
+                   pb::node::CommitMergeResponse* response, google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb

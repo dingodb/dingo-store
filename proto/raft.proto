@@ -32,6 +32,9 @@ enum CmdType {
   DELETEBATCH = 4;
   SPLIT = 5;
   COMPAREANDSET = 6;
+  PREPARE_MERGE = 7;
+  COMMIT_MERGE = 8;
+  ROLLBACK_MERGE = 9;
 
   SAVE_RAFT_SNAPSHOT = 100;
 
@@ -105,6 +108,40 @@ message SplitRequest {
 }
 
 message SplitResponse {}
+
+message PrepareMergeRequest {
+  int64 merge_id = 1; // the merge request unique id
+  int64 min_applied_log_id = 2; // leader/follower min applied log id
+  int64 target_region_id = 3; // target region id
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4; // target region epoch
+}
+
+message PrepareMergeResponse {}
+
+message LogEntry {
+  int64 index = 1;
+  int64 term = 2;
+  bytes data = 3;
+}
+
+message CommitMergeRequest {
+  int64 merge_id = 1; // the merge request unique id
+  int64 source_region_id = 2;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 3;
+  int64 prepare_merge_log_id = 4;
+  repeated LogEntry entries = 5; // source region raft log [min_applied_log_id, prepare_merge_log_id)
+}
+
+message CommitMergeResponse {}
+
+message RollbackMergeRequest {
+  int64 merge_id = 1; // the merge request unique id
+  int64 min_applied_log_id = 2;
+  int64 target_region_id = 3;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
+}
+
+message RollbackMergeResponse {}
 
 message SaveSnapshotRequest {
   int64 region_id = 1;
@@ -199,6 +236,9 @@ message Request {
     DeleteBatchRequest delete_batch = 1003;
     SplitRequest split = 1004;
     CompareAndSetRequest compare_and_set = 1005;
+    PrepareMergeRequest prepare_merge = 1006;
+    CommitMergeRequest commit_merge = 1007;
+    RollbackMergeRequest rollback_merge = 1008;
 
     SaveSnapshotRequest save_snapshot = 1100;
 
@@ -225,6 +265,9 @@ message Response {
     DeleteBatchResponse delete_batch = 1003;
     SplitResponse split = 1004;
     CompareAndSetResponse compare_and_set = 1005;
+    PrepareMergeResponse prepare_merge = 1006;
+    CommitMergeResponse commit_merge = 1007;
+    RollbackMergeResponse rollback_merge = 1008;
 
     SaveSnapshotResponse save_snapshot = 1100;
 
@@ -243,6 +286,7 @@ message Response {
 
 message RequestHeader {
   int64 region_id = 1;
+  dingodb.pb.common.RegionEpoch epoch = 2;
 }
 
 message RaftCmdRequest {

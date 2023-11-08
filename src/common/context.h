@@ -86,7 +86,10 @@ class Context {
     return *this;
   }
 
-  void SetCfName(const std::string& cf_name) { cf_name_ = cf_name; }
+  Context& SetCfName(const std::string& cf_name) {
+    cf_name_ = cf_name;
+    return *this;
+  }
   const std::string& CfName() const { return cf_name_; }
 
   bool DeleteFilesInRange() const { return delete_files_in_range_; }

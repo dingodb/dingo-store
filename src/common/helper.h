@@ -323,6 +323,8 @@ class Helper {
                                                    pb::store_internal::RaftSnapshotRegionMeta& meta);
 
   static butil::Status CheckRange(const pb::common::Range& range);
+  static bool IsEqualRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch);
+  static std::string RegionEpochToString(const pb::common::RegionEpoch& epoch);
 };
 
 }  // namespace dingodb

@@ -41,6 +41,11 @@ message RegionSplitRecord {
   string split_time = 2;
 }
 
+message MergeState {
+  int64 merge_id = 1;
+  bool has_applied_commit_merge_command = 2;
+}
+
 message Region {
   int64 id = 1;
   dingodb.pb.common.RegionType region_type = 10;
@@ -57,6 +62,8 @@ message Region {
   int64 parent_id = 72;
   repeated RegionSplitRecord childs = 73;
   int64 snapshot_epoch_version = 74;  // latest region raft snapshot epoch version
+
+  MergeState merge_state = 75;
 }
 
 message VectorIndexMeta {

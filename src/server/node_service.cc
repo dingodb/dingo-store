@@ -25,14 +25,17 @@
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "common/failpoint.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
 #include "coordinator/coordinator_closure.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 #include "vector/vector_index_snapshot_manager.h"
 
 namespace dingodb {
@@ -48,8 +51,7 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
   auto& server = Server::GetInstance();
 
   if (request->cluster_id() < 0) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "Param illegal");
   }
 
   auto* node_info = response->mutable_node_info();
@@ -72,6 +74,25 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
   raft_location->set_port(server.RaftEndpoint().port);
 }
 
+void NodeServiceImpl::GetRaftStatus(google::protobuf::RpcController* /*controller*/,
+                                    const pb::node::GetRaftStatusRequest* request,
+                                    pb::node::GetRaftStatusResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto engine = Server::GetInstance().GetRaftStoreEngine();
+  if (engine == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EENGINE_NOT_FOUND, "Not found raft store engine");
+    return;
+  }
+  auto node = engine->GetNode(request->region_id());
+  if (node == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ERAFT_NOT_FOUND, "Not found raft node");
+    return;
+  }
+
+  *(response->mutable_raft_status()) = *node->GetStatus();
+}
+
 void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetLogLevelRequest* request, pb::node::GetLogLevelResponse* response,
                                   google::protobuf::Closure* done) {
@@ -89,7 +110,8 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*
 
   if (min_log_level > pb::node::FATAL) {
     DINGO_LOG(ERROR) << "Invalid Log Level:" << min_log_level;
-    response->mutable_error()->set_errcode(::dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
+                            fmt::format("Param min_log_level({}) illegal", min_log_level));
     return;
   }
 
@@ -284,17 +306,13 @@ void NodeServiceImpl::SetFailPoint(google::protobuf::RpcController*, const pb::n
 
   const auto& failpoint = request->failpoint();
   if (failpoint.name().empty() || failpoint.config().empty()) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    error->set_errmsg("Param is error.");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "Param is error");
     return;
   }
 
   auto status = FailPointManager::GetInstance().ConfigureFailPoint(failpoint.name(), failpoint.config());
   if (!status.ok()) {
-    auto* error = response->mutable_error();
-    error->set_errcode(static_cast<Errno>(status.error_code()));
-    error->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 
@@ -361,9 +379,7 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
 
   auto status = ValidateInstallVectorIndexSnapshotRequest(request);
   if (!status.ok()) {
-    auto* error = response->mutable_error();
-    error->set_errcode(static_cast<Errno>(status.error_code()));
-    error->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     DINGO_LOG(INFO) << fmt::format("InstallVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
                                    response->ShortDebugString());
     return;
@@ -373,25 +389,21 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(vector_index_id);
   if (region == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EREGION_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found region {}.", vector_index_id));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {}.", vector_index_id));
     return;
   }
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found vector index {}.", vector_index_id));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EVECTOR_INDEX_NOT_FOUND,
+                            fmt::format("Not found vector index {}.", vector_index_id));
     return;
   }
 
   status = VectorIndexSnapshotManager::HandleInstallSnapshot(request->uri(), request->meta(),
                                                              vector_index_wrapper->SnapshotSet());
   if (!status.ok()) {
-    auto* error = response->mutable_error();
-    error->set_errcode(static_cast<Errno>(status.error_code()));
-    error->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 
   DINGO_LOG(INFO) << fmt::format("InstallVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
@@ -408,60 +420,91 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EREGION_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {}.", request->vector_index_id()));
     return;
   }
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EVECTOR_INDEX_NOT_FOUND,
+                            fmt::format("Not found vector index {}.", request->vector_index_id()));
+
     return;
   }
   auto snapshot = vector_index_wrapper->SnapshotSet()->GetLastSnapshot();
   if (snapshot == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EVECTOR_SNAPSHOT_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found vector index snapshot {}.", request->vector_index_id()));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EVECTOR_SNAPSHOT_NOT_FOUND,
+                            fmt::format("Not found vector index snapshot {}.", request->vector_index_id()));
     return;
   }
 
   auto status = VectorIndexSnapshotManager::HandlePullSnapshot(response, snapshot);
   if (!status.ok()) {
-    auto* error = response->mutable_error();
-    error->set_errcode(static_cast<Errno>(status.error_code()));
-    error->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
   DINGO_LOG(INFO) << fmt::format("GetVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
                                  response->ShortDebugString());
 }
 
-void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* controller,
+void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*controller*/,
                                        const pb::node::CheckVectorIndexRequest* request,
                                        pb::node::CheckVectorIndexResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
-  brpc::Controller* cntl = (brpc::Controller*)controller;
 
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EREGION_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {}.", request->vector_index_id()));
     return;
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper == nullptr) {
-    auto* error = response->mutable_error();
-    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
-    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    ServiceHelper::SetError(response->mutable_error(), Errno::EVECTOR_INDEX_NOT_FOUND,
+                            fmt::format("Not found vector index {}.", request->vector_index_id()));
     return;
   }
   if (vector_index_wrapper->IsReady() && vector_index_wrapper->IsOwnReady()) {
     response->set_is_exist(true);
+  }
+}
+
+butil::Status ValidateCommitMergeRequest(const pb::node::CommitMergeRequest* request) {
+  if (request->source_region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param source_region_id is empty");
+  }
+  if (request->target_region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param target_region_id is empty");
+  }
+
+  if (request->prepare_merge_log_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param prepare_merge_log_id is empty");
+  }
+
+  return butil::Status();
+}
+
+void NodeServiceImpl::CommitMerge(google::protobuf::RpcController* /*controller*/,
+                                  const pb::node::CommitMergeRequest* request, pb::node::CommitMergeResponse* response,
+                                  google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+
+  auto status = ValidateCommitMergeRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  auto storage = Server::GetInstance().GetStorage();
+  auto ctx = std::make_shared<Context>();
+  ctx->SetRegionId(request->target_region_id());
+  ctx->SetRegionEpoch(request->target_region_epoch());
+
+  status = storage->CommitMerge(ctx, request->merge_id(), request->source_region_id(), request->source_region_epoch(),
+                                request->prepare_merge_log_id(), Helper::PbRepeatedToVector(request->entries()));
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 

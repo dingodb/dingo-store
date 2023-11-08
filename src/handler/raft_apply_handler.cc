@@ -14,6 +14,7 @@
 
 #include "handler/raft_apply_handler.h"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -27,6 +28,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
+#include "common/service_access.h"
 #include "common/synchronization.h"
 #include "engine/raw_engine.h"
 #include "event/store_state_machine_event.h"
@@ -46,19 +48,6 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
                        int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put();
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    for (const auto &kv : request.kvs()) {
-      if (range.end_key().compare(kv.key()) <= 0) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
 
   auto writer = engine->Writer();
   if (!writer) {
@@ -91,19 +80,6 @@ int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
                                int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.put_if_absent();
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    for (const auto &kv : request.kvs()) {
-      if (range.end_key().compare(kv.key()) <= 0) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
 
   std::vector<bool> key_states;  // NOLINT
   bool key_state;
@@ -159,19 +135,6 @@ int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
                                  store::RegionMetricsPtr region_metrics, int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.compare_and_set();
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    for (const auto &kv : request.kvs()) {
-      if (range.end_key().compare(kv.key()) <= 0) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
 
   std::vector<bool> key_states;  // NOLINT
 
@@ -244,19 +207,6 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
                                int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_range();
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    for (const auto &delete_range : request.ranges()) {
-      if (range.end_key().compare(delete_range.end_key()) <= 0) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
 
   auto reader = engine->Reader();
   auto writer = engine->Writer();
@@ -307,19 +257,6 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
                                int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_batch();
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    for (const auto &key : request.keys()) {
-      if (range.end_key().compare(key) <= 0) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
 
   auto reader = engine->Reader();
   std::vector<bool> key_states(request.keys().size(), false);
@@ -728,6 +665,208 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
   return 0;
 }
 
+// Get raft log entries.
+static std::vector<pb::raft::LogEntry> GetRaftLogEntries(int64_t region_id, int64_t begin_log_id, int64_t end_log_id) {
+  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(region_id);
+  auto log_entries = log_storage->GetEntrys(begin_log_id, end_log_id);
+  std::vector<pb::raft::LogEntry> pb_log_entries;
+  pb_log_entries.resize(log_entries.size());
+  for (int i = 0; i < log_entries.size(); ++i) {
+    auto &pb_log_entry = pb_log_entries[i];
+    pb_log_entry.set_index(log_entries[i]->index);
+    pb_log_entry.set_term(log_entries[i]->term);
+    std::string data;
+    log_entries[i]->data.copy_to(&data);
+    pb_log_entry.mutable_data()->swap(data);
+  }
+
+  return pb_log_entries;
+}
+
+static void LaunchCommitMergeCommand(int64_t merge_id, store::RegionPtr source_region, store::RegionPtr target_region,
+                                     int64_t min_applied_log_id, int64_t prepare_merge_log_id) {
+  auto storage = Server::GetInstance().GetStorage();
+  assert(storage != nullptr);
+  auto node = storage->GetRaftStoreEngine()->GetNode(source_region->Id());
+  assert(node != nullptr);
+
+  uint64_t start_time = Helper::TimestampMs();
+  // Generate LogEntry.
+  auto log_entries = GetRaftLogEntries(source_region->Id(), min_applied_log_id, prepare_merge_log_id);
+
+  auto ctx = std::make_shared<Context>();
+  ctx->SetRegionId(target_region->Id());
+  ctx->SetRegionEpoch(target_region->Epoch());
+
+  int retry_count = 0;
+  do {
+    auto merge_state = source_region->MergeState();
+    // target region already execute CommitMerge.
+    if (merge_state.merge_id() == merge_id && merge_state.has_applied_commit_merge_command()) {
+      break;
+    }
+
+    auto source_region_epoch = source_region->Epoch();
+    auto status = storage->CommitMerge(ctx, merge_id, source_region->Id(), source_region_epoch, prepare_merge_log_id,
+                                       log_entries);
+    if (status.ok()) {
+      break;
+    }
+
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      // Invoke remote leader peer
+      auto peer = node->GetLeaderId();
+      if (!peer.is_empty()) {
+        pb::node::CommitMergeRequest request;
+        request.set_merge_id(merge_id);
+        request.set_source_region_id(source_region->Id());
+        *request.mutable_source_region_epoch() = source_region_epoch;
+        request.set_target_region_id(target_region->Id());
+        *request.mutable_target_region_epoch() = target_region->Epoch();
+        request.set_prepare_merge_log_id(prepare_merge_log_id);
+        Helper::VectorToPbRepeated(log_entries, request.mutable_entries());
+
+        status = ServiceAccess::CommitMerge(request, peer.addr);
+        if (status.ok()) {
+          break;
+        }
+      }
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[merge.merging][merge_id({}).region({}/{})] commit CommitMerge failed, times({}) error: {} {}", merge_id,
+        source_region->Id(), target_region->Id(), ++retry_count, status.error_code(), status.error_str());
+
+    bthread_usleep(100000);  // 100ms
+  } while (true);
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[merge.merging][merge_id({}).region({}/{})] commit CommitMerge finish, elapsed time({}ms)", merge_id,
+      source_region->Id(), target_region->Id(), Helper::TimestampMs() - start_time);
+}
+
+int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr source_region, std::shared_ptr<RawEngine>,
+                                const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+                                int64_t log_id) {
+  const auto &request = req.prepare_merge();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto target_region = store_region_meta->GetRegion(request.target_region_id());
+
+  // Validate
+  int wait_count = 0;
+  do {
+    if (target_region->Epoch().version() < request.target_region_epoch().version()) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[merge.merging][merge_id({}).region({}/{})] waiting({}), target region epoch({}) less the special epoch({})",
+          request.merge_id(), source_region->Id(), target_region->Id(), ++wait_count, target_region->Epoch().version(),
+          request.target_region_epoch().version());
+      bthread_usleep(100000);  // 100ms
+      target_region = store_region_meta->GetRegion(request.target_region_id());
+
+    } else if (target_region->Epoch().version() == request.target_region_epoch().version()) {
+      break;
+    } else if (target_region->Epoch().version() > request.target_region_epoch().version()) {
+      // Todo: check
+      DINGO_LOG(FATAL) << fmt::format(
+          "[merge.merging][merge_id({}).region({}/{})] epoch not match, source region({} / {}) target region({} / {} / "
+          "{})",
+          request.merge_id(), source_region->Id(), target_region->Id(), source_region->EpochToString(),
+          source_region->RangeToString(), Helper::RegionEpochToString(request.target_region_epoch()),
+          target_region->EpochToString(), target_region->RangeToString());
+    }
+
+  } while (true);
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[merge.merging][merge_id({}).region({}/{})] prepare merge, source region({} / {}) target region({} / {})",
+      request.merge_id(), source_region->Id(), target_region->Id(), source_region->EpochToString(),
+      source_region->RangeToString(), target_region->EpochToString(), target_region->RangeToString());
+
+  // Modify source region state.
+  store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::MERGING);
+
+  // Modify source region epoch.
+  int64_t new_version = source_region->Epoch().version() + 1;
+  store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, source_region->Range());
+
+  // Commit raft command CommitMerge.
+  LaunchCommitMergeCommand(request.merge_id(), source_region, target_region, request.min_applied_log_id(), log_id);
+
+  return 0;
+}
+
+int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target_region, std::shared_ptr<RawEngine>,
+                               const pb::raft::Request &req, store::RegionMetricsPtr, int64_t, int64_t log_id) {
+  assert(target_region != nullptr);
+  const auto &request = req.commit_merge();
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  assert(store_region_meta != nullptr);
+  auto raft_store_engine = Server::GetInstance().GetStorage()->GetRaftStoreEngine();
+  assert(raft_store_engine != nullptr);
+
+  uint64_t start_time = Helper::TimestampMs();
+  // Vaildate
+  auto source_region = store_region_meta->GetRegion(request.source_region_id());
+  if (source_region == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Not found source region.",
+                                    request.merge_id(), request.source_region_id(), target_region->Id());
+    return 0;
+  }
+
+  // Update merge state
+  pb::store_internal::MergeState merge_state;
+  merge_state.set_merge_id(request.merge_id());
+  merge_state.set_has_applied_commit_merge_command(true);
+  store_region_meta->UpdateMergeState(source_region, merge_state);
+
+  // Catch up apply source region raft log.
+  auto node = raft_store_engine->GetNode(source_region->Id());
+  if (node == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Not found source node.",
+                                    request.merge_id(), request.source_region_id(), target_region->Id());
+    return 0;
+  }
+  auto state_machine = std::dynamic_pointer_cast<StoreStateMachine>(node->GetStateMachine());
+  if (state_machine == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Not found source state machine.",
+                                    request.merge_id(), request.source_region_id(), target_region->Id());
+    return 0;
+  }
+
+  state_machine->CatchUpApplyLog(Helper::PbRepeatedToVector(request.entries()));
+
+  // Set source region TOMBSTONE state
+  store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
+
+  // Set target region range and epoch
+  // range: source range + target range
+  // epoch: max(source_epoch, target_epoch) + 1
+  pb::common::Range new_range;
+  new_range.set_start_key(source_region->Range().start_key());
+  new_range.set_end_key(target_region->Range().end_key());
+  int64_t new_version = std::max(request.source_region_epoch().version(), target_region->Epoch().version()) + 1;
+
+  store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range);
+
+  // Notify coordinator
+  Heartbeat::TriggerStoreHeartbeat({source_region->Id(), target_region->Id()}, true);
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[merge.merging][merge_id({}).region({}/{})] commit merge finish, epoch({}) range({}) elapsed time({}).",
+      request.merge_id(), source_region->Id(), target_region->Id(), target_region->EpochToString(),
+      target_region->RangeToString(), Helper::TimestampMs() - start_time);
+
+  return 0;
+}
+
+int RollbackMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr source_region, std::shared_ptr<RawEngine>,
+                                 const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+                                 int64_t log_id) {
+  const auto &request = req.rollback_merge();
+
+  return 0;
+}
+
 int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr region, std::shared_ptr<RawEngine>,
                                     const pb::raft::Request &, store::RegionMetricsPtr, int64_t term_id,
                                     int64_t log_id) {
@@ -756,22 +895,6 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
   butil::Status status;
   const auto &request = req.vector_add();
-
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    int64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-    int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
-    for (const auto &vector : request.vectors()) {
-      if (vector.id() < start_vector_id || vector.id() >= end_vector_id) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
 
   // Transform vector to kv
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
@@ -925,22 +1048,6 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   butil::Status status;
   const auto &request = req.vector_delete();
 
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    int64_t start_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-    int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
-    for (auto vector_id : request.ids()) {
-      if (vector_id < start_vector_id || vector_id >= end_vector_id) {
-        if (ctx) {
-          status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-          ctx->SetStatus(status);
-        }
-        return 0;
-      }
-    }
-  }
-
   auto reader = engine->Reader();
   auto snapshot = engine->GetSnapshot();
   if (!snapshot) {
@@ -1087,6 +1194,9 @@ std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   handler_collection->Register(std::make_shared<DeleteRangeHandler>());
   handler_collection->Register(std::make_shared<DeleteBatchHandler>());
   handler_collection->Register(std::make_shared<SplitHandler>());
+  handler_collection->Register(std::make_shared<PrepareMergeHandler>());
+  handler_collection->Register(std::make_shared<CommitMergeHandler>());
+  handler_collection->Register(std::make_shared<RollbackMergeHandler>());
   handler_collection->Register(std::make_shared<CompareAndSetHandler>());
   handler_collection->Register(std::make_shared<VectorAddHandler>());
   handler_collection->Register(std::make_shared<VectorDeleteHandler>());

@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -71,6 +72,7 @@ class Region {
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
   pb::common::RegionEpoch Epoch(bool lock = true);
+  std::string EpochToString();
   void SetEpochVersionAndRange(int64_t version, const pb::common::Range& range);
   void SetEpochConfVersion(int64_t version);
   void SetSnapshotEpochVersion(int64_t version);
@@ -135,6 +137,9 @@ class Region {
   int64_t GetAppliedIndex() { return applied_index_.load(); }
 
   scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor = nullptr;
+
+  void SetMergeState(const pb::store_internal::MergeState& merge_state);
+  pb::store_internal::MergeState MergeState();
 
  private:
   bthread_mutex_t mutex_;
@@ -222,6 +227,8 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateNeedBootstrapDoSnapshot(store::RegionPtr region, bool need_do_snapshot);
   void UpdateDisableChange(store::RegionPtr region, bool disable_change);
   void UpdateTemporaryDisableChange(store::RegionPtr region, bool disable_change);
+
+  void UpdateMergeState(store::RegionPtr region, const pb::store_internal::MergeState& merge_state);
 
   bool IsExistRegion(int64_t region_id);
   store::RegionPtr GetRegion(int64_t region_id);

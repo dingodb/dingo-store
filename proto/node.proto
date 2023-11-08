@@ -16,6 +16,7 @@ syntax = "proto3";
 
 import "common.proto";
 import "error.proto";
+import "raft.proto";
 
 package dingodb.pb.node;
 
@@ -36,6 +37,15 @@ message GetNodeInfoRequest {
 message GetNodeInfoResponse {
   dingodb.pb.error.Error error = 1;
   NodeInfo node_info = 2;
+}
+
+message GetRaftStatusRequest {
+  int64 region_id = 1;
+}
+
+message GetRaftStatusResponse {
+  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.BRaftStatus raft_status = 2;
 }
 
 enum LogLevel {
@@ -150,11 +160,30 @@ message CheckVectorIndexResponse {
   bool is_exist = 2;
 }
 
+message CommitMergeRequest {
+  int64 merge_id = 1;
+
+  int64 source_region_id = 2;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 3;
+
+  int64 target_region_id = 4;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 5;
+
+  int64 prepare_merge_log_id = 6;
+  repeated dingodb.pb.raft.LogEntry entries = 7;
+}
+
+message CommitMergeResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
   // out: List<Node>
   rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
+
+  rpc GetRaftStatus(GetRaftStatusRequest) returns (GetRaftStatusResponse);
 
   // Get current log level information
   rpc GetLogLevel(GetLogLevelRequest) returns (GetLogLevelResponse);
@@ -179,4 +208,7 @@ service NodeService {
 
   // Check region is hold vector index
   rpc CheckVectorIndex(CheckVectorIndexRequest) returns (CheckVectorIndexResponse);
+
+  // Launch CommitMerge command
+  rpc CommitMerge(CommitMergeRequest) returns (CommitMergeResponse);
 }

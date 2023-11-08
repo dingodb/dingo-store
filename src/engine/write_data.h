@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "common/helper.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 
@@ -33,11 +34,14 @@ enum class DatumType {
   kDeleteRange = 3,
   kDeleteBatch = 4,
   kSplit = 5,
-  kCompareAndSet = 6,
-  kMetaPut = 7,
-  kRebuildVectorIndex = 8,
-  kSaveRaftSnapshot = 9,
-  kTxn = 7,
+  kPrepareMerge = 6,
+  kCommitMerge = 7,
+  kRollbackMerge = 8,
+  kCompareAndSet = 9,
+  kMetaPut = 10,
+  kRebuildVectorIndex = 11,
+  kSaveRaftSnapshot = 12,
+  kTxn = 13,
 };
 
 class DatumAble {
@@ -290,6 +294,80 @@ struct SplitDatum : public DatumAble {
   pb::raft::SplitStrategy split_strategy;
 };
 
+struct PrepareMergeDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kPrepareMerge; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::PREPARE_MERGE);
+    auto* merge_request = request->mutable_prepare_merge();
+    merge_request->set_merge_id(merge_id);
+    merge_request->set_min_applied_log_id(min_applied_log_id);
+    merge_request->set_target_region_id(target_region_id);
+    *(merge_request->mutable_target_region_epoch()) = target_region_epoch;
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  int64_t merge_id;
+  int64_t min_applied_log_id;
+  int64_t target_region_id;
+  pb::common::RegionEpoch target_region_epoch;
+};
+
+struct CommitMergeDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kCommitMerge; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::COMMIT_MERGE);
+    auto* merge_request = request->mutable_commit_merge();
+    merge_request->set_merge_id(merge_id);
+    merge_request->set_source_region_id(source_region_id);
+    *(merge_request->mutable_source_region_epoch()) = source_region_epoch;
+    merge_request->set_prepare_merge_log_id(prepare_merge_log_id);
+    Helper::VectorToPbRepeated(entries, merge_request->mutable_entries());
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  int64_t merge_id;
+  int64_t source_region_id;
+  pb::common::RegionEpoch source_region_epoch;
+  int64_t prepare_merge_log_id;
+  std::vector<pb::raft::LogEntry> entries;
+};
+
+struct RollbackMergeDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kRollbackMerge; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::ROLLBACK_MERGE);
+    auto* merge_request = request->mutable_rollback_merge();
+    merge_request->set_merge_id(merge_id);
+    merge_request->set_min_applied_log_id(min_applied_log_id);
+    merge_request->set_target_region_id(target_region_id);
+    *(merge_request->mutable_target_region_epoch()) = target_region_epoch;
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  int64_t merge_id;
+  int64_t min_applied_log_id;
+  int64_t target_region_id;
+  pb::common::RegionEpoch target_region_epoch;
+};
+
 struct RebuildVectorIndexDatum : public DatumAble {
   DatumType GetType() override { return DatumType::kRebuildVectorIndex; }
 
@@ -462,6 +540,53 @@ class WriteDataBuilder {
     } else {
       datum->split_strategy = pb::raft::PRE_CREATE_REGION;
     }
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // PrepareMergeDatum
+  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, int64_t target_region_id,
+                                               const pb::common::RegionEpoch& epoch, int64_t min_applied_log_id) {
+    auto datum = std::make_shared<PrepareMergeDatum>();
+    datum->merge_id = merge_id;
+    datum->min_applied_log_id = min_applied_log_id;
+    datum->target_region_id = target_region_id;
+    datum->target_region_epoch = epoch;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // CommitMergeDatum
+  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, int64_t source_region_id,
+                                               const pb::common::RegionEpoch& epoch, int64_t prepare_merge_log_id,
+                                               const std::vector<pb::raft::LogEntry>& entries) {
+    auto datum = std::make_shared<CommitMergeDatum>();
+    datum->merge_id = merge_id;
+    datum->source_region_id = source_region_id;
+    datum->source_region_epoch = epoch;
+    datum->prepare_merge_log_id = prepare_merge_log_id;
+    datum->entries = entries;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // RollbackMergeDatum
+  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, const pb::common::RegionEpoch& epoch,
+                                               int64_t target_region_id, int64_t min_applied_log_id) {
+    auto datum = std::make_shared<RollbackMergeDatum>();
+    datum->merge_id = merge_id;
+    datum->min_applied_log_id = min_applied_log_id;
+    datum->target_region_id = target_region_id;
+    datum->target_region_epoch = epoch;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

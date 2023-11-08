@@ -58,8 +58,8 @@ DEFINE_string(group, "0", "Id of the replication group, now coordinator use 0 as
 DEFINE_uint64(split_from_id, 0, "split_from_id");
 DEFINE_uint64(split_to_id, 0, "split_to_id");
 DEFINE_string(split_key, "", "split_water_shed_key");
-DEFINE_uint64(merge_from_id, 0, "merge_from_id");
-DEFINE_uint64(merge_to_id, 0, "merge_to_id");
+DEFINE_uint64(source_id, 0, "source id");
+DEFINE_uint64(target_id, 0, "target id");
 DEFINE_uint64(peer_add_store_id, 0, "peer_add_store_id");
 DEFINE_uint64(peer_del_store_id, 0, "peer_del_store_id");
 DEFINE_uint64(store_id, 0, "store_id");

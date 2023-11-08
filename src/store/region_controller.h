@@ -99,6 +99,28 @@ class SplitRegionTask : public TaskRunnable {
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
 };
 
+class MergeRegionTask : public TaskRunnable {
+ public:
+  MergeRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
+      : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~MergeRegionTask() override = default;
+
+  std::string Type() override { return "MERGE_REGION"; }
+
+  void Run() override;
+
+  static butil::Status PreValidateMergeRegion(const pb::coordinator::RegionCmd& command);
+
+ private:
+  static butil::Status ValidateMergeRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
+                                           const pb::coordinator::MergeRequest& merge_request,
+                                           int64_t& min_applied_log_id);
+  butil::Status MergeRegion();
+
+  std::shared_ptr<Context> ctx_;
+  std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;
+};
+
 class ChangeRegionTask : public TaskRunnable {
  public:
   ChangeRegionTask(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> region_cmd)
