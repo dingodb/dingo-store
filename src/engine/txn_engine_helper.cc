@@ -1524,6 +1524,13 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
+  if (commit_ts <= start_ts) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
+                     << ", commit_ts is less than start_ts, region_id: " << ctx->RegionId()
+                     << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts is less than start_ts");
+  }
+
   // create reader and writer
   auto reader = raw_engine->Reader();
 
@@ -2163,6 +2170,13 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  if (commit_ts <= start_ts) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                     << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                     << ", commit_ts: " << commit_ts;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
   }
 
   // if commit_ts = 0, do rollback else do commit
