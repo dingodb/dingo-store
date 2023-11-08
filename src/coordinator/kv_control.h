@@ -211,7 +211,7 @@ class KvControl : public MetaControl {
   // out: kv
   // return: errno
   butil::Status KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
-                        bool count_only, std::vector<pb::version::Kv> &kv, int64_t &total_count_in_range);
+                        bool count_only, std::vector<pb::version::Kv> &kv, int64_t &return_count, bool &has_more);
 
   // kv functions for internal use
   // KvRange is the get function
