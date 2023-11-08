@@ -40,13 +40,54 @@ class VectorIndexFlatTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
-  static void TearDownTestSuite() { vector_index_flat.reset(); }
+  static void TearDownTestSuite() {
+    vector_index_flat_l2.reset();
+    vector_index_flat_ip.reset();
+    vector_index_flat_cosine.reset();
+  }
+
+  static void ReCreate() {
+    static const pb::common::Range kRange;
+
+    // valid param L2
+    {
+      int64_t id = 1;
+      pb::common::VectorIndexParameter index_parameter;
+      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
+      index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
+      index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+      vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    }
+
+    // valid param IP
+    {
+      int64_t id = 1;
+      pb::common::VectorIndexParameter index_parameter;
+      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+      index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+      index_parameter.mutable_flat_parameter()->set_metric_type(
+          ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
+      vector_index_flat_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+    }
+
+    // valid param cosine
+    {
+      int64_t id = 1;
+      pb::common::VectorIndexParameter index_parameter;
+      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
+      index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+      index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+      vector_index_flat_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
+    }
+  }
 
   void SetUp() override {}
 
   void TearDown() override {}
 
-  inline static std::shared_ptr<VectorIndex> vector_index_flat;
+  inline static std::shared_ptr<VectorIndex> vector_index_flat_l2;
+  inline static std::shared_ptr<VectorIndex> vector_index_flat_ip;
+  inline static std::shared_ptr<VectorIndex> vector_index_flat_cosine;
   inline static faiss::idx_t dimension = 8;
   inline static int data_base_size = 10;
   inline static std::vector<float> data_base;
@@ -58,16 +99,16 @@ TEST_F(VectorIndexFlatTest, Create) {
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_flat.get(), nullptr);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_flat.get(), nullptr);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
   // invalid param
@@ -75,8 +116,8 @@ TEST_F(VectorIndexFlatTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_flat.get(), nullptr);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
   // invalid param
@@ -84,8 +125,8 @@ TEST_F(VectorIndexFlatTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_flat.get(), nullptr);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
   // invalid param
@@ -94,8 +135,8 @@ TEST_F(VectorIndexFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(64);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_flat.get(), nullptr);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
   // invalid param
@@ -105,8 +146,19 @@ TEST_F(VectorIndexFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(64);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_EQ(vector_index_flat.get(), nullptr);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
+  }
+
+  // valid param L2
+  {
+    int64_t id = 1;
+    pb::common::VectorIndexParameter index_parameter;
+    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_flat_l2.get(), nullptr);
   }
 
   // valid param IP
@@ -117,19 +169,19 @@ TEST_F(VectorIndexFlatTest, Create) {
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_flat.get(), nullptr);
+    vector_index_flat_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_flat_ip.get(), nullptr);
   }
 
-  // valid param L2
+  // valid param cosine
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_flat.get(), nullptr);
+    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
+    vector_index_flat_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
+    EXPECT_NE(vector_index_flat_cosine.get(), nullptr);
   }
 }
 
@@ -141,7 +193,14 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
     int64_t id = 10000000;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
   // id exist
@@ -149,7 +208,14 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
     int64_t id = 0;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
   // id exist batch
@@ -158,7 +224,14 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
   // id exist batch again
@@ -167,21 +240,290 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+  }
+}
+
+TEST_F(VectorIndexFlatTest, SearchNoData) {
+  butil::Status ok;
+
+  // create random data
+  {
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib;
+
+    data_base.resize(dimension * data_base_size, 0.0f);
+    // float* xb = new float[dimension_ * data_base_size_];
+
+    for (int i = 0; i < data_base_size; i++) {
+      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
+      data_base[dimension * i] += i / 1000.;
+    }
+
+    for (size_t i = 0; i < data_base_size; i++) {
+      std::cout << "[" << i << "]"
+                << " [";
+      for (faiss::idx_t j = 0; j < dimension; j++) {
+        if (0 != j) {
+          std::cout << ",";
+        }
+        std::cout << std::setw(10) << data_base[i * dimension + j];
+      }
+
+      std::cout << "]" << '\n';
+    }
+  }
+
+  // ok
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = 3;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+    ok = vector_index_flat_l2->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+}
+
+TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
+  butil::Status ok;
+
+  // create random data
+  {
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib;
+
+    data_base.resize(dimension * data_base_size, 0.0f);
+    // float* xb = new float[dimension_ * data_base_size_];
+
+    for (int i = 0; i < data_base_size; i++) {
+      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
+      data_base[dimension * i] += i / 1000.;
+    }
+
+    for (size_t i = 0; i < data_base_size; i++) {
+      std::cout << "[" << i << "]"
+                << " [";
+      for (faiss::idx_t j = 0; j < dimension; j++) {
+        if (0 != j) {
+          std::cout << ",";
+        }
+        std::cout << std::setw(10) << data_base[i * dimension + j];
+      }
+
+      std::cout << "]" << '\n';
+    }
+  }
+
+  // ok add all
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+
+    for (int cnt = 0; cnt < data_base_size; cnt++) {
+      pb::common::VectorWithId vector_with_id;
+      vector_with_id.set_id(cnt + data_base_size);
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+      for (size_t i = 0; i < dimension; i++) {
+        float value = data_base[cnt * dimension + i];
+        vector_with_id.mutable_vector()->add_float_values(value);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results_l2;
+    std::vector<pb::index::VectorWithDistanceResult> results_ip;
+    std::vector<pb::index::VectorWithDistanceResult> results_cosine;
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results_l2);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_l2) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results_ip);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_ip) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results_cosine);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_cosine) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
+  }
+
+  // ok  all with filter
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+
+    for (int cnt = 0; cnt < data_base_size; cnt++) {
+      pb::common::VectorWithId vector_with_id;
+      vector_with_id.set_id(cnt + data_base_size);
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+      for (size_t i = 0; i < dimension; i++) {
+        float value = data_base[cnt * dimension + i];
+        vector_with_id.mutable_vector()->add_float_values(value);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results_l2;
+    std::vector<pb::index::VectorWithDistanceResult> results_ip;
+    std::vector<pb::index::VectorWithDistanceResult> results_cosine;
+
+    std::vector<int64_t> vector_ids;
+
+    vector_ids.reserve(data_base_size / 2);
+    for (int cnt = 0; cnt < data_base_size / 2; cnt++) {
+      vector_ids.push_back(cnt + data_base_size);
+    }
+
+    auto flat_list_filter_functor = std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_l2);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_l2) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_ip);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_ip) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_cosine);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_cosine) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
   }
 }
 
 TEST_F(VectorIndexFlatTest, NeedToSave) {
   int64_t last_save_log_behind = 0;
-  bool ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  bool ok = vector_index_flat_l2->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_ip->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_cosine->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 1000;
-  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  ok = vector_index_flat_l2->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_ip->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_cosine->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 10000000;
-  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  ok = vector_index_flat_l2->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_ip->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_cosine->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 }
 
@@ -218,7 +560,11 @@ TEST_F(VectorIndexFlatTest, Add) {
   // empty OK
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
-    ok = vector_index_flat->Add(vector_with_ids);
+    ok = vector_index_flat_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_cosine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
@@ -229,7 +575,11 @@ TEST_F(VectorIndexFlatTest, Add) {
 
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_flat->Add(vector_with_ids);
+    ok = vector_index_flat_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_cosine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
@@ -238,14 +588,18 @@ TEST_F(VectorIndexFlatTest, Add) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     pb::common::VectorWithId vector_with_id;
 
-    vector_with_id.set_id(0);
+    vector_with_id.set_id(0 + data_base_size);
     for (size_t i = 0; i < dimension; i++) {
       vector_with_id.mutable_vector()->add_float_values(data_base[i]);
     }
 
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_flat->Add(vector_with_ids);
+    ok = vector_index_flat_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -253,7 +607,7 @@ TEST_F(VectorIndexFlatTest, Add) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
 
-    for (size_t id = 1; id < data_base_size; id++) {
+    for (size_t id = 1 + data_base_size; id < data_base_size + data_base_size; id++) {
       pb::common::VectorWithId vector_with_id;
 
       vector_with_id.set_id(id);
@@ -264,22 +618,38 @@ TEST_F(VectorIndexFlatTest, Add) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_flat->Add(vector_with_ids);
+    ok = vector_index_flat_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
 TEST_F(VectorIndexFlatTest, NeedToSaveAfterAdd) {
   int64_t last_save_log_behind = 0;
-  bool ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  bool ok = vector_index_flat_l2->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_ip->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_cosine->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 1000;
-  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  ok = vector_index_flat_l2->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_ip->NeedToSave(last_save_log_behind);
+  EXPECT_FALSE(ok);
+  ok = vector_index_flat_cosine->NeedToSave(last_save_log_behind);
   EXPECT_FALSE(ok);
 
   last_save_log_behind = 10000000;
-  ok = vector_index_flat->NeedToSave(last_save_log_behind);
+  ok = vector_index_flat_l2->NeedToSave(last_save_log_behind);
+  EXPECT_TRUE(ok);
+  ok = vector_index_flat_ip->NeedToSave(last_save_log_behind);
+  EXPECT_TRUE(ok);
+  ok = vector_index_flat_cosine->NeedToSave(last_save_log_behind);
   EXPECT_TRUE(ok);
 }
 
@@ -291,33 +661,53 @@ TEST_F(VectorIndexFlatTest, Delete) {
     int64_t id = 10000000;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
   }
 
   // id exist
   {
-    int64_t id = 0;
+    int64_t id = 0 + data_base_size;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
   // id exist batch
   {
     std::vector<int64_t> ids;
-    for (size_t i = 0; i < data_base_size; i++) {
+    for (size_t i = 0 + data_base_size; i < data_base_size + data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
   // id exist batch again
   {
     std::vector<int64_t> ids;
-    for (size_t i = 0; i < data_base_size; i++) {
+    for (size_t i = 0 + data_base_size; i < data_base_size + data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_flat->Delete(ids);
+    ok = vector_index_flat_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    ok = vector_index_flat_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    ok = vector_index_flat_cosine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
   }
 }
 
@@ -355,7 +745,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
 
-    for (size_t id = 0; id < data_base_size; id++) {
+    for (size_t id = 0 + data_base_size; id < data_base_size + data_base_size; id++) {
       pb::common::VectorWithId vector_with_id;
 
       vector_with_id.set_id(id);
@@ -366,7 +756,11 @@ TEST_F(VectorIndexFlatTest, Upsert) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_flat->Add(vector_with_ids);
+    ok = vector_index_flat_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -388,8 +782,12 @@ TEST_F(VectorIndexFlatTest, Upsert) {
   // empty OK
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
-    ok = vector_index_flat->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_flat_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // one but empty failed
@@ -399,7 +797,11 @@ TEST_F(VectorIndexFlatTest, Upsert) {
 
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_flat->Upsert(vector_with_ids);
+    ok = vector_index_flat_l2->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_ip->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_cosine->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
@@ -434,7 +836,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
 
-    for (size_t id = 0; id < data_base_size; id++) {
+    for (size_t id = 0 + data_base_size; id < data_base_size + data_base_size; id++) {
       pb::common::VectorWithId vector_with_id;
 
       vector_with_id.set_id(id);
@@ -445,7 +847,11 @@ TEST_F(VectorIndexFlatTest, Upsert) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_flat->Upsert(vector_with_ids);
+    ok = vector_index_flat_l2->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -460,14 +866,18 @@ TEST_F(VectorIndexFlatTest, Search) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_flat_l2->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // invalid param failed, topk == 0, return OK
   {
     pb::common::VectorWithId vector_with_id;
-    vector_with_id.set_id(0);
+    vector_with_id.set_id(0 + data_base_size);
     vector_with_id.mutable_vector()->set_dimension(dimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (size_t i = 0; i < dimension; i++) {
@@ -479,14 +889,18 @@ TEST_F(VectorIndexFlatTest, Search) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_flat_l2->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // ok
   {
     pb::common::VectorWithId vector_with_id;
-    vector_with_id.set_id(0);
+    vector_with_id.set_id(0 + data_base_size);
     vector_with_id.mutable_vector()->set_dimension(dimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (size_t i = 0; i < dimension; i++) {
@@ -497,368 +911,397 @@ TEST_F(VectorIndexFlatTest, Search) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_flat_l2->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_ip->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_flat_cosine->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
-  // id exist batch
-  {
-    std::vector<int64_t> ids;
-    for (size_t i = 0; i < data_base_size; i++) {
-      ids.push_back(i);
-    }
-    vector_index_flat->Delete(ids);
-  }
-}
-
-TEST_F(VectorIndexFlatTest, CreateCosine) {
-  static const pb::common::Range kRange;
-  // valid param COSINE
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
-    EXPECT_NE(vector_index_flat.get(), nullptr);
-  }
-}
-
-TEST_F(VectorIndexFlatTest, AddCosine) {
-  butil::Status ok;
-
-  // create random data
-  {
-    std::mt19937 rng;
-    std::uniform_real_distribution<> distrib;
-
-    data_base.resize(dimension * data_base_size, 0.0f);
-    // float* xb = new float[dimension_ * data_base_size_];
-
-    for (int i = 0; i < data_base_size; i++) {
-      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
-      data_base[dimension * i] += i / 1000.;
-    }
-
-    for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
-                << " [";
-      for (faiss::idx_t j = 0; j < dimension; j++) {
-        if (0 != j) {
-          std::cout << ",";
-        }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
-      }
-
-      std::cout << "]" << '\n';
-    }
-  }
-
-  // empty OK
-  {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    ok = vector_index_flat->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-
-  // one but empty failed
-  {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    pb::common::VectorWithId vector_with_id;
-
-    vector_with_ids.push_back(vector_with_id);
-
-    ok = vector_index_flat->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-  }
-
-  // one ok
-  {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    pb::common::VectorWithId vector_with_id;
-
-    vector_with_id.set_id(0);
-    for (size_t i = 0; i < dimension; i++) {
-      vector_with_id.mutable_vector()->add_float_values(data_base[i]);
-    }
-
-    vector_with_ids.push_back(vector_with_id);
-
-    ok = vector_index_flat->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // others
-  {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-
-    for (size_t id = 1; id < data_base_size; id++) {
-      pb::common::VectorWithId vector_with_id;
-
-      vector_with_id.set_id(id);
-      for (size_t i = 0; i < dimension; i++) {
-        vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
-      }
-
-      vector_with_ids.push_back(vector_with_id);
-    }
-
-    ok = vector_index_flat->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-}
-
-TEST_F(VectorIndexFlatTest, DeleteCosine) {
-  butil::Status ok;
-
-  // id not found
-  {
-    int64_t id = 10000000;
-    std::vector<int64_t> ids;
-    ids.push_back(id);
-    vector_index_flat->Delete(ids);
-  }
-
-  // id exist
-  {
-    int64_t id = 0;
-    std::vector<int64_t> ids;
-    ids.push_back(id);
-    vector_index_flat->Delete(ids);
-  }
-
-  // id exist batch
-  {
-    std::vector<int64_t> ids;
-    for (size_t i = 0; i < data_base_size; i++) {
-      ids.push_back(i);
-    }
-    vector_index_flat->Delete(ids);
-  }
-
-  // id exist batch again
-  {
-    std::vector<int64_t> ids;
-    for (size_t i = 0; i < data_base_size; i++) {
-      ids.push_back(i);
-    }
-    vector_index_flat->Delete(ids);
-  }
-}
-
-TEST_F(VectorIndexFlatTest, UpsertCosine) {
-  butil::Status ok;
-
-  // create random data
-  {
-    std::mt19937 rng;
-    std::uniform_real_distribution<> distrib;
-
-    data_base.resize(dimension * data_base_size, 0.0f);
-    // float* xb = new float[dimension_ * data_base_size_];
-
-    for (int i = 0; i < data_base_size; i++) {
-      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
-      data_base[dimension * i] += i / 1000.;
-    }
-
-    for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
-                << " [";
-      for (faiss::idx_t j = 0; j < dimension; j++) {
-        if (0 != j) {
-          std::cout << ",";
-        }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
-      }
-
-      std::cout << "]" << '\n';
-    }
-  }
-
-  // add all data
-  {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-
-    for (size_t id = 0; id < data_base_size; id++) {
-      pb::common::VectorWithId vector_with_id;
-
-      vector_with_id.set_id(id);
-      for (size_t i = 0; i < dimension; i++) {
-        vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
-      }
-
-      vector_with_ids.push_back(vector_with_id);
-    }
-
-    ok = vector_index_flat->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // // must be delete .................................................................
+  // // id exist batch
   // {
-  //   vector_index_flat_.reset();
-
-  //   int64_t id = 1;
-  //   pb::common::VectorIndexParameter index_parameter;
-  //   index_parameter.set_vector_index_type(
-  //       ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-  //   index_parameter.mutable_flat_parameter()->set_dimension(dimension_);
-  //   index_parameter.mutable_flat_parameter()->set_metric_type(
-  //       ::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-  //   vector_index_flat_ = VectorIndexFactory::New(id, index_parameter);
-  //   EXPECT_NE(vector_index_flat_.get(), nullptr);
+  //   std::vector<int64_t> ids;
+  //   for (size_t i = 0 + data_base_size; i < data_base_size + data_base_size; i++) {
+  //     ids.push_back(i);
+  //   }
+  //   vector_index_flat->Delete(ids);
   // }
+}
 
-  // empty OK
-  {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    ok = vector_index_flat->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
+TEST_F(VectorIndexFlatTest, RangeSearch) {
+  butil::Status ok;
 
-  // one but empty failed
+  // invalid param failed,
   {
-    std::vector<pb::common::VectorWithId> vector_with_ids;
     pb::common::VectorWithId vector_with_id;
-
+    std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-
-    ok = vector_index_flat->Upsert(vector_with_ids);
+    float radius = 1.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
-  // create random data again
+  //  return OK
   {
-    std::mt19937 rng;
-    std::uniform_real_distribution<> distrib;
-
-    data_base.resize(dimension * data_base_size, 0.0f);
-    // float* xb = new float[dimension_ * data_base_size_];
-
-    for (int i = 0; i < data_base_size; i++) {
-      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
-      data_base[dimension * i] += i / 1000.;
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0 + data_base_size);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
     }
+    float radius = 1.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
 
-    for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
-                << " [";
-      for (faiss::idx_t j = 0; j < dimension; j++) {
-        if (0 != j) {
-          std::cout << ",";
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        i++;
       }
+    }
+    std::cout << std::endl;
+    results.clear();
 
-      std::cout << "]" << '\n';
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
+    results.clear();
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
     }
   }
 
-  // update all data
+  //  return OK
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0 + data_base_size);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    results.clear();
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    results.clear();
+
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  // ok add all
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
 
-    for (size_t id = 0; id < data_base_size; id++) {
+    for (int cnt = 0; cnt < data_base_size; cnt++) {
       pb::common::VectorWithId vector_with_id;
-
-      vector_with_id.set_id(id);
+      vector_with_id.set_id(cnt + data_base_size);
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
       for (size_t i = 0; i < dimension; i++) {
-        vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
+        float value = data_base[cnt * dimension + i];
+        vector_with_id.mutable_vector()->add_float_values(value);
       }
 
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_flat->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-}
-
-TEST_F(VectorIndexFlatTest, SearchCosine) {
-  butil::Status ok;
-
-  // invalid param failed, topk == 0, return OK
-  {
-    pb::common::VectorWithId vector_with_id;
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    vector_with_ids.push_back(vector_with_id);
-    uint32_t topk = 0;
+    float radius = 10.1F;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    results.clear();
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
+
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
   }
 
-  // invalid param failed, topk == 0, return OK
+  // ok  all with filter
   {
-    pb::common::VectorWithId vector_with_id;
-    vector_with_id.set_id(0);
-    vector_with_id.mutable_vector()->set_dimension(dimension);
-    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-    for (size_t i = 0; i < dimension; i++) {
-      float value = data_base[i];
-      vector_with_id.mutable_vector()->add_float_values(value);
-    }
-    uint32_t topk = 0;
-    std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
-    vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
 
-  // ok
-  {
-    pb::common::VectorWithId vector_with_id;
-    vector_with_id.set_id(0);
-    vector_with_id.mutable_vector()->set_dimension(dimension);
-    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-    for (size_t i = 0; i < dimension; i++) {
-      float value = data_base[i];
-      vector_with_id.mutable_vector()->add_float_values(value);
-    }
-    uint32_t topk = 3;
-    std::vector<pb::index::VectorWithDistanceResult> results;
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
+    for (int cnt = 0; cnt < data_base_size; cnt++) {
+      pb::common::VectorWithId vector_with_id;
+      vector_with_id.set_id(cnt + data_base_size);
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+      for (size_t i = 0; i < dimension; i++) {
+        float value = data_base[cnt * dimension + i];
+        vector_with_id.mutable_vector()->add_float_values(value);
+      }
 
-  // id exist batch
-  {
-    std::vector<int64_t> ids;
-    for (size_t i = 0; i < data_base_size; i++) {
-      ids.push_back(i);
+      vector_with_ids.push_back(vector_with_id);
     }
-    vector_index_flat->Delete(ids);
+
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results_l2;
+    std::vector<pb::index::VectorWithDistanceResult> results_ip;
+    std::vector<pb::index::VectorWithDistanceResult> results_cosine;
+
+    std::vector<int64_t> vector_ids;
+
+    vector_ids.reserve(data_base_size / 2);
+    for (int cnt = 0; cnt < data_base_size / 2; cnt++) {
+      vector_ids.push_back(cnt + data_base_size);
+    }
+
+    auto flat_list_filter_functor = std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_l2);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_l2) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_ip);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_ip) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_cosine);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_cosine) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
   }
 }
 
 TEST_F(VectorIndexFlatTest, Save) {
   butil::Status ok;
 
-  ok = vector_index_flat->Save("");
+  ok = vector_index_flat_l2->Save("");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  ok = vector_index_flat_ip->Save("");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  ok = vector_index_flat_cosine->Save("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_flat->Save("/var/flat");
+  ok = vector_index_flat_l2->Save("/var/flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_flat_ip->Save("/var/flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_flat_cosine->Save("/var/flat");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_flat->Save("./flat");
+  ok = vector_index_flat_l2->Save("./flat_l2");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_flat_ip->Save("./flat_ip");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_flat_cosine->Save("./flat_cosine");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 }
 
 TEST_F(VectorIndexFlatTest, Load) {
   butil::Status ok;
 
-  ok = vector_index_flat->Load("");
+  ok = vector_index_flat_l2->Load("");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  ok = vector_index_flat_ip->Load("");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  ok = vector_index_flat_cosine->Load("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_flat->Load("/var/ivf_flat");
+  ok = vector_index_flat_l2->Load("/var/ivf_flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_flat_ip->Load("/var/ivf_flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_flat_cosine->Load("/var/ivf_flat");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_flat->Load("./flat");
+  ok = vector_index_flat_l2->Load("./flat_l2");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_flat_ip->Load("./flat_ip");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_flat_cosine->Load("./flat_cosine");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 }
 
@@ -868,7 +1311,7 @@ TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
   // ok
   {
     pb::common::VectorWithId vector_with_id;
-    vector_with_id.set_id(0);
+    vector_with_id.set_id(0 + data_base_size);
     vector_with_id.mutable_vector()->set_dimension(dimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (size_t i = 0; i < dimension; i++) {
@@ -880,7 +1323,25 @@ TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
 
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_flat->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_flat_l2->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto& result : results) {
+      DINGO_LOG(INFO) << "results:" << result.DebugString();
+      DINGO_LOG(INFO) << "";
+    }
+
+    results.clear();
+    ok = vector_index_flat_ip->Search(vector_with_ids, topk, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto& result : results) {
+      DINGO_LOG(INFO) << "results:" << result.DebugString();
+      DINGO_LOG(INFO) << "";
+    }
+
+    results.clear();
+    ok = vector_index_flat_cosine->Search(vector_with_ids, topk, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results) {
@@ -892,7 +1353,7 @@ TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
   // ok with param
   {
     pb::common::VectorWithId vector_with_id;
-    vector_with_id.set_id(0);
+    vector_with_id.set_id(0 + data_base_size);
     vector_with_id.mutable_vector()->set_dimension(dimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     for (size_t i = 0; i < dimension; i++) {
@@ -922,7 +1383,7 @@ TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_flat->Search(vector_with_ids, topk, {filter}, results, false, parameter);
+    ok = vector_index_flat_l2->Search(vector_with_ids, topk, {filter}, results, false, parameter);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results) {
@@ -944,6 +1405,378 @@ TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
     if (is_all_in_vector) {
       DINGO_LOG(INFO) << "L2 : All Id in  vectors ";
     }
+
+    ok = vector_index_flat_ip->Search(vector_with_ids, topk, {filter}, results, false, parameter);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto& result : results) {
+      DINGO_LOG(INFO) << "IP:" << result.DebugString();
+      DINGO_LOG(INFO) << "";
+    }
+
+    is_all_in_vector = true;
+    for (const auto& result : results) {
+      for (const auto& distance : result.vector_with_distances()) {
+        auto id = distance.vector_with_id().id();
+        auto iter = std::find(vector_select_ids_clone.begin(), vector_select_ids_clone.end(), id);
+        if (iter == vector_select_ids_clone.end()) {
+          DINGO_LOG(INFO) << "IP : Not Find id : " << id;
+          is_all_in_vector = false;
+        }
+      }
+    }
+    if (is_all_in_vector) {
+      DINGO_LOG(INFO) << "IP : All Id in  vectors ";
+    }
+
+    ok = vector_index_flat_cosine->Search(vector_with_ids, topk, {filter}, results, false, parameter);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto& result : results) {
+      DINGO_LOG(INFO) << "COSINE:" << result.DebugString();
+      DINGO_LOG(INFO) << "";
+    }
+
+    is_all_in_vector = true;
+    for (const auto& result : results) {
+      for (const auto& distance : result.vector_with_distances()) {
+        auto id = distance.vector_with_id().id();
+        auto iter = std::find(vector_select_ids_clone.begin(), vector_select_ids_clone.end(), id);
+        if (iter == vector_select_ids_clone.end()) {
+          DINGO_LOG(INFO) << "COSINE : Not Find id : " << id;
+          is_all_in_vector = false;
+        }
+      }
+    }
+    if (is_all_in_vector) {
+      DINGO_LOG(INFO) << "COSINE : All Id in  vectors ";
+    }
+  }
+}
+
+TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
+  butil::Status ok;
+
+  // invalid param failed,
+  {
+    pb::common::VectorWithId vector_with_id;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+    float radius = 1.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+  }
+
+  //  return OK
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0 + data_base_size);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    float radius = 1.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
+    results.clear();
+
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
+    results.clear();
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  //  return OK
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0 + data_base_size);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    results.clear();
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    results.clear();
+
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  // ok add all
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+
+    for (int cnt = 0; cnt < data_base_size; cnt++) {
+      pb::common::VectorWithId vector_with_id;
+      vector_with_id.set_id(cnt + data_base_size);
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+      for (size_t i = 0; i < dimension; i++) {
+        float value = data_base[cnt * dimension + i];
+        vector_with_id.mutable_vector()->add_float_values(value);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    results.clear();
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
+
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  // ok  all with filter
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+
+    for (int cnt = 0; cnt < data_base_size; cnt++) {
+      pb::common::VectorWithId vector_with_id;
+      vector_with_id.set_id(cnt + data_base_size);
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+      for (size_t i = 0; i < dimension; i++) {
+        float value = data_base[cnt * dimension + i];
+        vector_with_id.mutable_vector()->add_float_values(value);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    float radius = 10.1F;
+    std::vector<pb::index::VectorWithDistanceResult> results_l2;
+    std::vector<pb::index::VectorWithDistanceResult> results_ip;
+    std::vector<pb::index::VectorWithDistanceResult> results_cosine;
+
+    std::vector<int64_t> vector_ids;
+
+    vector_ids.reserve(data_base_size / 2);
+    for (int cnt = 0; cnt < data_base_size / 2; cnt++) {
+      vector_ids.push_back(cnt + data_base_size);
+    }
+
+    auto flat_list_filter_functor = std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids);
+
+    ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_l2);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_l2) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+
+    ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_ip);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_ip) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+
+    std::cout << std::endl;
+    ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, results_cosine);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    {
+      int i = 0;
+      for (const auto& result : results_cosine) {
+        int j = 0;
+        std::cout << "i : " << i << std::endl;
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          std::cout << "\tj : " << j << " ";
+          std::cout << vector_with_distance.ShortDebugString() << std::endl;
+          j++;
+        }
+        i++;
+      }
+    }
+    std::cout << std::endl;
   }
 }
 

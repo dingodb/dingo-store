@@ -35,6 +35,7 @@
 #include "common/logging.h"
 #include "faiss/Index.h"
 #include "faiss/MetricType.h"
+#include "faiss/impl/AuxIndexStructures.h"
 #include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "hnswlib/space_ip.h"
@@ -81,33 +82,25 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
     return butil::Status::OK();
   }
 
-  // check
-  {
-    size_t i = 0;
-    for (const auto& vector_with_id : vector_with_ids) {
-      uint32_t input_dimension = vector_with_id.vector().float_values_size();
-      if (input_dimension != static_cast<size_t>(dimension_)) {
-        std::string s = fmt::format("Ivf Flat id.no : {}: float size : {} not equal to  dimension(create) : {}", i,
-                                    input_dimension, dimension_);
-        DINGO_LOG(ERROR) << s;
-        return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
-      }
-      i++;
-    }
+  const auto& [ids, status_ids] = VectorIndexUtils::CheckAndCopyVectorId(vector_with_ids, dimension_);
+  if (!status_ids.ok()) {
+    DINGO_LOG(ERROR) << status_ids.error_cstr();
+    return status_ids;
   }
 
-  std::unique_ptr<faiss::idx_t[]> ids;
-  try {
-    ids = std::make_unique<faiss::idx_t[]>(vector_with_ids.size());  // do not modify reset method. this fast and safe.
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for ids: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for ids, error: %s", e.what());
+  // fix lambda can not capture rvalue. change rvalue -> lvalue.
+  // c++ 20 fix this bug.
+  const std::unique_ptr<faiss::idx_t[]>& ids2 = ids;
+
+  const auto& [vectors, status] = VectorIndexUtils::CopyVectorData(vector_with_ids, dimension_, normalize_);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
   }
 
-  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    ids[i] = static_cast<faiss::idx_t>(vector_with_ids[i].id());
-  }
+  // fix lambda can not capture rvalue. change rvalue -> lvalue.
+  // c++ 20 fix this bug.
+  const std::unique_ptr<float[]>& vectors2 = vectors;
 
   BAIDU_SCOPED_LOCK(mutex_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
@@ -116,32 +109,12 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
     return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
   }
 
-  std::unique_ptr<float[]> vectors;
-  try {
-    vectors = std::make_unique<float[]>(vector_with_ids.size() *
-                                        dimension_);  // do not modify reset method. this fast and safe.
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for vectors: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for vectors, error: %s",
-                         e.what());
-  }
-
-  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    const auto& vector = vector_with_ids[i].vector().float_values();
-    memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
-
-    if (normalize_) {
-      VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension_, dimension_);
-    }
-  }
-
   std::thread([&]() {
     if (is_upsert) {
-      faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+      faiss::IDSelectorArray sel(vector_with_ids.size(), ids2.get());
       index_->remove_ids(sel);
     }
-    index_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+    index_->add_with_ids(vector_with_ids.size(), vectors2.get(), ids2.get());
   }).join();
 
   return butil::Status::OK();
@@ -182,17 +155,10 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
     return butil::Status::OK();
   }
 
-  std::unique_ptr<faiss::idx_t[]> ids;
-  try {
-    ids = std::make_unique<faiss::idx_t[]>(delete_ids.size());
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for ids: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for ids, error: %s", e.what());
-  }
-
-  for (size_t i = 0; i < delete_ids.size(); ++i) {
-    ids[i] = static_cast<faiss::idx_t>(delete_ids[i]);
+  const auto& [ids, status] = VectorIndexUtils::CopyVectorId(delete_ids);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
   }
 
   faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
@@ -244,36 +210,15 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
   std::vector<faiss::idx_t> labels;
   labels.resize(topk * vector_with_ids.size(), -1);
 
-  std::unique_ptr<float[]> vectors;
-  try {
-    vectors = std::make_unique<float[]>(vector_with_ids.size() * dimension_);
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for vectors: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, "Failed to allocate memory for vectors, error: %s",
-                         e.what());
+  const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
   }
 
-  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    if (vector_with_ids[i].vector().float_values_size() != this->dimension_) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "vector dimension is not equal to index dimension, vector id : {}, float_value_zie: {}, index dimension: {}",
-          vector_with_ids[i].id(), vector_with_ids[i].vector().float_values_size(), this->dimension_);
-
-      return butil::Status(
-          pb::error::Errno::EVECTOR_INVALID,
-          fmt::format("vector dimension is not equal to index dimension, vector id : {}, "
-                      "float_value_zie: {}, index dimension: {}",
-                      vector_with_ids[i].id(), vector_with_ids[i].vector().float_values_size(), this->dimension_));
-    } else {
-      const auto& vector = vector_with_ids[i].vector().float_values();
-      memcpy(vectors.get() + i * dimension_, vector.data(), dimension_ * sizeof(float));
-
-      if (normalize_) {
-        VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension_, dimension_);
-      }
-    }
-  }
+  // fix lambda can not capture rvalue. change rvalue -> lvalue.
+  // c++ 20 fix this bug.
+  const std::unique_ptr<float[]>& vectors2 = vectors;
 
   {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -305,40 +250,117 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
       if (!filters.empty()) {
         auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
         ivf_search_parameters.sel = ivf_flat_filter.get();
-        index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+        index_->search(vector_with_ids.size(), vectors2.get(), topk, distances.data(), labels.data(),
                        &ivf_search_parameters);
       } else {
-        index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+        index_->search(vector_with_ids.size(), vectors2.get(), topk, distances.data(), labels.data(),
                        &ivf_search_parameters);
       }
     });
     t.join();
   }
 
-  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
-    auto& result = results.emplace_back();
+  VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
 
-    for (size_t i = 0; i < topk; i++) {
-      size_t pos = row * topk + i;
-      if (labels[pos] < 0) {
-        continue;
+  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexIvfFlat::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                                              std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                                              std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                                              bool /*reconstruct*/,
+                                              const pb::common::VectorSearchParameter& parameter) {
+  if (vector_with_ids.empty()) {
+    DINGO_LOG(WARNING) << "vector_with_ids is empty";
+    return butil::Status::OK();
+  }
+
+  int32_t nprobe = parameter.ivf_flat().nprobe();
+  if (BAIDU_UNLIKELY(nprobe <= 0)) {
+    DINGO_LOG(WARNING) << fmt::format("pb::common::VectorSearchParameter ivf_flat nprobe : {} <=0. use default",
+                                      nprobe);
+    nprobe = Constant::kSearchIvfFlatParamNprobe;
+  }
+
+  const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  // fix lambda can not capture rvalue. change rvalue -> lvalue.
+  // c++ 20 fix this bug.
+  const std::unique_ptr<float[]>& vectors2 = vectors;
+
+  std::unique_ptr<faiss::RangeSearchResult> range_search_result =
+      std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
+
+  if (metric_type_ == pb::common::MetricType::METRIC_TYPE_COSINE ||
+      metric_type_ == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
+    radius = 1.0F - radius;
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    if (BAIDU_UNLIKELY(!DoIsTrained())) {
+      std::string s = fmt::format("ivf flat not train. train first. ignored");
+      DINGO_LOG(WARNING) << s;
+
+      for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+        auto& result = results.emplace_back();
       }
-      auto* vector_with_distance = result.add_vector_with_distances();
 
-      auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
-      vector_with_id->set_id(labels[pos]);
-      vector_with_id->mutable_vector()->set_dimension(dimension_);
-      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-      if (metric_type_ == pb::common::MetricType::METRIC_TYPE_COSINE ||
-          metric_type_ == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
-        vector_with_distance->set_distance(1.0F - distances[pos]);
-      } else {
-        vector_with_distance->set_distance(distances[pos]);
-      }
+      return butil::Status::OK();
+    }
 
-      vector_with_distance->set_metric_type(metric_type_);
+    if (BAIDU_UNLIKELY(nprobe <= 0)) {
+      nprobe = index_->nprobe;
+    }
+
+    // Prevent users from passing parameters out of bounds.
+    nprobe = std::min(nprobe, static_cast<int32_t>(index_->nlist));
+
+    faiss::IVFSearchParameters ivf_search_parameters;
+    ivf_search_parameters.nprobe = nprobe;
+    ivf_search_parameters.max_codes = 0;
+    ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
+
+    std::promise<butil::Status> promise_status;
+    std::future<butil::Status> future_status = promise_status.get_future();
+    // use std::thread to call faiss functions
+    std::thread t(
+        [&](std::promise<butil::Status>& promise_status) {
+          try {
+            if (!filters.empty()) {
+              auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+              ivf_search_parameters.sel = ivf_flat_filter.get();
+              index_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
+                                   &ivf_search_parameters);
+            } else {
+              index_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
+                                   &ivf_search_parameters);
+            }
+            promise_status.set_value(butil::Status());
+          } catch (std::exception& e) {
+            std::string s = fmt::format("VectorIndexIvfFlat::RangeSearch failed. error : {}", e.what());
+            promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
+          }
+        },
+        std::ref(promise_status));
+
+    butil::Status status2 = future_status.get();
+
+    t.join();
+
+    if (!status2.ok()) {
+      DINGO_LOG(ERROR) << status2.error_cstr();
+      return status2;
     }
   }
+
+  VectorIndexUtils ::FillRangeSearchResult(range_search_result, metric_type_, dimension_, results);
 
   DINGO_LOG(DEBUG) << "result.size() = " << results.size();
 
@@ -352,6 +374,11 @@ void VectorIndexIvfFlat::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 bool VectorIndexIvfFlat::SupportSave() { return true; }
 
 butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
+  // Warning : read me first !!!!
+  // Currently, the save function is executed in the fork child process.
+  // When calling glog,
+  // the child process will hang.
+  // Remove glog temporarily.
   if (BAIDU_UNLIKELY(path.empty())) {
     std::string s = fmt::format("path empty. not support");
     // DINGO_LOG(ERROR) << s;

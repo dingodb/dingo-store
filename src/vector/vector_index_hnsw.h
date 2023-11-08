@@ -63,6 +63,11 @@ class VectorIndexHnsw : public VectorIndex {
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
                        [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
 
+  butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {}) override;
+
   int32_t GetDimension() override;
   butil::Status GetCount([[maybe_unused]] int64_t& count) override;
   butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;

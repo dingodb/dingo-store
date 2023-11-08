@@ -743,6 +743,402 @@ void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_
 #endif
 }
 
+void SendVectorRangeSearch(int64_t region_id, uint32_t dimension, double radius) {
+  dingodb::pb::index::VectorSearchRequest request;
+  dingodb::pb::index::VectorSearchResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  auto* vector = request.add_vector_with_ids();
+
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension is 0";
+    return;
+  }
+
+  for (int i = 0; i < dimension; i++) {
+    vector->mutable_vector()->add_float_values(1.0 * i);
+  }
+
+  request.mutable_parameter()->set_top_n(0);
+  request.mutable_parameter()->set_enable_range_search(true);
+  request.mutable_parameter()->set_radius(radius);
+
+  if (FLAGS_without_vector) {
+    request.mutable_parameter()->set_without_vector_data(true);
+  }
+
+  if (FLAGS_without_scalar) {
+    request.mutable_parameter()->set_without_scalar_data(true);
+  }
+
+  if (FLAGS_without_table) {
+    request.mutable_parameter()->set_without_table_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  std::vector<int64_t> vt_ids;
+  if (FLAGS_with_vector_ids) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (int i = 0; i < 20; i++) {
+      std::random_device seed;
+      std::ranlux48 engine(seed());
+
+      std::uniform_int_distribution<> distrib(1, 100000ULL);
+      auto random = distrib(engine);
+
+      vt_ids.push_back(random);
+    }
+
+    sort(vt_ids.begin(), vt_ids.end());
+    vt_ids.erase(std::unique(vt_ids.begin(), vt_ids.end()), vt_ids.end());
+
+    for (auto id : vt_ids) {
+      request.mutable_parameter()->add_vector_ids(id);
+    }
+
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << '\n';
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (int k = 0; k < 2; k++) {
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data("value" + std::to_string(k));
+
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+    }
+  }
+
+  if (FLAGS_with_scalar_post_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
+
+    for (int k = 0; k < 2; k++) {
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data("value" + std::to_string(k));
+
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+    }
+  }
+
+  if (FLAGS_print_vector_search_delay) {
+    auto start = std::chrono::steady_clock::now();
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
+
+  } else {
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
+  }
+
+  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+
+  // match compare
+  if (FLAGS_with_vector_ids) {
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << '\n';
+
+    std::vector<int64_t> result_vt_ids;
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+    }
+
+    if (result_vt_ids.empty()) {
+      std::cout << "result_vt_ids : empty" << '\n';
+    } else {
+      std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
+      for (auto id : result_vt_ids) {
+        std::cout << id << " ";
+      }
+      std::cout << "]";
+      std::cout << '\n';
+    }
+
+    for (auto id : result_vt_ids) {
+      auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
+      if (iter == vt_ids.end()) {
+        std::cout << "result_vector_ids not all in vector_ids" << '\n';
+        return;
+      }
+    }
+    std::cout << "result_vector_ids  all in vector_ids" << '\n';
+  }
+
+  if (FLAGS_with_scalar_pre_filter || FLAGS_with_scalar_post_filter) {
+    std::vector<int64_t> result_vt_ids;
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+    }
+
+    auto lambda_print_result_vector_function = [&result_vt_ids](const std::string& name) {
+      std::cout << name << ": " << result_vt_ids.size() << " [ ";
+      for (auto id : result_vt_ids) {
+        std::cout << id << " ";
+      }
+      std::cout << "]";
+      std::cout << '\n';
+    };
+
+    lambda_print_result_vector_function("before sort result_vt_ids");
+
+    std::sort(result_vt_ids.begin(), result_vt_ids.end());
+
+    lambda_print_result_vector_function("after  sort result_vt_ids");
+  }
+}
+void SendVectorRangeSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, double radius,
+                                uint32_t batch_count, const std::string& key, const std::string& value) {
+  dingodb::pb::index::VectorSearchDebugRequest request;
+  dingodb::pb::index::VectorSearchDebugResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension is 0";
+    return;
+  }
+
+  if (batch_count == 0) {
+    DINGO_LOG(ERROR) << "batch_count is 0";
+    return;
+  }
+
+  if (start_vector_id > 0) {
+    for (int count = 0; count < batch_count; count++) {
+      auto* add_vector_with_id = request.add_vector_with_ids();
+      add_vector_with_id->set_id(start_vector_id + count);
+    }
+  } else {
+    std::random_device seed;
+    std::ranlux48 engine(seed());
+    std::uniform_int_distribution<> distrib(0, 100);
+
+    for (int count = 0; count < batch_count; count++) {
+      auto* vector = request.add_vector_with_ids()->mutable_vector();
+      for (int i = 0; i < dimension; i++) {
+        auto random = static_cast<double>(distrib(engine)) / 10.123;
+        vector->add_float_values(random);
+      }
+    }
+
+    request.mutable_parameter()->set_top_n(0);
+  }
+
+  request.mutable_parameter()->set_enable_range_search(true);
+  request.mutable_parameter()->set_radius(radius);
+
+  if (FLAGS_without_vector) {
+    request.mutable_parameter()->set_without_vector_data(true);
+  }
+
+  if (FLAGS_without_scalar) {
+    request.mutable_parameter()->set_without_scalar_data(true);
+  }
+
+  if (FLAGS_without_table) {
+    request.mutable_parameter()->set_without_table_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_parameter()->mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  std::vector<int64_t> vt_ids;
+  if (FLAGS_with_vector_ids) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (int i = 0; i < FLAGS_vector_ids_count; i++) {
+      std::random_device seed;
+      std::ranlux48 engine(seed());
+
+      std::uniform_int_distribution<> distrib(1, 1000000ULL);
+      auto random = distrib(engine);
+
+      vt_ids.push_back(random);
+    }
+
+    sort(vt_ids.begin(), vt_ids.end());
+    vt_ids.erase(std::unique(vt_ids.begin(), vt_ids.end()), vt_ids.end());
+
+    for (auto id : vt_ids) {
+      request.mutable_parameter()->add_vector_ids(id);
+    }
+
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << '\n';
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+
+    for (uint32_t m = 0; m < batch_count; m++) {
+      dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector_with_ids(m);
+
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(value);
+
+      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({key, scalar_value});
+    }
+  }
+
+  if (FLAGS_with_scalar_post_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
+
+    for (uint32_t m = 0; m < batch_count; m++) {
+      dingodb::pb::common::VectorWithId* vector_with_id = request.mutable_vector_with_ids(m);
+
+      ::dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(value);
+
+      vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({key, scalar_value});
+    }
+  }
+
+  if (FLAGS_print_vector_search_delay) {
+    auto start = std::chrono::steady_clock::now();
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearchDebug", request, response);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << fmt::format("SendVectorSearchDebug  span: {} (us)", diff);
+
+  } else {
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearchDebug", request, response);
+  }
+
+  DINGO_LOG(INFO) << "VectorSearchDebug response: " << response.DebugString();
+
+  DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_size: " << response.batch_results_size();
+  for (const auto& batch_result : response.batch_results()) {
+    DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_dist_size: "
+                    << batch_result.vector_with_distances_size();
+  }
+
+#if 0  // NOLINT
+  // match compare
+  if (FLAGS_with_vector_ids) {
+    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+
+    for (auto id : request.parameter().vector_ids()) {
+      std::cout << id << " ";
+    }
+    std::cout << "]";
+    std::cout << std::endl;
+
+    std::cout << "response.batch_results() size : " << response.batch_results().size() << std::endl;
+
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      std::vector<int64_t> result_vt_ids;
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+
+      if (result_vt_ids.empty()) {
+        std::cout << "result_vt_ids : empty" << std::endl;
+      } else {
+        std::cout << "result_vt_ids : " << result_vt_ids.size() << " [ ";
+        for (auto id : result_vt_ids) {
+          std::cout << id << " ";
+        }
+        std::cout << "]";
+        std::cout << std::endl;
+      }
+
+      for (auto id : result_vt_ids) {
+        auto iter = std::find(vt_ids.begin(), vt_ids.end(), id);
+        if (iter == vt_ids.end()) {
+          std::cout << "result_vector_ids not all in vector_ids" << std::endl;
+          return;
+        }
+      }
+      std::cout << "result_vector_ids  all in vector_ids" << std::endl;
+    }
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    for (const auto& vector_with_distance_result : response.batch_results()) {
+      std::vector<int64_t> result_vt_ids;
+      for (const auto& vector_with_distance : vector_with_distance_result.vector_with_distances()) {
+        auto id = vector_with_distance.vector_with_id().id();
+        result_vt_ids.push_back(id);
+      }
+
+      auto lambda_print_result_vector_function = [&result_vt_ids](const std::string& name) {
+        std::cout << name << ": " << result_vt_ids.size() << " [ ";
+        for (auto id : result_vt_ids) {
+          std::cout << id << " ";
+        }
+        std::cout << "]";
+        std::cout << std::endl;
+      };
+
+      lambda_print_result_vector_function("before sort result_vt_ids");
+
+      std::sort(result_vt_ids.begin(), result_vt_ids.end());
+
+      lambda_print_result_vector_function("after  sort result_vt_ids");
+
+      std::cout << std::endl;
+    }
+  }
+#endif
+}
+
 void SendVectorBatchSearch(int64_t region_id, uint32_t dimension, uint32_t topn, uint32_t batch_count) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;

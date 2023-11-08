@@ -94,6 +94,11 @@ class VectorIndexIvfFlat : public VectorIndex {
                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
                        [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
 
+  butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
+                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {}) override;
+
   void LockWrite() override;
   void UnlockWrite() override;
 
