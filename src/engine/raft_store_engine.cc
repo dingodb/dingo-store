@@ -169,16 +169,10 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   // Build StateMachine
-  auto state_machine = std::make_shared<StoreStateMachine>(
-      raw_engine_, region, parameter.raft_meta, parameter.region_metrics, parameter.listeners, parameter.is_restart);
+  auto state_machine = std::make_shared<StoreStateMachine>(raw_engine_, region, parameter.raft_meta,
+                                                           parameter.region_metrics, parameter.listeners);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
-  }
-
-  if (parameter.is_restart) {
-    DINGO_LOG(INFO) << "[raft.engine][region(" << region->Id()
-                    << ")] recover raft node, last_applied_index = " << region->GetAppliedIndex();
-    state_machine->UpdateAppliedIndex(region->GetAppliedIndex());
   }
 
   // Build log storage

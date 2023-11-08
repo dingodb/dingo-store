@@ -32,6 +32,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
+#include "raft/dingo_filesystem_adaptor.h"
 #include "server/server.h"
 
 const int kSaveAppliedIndexStep = 10;
@@ -64,7 +65,7 @@ void StoreClosure::Run() {
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                                      std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                      store::RegionMetricsPtr region_metrics,
-                                     std::shared_ptr<EventListenerCollection> listeners, bool is_restart)
+                                     std::shared_ptr<EventListenerCollection> listeners)
     : engine_(engine),
       region_(region),
       str_node_id_(std::to_string(region->Id())),
@@ -72,8 +73,7 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
       region_metrics_(region_metrics),
       listeners_(listeners),
       applied_term_(raft_meta->term()),
-      applied_index_(raft_meta->applied_index()),
-      is_restart_for_load_snapshot_(is_restart) {
+      applied_index_(raft_meta->applied_index()) {
   bthread_mutex_init(&apply_mutex_, nullptr);
 }
 
@@ -100,19 +100,12 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard done_guard(iter.done());
 
-    region_->LockRegionRaft();
-
-    ON_SCOPE_EXIT([&]() { region_->UnlockRegionRaft(); });
-
     if (iter.index() <= applied_index_) {
       continue;
     }
 
     applied_term_ = iter.term();
     applied_index_ = iter.index();
-
-    region_->SetAppliedTerm(applied_term_);
-    region_->SetAppliedIndex(applied_index_);
 
     // region is STANDBY state, don't apply.
     while (region_->State() == pb::common::StoreRegionState::STANDBY) {
@@ -137,13 +130,12 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    if (Helper::IsEqualRegionEpoch(raft_cmd->header().epoch(), region_->Epoch())) {
+    if (!Helper::IsEqualRegionEpoch(raft_cmd->header().epoch(), region_->Epoch())) {
       auto* done = dynamic_cast<StoreClosure*>(iter.done());
       auto ctx = done ? done->GetCtx() : nullptr;
       if (ctx != nullptr) {
-        std::string s =
-            fmt::format("Region({}) epoch is not match, region_epoch({}) raft_cmd_epoch({}_{})", region_->Id(),
-                        region_->EpochToString(), Helper::RegionEpochToString(raft_cmd->header().epoch()));
+        std::string s = fmt::format("Region({}) epoch is not match, region_epoch({}) raft_cmd_epoch({})", region_->Id(),
+                                    region_->EpochToString(), Helper::RegionEpochToString(raft_cmd->header().epoch()));
         DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
 
         ctx->SetStatus(butil::Status(pb::error::EREGION_VERSION, s));
@@ -151,8 +143,12 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       continue;
     }
 
-    DINGO_LOG(DEBUG) << fmt::format("[raft.sm][region({})] apply log {}:{} applied_index({})",
-                                    raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_);
+    DINGO_LOG(DEBUG) << fmt::format(
+        "[raft.sm][region({}).epoch({})] apply log {}:{} applied_index({}) cmd_type({})",
+        raft_cmd->header().region_id(), Helper::RegionEpochToString(raft_cmd->header().epoch()), iter.term(),
+        iter.index(), applied_index_,
+        raft_cmd->requests().empty() ? "" : pb::raft::CmdType_Name(raft_cmd->requests().at(0).cmd_type()));
+
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
     event->region = region_;
@@ -179,48 +175,77 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
   }
 }
 
-void StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries) {
-  BAIDU_SCOPED_LOCK(apply_mutex_);
-
-  int64_t start_applied_id = applied_index_;
-  int actual_apply_log_count = 0;
-  uint64_t start_time = Helper::TimestampMs();
-  for (const auto& entry : entries) {
-    if (entry.index() <= applied_index_) {
-      continue;
-    }
-
-    auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-    CHECK(raft_cmd->ParsePartialFromArray(entry.data().data(), entry.data().size()));
-
-    applied_term_ = entry.term();
-    applied_index_ = entry.index();
-
-    auto event = std::make_shared<SmApplyEvent>();
-    event->region = region_;
-    event->engine = engine_;
-    event->raft_cmd = raft_cmd;
-    event->region_metrics = region_metrics_;
-    event->term_id = entry.term();
-    event->log_id = entry.index();
-
-    DispatchEvent(EventType::kSmApply, event);
-
-    // bvar metrics
-    StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
-
-    if (applied_index_ % kSaveAppliedIndexStep == 0) {
-      raft_meta_->set_term(applied_term_);
-      raft_meta_->set_applied_index(applied_index_);
-      Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
-    }
-
-    ++actual_apply_log_count;
+int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries) {
+  if (entries.empty()) {
+    return 0;
+  }
+  if (entries[entries.size() - 1].index() <= applied_index_) {
+    return 0;
   }
 
+  uint64_t start_time = Helper::TimestampMs();
+  int32_t actual_apply_log_count = 0;
+  int64_t start_applied_id = 0;
+  {
+    BAIDU_SCOPED_LOCK(apply_mutex_);
+    start_applied_id = applied_index_;
+
+    for (const auto& entry : entries) {
+      if (entry.index() <= applied_index_) {
+        continue;
+      }
+
+      auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+      CHECK(raft_cmd->ParsePartialFromArray(entry.data().data(), entry.data().size()));
+
+      DINGO_LOG(INFO) << fmt::format(
+          "[raft.sm][region({}).epoch({})] apply log {}:{} applied_index({}) cmd_type({})",
+          raft_cmd->header().region_id(), Helper::RegionEpochToString(raft_cmd->header().epoch()), entry.term(),
+          entry.index(), applied_index_,
+          raft_cmd->requests().empty() ? "" : pb::raft::CmdType_Name(raft_cmd->requests().at(0).cmd_type()));
+
+      applied_term_ = entry.term();
+      applied_index_ = entry.index();
+
+      auto event = std::make_shared<SmApplyEvent>();
+      event->region = region_;
+      event->engine = engine_;
+      event->raft_cmd = raft_cmd;
+      event->region_metrics = region_metrics_;
+      event->term_id = entry.term();
+      event->log_id = entry.index();
+
+      DispatchEvent(EventType::kSmApply, event);
+
+      // bvar metrics
+      StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
+
+      if (applied_index_ % kSaveAppliedIndexStep == 0) {
+        raft_meta_->set_term(applied_term_);
+        raft_meta_->set_applied_index(applied_index_);
+        Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+      }
+
+      ++actual_apply_log_count;
+    }
+  }
   DINGO_LOG(INFO) << fmt::format(
       "[raft.sm][region({})] catch up apply log finish, start_applied_id({}), apply_log_count({}/{}) elapsed time({})",
       region_->Id(), start_applied_id, actual_apply_log_count, entries.size(), Helper::TimestampMs() - start_time);
+
+  return actual_apply_log_count;
+}
+
+std::shared_ptr<SnapshotContext> StoreStateMachine::MakeSnapshotContext() {
+  BAIDU_SCOPED_LOCK(apply_mutex_);
+
+  auto snapshot_ctx = std::make_shared<SnapshotContext>(engine_);
+  snapshot_ctx->applied_term = applied_term_;
+  snapshot_ctx->applied_index = applied_index_;
+  snapshot_ctx->region_epoch = region_->Epoch();
+  snapshot_ctx->range = region_->Range();
+
+  return snapshot_ctx;
 }
 
 void StoreStateMachine::on_shutdown() {
@@ -277,12 +302,6 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
 
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load snapshot({}-{}) applied_index({})",
                                  region_->Id(), meta.last_included_term(), meta.last_included_index(), applied_index_);
-
-  if (is_restart_for_load_snapshot_) {
-    is_restart_for_load_snapshot_ = false;
-    DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_load, this is first load after restart",
-                                   region_->Id());
-  }
 
   std::string flag_filepath = reader->get_path() + "/" + Constant::kRaftSnapshotRegionMetaFileName;
   if (!Helper::IsExistPath(flag_filepath)) {

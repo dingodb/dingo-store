@@ -92,9 +92,7 @@ message SplitRequest {
 
 message MergeRequest {
   int64 source_region_id = 1;
-  dingodb.pb.common.RegionEpoch source_region_epoch = 2;
-  int64 target_region_id = 3;
-  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
+  int64 target_region_id = 2;
 }
 
 message ChangePeerRequest {
@@ -633,8 +631,8 @@ message CreateRegionRequest {
 
   int64 split_from_region_id = 25;  // optional, if set, will split from this region
 
-  dingodb.pb.common.RegionType region_type =
-      30;  // optional, if set, will create a region with this type, this type is default STORE
+  // optional, if set, will create a region with this type, this type is default STORE
+  dingodb.pb.common.RegionType region_type = 30;
   dingodb.pb.common.IndexParameter index_parameter = 40;  // optional, if region_type is INDEX, this field is required
 }
 

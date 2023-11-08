@@ -218,6 +218,7 @@ butil::Status InteractionManager::SendRequestWithoutContext(const std::string& s
                                                             Response& response) {
   if (service_name == "UtilService" || service_name == "RegionControlService") {
     if (store_interaction_ == nullptr) {
+      DINGO_LOG(ERROR) << "Store interaction is nullptr.";
       return butil::Status(dingodb::pb::error::EINTERNAL, "Store interaction is nullptr.");
     }
     return store_interaction_->SendRequest(service_name, api_name, request, response);
@@ -243,6 +244,7 @@ butil::Status InteractionManager::SendRequestWithContext(const std::string& serv
 
     if (response.error().errcode() == dingodb::pb::error::EREGION_VERSION) {
       RegionRouter::GetInstance().UpdateRegionEntry(response.error().store_region_info());
+      DINGO_LOG(INFO) << "QueryRegionEntry region_id: " << request.context().region_id();
       auto region_entry = RegionRouter::GetInstance().QueryRegionEntry(request.context().region_id());
       if (region_entry == nullptr) {
         return butil::Status(dingodb::pb::error::EREGION_NOT_FOUND, "Not found region %lu",

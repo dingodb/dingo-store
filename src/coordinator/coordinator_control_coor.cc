@@ -33,6 +33,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
@@ -2525,8 +2526,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
                          "merge_to_region has different part_id");
   }
 
-  // validate merge_from_region and merge_to_region has same start_key and
-  // end_key
+  // validate merge_from_region and merge_to_region has continuous range
   pb::common::Range new_range;
   bool range_match = false;
   if (merge_from_region.definition().range().start_key() == merge_to_region.definition().range().end_key()) {
@@ -2541,11 +2541,9 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
   }
 
   if (!range_match) {
-    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has "
-                        "different start_key or end_key";
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has not continuous range.";
     return butil::Status(pb::error::Errno::EMERGE_RANGE_NOT_MATCH,
-                         "MergeRegion merge_from_region and merge_to_region has different "
-                         "start_key or end_key");
+                         "MergeRegion merge_from_region and merge_to_region has not continuous range");
   }
 
   // only send merge region_cmd to merge_from_region_id's leader store id
@@ -2561,7 +2559,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
   // build task list
   auto* new_task_list = CreateTaskList(meta_increment);
 
-  // build merege task
+  // build merge task
   AddMergeTask(new_task_list, leader_store_id, merge_from_region_id, merge_to_region_id);
 
   // check if all merge_from_region is updated to TOMBSTONE
@@ -2571,11 +2569,6 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
 
   // build drop region task
   auto* drop_region_task = new_task_list->add_tasks();
-  auto* task_pre_check_drop = drop_region_task->mutable_pre_check();
-  task_pre_check_drop->set_type(pb::coordinator::TaskPreCheckType::REGION_CHECK);
-  auto* region_check = task_pre_check_drop->mutable_region_check();
-  region_check->set_region_id(merge_from_region_id);
-  region_check->set_state(::dingodb::pb::common::RegionState::REGION_TOMBSTONE);
 
   // call drop_region to get store_operations
   pb::coordinator_internal::MetaIncrement meta_increment_tmp;
@@ -3508,6 +3501,8 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
 
 pb::common::RegionState CoordinatorControl::GenRegionState(
     const pb::common::RegionMetrics& region_metrics, const pb::coordinator_internal::RegionInternal& region_internal) {
+  DINGO_LOG(INFO) << fmt::format("===regoin state: {} {}", region_metrics.id(),
+                                 pb::common::StoreRegionState_Name(region_metrics.store_region_state()));
   if (region_internal.state() == pb::common::RegionState::REGION_DELETE ||
       region_internal.state() == pb::common::RegionState::REGION_DELETING ||
       region_internal.state() == pb::common::RegionState::REGION_DELETED) {
@@ -4271,17 +4266,17 @@ void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_l
   *(region_cmd_to_transfer->mutable_transfer_leader_request()->mutable_peer()) = new_leader_peer;
 }
 
-void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
-                                      int64_t merge_to_region_id) {
+void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                      int64_t merge_from_region_id, int64_t merge_to_region_id) {
   // build merege task
   auto* merge_task = task_list->add_tasks();
   auto* store_operation_merge = merge_task->add_store_operations();
   store_operation_merge->set_id(store_id);
   auto* region_cmd_to_add = store_operation_merge->add_region_cmds();
 
-  region_cmd_to_add->set_region_id(region_id);
+  region_cmd_to_add->set_region_id(merge_from_region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_MERGE);
-  region_cmd_to_add->mutable_merge_request()->set_source_region_id(store_id);
+  region_cmd_to_add->mutable_merge_request()->set_source_region_id(merge_from_region_id);
   region_cmd_to_add->mutable_merge_request()->set_target_region_id(merge_to_region_id);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat

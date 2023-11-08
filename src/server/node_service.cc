@@ -74,6 +74,23 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
   raft_location->set_port(server.RaftEndpoint().port);
 }
 
+void NodeServiceImpl::GetRegionInfo(google::protobuf::RpcController*, const pb::node::GetRegionInfoRequest* request,
+                                    pb::node::GetRegionInfoResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard const done_guard(done);
+
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  for (auto region_id : request->region_ids()) {
+    auto region = store_region_meta->GetRegion(region_id);
+    if (region == nullptr) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                              fmt::format("Not found region {}", region_id));
+      return;
+    }
+
+    *response->add_regions() = region->InnerRegion();
+  }
+}
+
 void NodeServiceImpl::GetRaftStatus(google::protobuf::RpcController* /*controller*/,
                                     const pb::node::GetRaftStatusRequest* request,
                                     pb::node::GetRaftStatusResponse* response, google::protobuf::Closure* done) {
@@ -84,13 +101,19 @@ void NodeServiceImpl::GetRaftStatus(google::protobuf::RpcController* /*controlle
     ServiceHelper::SetError(response->mutable_error(), pb::error::EENGINE_NOT_FOUND, "Not found raft store engine");
     return;
   }
-  auto node = engine->GetNode(request->region_id());
-  if (node == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::ERAFT_NOT_FOUND, "Not found raft node");
-    return;
-  }
 
-  *(response->mutable_raft_status()) = *node->GetStatus();
+  for (auto region_id : request->region_ids()) {
+    auto node = engine->GetNode(region_id);
+    if (node == nullptr) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::ERAFT_NOT_FOUND,
+                              fmt::format("Not found raft node {}", region_id));
+      return;
+    }
+
+    auto* entry = response->add_entries();
+    entry->set_region_id(region_id);
+    *entry->mutable_raft_status() = *node->GetStatus();
+  }
 }
 
 void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*/,
@@ -501,8 +524,13 @@ void NodeServiceImpl::CommitMerge(google::protobuf::RpcController* /*controller*
   ctx->SetRegionId(request->target_region_id());
   ctx->SetRegionEpoch(request->target_region_epoch());
 
-  status = storage->CommitMerge(ctx, request->merge_id(), request->source_region_id(), request->source_region_epoch(),
-                                request->prepare_merge_log_id(), Helper::PbRepeatedToVector(request->entries()));
+  pb::common::RegionDefinition region_definition;
+  region_definition.set_id(request->source_region_id());
+  *region_definition.mutable_epoch() = request->source_region_epoch();
+  *region_definition.mutable_range() = request->source_region_range();
+
+  status = storage->CommitMerge(ctx, request->merge_id(), region_definition, request->prepare_merge_log_id(),
+                                Helper::PbRepeatedToVector(request->entries()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }

@@ -100,11 +100,12 @@ enum SplitStrategy {
 }
 
 message SplitRequest {
-  int64 from_region_id = 1;                 // split from region id
-  int64 to_region_id = 2;                   // split to region id
-  bytes split_key = 3;                      // split watershed key
-  dingodb.pb.common.RegionEpoch epoch = 4;  // current region epoch
-  SplitStrategy split_strategy = 5;
+  int64 split_id = 1; // the split request unique id
+  int64 from_region_id = 2;                 // split from region id
+  int64 to_region_id = 3;                   // split to region id
+  bytes split_key = 4;                      // split watershed key
+  dingodb.pb.common.RegionEpoch epoch = 5;  // current region epoch
+  SplitStrategy split_strategy = 6;
 }
 
 message SplitResponse {}
@@ -114,6 +115,7 @@ message PrepareMergeRequest {
   int64 min_applied_log_id = 2; // leader/follower min applied log id
   int64 target_region_id = 3; // target region id
   dingodb.pb.common.RegionEpoch target_region_epoch = 4; // target region epoch
+  dingodb.pb.common.Range target_region_range = 5; // target region range
 }
 
 message PrepareMergeResponse {}
@@ -127,9 +129,10 @@ message LogEntry {
 message CommitMergeRequest {
   int64 merge_id = 1; // the merge request unique id
   int64 source_region_id = 2;
-  dingodb.pb.common.RegionEpoch source_region_epoch = 3;
-  int64 prepare_merge_log_id = 4;
-  repeated LogEntry entries = 5; // source region raft log [min_applied_log_id, prepare_merge_log_id)
+  dingodb.pb.common.RegionEpoch source_region_epoch = 3; // source region epoch
+  dingodb.pb.common.Range source_region_range = 4; // source region range 
+  int64 prepare_merge_log_id = 5;
+  repeated LogEntry entries = 6; // source region raft log [min_applied_log_id, prepare_merge_log_id)
 }
 
 message CommitMergeResponse {}

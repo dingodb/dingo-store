@@ -376,6 +376,14 @@ pb::common::Range Helper::IntersectRange(const pb::common::Range& range1, const 
   return range;
 }
 
+std::string Helper::RangeToString(const pb::common::Range& range) {
+  return fmt::format("[{}-{})", Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()));
+}
+
+bool Helper::IsContainRange(const pb::common::Range& range1, const pb::common::Range& range2) {
+  return range2.start_key() >= range1.start_key() && range2.end_key() <= range1.end_key();
+}
+
 std::string Helper::StringToHex(const std::string& str) {
   std::stringstream ss;
   for (const auto& ch : str) {
@@ -1669,6 +1677,18 @@ butil::Status Helper::CheckRange(const pb::common::Range& range) {
   }
 
   return butil::Status();
+}
+
+int Helper::CompareRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch) {
+  if (src_epoch.conf_version() == dst_epoch.conf_version() && src_epoch.version() == dst_epoch.version()) {
+    return 0;
+  }
+
+  if (src_epoch.conf_version() < dst_epoch.conf_version() || src_epoch.version() < dst_epoch.version()) {
+    return -1;
+  }
+
+  return 1;
 }
 
 bool Helper::IsEqualRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch) {

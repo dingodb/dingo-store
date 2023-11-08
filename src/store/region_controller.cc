@@ -386,8 +386,9 @@ butil::Status SplitRegionTask::SplitRegion() {
 
   // Commit raft log
   ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
+  ctx_->SetRegionEpoch(parent_region->Epoch());
   return Server::GetInstance().GetEngine()->AsyncWrite(
-      ctx_, WriteDataBuilder::BuildWrite(region_cmd_->split_request(), parent_region->Epoch()),
+      ctx_, WriteDataBuilder::BuildWrite(region_cmd_->id(), region_cmd_->split_request(), parent_region->Epoch()),
       [](std::shared_ptr<Context>, butil::Status status) {
         if (!status.ok()) {
           LOG(ERROR) << fmt::format("[control.region][region()] write split failed, error: {}", status.error_str());
@@ -396,11 +397,15 @@ butil::Status SplitRegionTask::SplitRegion() {
 }
 
 void SplitRegionTask::Run() {
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] Run split region, details: {}",
+                                 region_cmd_->split_request().split_from_region_id(),
+                                 region_cmd_->split_request().split_to_region_id(), region_cmd_->ShortDebugString());
   auto status = SplitRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, error: {}",
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, error: {} {}",
                                     region_cmd_->split_request().split_from_region_id(),
-                                    region_cmd_->split_request().split_to_region_id(), status.error_str());
+                                    region_cmd_->split_request().split_to_region_id(),
+                                    pb::error::Errno_Name(status.error_code()), status.error_str());
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -415,101 +420,27 @@ void SplitRegionTask::Run() {
 
 butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::RegionCmd& command) {
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
-  const auto& request = command.merge_request();
+  const auto& merge_request = command.merge_request();
+  if (command.region_id() != merge_request.source_region_id()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param source_region_id must equal RegionCmd.region_id");
+  }
 
   int64_t min_applied_log_id = 0;
-  auto status = ValidateMergeRegion(store_region_meta, request, min_applied_log_id);
+  auto status = ValidateMergeRegion(store_region_meta, merge_request, min_applied_log_id);
   if (!status.ok()) {
     DINGO_LOG(INFO) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Merge failed, error: {} {}",
-                                   command.id(), request.source_region_id(), request.target_region_id(),
+                                   command.id(), merge_request.source_region_id(), merge_request.target_region_id(),
                                    status.error_code(), status.error_str());
   }
 
   return status;
 }
 
-butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
-                                                   const pb::coordinator::MergeRequest& merge_request,
-                                                   int64_t& min_applied_log_id) {
-  if (merge_request.source_region_id() == 0 || merge_request.target_region_id() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param source_region_id/target_region_id is error");
-  }
-  auto source_region = store_region_meta->GetRegion(merge_request.source_region_id());
-  if (source_region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found source region");
-  }
-  if (!Helper::IsEqualRegionEpoch(source_region->Epoch(), merge_request.source_region_epoch())) {
-    return butil::Status(
-        pb::error::EREGION_VERSION,
-        fmt::format("Not match source region epoch ({} / {})", Helper::RegionEpochToString(source_region->Epoch()),
-                    Helper::RegionEpochToString(merge_request.source_region_epoch())));
-  }
-
-  auto target_region = store_region_meta->GetRegion(merge_request.target_region_id());
-  if (target_region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found target region");
-  }
-  if (!Helper::IsEqualRegionEpoch(target_region->Epoch(), merge_request.target_region_epoch())) {
-    return butil::Status(
-        pb::error::EREGION_VERSION,
-        fmt::format("Not match target region epoch ({} / {})", Helper::RegionEpochToString(target_region->Epoch()),
-                    Helper::RegionEpochToString(merge_request.target_region_epoch())));
-  }
-
-  // Check region adjoin
-  if (source_region->Range().end_key() != target_region->Range().start_key()) {
-    return butil::Status(pb::error::EREGION_NOT_ADJOIN, "Not adjoin region.");
-  }
-
-  // Check source/target region epoch
-
-  // Check source region follower commit log progress.
-  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
-  if (raft_store_engine == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
-  }
-
-  auto node = raft_store_engine->GetNode(source_region->Id());
-  if (node == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
-  }
-
-  if (!node->IsLeader()) {
-    return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
-  }
-  auto raft_status = node->GetStatus();
-  if (raft_status == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "Get raft status failed.");
-  }
-
-  if (!raft_status->unstable_followers().empty()) {
-    return butil::Status(pb::error::EINTERNAL, "Has unstable followers.");
-  }
-
-  min_applied_log_id = raft_status->committed_index();
-  for (const auto& [peer_addr, follower] : raft_status->stable_followers()) {
-    if (follower.consecutive_error_times() > 0) {
-      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal.", peer_addr.c_str());
-    }
-
-    auto peer_raft_status = ServiceAccess::GetRaftStatus(source_region->Id(), Helper::GetEndPoint(peer_addr));
-    if (peer_raft_status.peer_id().empty()) {
-      return butil::Status(pb::error::EINTERNAL, "Get peer raft status failed.");
-    }
-
-    if (peer_raft_status.committed_index() + FLAGS_merge_commited_log_gap < raft_status->last_index()) {
-      return butil::Status(pb::error::EINTERNAL, "Follower %s log fall behind exceed %ld.", peer_addr.c_str(),
-                           FLAGS_merge_commited_log_gap);
-    }
-
-    min_applied_log_id = std::min(min_applied_log_id, peer_raft_status.known_applied_index());
-  }
-
-  // Check whether have split/merge/change_peer raft log since min_applied_log_id.
-  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(source_region->Id());
+// Check split/merge/change_peer raft log
+butil::Status CheckChangeRegionLog(int64_t region_id, int64_t min_applied_log_id) {
+  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(region_id);
   if (log_storage == nullptr) {
-    return butil::Status(pb::error::ERAFT_NOT_FOUND_LOG_STORAGE,
-                         fmt::format("Not found log storage {}", source_region->Id()));
+    return butil::Status(pb::error::ERAFT_NOT_FOUND_LOG_STORAGE, fmt::format("Not found log storage {}", region_id));
   }
 
   bool has = log_storage->HasSpecificLog(min_applied_log_id, INT64_MAX, [](const LogEntry& log_entry) -> bool {
@@ -529,8 +460,136 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
     }
     return false;
   });
+
   if (has) {
-    return butil::Status(pb::error::ERAFT_EXIST_CHANGE_LOG, fmt::format("Exist change log {}", source_region->Id()));
+    return butil::Status(pb::error::ERAFT_EXIST_CHANGE_LOG,
+                         fmt::format("Exist split/merge/change_peer log recently {}", region_id));
+  }
+  return butil::Status();
+}
+
+butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
+                                                   const pb::coordinator::MergeRequest& merge_request,
+                                                   int64_t& source_min_applied_log_id) {
+  if (merge_request.source_region_id() == 0 || merge_request.target_region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param source_region_id/target_region_id is error");
+  }
+  auto source_region = store_region_meta->GetRegion(merge_request.source_region_id());
+  if (source_region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found source region");
+  }
+
+  auto target_region = store_region_meta->GetRegion(merge_request.target_region_id());
+  if (target_region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found target region");
+  }
+
+  // Check region adjoin
+  if (source_region->Range().end_key() != target_region->Range().start_key() &&
+      source_region->Range().start_key() != target_region->Range().end_key()) {
+    return butil::Status(pb::error::EREGION_NOT_NEIGHBOR, "Not neighbor region");
+  }
+
+  // Check source region follower commit log progress.
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
+  }
+
+  auto source_node = raft_store_engine->GetNode(source_region->Id());
+  if (source_node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
+  }
+  auto target_node = raft_store_engine->GetNode(target_region->Id());
+  if (target_node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
+  }
+  if (!source_node->IsLeader()) {
+    return butil::Status(pb::error::ERAFT_NOTLEADER, source_node->GetLeaderId().to_string());
+  }
+  auto source_raft_status = source_node->GetStatus();
+  if (source_raft_status == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get source region raft status failed");
+  }
+  auto target_raft_status = target_node->GetStatus();
+  if (target_raft_status == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get target region raft status failed");
+  }
+
+  if (!source_raft_status->unstable_followers().empty()) {
+    return butil::Status(pb::error::EINTERNAL, "Has unstable followers");
+  }
+
+  // Check remote source/target region epoch
+  for (const auto& [peer_addr, follower] : source_raft_status->stable_followers()) {
+    if (follower.consecutive_error_times() > 0) {
+      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal", peer_addr.c_str());
+    }
+
+    auto region_metas =
+        ServiceAccess::GetRegionInfo({source_region->Id(), target_region->Id()}, Helper::GetEndPoint(peer_addr));
+    if (region_metas.size() != 2) {
+      return butil::Status(pb::error::EINTERNAL, "Get remote region info failed at node(%s)", peer_addr.c_str());
+    }
+    for (const auto& region_meta : region_metas) {
+      if (region_meta.id() == source_region->Id() &&
+          !Helper::IsEqualRegionEpoch(source_region->Epoch(), region_meta.definition().epoch())) {
+        return butil::Status(pb::error::EREGION_VERSION,
+                             fmt::format("Not match source region epoch ({} / {}) at node({})",
+                                         Helper::RegionEpochToString(region_meta.definition().epoch()),
+                                         Helper::RegionEpochToString(source_region->Epoch()), peer_addr));
+      } else if (region_meta.id() == target_region->Id() &&
+                 !Helper::IsEqualRegionEpoch(target_region->Epoch(), region_meta.definition().epoch())) {
+        return butil::Status(pb::error::EREGION_VERSION,
+                             fmt::format("Not match target region epoch ({} / {}) at node({})",
+                                         Helper::RegionEpochToString(region_meta.definition().epoch()),
+                                         Helper::RegionEpochToString(target_region->Epoch()), peer_addr));
+      }
+    }
+  }
+
+  // Check raft status
+  source_min_applied_log_id = INT64_MAX;
+  int64_t target_min_applied_log_id = INT64_MAX;
+  for (const auto& [peer_addr, follower] : source_raft_status->stable_followers()) {
+    if (follower.consecutive_error_times() > 0) {
+      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal.", peer_addr.c_str());
+    }
+
+    auto raft_status_entries =
+        ServiceAccess::GetRaftStatus({source_region->Id(), target_region->Id()}, Helper::GetEndPoint(peer_addr));
+    if (raft_status_entries.size() != 2) {
+      return butil::Status(pb::error::EINTERNAL, "Get remote raft node info failed at node(%s)", peer_addr.c_str());
+    }
+    for (const auto& entry : raft_status_entries) {
+      if (entry.raft_status().peer_id().empty()) {
+        return butil::Status(pb::error::EINTERNAL, "Get peer raft status failed.");
+      }
+
+      if (entry.region_id() == source_region->Id()) {
+        if (entry.raft_status().committed_index() + FLAGS_merge_commited_log_gap < source_raft_status->last_index()) {
+          return butil::Status(pb::error::EINTERNAL, "Source region follower %s log fall behind exceed %ld.",
+                               peer_addr.c_str(), FLAGS_merge_commited_log_gap);
+        }
+        source_min_applied_log_id = std::min(source_min_applied_log_id, entry.raft_status().known_applied_index());
+      } else if (entry.region_id() == target_region->Id()) {
+        if (entry.raft_status().committed_index() + FLAGS_merge_commited_log_gap < target_raft_status->last_index()) {
+          return butil::Status(pb::error::EINTERNAL, "Target region follower %s log fall behind exceed %ld.",
+                               peer_addr.c_str(), FLAGS_merge_commited_log_gap);
+        }
+        target_min_applied_log_id = std::min(target_min_applied_log_id, entry.raft_status().known_applied_index());
+      }
+    }
+  }
+
+  // Check whether have split/merge/change_peer raft log since min_applied_log_id.
+  auto status = CheckChangeRegionLog(source_region->Id(), source_min_applied_log_id);
+  if (!status.ok()) {
+    return status;
+  }
+  status = CheckChangeRegionLog(target_region->Id(), target_min_applied_log_id);
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -566,8 +625,8 @@ butil::Status MergeRegionTask::MergeRegion() {
   ctx->SetRegionId(source_region->Id());
   ctx->SetRegionEpoch(source_region->Epoch());
 
-  status = Server::GetInstance().GetStorage()->PrepareMerge(ctx, region_cmd_->id(), target_region->Id(),
-                                                            target_region->Epoch(), min_applied_log_id);
+  status = Server::GetInstance().GetStorage()->PrepareMerge(ctx, region_cmd_->id(), target_region->Definition(),
+                                                            min_applied_log_id);
   if (!status.ok()) {
     return status;
   }
@@ -580,12 +639,16 @@ butil::Status MergeRegionTask::MergeRegion() {
 }
 
 void MergeRegionTask::Run() {
+  DINGO_LOG(INFO) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Run merge region, details: {}",
+                                 region_cmd_->id(), region_cmd_->merge_request().source_region_id(),
+                                 region_cmd_->merge_request().target_region_id(), region_cmd_->ShortDebugString());
+
   auto status = MergeRegion();
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Merge failed, error: {} {}",
                                     region_cmd_->id(), region_cmd_->merge_request().source_region_id(),
-                                    region_cmd_->merge_request().target_region_id(), status.error_code(),
-                                    status.error_str());
+                                    region_cmd_->merge_request().target_region_id(),
+                                    pb::error::Errno_Name(status.error_code()), status.error_str());
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -1441,7 +1504,9 @@ RegionController::TaskBuilderMap RegionController::task_builders = {
        return std::make_shared<SplitRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_MERGE,
-     [](std::shared_ptr<Context>, std::shared_ptr<pb::coordinator::RegionCmd>) -> TaskRunnablePtr { return nullptr; }},
+     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+       return std::make_shared<MergeRegionTask>(ctx, command);
+     }},
     {pb::coordinator::CMD_CHANGE_PEER,
      [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
        return std::make_shared<ChangeRegionTask>(ctx, command);
@@ -1488,6 +1553,7 @@ RegionController::ValidaterMap RegionController::validaters = {
     {pb::coordinator::CMD_CREATE, CreateRegionTask::PreValidateCreateRegion},
     {pb::coordinator::CMD_DELETE, DeleteRegionTask::PreValidateDeleteRegion},
     {pb::coordinator::CMD_SPLIT, SplitRegionTask::PreValidateSplitRegion},
+    {pb::coordinator::CMD_MERGE, MergeRegionTask::PreValidateMergeRegion},
     {pb::coordinator::CMD_CHANGE_PEER, ChangeRegionTask::PreValidateChangeRegion},
     {pb::coordinator::CMD_TRANSFER_LEADER, TransferLeaderTask::PreValidateTransferLeader},
     {pb::coordinator::CMD_PURGE, PurgeRegionTask::PreValidatePurgeRegion},

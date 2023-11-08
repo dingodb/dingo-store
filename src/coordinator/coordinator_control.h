@@ -731,7 +731,7 @@ class CoordinatorControl : public MetaControl {
                                 const pb::common::RegionDefinition &region_definition);
   static void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                                     const pb::common::Peer &new_leader_peer);
-  static void AddMergeTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+  static void AddMergeTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t merge_from_region_id,
                            int64_t merge_to_region_id);
   static void AddSplitTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                            int64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region);

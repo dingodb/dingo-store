@@ -54,6 +54,7 @@
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
 #include "server/server.h"
+#include "store/heartbeat.h"
 
 namespace dingodb {
 
@@ -1103,8 +1104,7 @@ static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnF
     size_t option_value = 0;
     CastValue(column_family->GetConfItem(Constant::kBlockCache), option_value);
 
-    auto cache = rocksdb::NewLRUCache(option_value);  // LRUcache
-    table_options.block_cache = cache;
+    table_options.block_cache = rocksdb::NewLRUCache(option_value);  // LRUcache
   }
 
   // arena_block_size
@@ -1150,8 +1150,6 @@ static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnF
 
   table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10.0, false));
   table_options.whole_key_filtering = true;
-
-  auto compressed_block_cache = rocksdb::NewLRUCache(1024 * 1024 * 1024);  // LRUcache
 
   rocksdb::TableFactory* table_factory = NewBlockBasedTableFactory(table_options);
   family_options.table_factory.reset(table_factory);

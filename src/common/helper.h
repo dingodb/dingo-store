@@ -166,6 +166,11 @@ class Helper {
   // Take range intersection
   static pb::common::Range IntersectRange(const pb::common::Range& range1, const pb::common::Range& range2);
 
+  static std::string RangeToString(const pb::common::Range& range);
+
+  // range1 contain range2
+  static bool IsContainRange(const pb::common::Range& range1, const pb::common::Range& range2);
+
   static std::string StringToHex(const std::string& str);
   static std::string StringToHex(const std::string_view& str);
   static std::string HexToString(const std::string& hex_str);
@@ -323,6 +328,10 @@ class Helper {
                                                    pb::store_internal::RaftSnapshotRegionMeta& meta);
 
   static butil::Status CheckRange(const pb::common::Range& range);
+  // 0: src_epoch == dst_epoch
+  // -1: src_epoch < dst_epoch
+  // 1: src_epoch > dst_epoch
+  static int CompareRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch);
   static bool IsEqualRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch);
   static std::string RegionEpochToString(const pb::common::RegionEpoch& epoch);
 };

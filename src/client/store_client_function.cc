@@ -1724,7 +1724,7 @@ int SendKvPut(int64_t region_id, const std::string& key, std::string value) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   auto* kv = request.mutable_kv();
   kv->set_key(key);
-  kv->set_value(value.empty() ? Helper::GenRandomString(64) : value);
+  kv->set_value(value.empty() ? Helper::GenRandomString(256) : value);
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPut", request, response);
   return response.error().errcode();
@@ -1739,7 +1739,7 @@ void SendKvBatchPut(int64_t region_id, const std::string& prefix, int count) {
     std::string key = prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
     kv->set_key(key);
-    kv->set_value(Helper::GenRandomString(64));
+    kv->set_value(Helper::GenRandomString(256));
   }
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPut", request, response);
@@ -1930,6 +1930,20 @@ void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vec
 
   InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "ChangeRegion", request,
                                                               response);
+}
+
+void SendMergeRegion(int64_t source_region_id, int64_t target_region_id) {
+  if (source_region_id == 0 || target_region_id == 0) {
+    DINGO_LOG(INFO) << "Param source_region_id/target_region_id is error.";
+    return;
+  }
+  dingodb::pb::region_control::MergeRegionRequest request;
+  dingodb::pb::region_control::MergeRegionResponse response;
+
+  request.set_source_region_id(source_region_id);
+  request.set_target_region_id(target_region_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "MergeRegion", request, response);
 }
 
 void SendDestroyRegion(int64_t region_id) {

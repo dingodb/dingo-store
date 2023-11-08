@@ -898,17 +898,16 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   return butil::Status::OK();
 }
 
-butil::Status Storage::PrepareMerge(std::shared_ptr<Context> ctx, int64_t merge_id, int64_t target_region_id,
-                                    const pb::common::RegionEpoch& target_region_epoch, int64_t min_applied_log_id) {
-  return engine_->Write(
-      ctx, WriteDataBuilder::BuildWrite(merge_id, target_region_id, target_region_epoch, min_applied_log_id));
+butil::Status Storage::PrepareMerge(std::shared_ptr<Context> ctx, int64_t merge_id,
+                                    const pb::common::RegionDefinition& region_definition, int64_t min_applied_log_id) {
+  return engine_->Write(ctx, WriteDataBuilder::BuildWrite(merge_id, region_definition, min_applied_log_id));
 }
 
-butil::Status Storage::CommitMerge(std::shared_ptr<Context> ctx, int64_t merge_id, int64_t source_region_id,
-                                   const pb::common::RegionEpoch& source_region_epoch, int64_t prepare_merge_log_id,
+butil::Status Storage::CommitMerge(std::shared_ptr<Context> ctx, int64_t merge_id,
+                                   const pb::common::RegionDefinition& region_definition, int64_t prepare_merge_log_id,
                                    const std::vector<pb::raft::LogEntry>& entries) {
-  return engine_->Write(ctx, WriteDataBuilder::BuildWrite(merge_id, source_region_id, source_region_epoch,
-                                                          prepare_merge_log_id, entries));
+  return engine_->AsyncWrite(ctx,
+                             WriteDataBuilder::BuildWrite(merge_id, region_definition, prepare_merge_log_id, entries));
 }
 
 }  // namespace dingodb

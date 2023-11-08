@@ -34,7 +34,7 @@ struct SmApplyEvent : public Event {
   store::RegionPtr region;
   store::RegionMetricsPtr region_metrics;
   std::shared_ptr<RawEngine> engine;
-  braft::Closure* done;
+  braft::Closure* done = {nullptr};
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;
   int64_t term_id;
   int64_t log_id;

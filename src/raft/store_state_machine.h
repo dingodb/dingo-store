@@ -48,6 +48,8 @@ class StoreClosure : public braft::Closure {
   std::shared_ptr<pb::raft::RaftCmdRequest> request_;
 };
 
+struct SnapshotContext;
+
 // Execute order on restart: on_snapshot_load
 //                           on_configuration_committed
 //                           on_leader_start|on_start_following
@@ -56,8 +58,8 @@ class StoreStateMachine : public braft::StateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                              std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
-                             store::RegionMetricsPtr region_metrics, std::shared_ptr<EventListenerCollection> listeners,
-                             bool is_restart);
+                             store::RegionMetricsPtr region_metrics,
+                             std::shared_ptr<EventListenerCollection> listeners);
   ~StoreStateMachine() override;
 
   static bool Init();
@@ -76,7 +78,9 @@ class StoreStateMachine : public braft::StateMachine {
   void UpdateAppliedIndex(int64_t applied_index);
   int64_t GetAppliedIndex() const;
 
-  void CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries);
+  int32_t CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries);
+
+  std::shared_ptr<SnapshotContext> MakeSnapshotContext();
 
  private:
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
@@ -91,8 +95,6 @@ class StoreStateMachine : public braft::StateMachine {
   std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
 
   store::RegionMetricsPtr region_metrics_;
-
-  std::atomic<bool> is_restart_for_load_snapshot_;
 
   // Protect apply serial
   bthread_mutex_t apply_mutex_;
