@@ -90,6 +90,33 @@ class SplitHandler : public BaseHandler {
              int64_t log_id) override;
 };
 
+// Handle raft command PrepareMergeRequest
+class PrepareMergeHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kPrepareMerge; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr source_region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+             int64_t log_id) override;
+};
+
+// Handle raft command CommitMergeRequest
+class CommitMergeHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kCommitMerge; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr target_region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+             int64_t log_id) override;
+};
+
+// Handle raft command RollbackMergeRequest
+class RollbackMergeHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kRollbackMerge; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+             int64_t log_id) override;
+};
+
 // SaveRaftSnapshotHandler
 class SaveRaftSnapshotHandler : public BaseHandler {
  public:

@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -32,10 +33,12 @@
 
 namespace dingodb {
 
+enum class LogEntryType { kEntryTypeUnknown = 0, kEntryTypeNoOp = 1, kEntryTypeData = 2, kEntryTypeConfiguration = 3 };
+
 struct LogEntry {
+  LogEntryType type;
   int64_t index;
   int64_t term;
-
   butil::IOBuf data;
 };
 
@@ -178,6 +181,9 @@ class SegmentLogStorage {
 
   // [begin_index, end_index]
   std::vector<std::shared_ptr<LogEntry>> GetEntrys(uint64_t begin_index, uint64_t end_index);
+
+  using MatchFuncer = std::function<bool(const LogEntry&)>;
+  bool HasSpecificLog(uint64_t begin_index, uint64_t end_index, MatchFuncer matcher);
 
   // get logentry's term by index
   int64_t GetTerm(int64_t index);

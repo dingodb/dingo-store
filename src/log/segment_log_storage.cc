@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "braft/enum.pb.h"
 #include "braft/fsync.h"
 #include "braft/local_storage.pb.h"
 #include "braft/log_entry.h"
@@ -831,6 +832,44 @@ std::vector<std::shared_ptr<LogEntry>> SegmentLogStorage::GetEntrys(uint64_t beg
   }
 
   return log_entrys;
+}
+
+bool SegmentLogStorage::HasSpecificLog(uint64_t begin_index, uint64_t end_index, MatchFuncer matcher) {
+  auto segments = GetSegments(begin_index, end_index);
+  if (segments.empty()) {
+    return false;
+  }
+
+  for (auto& segment : segments) {
+    for (int64_t i = segment->FirstIndex(); i <= segment->LastIndex(); ++i) {
+      if (i < begin_index || i > end_index) {
+        continue;
+      }
+      auto* log_entry = segment->Get(i);
+      if (log_entry != nullptr) {
+        if (log_entry->type == braft::ENTRY_TYPE_DATA) {
+          LogEntry tmp_log_entry;
+          tmp_log_entry.type = LogEntryType::kEntryTypeData;
+          tmp_log_entry.term = log_entry->id.term;
+          tmp_log_entry.index = log_entry->id.index;
+          tmp_log_entry.data.swap(log_entry->data);
+          if (matcher(tmp_log_entry)) {
+            return true;
+          }
+        } else if (log_entry->type == braft::ENTRY_TYPE_CONFIGURATION) {
+          LogEntry tmp_log_entry;
+          tmp_log_entry.type = LogEntryType::kEntryTypeConfiguration;
+          tmp_log_entry.term = log_entry->id.term;
+          tmp_log_entry.index = log_entry->id.index;
+          if (matcher(tmp_log_entry)) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 int64_t SegmentLogStorage::GetTerm(const int64_t index) {

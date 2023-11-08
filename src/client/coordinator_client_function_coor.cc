@@ -45,8 +45,8 @@ DECLARE_string(coordinator_addr);
 DECLARE_uint64(split_from_id);
 DECLARE_uint64(split_to_id);
 DECLARE_string(split_key);
-DECLARE_uint64(merge_from_id);
-DECLARE_uint64(merge_to_id);
+DECLARE_uint64(source_id);
+DECLARE_uint64(target_id);
 DECLARE_uint64(peer_add_store_id);
 DECLARE_uint64(peer_del_store_id);
 DECLARE_uint64(store_id);
@@ -1422,15 +1422,15 @@ void SendMergeRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   dingodb::pb::coordinator::MergeRegionRequest request;
   dingodb::pb::coordinator::MergeRegionResponse response;
 
-  if (FLAGS_merge_to_id > 0) {
-    request.mutable_merge_request()->set_merge_to_region_id(FLAGS_merge_to_id);
+  if (FLAGS_target_id > 0) {
+    request.mutable_merge_request()->set_target_region_id(FLAGS_target_id);
   } else {
     DINGO_LOG(ERROR) << "merge_to_id is empty";
     return;
   }
 
-  if (FLAGS_merge_from_id > 0) {
-    request.mutable_merge_request()->set_merge_from_region_id(FLAGS_merge_from_id);
+  if (FLAGS_source_id > 0) {
+    request.mutable_merge_request()->set_source_region_id(FLAGS_source_id);
   } else {
     DINGO_LOG(ERROR) << "merge_from_id is empty";
     return;

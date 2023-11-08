@@ -4281,8 +4281,8 @@ void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int6
 
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_MERGE);
-  region_cmd_to_add->mutable_merge_request()->set_merge_from_region_id(store_id);
-  region_cmd_to_add->mutable_merge_request()->set_merge_to_region_id(merge_to_region_id);
+  region_cmd_to_add->mutable_merge_request()->set_source_region_id(store_id);
+  region_cmd_to_add->mutable_merge_request()->set_target_region_id(merge_to_region_id);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }

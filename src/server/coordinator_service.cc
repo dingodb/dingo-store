@@ -1319,8 +1319,8 @@ void DoMergeRegion(google::protobuf::RpcController *controller, const pb::coordi
 
   auto merge_request = request->merge_request();
 
-  auto ret = coordinator_control->MergeRegionWithTaskList(merge_request.merge_from_region_id(),
-                                                          merge_request.merge_to_region_id(), meta_increment);
+  auto ret = coordinator_control->MergeRegionWithTaskList(merge_request.source_region_id(),
+                                                          merge_request.target_region_id(), meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -1345,7 +1345,7 @@ void DoMergeRegion(google::protobuf::RpcController *controller, const pb::coordi
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "MergeRegion Write failed:  merge_from_region_id="
-                     << request->merge_request().merge_from_region_id();
+                     << request->merge_request().source_region_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     brpc::ClosureGuard done_guard(meta_closure);
     return;

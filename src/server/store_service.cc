@@ -84,7 +84,9 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
@@ -162,7 +164,9 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   }
 
   auto ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
@@ -239,7 +243,9 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
@@ -317,7 +323,9 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   status = storage->KvPut(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
@@ -394,7 +402,9 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
@@ -474,7 +484,9 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
   status = storage->KvPutIfAbsent(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_kvs()),
@@ -553,7 +565,9 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
   status = storage->KvDelete(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
@@ -638,7 +652,9 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->KvDeleteRange(ctx, is_sync, correction_range);
@@ -707,7 +723,9 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   status = storage->KvCompareAndSet(ctx, is_sync, {request->kv()}, {request->expect_value()}, true);
   if (!status.ok()) {
@@ -785,7 +803,9 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
 
@@ -872,7 +892,9 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
@@ -956,7 +978,9 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   status = storage->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
@@ -1031,7 +1055,9 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
 
   status = storage->KvScanRelease(ctx, request->scan_id());
   if (!status.ok()) {
@@ -1099,7 +1125,8 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1184,7 +1211,8 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1304,7 +1332,8 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1402,7 +1431,8 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1500,7 +1530,8 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1607,7 +1638,8 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1693,7 +1725,8 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1773,7 +1806,8 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1855,7 +1889,8 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -1945,7 +1980,8 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -2040,7 +2076,8 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -2128,7 +2165,8 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -2193,7 +2231,8 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -2268,7 +2307,8 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   }
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 
@@ -2343,7 +2383,8 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
-  ctx->SetRegionId(region_id).SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionId(region_id);
+  ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
 

@@ -15,6 +15,7 @@
 #include "raft/store_state_machine.h"
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -72,7 +73,11 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
       listeners_(listeners),
       applied_term_(raft_meta->term()),
       applied_index_(raft_meta->applied_index()),
-      is_restart_for_load_snapshot_(is_restart) {}
+      is_restart_for_load_snapshot_(is_restart) {
+  bthread_mutex_init(&apply_mutex_, nullptr);
+}
+
+StoreStateMachine::~StoreStateMachine() { bthread_mutex_destroy(&apply_mutex_); }
 
 bool StoreStateMachine::Init() { return true; }
 
@@ -90,6 +95,8 @@ int StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_
 }
 
 void StoreStateMachine::on_apply(braft::Iterator& iter) {
+  BAIDU_SCOPED_LOCK(apply_mutex_);
+
   for (; iter.valid(); iter.next()) {
     braft::AsyncClosureGuard done_guard(iter.done());
 
@@ -130,8 +137,22 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
-    // DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] apply log {}:{} applied_index({})",
-    //                                raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_);
+    if (Helper::IsEqualRegionEpoch(raft_cmd->header().epoch(), region_->Epoch())) {
+      auto* done = dynamic_cast<StoreClosure*>(iter.done());
+      auto ctx = done ? done->GetCtx() : nullptr;
+      if (ctx != nullptr) {
+        std::string s =
+            fmt::format("Region({}) epoch is not match, region_epoch({}) raft_cmd_epoch({}_{})", region_->Id(),
+                        region_->EpochToString(), Helper::RegionEpochToString(raft_cmd->header().epoch()));
+        DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
+
+        ctx->SetStatus(butil::Status(pb::error::EREGION_VERSION, s));
+      }
+      continue;
+    }
+
+    DINGO_LOG(DEBUG) << fmt::format("[raft.sm][region({})] apply log {}:{} applied_index({})",
+                                    raft_cmd->header().region_id(), iter.term(), iter.index(), applied_index_);
     // Build event
     auto event = std::make_shared<SmApplyEvent>();
     event->region = region_;
@@ -156,6 +177,50 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
   }
+}
+
+void StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries) {
+  BAIDU_SCOPED_LOCK(apply_mutex_);
+
+  int64_t start_applied_id = applied_index_;
+  int actual_apply_log_count = 0;
+  uint64_t start_time = Helper::TimestampMs();
+  for (const auto& entry : entries) {
+    if (entry.index() <= applied_index_) {
+      continue;
+    }
+
+    auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+    CHECK(raft_cmd->ParsePartialFromArray(entry.data().data(), entry.data().size()));
+
+    applied_term_ = entry.term();
+    applied_index_ = entry.index();
+
+    auto event = std::make_shared<SmApplyEvent>();
+    event->region = region_;
+    event->engine = engine_;
+    event->raft_cmd = raft_cmd;
+    event->region_metrics = region_metrics_;
+    event->term_id = entry.term();
+    event->log_id = entry.index();
+
+    DispatchEvent(EventType::kSmApply, event);
+
+    // bvar metrics
+    StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
+
+    if (applied_index_ % kSaveAppliedIndexStep == 0) {
+      raft_meta_->set_term(applied_term_);
+      raft_meta_->set_applied_index(applied_index_);
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
+    }
+
+    ++actual_apply_log_count;
+  }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[raft.sm][region({})] catch up apply log finish, start_applied_id({}), apply_log_count({}/{}) elapsed time({})",
+      region_->Id(), start_applied_id, actual_apply_log_count, entries.size(), Helper::TimestampMs() - start_time);
 }
 
 void StoreStateMachine::on_shutdown() {

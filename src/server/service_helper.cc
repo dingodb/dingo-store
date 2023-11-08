@@ -113,6 +113,9 @@ butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {
   if (region->State() == pb::common::StoreRegionState::ORPHAN) {
     return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is orphan", region->Id());
   }
+  if (region->State() == pb::common::StoreRegionState::TOMBSTONE) {
+    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is tombstone", region->Id());
+  }
 
   return butil::Status();
 }

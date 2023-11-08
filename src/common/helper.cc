@@ -1671,4 +1671,12 @@ butil::Status Helper::CheckRange(const pb::common::Range& range) {
   return butil::Status();
 }
 
+bool Helper::IsEqualRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch) {
+  return src_epoch.conf_version() == dst_epoch.conf_version() && src_epoch.version() == dst_epoch.version();
+}
+
+std::string Helper::RegionEpochToString(const pb::common::RegionEpoch& epoch) {
+  return fmt::format("{}-{}", epoch.conf_version(), epoch.version());
+}
+
 }  // namespace dingodb

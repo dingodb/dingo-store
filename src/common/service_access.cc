@@ -23,6 +23,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "gflags/gflags_declare.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
@@ -92,6 +93,34 @@ pb::node::NodeInfo ServiceAccess::GetNodeInfo(const std::string& host, int port)
   butil::EndPoint endpoint;
   butil::str2endpoint(host.c_str(), port, &endpoint);
   return GetNodeInfo(endpoint);
+}
+
+pb::common::BRaftStatus ServiceAccess::GetRaftStatus(int64_t region_id, const butil::EndPoint& endpoint) {
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return {};
+  }
+
+  pb::node::NodeService_Stub stub(channel.get());
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
+
+  pb::node::GetRaftStatusRequest request;
+  request.set_region_id(region_id);
+  pb::node::GetRaftStatusResponse response;
+  stub.GetRaftStatus(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << "Fail to send request to : " << cntl.ErrorText();
+    return {};
+  }
+  if (response.error().errcode() != pb::error::OK) {
+    DINGO_LOG(ERROR) << fmt::format("GetRaftStatus failed, error: {} {}", static_cast<int>(response.error().errcode()),
+                                    response.error().errmsg());
+    return {};
+  }
+
+  return response.raft_status();
 }
 
 butil::Status ServiceAccess::InstallVectorIndexSnapshot(const pb::node::InstallVectorIndexSnapshotRequest& request,
@@ -227,6 +256,33 @@ std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const p
   buf->swap(cntl.response_attachment());
 
   return response;
+}
+
+butil::Status ServiceAccess::CommitMerge(const pb::node::CommitMergeRequest& request, const butil::EndPoint& endpoint) {
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
+                         Helper::EndPointToStr(endpoint).c_str());
+  }
+
+  pb::node::NodeService_Stub stub(channel.get());
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
+
+  pb::node::CommitMergeResponse response;
+  stub.CommitMerge(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << "Fail to send request to : " << cntl.ErrorText();
+    return {};
+  }
+  if (response.error().errcode() != pb::error::OK) {
+    DINGO_LOG(ERROR) << fmt::format("CommitMerge failed, error: {} {}", static_cast<int>(response.error().errcode()),
+                                    response.error().errmsg());
+    return butil::Status(response.error().errcode(), response.error().errmsg());
+  }
+
+  return butil::Status();
 }
 
 }  // namespace dingodb

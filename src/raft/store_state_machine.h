@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "braft/raft.h"
 #include "brpc/controller.h"
@@ -57,7 +58,7 @@ class StoreStateMachine : public braft::StateMachine {
                              std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                              store::RegionMetricsPtr region_metrics, std::shared_ptr<EventListenerCollection> listeners,
                              bool is_restart);
-  ~StoreStateMachine() override = default;
+  ~StoreStateMachine() override;
 
   static bool Init();
 
@@ -75,6 +76,8 @@ class StoreStateMachine : public braft::StateMachine {
   void UpdateAppliedIndex(int64_t applied_index);
   int64_t GetAppliedIndex() const;
 
+  void CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries);
+
  private:
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
@@ -90,6 +93,9 @@ class StoreStateMachine : public braft::StateMachine {
   store::RegionMetricsPtr region_metrics_;
 
   std::atomic<bool> is_restart_for_load_snapshot_;
+
+  // Protect apply serial
+  bthread_mutex_t apply_mutex_;
 };
 
 }  // namespace dingodb

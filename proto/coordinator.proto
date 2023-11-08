@@ -91,8 +91,10 @@ message SplitRequest {
 }
 
 message MergeRequest {
-  int64 merge_from_region_id = 1;  // merge from region id
-  int64 merge_to_region_id = 2;    // merge to region id
+  int64 source_region_id = 1;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 2;
+  int64 target_region_id = 3;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
 }
 
 message ChangePeerRequest {
