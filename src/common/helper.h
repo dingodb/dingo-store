@@ -275,7 +275,12 @@ class Helper {
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
   // for vector index region, encode range
-  static std::string EncodeVectorIndexRegionHeader(int64_t partition_id, int64_t vector_id);
+  static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id);
+  static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id, int64_t vector_id);
+  // for table region, encode range
+  static std::string EncodeTableRegionHeader(char prefix, const std::string& user_key);
+  static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id);
+  static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id, const std::string& user_key);
 
   // for index region transaction, decode vector_id from key
   static int64_t DecodeVectorId(const std::string& value);
