@@ -31,6 +31,9 @@ class RegionControlServiceImpl : public pb::region_control::RegionControlService
   void ChangeRegion(google::protobuf::RpcController* controller, const pb::region_control::ChangeRegionRequest* request,
                     pb::region_control::ChangeRegionResponse* response, google::protobuf::Closure* done) override;
 
+  void MergeRegion(google::protobuf::RpcController* controller, const pb::region_control::MergeRegionRequest* request,
+                 pb::region_control::MergeRegionResponse* response, google::protobuf::Closure* done) override;
+
   void DestroyRegion(google::protobuf::RpcController* controller,
                      const pb::region_control::DestroyRegionRequest* request,
                      pb::region_control::DestroyRegionResponse* response, google::protobuf::Closure* done) override;
