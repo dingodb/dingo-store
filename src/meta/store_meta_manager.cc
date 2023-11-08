@@ -28,7 +28,6 @@
 #include "common/role.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
-#include "raft/dingo_filesystem_adaptor.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
@@ -99,10 +98,6 @@ void Region::LockRegionMeta() { bthread_mutex_lock(&mutex_); }
 
 void Region::UnlockRegionMeta() { bthread_mutex_unlock(&mutex_); }
 
-void Region::LockRegionRaft() { bthread_mutex_lock(&raft_mutex_); }
-
-void Region::UnlockRegionRaft() { bthread_mutex_unlock(&raft_mutex_); }
-
 void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
@@ -111,6 +106,7 @@ void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& r
 
 void Region::SetEpochConfVersion(int64_t version) {
   BAIDU_SCOPED_LOCK(mutex_);
+  inner_region_.set_last_change_cmd_id(inner_region_.last_change_cmd_id() + 1);
   inner_region_.mutable_definition()->mutable_epoch()->set_conf_version(version);
 }
 
@@ -138,11 +134,7 @@ pb::common::Range Region::Range(bool lock) {
   }
 }
 
-std::string Region::RangeToString() {
-  auto region_range = Range();
-  return fmt::format("[{}-{})", Helper::StringToHex(region_range.start_key()),
-                     Helper::StringToHex(region_range.end_key()));
-}
+std::string Region::RangeToString() { return Helper::RangeToString(Range()); }
 
 bool Region::CheckKeyInRange(const std::string& key) {
   auto region_range = Range();
@@ -274,27 +266,14 @@ pb::common::RawEngine Region::GetRawEngineType() {
   return inner_region_.definition().raw_engine();
 }
 
-std::shared_ptr<RawEngine> Region::GetRawEngine() {
+void Region::SetLastChangeCmdId(int64_t cmd_id) {
   BAIDU_SCOPED_LOCK(mutex_);
-  auto raw_engine_type = inner_region_.definition().raw_engine();
-  if (raw_engine_type == pb::common::RawEngine::RAW_ENG_ROCKSDB) {
-    return Server::GetInstance().GetRawEngine();
-  } else if (raw_engine_type == pb::common::RawEngine::RAW_ENG_BDB) {
-    return Server::GetInstance().GetRawEngine();
-  } else {
-    DINGO_LOG(ERROR) << "Unknown raw engine type: " << pb::common::RawEngine_Name(raw_engine_type);
-    return nullptr;
-  }
+  inner_region_.set_last_change_cmd_id(cmd_id);
 }
 
-void Region::SetMergeState(const pb::store_internal::MergeState& merge_state) {
+int64_t Region::LastChangeCmdId() {
   BAIDU_SCOPED_LOCK(mutex_);
-  *inner_region_.mutable_merge_state() = merge_state;
-}
-
-pb::store_internal::MergeState Region::MergeState() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.merge_state();
+  return inner_region_.last_change_cmd_id();
 }
 
 }  // namespace store
@@ -490,7 +469,7 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
       }
       break;
     case pb::common::StoreRegionState::MERGING:
-      if (new_state == pb::common::StoreRegionState::NORMAL) {
+      if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::TOMBSTONE) {
         region->SetState(new_state);
         successed = true;
       }
@@ -623,10 +602,10 @@ void StoreRegionMeta::UpdateTemporaryDisableChange(store::RegionPtr region, bool
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateMergeState(store::RegionPtr region, const pb::store_internal::MergeState& merge_state) {
+void StoreRegionMeta::UpdateLastChangeCmdId(store::RegionPtr region, int64_t cmd_id) {
   assert(region != nullptr);
 
-  region->SetMergeState(merge_state);
+  region->SetLastChangeCmdId(cmd_id);
   meta_writer_->Put(TransformToKv(region));
 }
 
@@ -699,11 +678,6 @@ void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& k
     region->DeSerialize(kv.value());
     region->Recover();
 
-    auto raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(region_id);
-    if (raft_meta != nullptr) {
-      region->SetAppliedTerm(raft_meta->term());
-      region->SetAppliedIndex(raft_meta->applied_index());
-    }
     regions_.Put(region_id, region);
   }
 }

@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
@@ -95,7 +96,39 @@ pb::node::NodeInfo ServiceAccess::GetNodeInfo(const std::string& host, int port)
   return GetNodeInfo(endpoint);
 }
 
-pb::common::BRaftStatus ServiceAccess::GetRaftStatus(int64_t region_id, const butil::EndPoint& endpoint) {
+std::vector<pb::store_internal::Region> ServiceAccess::GetRegionInfo(std::vector<int64_t> region_ids,
+                                                                     const butil::EndPoint& endpoint) {
+  auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
+  if (channel == nullptr) {
+    return {};
+  }
+
+  pb::node::NodeService_Stub stub(channel.get());
+
+  brpc::Controller cntl;
+  cntl.set_timeout_ms(6000);
+
+  pb::node::GetRegionInfoRequest request;
+  for (auto region_id : region_ids) {
+    request.add_region_ids(region_id);
+  }
+  pb::node::GetRegionInfoResponse response;
+  stub.GetRegionInfo(&cntl, &request, &response, nullptr);
+  if (cntl.Failed()) {
+    DINGO_LOG(ERROR) << "Fail to send request to : " << cntl.ErrorText();
+    return {};
+  }
+  if (response.error().errcode() != pb::error::OK) {
+    DINGO_LOG(ERROR) << fmt::format("GetRegionInfo failed, error: {} {}", static_cast<int>(response.error().errcode()),
+                                    response.error().errmsg());
+    return {};
+  }
+
+  return Helper::PbRepeatedToVector(response.regions());
+}
+
+std::vector<pb::node::RaftStatusEntry> ServiceAccess::GetRaftStatus(std::vector<int64_t> region_ids,
+                                                                    const butil::EndPoint& endpoint) {
   auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
   if (channel == nullptr) {
     return {};
@@ -107,7 +140,9 @@ pb::common::BRaftStatus ServiceAccess::GetRaftStatus(int64_t region_id, const bu
   cntl.set_timeout_ms(6000);
 
   pb::node::GetRaftStatusRequest request;
-  request.set_region_id(region_id);
+  for (auto region_id : region_ids) {
+    request.add_region_ids(region_id);
+  }
   pb::node::GetRaftStatusResponse response;
   stub.GetRaftStatus(&cntl, &request, &response, nullptr);
   if (cntl.Failed()) {
@@ -120,7 +155,7 @@ pb::common::BRaftStatus ServiceAccess::GetRaftStatus(int64_t region_id, const bu
     return {};
   }
 
-  return response.raft_status();
+  return Helper::PbRepeatedToVector(response.entries());
 }
 
 butil::Status ServiceAccess::InstallVectorIndexSnapshot(const pb::node::InstallVectorIndexSnapshotRequest& request,

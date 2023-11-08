@@ -47,14 +47,8 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() {
-    bthread_mutex_init(&mutex_, nullptr);
-    bthread_mutex_init(&raft_mutex_, nullptr);
-  };
-  ~Region() {
-    bthread_mutex_destroy(&raft_mutex_);
-    bthread_mutex_destroy(&mutex_);
-  }
+  Region() { bthread_mutex_init(&mutex_, nullptr); };
+  ~Region() { bthread_mutex_destroy(&mutex_); }
 
   Region(const Region&) = delete;
   void operator=(const Region&) = delete;
@@ -78,9 +72,6 @@ class Region {
   void SetSnapshotEpochVersion(int64_t version);
   void LockRegionMeta();
   void UnlockRegionMeta();
-
-  void LockRegionRaft();
-  void UnlockRegionRaft();
 
   int64_t LeaderId();
   void SetLeaderId(int64_t leader_id);
@@ -126,28 +117,19 @@ class Region {
   pb::store_internal::Region InnerRegion();
   pb::common::RegionDefinition Definition();
   pb::common::RawEngine GetRawEngineType();
-  std::shared_ptr<RawEngine> GetRawEngine();
 
   VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
   void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }
 
-  void SetAppliedTerm(int64_t term) { applied_term_.store(term); }
-  void SetAppliedIndex(int64_t index) { applied_index_.store(index); }
-  int64_t GetAppliedTerm() { return applied_term_.load(); }
-  int64_t GetAppliedIndex() { return applied_index_.load(); }
-
   scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor = nullptr;
 
-  void SetMergeState(const pb::store_internal::MergeState& merge_state);
-  pb::store_internal::MergeState MergeState();
+  void SetLastChangeCmdId(int64_t cmd_id);
+  int64_t LastChangeCmdId();
 
  private:
   bthread_mutex_t mutex_;
-  bthread_mutex_t raft_mutex_;  // this mutex is used to stop store_state_machine on_apply
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
-  std::atomic<int64_t> applied_term_{0};
-  std::atomic<int64_t> applied_index_{0};
 
   pb::raft::SplitStrategy split_strategy_{};
 
@@ -228,7 +210,7 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateDisableChange(store::RegionPtr region, bool disable_change);
   void UpdateTemporaryDisableChange(store::RegionPtr region, bool disable_change);
 
-  void UpdateMergeState(store::RegionPtr region, const pb::store_internal::MergeState& merge_state);
+  void UpdateLastChangeCmdId(store::RegionPtr region, int64_t cmd_id);
 
   bool IsExistRegion(int64_t region_id);
   store::RegionPtr GetRegion(int64_t region_id);

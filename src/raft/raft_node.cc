@@ -246,4 +246,9 @@ std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
 
 std::shared_ptr<braft::StateMachine> RaftNode::GetStateMachine() { return fsm_; }
 
+std::shared_ptr<SnapshotContext> RaftNode::MakeSnapshotContext() {
+  auto fsm = std::dynamic_pointer_cast<StoreStateMachine>(fsm_);
+  return fsm != nullptr ? fsm->MakeSnapshotContext() : nullptr;
+}
+
 }  // namespace dingodb

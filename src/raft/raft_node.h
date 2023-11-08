@@ -32,6 +32,8 @@
 
 namespace dingodb {
 
+struct SnapshotContext;
+
 // Encapsulation braft node
 class RaftNode {
  public:
@@ -74,6 +76,7 @@ class RaftNode {
   std::shared_ptr<pb::common::BRaftStatus> GetStatus();
 
   std::shared_ptr<braft::StateMachine> GetStateMachine();
+  std::shared_ptr<SnapshotContext> MakeSnapshotContext();
 
  private:
   std::string path_;

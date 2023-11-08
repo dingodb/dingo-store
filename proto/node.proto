@@ -17,6 +17,7 @@ syntax = "proto3";
 import "common.proto";
 import "error.proto";
 import "raft.proto";
+import "store_internal.proto";
 
 package dingodb.pb.node;
 
@@ -39,13 +40,27 @@ message GetNodeInfoResponse {
   NodeInfo node_info = 2;
 }
 
+message GetRegionInfoRequest {
+  repeated int64 region_ids = 1;
+}
+
+message GetRegionInfoResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated dingodb.pb.store_internal.Region regions = 2;
+}
+
 message GetRaftStatusRequest {
+  repeated int64 region_ids = 1;
+}
+
+message RaftStatusEntry {
   int64 region_id = 1;
+  dingodb.pb.common.BRaftStatus raft_status = 2;
 }
 
 message GetRaftStatusResponse {
   dingodb.pb.error.Error error = 1;
-  dingodb.pb.common.BRaftStatus raft_status = 2;
+  repeated RaftStatusEntry entries = 2;
 }
 
 enum LogLevel {
@@ -165,12 +180,14 @@ message CommitMergeRequest {
 
   int64 source_region_id = 2;
   dingodb.pb.common.RegionEpoch source_region_epoch = 3;
+  dingodb.pb.common.Range source_region_range = 4;
 
-  int64 target_region_id = 4;
-  dingodb.pb.common.RegionEpoch target_region_epoch = 5;
+  int64 target_region_id = 5;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 6;
+  dingodb.pb.common.Range target_region_range = 7;
 
-  int64 prepare_merge_log_id = 6;
-  repeated dingodb.pb.raft.LogEntry entries = 7;
+  int64 prepare_merge_log_id = 8;
+  repeated dingodb.pb.raft.LogEntry entries = 9;
 }
 
 message CommitMergeResponse {
@@ -183,6 +200,7 @@ service NodeService {
   // out: List<Node>
   rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
 
+  rpc GetRegionInfo(GetRegionInfoRequest) returns (GetRegionInfoResponse);
   rpc GetRaftStatus(GetRaftStatusRequest) returns (GetRaftStatusResponse);
 
   // Get current log level information

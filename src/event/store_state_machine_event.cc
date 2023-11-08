@@ -79,16 +79,17 @@ int SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
 }
 
 // Launch save raft snapshot
-static void LaunchSaveRaftSnapshot(int64_t region_id) {
+static void LaunchSaveRaftSnapshot(store::RegionPtr region) {
   auto engine = Server::GetInstance().GetEngine();
   if (engine != nullptr) {
     auto ctx = std::make_shared<Context>();
-    ctx->SetRegionId(region_id);
-    auto status = engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(region_id));
+    ctx->SetRegionId(region->Id());
+    ctx->SetRegionEpoch(region->Epoch());
+    auto status = engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(region->Id()));
     if (!status.ok()) {
       if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
         DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({})] launch save raft snapshot failed, error: {}",
-                                        region_id, status.error_str());
+                                        region->Id(), status.error_str());
       }
     }
   }
@@ -118,7 +119,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
     // do child region snapshot
     // because of child region is new create, no raft log, so don't directly save snapshot.
     // commit a raft log, then save raft snapshot in state machine.
-    LaunchSaveRaftSnapshot(region->Id());
+    LaunchSaveRaftSnapshot(region);
   }
 
   // Update region meta

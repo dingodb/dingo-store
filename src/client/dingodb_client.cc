@@ -267,9 +267,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       return;
     }
 
-  } else if (FLAGS_region_id != 0) {
+  } else if (FLAGS_region_id != 0 || FLAGS_source_id != 0) {
+    int64_t region_id = FLAGS_region_id != 0 ? FLAGS_region_id : FLAGS_source_id;
     // Get store addr from coordinator
-    auto status = client::InteractionManager::GetInstance().CreateStoreInteraction(FLAGS_region_id);
+    auto status = client::InteractionManager::GetInstance().CreateStoreInteraction(region_id);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "Create store interaction failed, error: " << status.error_cstr();
       return;
@@ -283,6 +284,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendAddRegion(FLAGS_region_id, FLAGS_raft_group, raft_addrs);
     } else if (method == "ChangeRegion") {
       client::SendChangeRegion(FLAGS_region_id, FLAGS_raft_group, raft_addrs);
+    } else if (method == "MergeRegionAtStore") {
+      client::SendMergeRegion(FLAGS_source_id, FLAGS_target_id);
     } else if (method == "DestroyRegion") {
       client::SendDestroyRegion(FLAGS_region_id);
     } else if (method == "Snapshot") {

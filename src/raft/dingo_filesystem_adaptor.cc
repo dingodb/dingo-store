@@ -804,24 +804,18 @@ bool DingoFileSystemAdaptor::open_snapshot(const std::string& path) {
 
   mutil_snapshot_cond_.Increase();
   // create new raw engine snapshot
-  auto region = Server::GetInstance().GetRegion(region_id_);
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << "region_id: " << region_id_ << " is null region";
+  auto raft_node = Server::GetInstance().GetStorage()->GetRaftStoreEngine()->GetNode(region_id_);
+  if (raft_node == nullptr) {
+    DINGO_LOG(ERROR) << "region_id: " << region_id_ << " is not found raft node";
     return false;
   }
 
-  region->LockRegionRaft();
-  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path << ", LockRegionRaft";
-  auto raw_engine = region->GetRawEngine();
-  if (raw_engine == nullptr) {
-    DINGO_LOG(ERROR) << "region_id: " << region_id_ << " raw_engine is null";
+  auto snapshot_context = raft_node->MakeSnapshotContext();
+  if (snapshot_context == nullptr) {
+    DINGO_LOG(ERROR) << "region_id: " << region_id_ << " make snapshot context failed.";
     return false;
   }
-  snapshot_context_env_map_[path].snapshot_context = std::make_shared<SnapshotContext>(raw_engine);
-  snapshot_context_env_map_[path].snapshot_context->applied_term = region->GetAppliedTerm();
-  snapshot_context_env_map_[path].snapshot_context->applied_index = region->GetAppliedIndex();
-  snapshot_context_env_map_[path].snapshot_context->region_epoch = region->Epoch();
-  snapshot_context_env_map_[path].snapshot_context->range = region->Range();
+  snapshot_context_env_map_[path].snapshot_context = snapshot_context;
 
   DINGO_LOG(INFO) << "region_id: " << region_id_ << " open snapshot path: " << path
                   << ", applied_term: " << snapshot_context_env_map_[path].snapshot_context->applied_term
@@ -829,7 +823,6 @@ bool DingoFileSystemAdaptor::open_snapshot(const std::string& path) {
                   << ", range: " << snapshot_context_env_map_[path].snapshot_context->range.ShortDebugString()
                   << ", epoch: " << snapshot_context_env_map_[path].snapshot_context->region_epoch.ShortDebugString();
 
-  region->UnlockRegionRaft();
   DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path << ", UnockRegionRaft";
 
   snapshot_context_env_map_[path].count++;

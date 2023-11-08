@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 
 #include <memory>
+#include <vector>
 
 #include "braft/remote_file_copier.h"
 #include "butil/endpoint.h"
@@ -50,7 +51,11 @@ class ServiceAccess {
   static pb::node::NodeInfo GetNodeInfo(const butil::EndPoint& endpoint);
   static pb::node::NodeInfo GetNodeInfo(const std::string& host, int port);
 
-  static pb::common::BRaftStatus GetRaftStatus(int64_t region_id, const butil::EndPoint& endpoint);
+  static std::vector<pb::store_internal::Region> GetRegionInfo(std::vector<int64_t> region_ids,
+                                                               const butil::EndPoint& endpoint);
+
+  static std::vector<pb::node::RaftStatusEntry> GetRaftStatus(std::vector<int64_t> region_ids,
+                                                              const butil::EndPoint& endpoint);
 
   static butil::Status InstallVectorIndexSnapshot(const pb::node::InstallVectorIndexSnapshotRequest& request,
                                                   const butil::EndPoint& endpoint,

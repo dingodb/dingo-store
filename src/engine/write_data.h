@@ -276,6 +276,7 @@ struct SplitDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::SPLIT);
     pb::raft::SplitRequest* split_request = request->mutable_split();
+    split_request->set_split_id(split_id);
     split_request->set_from_region_id(from_region_id);
     split_request->set_to_region_id(to_region_id);
     split_request->set_split_key(split_key);
@@ -287,6 +288,7 @@ struct SplitDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
+  int64_t split_id;
   int64_t from_region_id;
   int64_t to_region_id;
   std::string split_key;
@@ -306,6 +308,7 @@ struct PrepareMergeDatum : public DatumAble {
     merge_request->set_min_applied_log_id(min_applied_log_id);
     merge_request->set_target_region_id(target_region_id);
     *(merge_request->mutable_target_region_epoch()) = target_region_epoch;
+    *(merge_request->mutable_target_region_range()) = target_region_range;
 
     return request;
   };
@@ -316,6 +319,7 @@ struct PrepareMergeDatum : public DatumAble {
   int64_t min_applied_log_id;
   int64_t target_region_id;
   pb::common::RegionEpoch target_region_epoch;
+  pb::common::Range target_region_range;
 };
 
 struct CommitMergeDatum : public DatumAble {
@@ -329,6 +333,7 @@ struct CommitMergeDatum : public DatumAble {
     merge_request->set_merge_id(merge_id);
     merge_request->set_source_region_id(source_region_id);
     *(merge_request->mutable_source_region_epoch()) = source_region_epoch;
+    *(merge_request->mutable_source_region_range()) = source_region_range;
     merge_request->set_prepare_merge_log_id(prepare_merge_log_id);
     Helper::VectorToPbRepeated(entries, merge_request->mutable_entries());
 
@@ -340,6 +345,7 @@ struct CommitMergeDatum : public DatumAble {
   int64_t merge_id;
   int64_t source_region_id;
   pb::common::RegionEpoch source_region_epoch;
+  pb::common::Range source_region_range;
   int64_t prepare_merge_log_id;
   std::vector<pb::raft::LogEntry> entries;
 };
@@ -528,9 +534,10 @@ class WriteDataBuilder {
   }
 
   // SplitDatum
-  static std::shared_ptr<WriteData> BuildWrite(const pb::coordinator::SplitRequest& split_request,
+  static std::shared_ptr<WriteData> BuildWrite(int64_t split_id, const pb::coordinator::SplitRequest& split_request,
                                                const pb::common::RegionEpoch& epoch) {
     auto datum = std::make_shared<SplitDatum>();
+    datum->split_id = split_id;
     datum->from_region_id = split_request.split_from_region_id();
     datum->to_region_id = split_request.split_to_region_id();
     datum->split_key = split_request.split_watershed_key();
@@ -548,13 +555,14 @@ class WriteDataBuilder {
   }
 
   // PrepareMergeDatum
-  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, int64_t target_region_id,
-                                               const pb::common::RegionEpoch& epoch, int64_t min_applied_log_id) {
+  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, const pb::common::RegionDefinition& region_definition,
+                                               int64_t min_applied_log_id) {
     auto datum = std::make_shared<PrepareMergeDatum>();
     datum->merge_id = merge_id;
     datum->min_applied_log_id = min_applied_log_id;
-    datum->target_region_id = target_region_id;
-    datum->target_region_epoch = epoch;
+    datum->target_region_id = region_definition.id();
+    datum->target_region_epoch = region_definition.epoch();
+    datum->target_region_range = region_definition.range();
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -563,13 +571,14 @@ class WriteDataBuilder {
   }
 
   // CommitMergeDatum
-  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, int64_t source_region_id,
-                                               const pb::common::RegionEpoch& epoch, int64_t prepare_merge_log_id,
+  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, const pb::common::RegionDefinition& region_definition,
+                                               int64_t prepare_merge_log_id,
                                                const std::vector<pb::raft::LogEntry>& entries) {
     auto datum = std::make_shared<CommitMergeDatum>();
     datum->merge_id = merge_id;
-    datum->source_region_id = source_region_id;
-    datum->source_region_epoch = epoch;
+    datum->source_region_id = region_definition.id();
+    datum->source_region_epoch = region_definition.epoch();
+    datum->source_region_range = region_definition.range();
     datum->prepare_merge_log_id = prepare_merge_log_id;
     datum->entries = entries;
 

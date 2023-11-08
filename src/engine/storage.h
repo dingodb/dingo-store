@@ -145,10 +145,10 @@ class Storage {
   butil::Status ValidateLeader(int64_t region_id);
   bool IsLeader(int64_t region_id);
 
-  butil::Status PrepareMerge(std::shared_ptr<Context> ctx, int64_t merge_id, int64_t target_region_id,
-                             const pb::common::RegionEpoch& target_region_epoch, int64_t min_applied_log_id);
-  butil::Status CommitMerge(std::shared_ptr<Context> ctx, int64_t merge_id, int64_t source_region_id,
-                            const pb::common::RegionEpoch& source_region_epoch, int64_t prepare_merge_log_id,
+  butil::Status PrepareMerge(std::shared_ptr<Context> ctx, int64_t merge_id,
+                             const pb::common::RegionDefinition& region_definition, int64_t min_applied_log_id);
+  butil::Status CommitMerge(std::shared_ptr<Context> ctx, int64_t merge_id,
+                            const pb::common::RegionDefinition& region_definition, int64_t prepare_merge_log_id,
                             const std::vector<pb::raft::LogEntry>& entries);
 
  private:

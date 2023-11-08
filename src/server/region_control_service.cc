@@ -96,7 +96,17 @@ void RegionControlServiceImpl::MergeRegion(google::protobuf::RpcController* cont
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << "MergeRegion request: " << request->ShortDebugString();
+  DINGO_LOG(INFO) << "MergeRegion request: " << request->ShortDebugString();
+
+  auto storage = Server::GetInstance().GetStorage();
+  auto status = storage->ValidateLeader(request->source_region_id());
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
+      ServiceHelper::RedirectLeader(status.error_str(), response);
+    }
+    return;
+  }
 
   auto region_controller = Server::GetInstance().GetRegionController();
 
@@ -104,13 +114,12 @@ void RegionControlServiceImpl::MergeRegion(google::protobuf::RpcController* cont
   command->set_id(Helper::TimestampNs());
   command->set_region_id(request->source_region_id());
   command->set_region_cmd_type(pb::coordinator::CMD_MERGE);
+
   auto* merge_request = command->mutable_merge_request();
   merge_request->set_source_region_id(request->source_region_id());
   merge_request->set_target_region_id(request->target_region_id());
-  *merge_request->mutable_source_region_epoch() = request->source_region_epoch();
-  *merge_request->mutable_target_region_epoch() = request->target_region_epoch();
 
-  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }

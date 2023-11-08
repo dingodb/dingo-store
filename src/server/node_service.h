@@ -32,6 +32,8 @@ class NodeServiceImpl : public pb::node::NodeService {
 
   void GetNodeInfo(google::protobuf::RpcController* controller, const pb::node::GetNodeInfoRequest* request,
                    pb::node::GetNodeInfoResponse* response, google::protobuf::Closure* done) override;
+  void GetRegionInfo(google::protobuf::RpcController* controller, const pb::node::GetRegionInfoRequest* request,
+                     pb::node::GetRegionInfoResponse* response, google::protobuf::Closure* done) override;
   void GetRaftStatus(google::protobuf::RpcController* controller, const pb::node::GetRaftStatusRequest* request,
                      pb::node::GetRaftStatusResponse* response, google::protobuf::Closure* done) override;
   void GetLogLevel(google::protobuf::RpcController* controller, const pb::node::GetLogLevelRequest* request,

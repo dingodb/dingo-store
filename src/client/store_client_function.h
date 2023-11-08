@@ -167,6 +167,7 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
 // region
 void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
 void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);
+void SendMergeRegion(int64_t source_region_id, int64_t target_region_id);
 void SendDestroyRegion(int64_t region_id);
 void SendSnapshot(int64_t region_id);
 void BatchSendAddRegion(int start_region_id, int region_count, int thread_num, const std::string& raft_group,

@@ -98,6 +98,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     *(tmp_region_metrics.mutable_region_definition()) = region_meta->Definition();
     tmp_region_metrics.set_snapshot_epoch_version(region_meta->SnapshotEpochVersion());
 
+    DINGO_LOG(INFO) << fmt::format("===tmp_region_metrics: {} {}", tmp_region_metrics.id(),
+                                   pb::common::StoreRegionState_Name(tmp_region_metrics.store_region_state()));
+
     if ((region_meta->State() == pb::common::StoreRegionState::NORMAL ||
          region_meta->State() == pb::common::StoreRegionState::STANDBY ||
          region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
