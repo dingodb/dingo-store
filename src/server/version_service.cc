@@ -470,8 +470,9 @@ void DoKvRange(google::protobuf::RpcController* /*controller*/, const pb::versio
 
   std::vector<pb::version::Kv> kvs;
   int64_t total_count_in_range = 0;
+  bool has_more = false;
   auto ret = kv_control->KvRange(request->key(), request->range_end(), real_limit, request->keys_only(),
-                                 request->count_only(), kvs, total_count_in_range);
+                                 request->count_only(), kvs, total_count_in_range, has_more);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -483,7 +484,7 @@ void DoKvRange(google::protobuf::RpcController* /*controller*/, const pb::versio
       *resp_kv = kv;
     }
   }
-  response->set_more(total_count_in_range > real_limit);
+  response->set_more(has_more);
   response->set_count(total_count_in_range);
 
   DINGO_LOG(INFO) << "Range success: key=" << request->key() << ", end_key=" << request->range_end()

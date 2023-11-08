@@ -63,7 +63,8 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
   // check if need to send back immediately
   std::vector<pb::version::Kv> kvs_temp;
   int64_t total_count_in_range = 0;
-  KvRange(watch_key, std::string(), 1, false, false, kvs_temp, total_count_in_range);
+  bool has_more = false;
+  KvRange(watch_key, std::string(), 1, false, false, kvs_temp, total_count_in_range, has_more);
 
   // if key is not exists, and no wait, send response
   if (kvs_temp.empty() && !wait_on_not_exist_key) {

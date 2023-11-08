@@ -197,12 +197,16 @@ butil::Status KvControl::DeleteRawKvRev(const pb::coordinator_internal::Revision
 // in:  keys_only
 // in:  count_only
 // out: kv
+// out: return_count
+// out: has_more
 // return: errno
 butil::Status KvControl::KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
-                                 bool count_only, std::vector<pb::version::Kv> &kv, int64_t &total_count_in_range) {
+                                 bool count_only, std::vector<pb::version::Kv> &kv, int64_t &return_count,
+                                 bool &has_more) {
   DINGO_LOG(INFO) << "KvRange, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only;
 
+  has_more = false;
   if (limit == 0) {
     limit = INT64_MAX;
   }
@@ -242,6 +246,7 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
 
     limit_count++;
     if (limit_count > limit) {
+      has_more = true;
       break;
     }
 
@@ -274,11 +279,11 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     kv.push_back(kv_temp);
   }
 
-  total_count_in_range = kv.size();
+  return_count = kv.size();
 
   DINGO_LOG(INFO) << "KvRange finish, key: " << key << ", range_end: " << range_end << ", limit: " << limit
                   << ", keys_only: " << keys_only << ", count_only: " << count_only << ", kv size: " << kv.size()
-                  << ", total_count_in_range: " << total_count_in_range;
+                  << ", total_count_in_range: " << return_count;
 
   return butil::Status::OK();
 }
@@ -383,7 +388,8 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   std::vector<pb::version::Kv> kvs_temp;
 
   int64_t total_count_in_range = 0;
-  KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
+  bool has_more = false;
+  KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range, has_more);
   if (ignore_lease) {
     if (!kvs_temp.empty()) {
       // if ignore_lease, get the lease of the key
@@ -422,7 +428,8 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   if (need_prev_kv) {
     if (kvs_temp.empty()) {
       int64_t total_count_in_range = 0;
-      KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range);
+      bool has_more = false;
+      KvRange(key_value_in.key(), std::string(), 1, false, false, kvs_temp, total_count_in_range, has_more);
     }
     if (!kvs_temp.empty()) {
       prev_kv = kvs_temp[0];
@@ -474,10 +481,11 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
 
   std::vector<pb::version::Kv> kvs_to_delete;
   int64_t total_count_in_range = 0;
+  bool has_more = false;
 
   bool key_only = !need_prev_kv;
 
-  auto ret = KvRange(key, range_end, INT64_MAX, key_only, false, kvs_to_delete, total_count_in_range);
+  auto ret = KvRange(key, range_end, INT64_MAX, key_only, false, kvs_to_delete, total_count_in_range, has_more);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvDeleteRange KvRange failed, key: " << key << ", range_end: " << range_end
                      << ", error: " << ret.error_str();
