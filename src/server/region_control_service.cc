@@ -36,6 +36,7 @@
 #include "proto/region_control.pb.h"
 #include "server/file_service.h"
 #include "server/server.h"
+#include "server/service_helper.h"
 #include "vector/vector_index_snapshot_manager.h"
 
 using dingodb::pb::error::Errno;
@@ -61,9 +62,7 @@ void RegionControlServiceImpl::AddRegion(google::protobuf::RpcController* contro
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
-    auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-    mut_err->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 
@@ -86,9 +85,34 @@ void RegionControlServiceImpl::ChangeRegion(google::protobuf::RpcController* con
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
-    auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-    mut_err->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+  }
+}
+
+void RegionControlServiceImpl::MergeRegion(google::protobuf::RpcController* controller,
+                                           const dingodb::pb::region_control::MergeRegionRequest* request,
+                                           dingodb::pb::region_control::MergeRegionResponse* response,
+                                           google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "MergeRegion request: " << request->ShortDebugString();
+
+  auto region_controller = Server::GetInstance().GetRegionController();
+
+  auto command = std::make_shared<pb::coordinator::RegionCmd>();
+  command->set_id(Helper::TimestampNs());
+  command->set_region_id(request->source_region_id());
+  command->set_region_cmd_type(pb::coordinator::CMD_MERGE);
+  auto* merge_request = command->mutable_merge_request();
+  merge_request->set_source_region_id(request->source_region_id());
+  merge_request->set_target_region_id(request->target_region_id());
+  *merge_request->mutable_source_region_epoch() = request->source_region_epoch();
+  *merge_request->mutable_target_region_epoch() = request->target_region_epoch();
+
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 
@@ -111,9 +135,7 @@ void RegionControlServiceImpl::DestroyRegion(google::protobuf::RpcController* co
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
-    auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-    mut_err->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 
@@ -135,9 +157,7 @@ void RegionControlServiceImpl::Snapshot(google::protobuf::RpcController* control
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
-    auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-    mut_err->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 
@@ -154,9 +174,7 @@ void RegionControlServiceImpl::TransferLeader(google::protobuf::RpcController* c
   if (raft_store_engine != nullptr) {
     auto status = raft_store_engine->TransferLeader(request->region_id(), request->peer());
     if (!status.ok()) {
-      auto* mut_err = response->mutable_error();
-      mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-      mut_err->set_errmsg(status.error_str());
+      ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     }
   }
 }
@@ -180,9 +198,7 @@ void RegionControlServiceImpl::SnapshotVectorIndex(google::protobuf::RpcControll
 
   auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
   if (!status.ok()) {
-    auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-    mut_err->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 
@@ -234,9 +250,7 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   }
 
   if (!status.ok()) {
-    auto* mut_err = response->mutable_error();
-    mut_err->set_errcode(static_cast<Errno>(status.error_code()));
-    mut_err->set_errmsg(status.error_str());
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
 

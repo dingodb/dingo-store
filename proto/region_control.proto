@@ -40,6 +40,17 @@ message ChangeRegionResponse {
   dingodb.pb.error.Error error = 1;
 }
 
+message MergeRegionRequest {
+  int64 source_region_id = 1;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 2;
+  int64 target_region_id = 3;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
+}
+
+message MergeRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
 message DestroyRegionRequest {
   int64 region_id = 1;
 }
@@ -179,6 +190,7 @@ service RegionControlService {
   // region
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
   rpc ChangeRegion(ChangeRegionRequest) returns (ChangeRegionResponse);
+  rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
   rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
   rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
