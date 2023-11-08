@@ -134,10 +134,19 @@ void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int 
 std::string OctalToHex(const std::string& str);
 std::string StringToHex(const std::string& key);
 std::string HexToString(const std::string& hex);
-std::string VectorPrefixToHex(uint64_t part_id, uint64_t vector_id);
+std::string VectorPrefixToHex(char prefix, uint64_t part_id);
+std::string VectorPrefixToHex(char prefix, uint64_t part_id, uint64_t vector_id);
+std::string TablePrefixToHex(char prefix, const std::string& user_key);
+std::string TablePrefixToHex(char prefix, uint64_t part_id);
+std::string TablePrefixToHex(char prefix, uint64_t part_id, const std::string& user_key);
+
+std::string HexToTablePrefix(const std::string& hex, bool has_part_id = false);
 std::string HexToVectorPrefix(const std::string& hex);
 bool TxnGetRegion(uint64_t region_id, dingodb::pb::common::Region& region);
+std::string GetServiceName(const dingodb::pb::common::Region& region);
+
 void SendTxnGet(uint64_t region_id);
+void SendTxnBatchGet(uint64_t region_id);
 void SendTxnScan(uint64_t region_id);
 void SendTxnPessimisticLock(uint64_t region_id);
 void SendTxnPessimisticRollback(uint64_t region_id);
@@ -145,7 +154,6 @@ void SendTxnPrewrite(uint64_t region_id);
 void SendTxnCommit(uint64_t region_id);
 void SendTxnCheckTxnStatus(uint64_t region_id);
 void SendTxnResolveLock(uint64_t region_id);
-void SendTxnBatchGet(uint64_t region_id);
 void SendTxnBatchRollback(uint64_t region_id);
 void SendTxnScanLock(uint64_t region_id);
 void SendTxnHeartBeat(uint64_t region_id);
@@ -153,17 +161,8 @@ void SendTxnGc(uint64_t region_id);
 void SendTxnDeleteRange(uint64_t region_id);
 void SendTxnDump(uint64_t region_id);
 
-void StoreSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
 void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region);
-void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region);
-
-void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region);
-void IndexSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region);
 
 // region
 void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);

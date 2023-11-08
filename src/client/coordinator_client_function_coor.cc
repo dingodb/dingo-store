@@ -69,6 +69,20 @@ DECLARE_uint64(safe_point);
 DECLARE_uint64(replica);
 DECLARE_string(start_key);
 DECLARE_string(end_key);
+DECLARE_string(vector_index_type);
+DECLARE_uint32(max_elements);
+DECLARE_uint32(dimension);
+DECLARE_uint32(efconstruction);
+DECLARE_uint32(nlinks);
+DECLARE_uint32(ncentroids);
+DECLARE_string(metrics_type);
+DECLARE_int64(def_version);
+DECLARE_int32(nsubvector);
+DECLARE_int32(nbits_per_idx);
+DECLARE_uint64(part_id);
+DECLARE_string(region_prefix);
+DECLARE_uint64(start_id);
+DECLARE_uint64(end_id);
 
 // raft control
 void SendRaftAddPeer() {
@@ -1066,37 +1080,157 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     return;
   }
 
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-
-  std::string start_key = FLAGS_start_key;
-  std::string end_key = FLAGS_end_key;
-
-  if (FLAGS_key_is_hex) {
-    DINGO_LOG(INFO) << "key is hex";
-    start_key = dingodb::Helper::HexToString(FLAGS_start_key);
-    end_key = dingodb::Helper::HexToString(FLAGS_end_key);
-  }
-
-  if (start_key > end_key) {
-    DINGO_LOG(ERROR) << "start_key must < end_key";
-    return;
-  }
-
   dingodb::pb::coordinator::CreateRegionRequest request;
   dingodb::pb::coordinator::CreateRegionResponse response;
 
   request.set_region_name(FLAGS_name);
   request.set_replica_num(FLAGS_replica);
-  request.mutable_range()->set_start_key(start_key);
-  request.mutable_range()->set_end_key(end_key);
+
+  // int64_t new_part_id = 0;
+  // int ret = GetCreateTableId(coordinator_interaction, new_part_id);
+  // if (ret != 0) {
+  //   DINGO_LOG(WARNING) << "GetCreateTableId failed";
+  //   return;
+  // }
+
+  if (FLAGS_vector_index_type.empty()) {
+    DINGO_LOG(WARNING) << "vector_index_type is empty, so create a store region";
+    if (FLAGS_start_key.empty()) {
+      DINGO_LOG(ERROR) << "start_key is empty";
+      return;
+    }
+
+    if (FLAGS_end_key.empty()) {
+      DINGO_LOG(ERROR) << "end_key is empty";
+      return;
+    }
+
+    std::string start_key = FLAGS_start_key;
+    std::string end_key = FLAGS_end_key;
+
+    if (FLAGS_key_is_hex) {
+      DINGO_LOG(INFO) << "key is hex";
+      start_key = dingodb::Helper::HexToString(FLAGS_start_key);
+      end_key = dingodb::Helper::HexToString(FLAGS_end_key);
+    }
+
+    if (start_key > end_key) {
+      DINGO_LOG(ERROR) << "start_key must < end_key";
+      return;
+    }
+    request.mutable_range()->set_start_key(start_key);
+    request.mutable_range()->set_end_key(end_key);
+
+    if (FLAGS_part_id > 0) {
+      request.set_part_id(FLAGS_part_id);
+    }
+  } else {
+    DINGO_LOG(INFO) << "vector_index_type=" << FLAGS_vector_index_type << ", so create a vector index region";
+
+    if (FLAGS_region_prefix.size() != 1) {
+      DINGO_LOG(ERROR) << "region_prefix must be 1";
+      return;
+    }
+
+    // vector index region must have a part_id
+    if (FLAGS_part_id == 0) {
+      DINGO_LOG(ERROR) << "part_id is empty";
+      return;
+    }
+    request.set_part_id(FLAGS_part_id);
+
+    std::string start_key;
+    std::string end_key;
+
+    if (FLAGS_start_id > 0 && FLAGS_end_id > 0 && FLAGS_start_id < FLAGS_end_id) {
+      DINGO_LOG(INFO) << "use start_id " << FLAGS_start_id << ", end_id " << FLAGS_end_id << " to create region range";
+      start_key =
+          dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
+      end_key = dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
+    } else {
+      DINGO_LOG(INFO) << "use part_id " << FLAGS_part_id << " to create region range";
+      start_key = dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id);
+      end_key = dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
+    }
+    DINGO_LOG(INFO) << "region range is : " << dingodb::Helper::StringToHex(start_key) << " to "
+                    << dingodb::Helper::StringToHex(end_key);
+
+    request.mutable_range()->set_start_key(start_key);
+    request.mutable_range()->set_end_key(end_key);
+
+    auto* vector_index_parameter = request.mutable_index_parameter()->mutable_vector_index_parameter();
+    if (FLAGS_vector_index_type == "hnsw") {
+      vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+    } else if (FLAGS_vector_index_type == "flat") {
+      vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    } else if (FLAGS_vector_index_type == "ivf_flat") {
+      vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
+    } else if (FLAGS_vector_index_type == "ivf_pq") {
+      vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    } else {
+      DINGO_LOG(WARNING) << "vector_index_type is invalid, now only support hnsw and flat";
+      return;
+    }
+
+    if (FLAGS_dimension == 0) {
+      DINGO_LOG(WARNING) << "dimension is empty";
+      return;
+    }
+
+    dingodb::pb::common::MetricType metric_type;
+
+    if (FLAGS_metrics_type == "L2" || FLAGS_metrics_type == "l2") {
+      metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_L2;
+    } else if (FLAGS_metrics_type == "IP" || FLAGS_metrics_type == "ip") {
+      metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
+    } else if (FLAGS_metrics_type == "COSINE" || FLAGS_metrics_type == "cosine") {
+      metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+    } else {
+      DINGO_LOG(WARNING) << "metrics_type is invalid, now only support L2, IP and COSINE";
+      return;
+    }
+
+    if (FLAGS_vector_index_type == "hnsw") {
+      if (FLAGS_max_elements == 0) {
+        DINGO_LOG(WARNING) << "max_elements is empty";
+        return;
+      }
+      if (FLAGS_efconstruction == 0) {
+        DINGO_LOG(WARNING) << "efconstruction is empty";
+        return;
+      }
+      if (FLAGS_nlinks == 0) {
+        DINGO_LOG(WARNING) << "nlinks is empty";
+        return;
+      }
+
+      DINGO_LOG(INFO) << "max_elements=" << FLAGS_max_elements << ", dimension=" << FLAGS_dimension;
+
+      auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
+
+      hsnw_index_parameter->set_dimension(FLAGS_dimension);
+      hsnw_index_parameter->set_metric_type(metric_type);
+      hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
+      hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
+      hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
+    } else if (FLAGS_vector_index_type == "flat") {
+      auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
+      flat_index_parameter->set_dimension(FLAGS_dimension);
+      flat_index_parameter->set_metric_type(metric_type);
+    } else if (FLAGS_vector_index_type == "ivf_flat") {
+      auto* ivf_flat_index_parameter = vector_index_parameter->mutable_ivf_flat_parameter();
+      ivf_flat_index_parameter->set_dimension(FLAGS_dimension);
+      ivf_flat_index_parameter->set_metric_type(metric_type);
+      ivf_flat_index_parameter->set_ncentroids(FLAGS_ncentroids);
+    } else if (FLAGS_vector_index_type == "ivf_pq") {
+      auto* ivf_pq_index_parameter = vector_index_parameter->mutable_ivf_pq_parameter();
+      ivf_pq_index_parameter->set_dimension(FLAGS_dimension);
+      ivf_pq_index_parameter->set_metric_type(metric_type);
+      ivf_pq_index_parameter->set_ncentroids(FLAGS_ncentroids);
+      ivf_pq_index_parameter->set_nsubvector(FLAGS_nsubvector);
+      ivf_pq_index_parameter->set_nbits_per_idx(FLAGS_nbits_per_idx);
+    }
+  }
 
   DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
 

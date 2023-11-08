@@ -39,6 +39,8 @@ void SendRaftTransferLeader();
 void SendRaftSnapshot();
 void SendRaftResetPeer();
 
+int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t& table_id);
+
 // coordinator service functions
 void SendHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendKvHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
