@@ -52,8 +52,8 @@ DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation"
 
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
-DECLARE_uint32(max_prewrite_count);
-DECLARE_uint32(max_scan_lock_limit);
+DECLARE_int64(max_prewrite_count);
+DECLARE_int64(max_scan_lock_limit);
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
@@ -1483,21 +1483,25 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
     store_mutation.set_value(mutation.vector().SerializeAsString());
   }
 
-  std::map<int32_t, int64_t> for_update_ts_checks;
+  std::map<int64_t, int64_t> for_update_ts_checks;
   for (const auto& for_update_ts_check : request->for_update_ts_checks()) {
     for_update_ts_checks.insert_or_assign(for_update_ts_check.index(), for_update_ts_check.expected_for_update_ts());
   }
 
-  std::map<int32_t, std::string> lock_extra_datas;
+  std::map<int64_t, std::string> lock_extra_datas;
   for (const auto& lock_extra_data : request->lock_extra_datas()) {
     lock_extra_datas.insert_or_assign(lock_extra_data.index(), lock_extra_data.extra_data());
   }
 
+  std::vector<int64_t> pessimistic_checks;
+  pessimistic_checks.reserve(request->pessimistic_checks_size());
+  for (const auto& pessimistic_check : request->pessimistic_checks()) {
+    pessimistic_checks.push_back(pessimistic_check);
+  }
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnPrewrite(ctx, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
                                 request->txn_size(), request->try_one_pc(), request->max_commit_ts(),
-                                Helper::PbRepeatedToVector(request->pessimistic_checks()), for_update_ts_checks,
-                                lock_extra_datas);
+                                pessimistic_checks, for_update_ts_checks, lock_extra_datas);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

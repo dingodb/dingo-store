@@ -39,8 +39,6 @@
 
 namespace dingodb {
 
-DEFINE_uint32(max_short_value_in_write_cf, 1024, "max short value in write cf");
-
 void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                   std::shared_ptr<RawEngine> engine,
                                                   const pb::raft::MultiCfPutAndDeleteRequest &request,

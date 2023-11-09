@@ -93,9 +93,9 @@ class Storage {
                                        const std::vector<std::string>& keys);
   butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                             const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
-                            bool try_one_pc, int64_t max_commit_ts, const std::vector<int>& pessimistic_checks,
-                            const std::map<int32_t, int64_t>& for_update_ts_checks,
-                            const std::map<int32_t, std::string>& lock_extra_datas);
+                            bool try_one_pc, int64_t max_commit_ts, const std::vector<int64_t>& pessimistic_checks,
+                            const std::map<int64_t, int64_t>& for_update_ts_checks,
+                            const std::map<int64_t, std::string>& lock_extra_datas);
   butil::Status TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                           const std::vector<std::string>& keys);
   butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys);

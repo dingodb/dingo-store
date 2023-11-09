@@ -429,13 +429,13 @@ butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalc
     return butil::Status();
   }
 
-  int32_t dimension = 0;
+  int64_t dimension = 0;
 
   auto lambda_op_vector_check_function = [&dimension](const auto& op_vector, const std::string& name) {
     if (!op_vector.empty()) {
       size_t i = 0;
       for (const auto& vector : op_vector) {
-        int32_t current_dimension = static_cast<int32_t>(vector.float_values().size());
+        int64_t current_dimension = static_cast<int64_t>(vector.float_values().size());
         if (0 == dimension) {
           dimension = current_dimension;
         }
@@ -595,9 +595,9 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int6
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
                                    int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-                                   const std::vector<int>& pessimistic_checks,
-                                   const std::map<int32_t, int64_t>& for_update_ts_checks,
-                                   const std::map<int32_t, std::string>& lock_extra_datas) {
+                                   const std::vector<int64_t>& pessimistic_checks,
+                                   const std::map<int64_t, int64_t>& for_update_ts_checks,
+                                   const std::map<int64_t, std::string>& lock_extra_datas) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
