@@ -137,6 +137,157 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapGetRangeValues) {
   EXPECT_EQ(ret, 90);
 }
 
+TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
+  dingodb::DingoSafeStdMap<std::string, std::string> safe_map;
+
+  safe_map.Put("wa", "wa0");
+  safe_map.Put("wa0", "wb");
+  safe_map.Put("wb", "wb0");
+  safe_map.Put("wb0", "wb5");
+  safe_map.Put("wb5", "wc");
+  safe_map.Put("wc", "wc0");
+  safe_map.Put("wc0", "wd");
+
+  std::vector<std::string> values;
+  std::string start_key;
+  std::string end_key;
+  int ret = 0;
+
+  values.clear();
+  start_key = "wd";
+  end_key = "wd";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 0);
+
+  values.clear();
+  start_key = "wd";
+  end_key = "wc";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 0);
+
+  values.clear();
+  start_key = "wa";
+  end_key = "wa0";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wa1";
+  end_key = "wa3";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wc1";
+  end_key = "wc3";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wa0";
+  end_key = "wc0";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 5);
+
+  values.clear();
+  start_key = "wb1";
+  end_key = "wb2";
+  ret = safe_map.FindIntervalValues(
+      values, start_key, end_key, [start_key, end_key](const std::string& key) { return key.compare(start_key) <= 0; },
+      [start_key, end_key](const std::string& value) { return value.compare(end_key) >= 0; });
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wb1";
+  end_key = "wb2";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wc1";
+  end_key = "wc2";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wa1";
+  end_key = "wa2";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = "wa1";
+  end_key = "wb2";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 3);
+
+  values.clear();
+  start_key = "wd";
+  end_key = "wd0";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+}
+
 TEST(DingoSafeStdMapTest, DingoSafeStdMapMultiGet) {
   dingodb::DingoSafeStdMap<std::string, std::string> safe_map;
 

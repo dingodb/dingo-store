@@ -4626,9 +4626,9 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   std::string upper_bound;
 
   if (end_key == std::string(1, '\0')) {
-    upper_bound = std::string(8, '\xff');
+    upper_bound = std::string(9, '\xff');
   } else if (end_key.empty()) {
-    upper_bound = Helper::PrefixNext(start_key);
+    upper_bound = start_key + std::string(1, '\0');
   } else {
     upper_bound = end_key;
   }
@@ -4637,13 +4637,27 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
                   << " upper_bound=" << Helper::StringToHex(upper_bound);
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret = this->range_region_map_.GetRangeValues(region_internals, lower_bound, upper_bound, nullptr, nullptr);
+  auto ret = range_region_map_.FindIntervalValues(
+      region_internals, lower_bound, upper_bound, nullptr,
+      [lower_bound, upper_bound](const pb::coordinator_internal::RegionInternal& region) {
+        return region.id() > 0 && region.definition().range().end_key() > lower_bound;
+      });
   if (ret < 0) {
     DINGO_LOG(ERROR) << "range_region_map_.GetRangeValues failed";
     return butil::Status(pb::error::EINTERNAL, "range_region_map_.GetRangeValues failed");
   }
 
   for (const auto& region_internal : region_internals) {
+    if (end_key.empty()) {
+      if (region_internal.definition().range().start_key() <= start_key &&
+          region_internal.definition().range().end_key() > start_key) {
+        regions.push_back(region_internal);
+        break;
+      } else {
+        continue;
+      }
+    }
+
     regions.push_back(region_internal);
 
     if (limit > 0 && regions.size() >= static_cast<size_t>(limit)) {
