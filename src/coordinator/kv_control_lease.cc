@@ -167,23 +167,25 @@ butil::Status KvControl::LeaseRevoke(int64_t lease_id, pb::coordinator_internal:
   auto keys_iter = lease_to_key_map_temp_.find(lease_id);
   if (keys_iter == lease_to_key_map_temp_.end()) {
     DINGO_LOG(WARNING) << "lease id " << lease_id << " not found from lease_to_key_map_temp_";
-  }
-
-  lease_with_keys = std::move(keys_iter->second);
-  for (const auto &key : lease_with_keys.keys) {
-    std::vector<pb::version::Kv> prev_kvs;
+  } else {
+    lease_with_keys = std::move(keys_iter->second);
     int64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
     int64_t sub_revision = 1;
-    int64_t deleted_count = 0;
-    auto ret_status = KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, deleted_count,
-                                    prev_kvs, meta_increment);
-    if (!ret_status.ok()) {
-      DINGO_LOG(ERROR) << "DeleteRawKv failed, key: " << key;
-    }
-  }
+    for (const auto &key : lease_with_keys.keys) {
+      std::vector<pb::version::Kv> prev_kvs;
+      int64_t deleted_count = 0;
+      auto ret_status = KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, deleted_count,
+                                      prev_kvs, meta_increment);
+      if (!ret_status.ok()) {
+        DINGO_LOG(ERROR) << "DeleteRawKv failed, key: " << key;
+      }
 
-  // delete lease from map
-  lease_to_key_map_temp_.erase(lease_id);
+      sub_revision++;
+    }
+
+    // delete lease from map
+    lease_to_key_map_temp_.erase(lease_id);
+  }
 
   if (!has_mutex_locked) {
     bthread_mutex_unlock(&lease_to_key_map_temp_mutex_);
@@ -394,6 +396,7 @@ butil::Status KvControl::LeaseRemoveMultiLeaseKeys(std::map<int64_t, std::set<st
     auto iter = lease_to_key_map_temp_.find(lease_id);
     if (iter == lease_to_key_map_temp_.end()) {
       DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
+      continue;
     }
 
     lease_with_keys = std::move(iter->second);
