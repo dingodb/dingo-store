@@ -58,11 +58,11 @@ class IndexServiceImpl : public pb::index::IndexService {
 
   // txn read
   void TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
-              pb::index::TxnGetResponse* response, google::protobuf::Closure* done) override;
+              pb::store::TxnGetResponse* response, google::protobuf::Closure* done) override;
   void TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
-               pb::index::TxnScanResponse* response, google::protobuf::Closure* done) override;
+               pb::store::TxnScanResponse* response, google::protobuf::Closure* done) override;
   void TxnBatchGet(google::protobuf::RpcController* controller, const pb::store::TxnBatchGetRequest* request,
-                   pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) override;
+                   pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) override;
   void TxnScanLock(google::protobuf::RpcController* controller, const pb::store::TxnScanLockRequest* request,
                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) override;
   void TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
@@ -76,7 +76,7 @@ class IndexServiceImpl : public pb::index::IndexService {
                               const pb::store::TxnPessimisticRollbackRequest* request,
                               pb::store::TxnPessimisticRollbackResponse* response,
                               google::protobuf::Closure* done) override;
-  void TxnPrewrite(google::protobuf::RpcController* controller, const pb::index::TxnPrewriteRequest* request,
+  void TxnPrewrite(google::protobuf::RpcController* controller, const pb::store::TxnPrewriteRequest* request,
                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) override;
   void TxnCommit(google::protobuf::RpcController* controller, const pb::store::TxnCommitRequest* request,
                  pb::store::TxnCommitResponse* response, google::protobuf::Closure* done) override;

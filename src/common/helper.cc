@@ -1318,12 +1318,69 @@ bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, con
   return false;
 }
 
-std::string Helper::EncodeVectorIndexRegionHeader(int64_t partition_id, int64_t vector_id) {
-  Buf buf(16);
-  buf.WriteLong(partition_id);
-  // buf.WriteLong(vector_id);
-  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+std::string Helper::EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "]";
+  }
 
+  // Buf buf(17);
+  Buf buf(Constant::kVectorKeyMaxLenWithPrefix - 8);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  return buf.GetString();
+}
+
+std::string Helper::EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id, int64_t vector_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "], vector_id:["
+                     << vector_id << "]";
+  }
+
+  // Buf buf(17);
+  Buf buf(Constant::kVectorKeyMaxLenWithPrefix);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+  return buf.GetString();
+}
+
+std::string Helper::EncodeTableRegionHeader(char prefix, const std::string& user_key) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode table key failed, prefix is 0, user_key:[" << Helper::StringToHex(user_key) << "]";
+  }
+
+  Buf buf(1 + user_key.size());
+  buf.Write(prefix);
+  buf.Write(user_key);
+  return buf.GetString();
+}
+
+std::string Helper::EncodeTableRegionHeader(char prefix, int64_t partition_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode table key failed, prefix is 0, partition_id:[" << partition_id << "]";
+  }
+
+  Buf buf(1 + 8);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  return buf.GetString();
+}
+
+std::string Helper::EncodeTableRegionHeader(char prefix, int64_t partition_id, const std::string& user_key) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode table key failed, prefix is 0, partition_id:[" << partition_id << "], user_key:["
+                     << Helper::StringToHex(user_key) << "]";
+  }
+
+  Buf buf(1 + 8 + user_key.size());
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  buf.Write(user_key);
   return buf.GetString();
 }
 

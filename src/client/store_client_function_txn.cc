@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -70,11 +71,14 @@ DEFINE_bool(with_start, true, "with_start");
 DEFINE_bool(with_end, false, "with_end");
 DEFINE_string(mutation_op, "", "mutation_op, [put, delete, putifabsent, lock]");
 DEFINE_string(key2, "", "key2");
+DEFINE_string(value2, "value2", "value2");
 DEFINE_bool(rc, false, "read commited");
 DECLARE_int64(dimension);
+DEFINE_string(extra_data, "", "extra_data");
+DECLARE_bool(key_is_hex);
+DECLARE_bool(value_is_hex);
 
 namespace client {
-
 std::string OctalToHex(const std::string& str) {
   std::string hex_str;
   for (std::size_t i = 0; i < str.size(); ++i) {
@@ -97,18 +101,62 @@ std::string StringToHex(const std::string& key) { return dingodb::Helper::String
 
 std::string HexToString(const std::string& hex) { return dingodb::Helper::HexToString(hex); }
 
-std::string VectorPrefixToHex(uint64_t part_id, uint64_t vector_id) {
-  std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id);
+std::string VectorPrefixToHex(char prefix, uint64_t part_id) {
+  std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(prefix, part_id);
   return dingodb::Helper::StringToHex(key);
+}
+
+std::string VectorPrefixToHex(char prefix, uint64_t part_id, uint64_t vector_id) {
+  std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(prefix, part_id, vector_id);
+  return dingodb::Helper::StringToHex(key);
+}
+
+std::string TablePrefixToHex(char prefix, const std::string& user_key) {
+  std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, user_key);
+  return dingodb::Helper::StringToHex(key);
+}
+
+std::string TablePrefixToHex(char prefix, uint64_t part_id) {
+  std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, part_id);
+  return dingodb::Helper::StringToHex(key);
+}
+
+std::string TablePrefixToHex(char prefix, uint64_t part_id, const std::string& user_key) {
+  std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, part_id, user_key);
+  return dingodb::Helper::StringToHex(key);
+}
+
+std::string HexToTablePrefix(const std::string& hex, bool has_part_id) {
+  std::string key = dingodb::Helper::HexToString(hex);
+  dingodb::Buf buf(key);
+  char prefix = buf.Read();
+  uint64_t part_id = 0;
+  if (has_part_id) {
+    part_id = buf.ReadLong();
+  }
+  auto user_key_data_size = key.size() - 1;
+  if (has_part_id) {
+    user_key_data_size = user_key_data_size - 8;
+  }
+  std::vector<uint8_t> user_key_data;
+  user_key_data.reserve(user_key_data_size);
+  for (int i = 0; i < user_key_data_size; i++) {
+    user_key_data.push_back(buf.Read());
+  }
+  std::string user_key(user_key_data.begin(), user_key_data.end());
+
+  return std::string(1, prefix) + "_" + std::to_string(part_id) + "_(hex_" + StringToHex(user_key) + ")_(raw_" +
+         user_key + ")";
 }
 
 std::string HexToVectorPrefix(const std::string& hex) {
   std::string key = dingodb::Helper::HexToString(hex);
   dingodb::Buf buf(key);
+  char prefix = buf.Read();
   uint64_t part_id = buf.ReadLong();
   uint64_t vector_id = buf.ReadLong();
 
-  return std::to_string(part_id) + "_" + std::to_string(vector_id);
+  return std::string(1, prefix) + "_" + std::to_string(part_id) + "_" + std::to_string(vector_id);
 }
 
 bool TxnGetRegion(uint64_t region_id, dingodb::pb::common::Region& region) {
@@ -132,93 +180,29 @@ bool TxnGetRegion(uint64_t region_id, dingodb::pb::common::Region& region) {
   return true;
 }
 
+std::string GetServiceName(const dingodb::pb::common::Region& region) {
+  std::string service_name;
+  if (!region.definition().index_parameter().has_vector_index_parameter()) {
+    service_name = "StoreService";
+  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
+             region.definition().index_parameter().has_vector_index_parameter()) {
+    service_name = "IndexService";
+  } else {
+    DINGO_LOG(ERROR) << "region_type is invalid";
+    exit(-1);
+  }
+
+  return service_name;
+}
+
 // store
-
-void StoreSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnGetRequest request;
-  dingodb::pb::store::TxnGetResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  request.set_key(FLAGS_key);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnGet", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnScanRequest request;
-  dingodb::pb::store::TxnScanResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  dingodb::pb::common::RangeWithOptions range;
-  range.mutable_range()->set_start_key(FLAGS_start_key);
-  range.mutable_range()->set_end_key(FLAGS_end_key);
-  range.set_with_start(FLAGS_with_start);
-  range.set_with_end(FLAGS_with_end);
-
-  if (FLAGS_limit == 0) {
-    DINGO_LOG(ERROR) << "limit is empty";
-    return;
-  }
-  request.set_limit(FLAGS_limit);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  request.set_is_reverse(FLAGS_is_reverse);
-  request.set_key_only(FLAGS_key_only);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnScan", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
 
 void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
   request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
   if (FLAGS_rc) {
     request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
@@ -229,7 +213,11 @@ void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     DINGO_LOG(ERROR) << "primary_lock is empty";
     return;
   }
-  request.set_primary_lock(FLAGS_primary_lock);
+  if (FLAGS_key_is_hex) {
+    request.set_primary_lock(HexToString(FLAGS_primary_lock));
+  } else {
+    request.set_primary_lock(FLAGS_primary_lock);
+  }
 
   if (FLAGS_start_ts == 0) {
     DINGO_LOG(ERROR) << "start_ts is empty";
@@ -260,6 +248,12 @@ void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     DINGO_LOG(ERROR) << "key is empty";
     return;
   }
+  std::string key = FLAGS_key;
+  std::string key2 = FLAGS_key2;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+    key2 = HexToString(FLAGS_key2);
+  }
   if (FLAGS_mutation_op == "put") {
     if (FLAGS_value.empty()) {
       DINGO_LOG(ERROR) << "value is empty";
@@ -267,12 +261,37 @@ void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     }
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Put);
-    mutation->set_key(FLAGS_key);
-    mutation->set_value(FLAGS_value);
+    mutation->set_key(key);
+    if (FLAGS_value_is_hex) {
+      mutation->set_value(HexToString(FLAGS_value));
+    } else {
+      mutation->set_value(FLAGS_value);
+    }
+    DINGO_LOG(INFO) << "key: " << FLAGS_key << ", value: " << FLAGS_value;
+
+    if (!FLAGS_key2.empty()) {
+      auto* mutation = request.add_mutations();
+      mutation->set_op(::dingodb::pb::store::Op::Put);
+      mutation->set_key(key2);
+      if (FLAGS_value_is_hex) {
+        mutation->set_value(HexToString(FLAGS_value));
+      } else {
+        mutation->set_value(FLAGS_value);
+      }
+      DINGO_LOG(INFO) << "key2: " << FLAGS_key2 << ", value: " << FLAGS_value;
+    }
   } else if (FLAGS_mutation_op == "delete") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Delete);
-    mutation->set_key(FLAGS_key);
+    mutation->set_key(key);
+    DINGO_LOG(INFO) << "key: " << FLAGS_key;
+
+    if (!FLAGS_key2.empty()) {
+      auto* mutation = request.add_mutations();
+      mutation->set_op(::dingodb::pb::store::Op::Delete);
+      mutation->set_key(key2);
+      DINGO_LOG(INFO) << "key2: " << FLAGS_key2;
+    }
   } else if (FLAGS_mutation_op == "insert") {
     if (FLAGS_value.empty()) {
       DINGO_LOG(ERROR) << "value is empty";
@@ -280,11 +299,49 @@ void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     }
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
-    mutation->set_key(FLAGS_key);
-    mutation->set_value(FLAGS_value);
+    mutation->set_key(key);
+    if (FLAGS_value_is_hex) {
+      mutation->set_value(HexToString(FLAGS_value));
+    } else {
+      mutation->set_value(FLAGS_value);
+    }
+    DINGO_LOG(INFO) << "key: " << FLAGS_key << ", value: " << FLAGS_value;
+
+    if (!FLAGS_key2.empty()) {
+      auto* mutation = request.add_mutations();
+      mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
+      mutation->set_key(key2);
+      if (FLAGS_value_is_hex) {
+        mutation->set_value(HexToString(FLAGS_value2));
+      } else {
+        mutation->set_value(FLAGS_value2);
+      }
+      DINGO_LOG(INFO) << "key2: " << FLAGS_key2 << ", value2: " << FLAGS_value2;
+    }
   } else {
     DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
     return;
+  }
+
+  if (!FLAGS_extra_data.empty()) {
+    DINGO_LOG(INFO) << "extra_data is: " << FLAGS_extra_data;
+  }
+
+  if (FLAGS_for_update_ts > 0) {
+    DINGO_LOG(INFO) << "for_update_ts > 0, do pessimistic check : " << FLAGS_for_update_ts;
+    for (int i = 0; i < request.mutations_size(); i++) {
+      request.add_pessimistic_checks(::dingodb::pb::store::TxnPrewriteRequest_PessimisticCheck::
+                                         TxnPrewriteRequest_PessimisticCheck_DO_PESSIMISTIC_CHECK);
+      auto* for_update_ts_check = request.add_for_update_ts_checks();
+      for_update_ts_check->set_expected_for_update_ts(FLAGS_for_update_ts);
+      for_update_ts_check->set_index(i);
+
+      if (!FLAGS_extra_data.empty()) {
+        auto* extra_data = request.add_lock_extra_datas();
+        extra_data->set_index(i);
+        extra_data->set_extra_data(FLAGS_extra_data);
+      }
+    }
   }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
@@ -294,453 +351,13 @@ void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void StoreSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnCommitRequest request;
-  dingodb::pb::store::TxnCommitResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_commit_ts == 0) {
-    DINGO_LOG(ERROR) << "commit_ts is empty";
-    return;
-  }
-  request.set_commit_ts(FLAGS_commit_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnCommit", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnCheckTxnStatusRequest request;
-  dingodb::pb::store::TxnCheckTxnStatusResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_primary_key.empty()) {
-    DINGO_LOG(ERROR) << "primary_key is empty";
-    return;
-  }
-  request.set_primary_key(FLAGS_primary_key);
-
-  if (FLAGS_lock_ts == 0) {
-    DINGO_LOG(ERROR) << "lock_ts is 0";
-    return;
-  }
-  request.set_lock_ts(FLAGS_lock_ts);
-
-  if (FLAGS_caller_start_ts == 0) {
-    DINGO_LOG(ERROR) << "caller_start_ts is 0";
-    return;
-  }
-  request.set_caller_start_ts(FLAGS_caller_start_ts);
-
-  if (FLAGS_current_ts == 0) {
-    DINGO_LOG(ERROR) << "current_ts is 0";
-    return;
-  }
-  request.set_current_ts(FLAGS_current_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnCheckTxnStatus", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnResolveLockRequest request;
-  dingodb::pb::store::TxnResolveLockResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is 0";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_commit_ts == 0) {
-    DINGO_LOG(ERROR) << "commit_ts is 0";
-    return;
-  }
-  request.set_commit_ts(FLAGS_commit_ts);
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  request.add_keys()->assign(FLAGS_key);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnResolveLock", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnBatchGetRequest request;
-  dingodb::pb::store::TxnBatchGetResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  if (FLAGS_key2.empty()) {
-    DINGO_LOG(ERROR) << "key2 is empty";
-    return;
-  }
-  request.add_keys()->assign(FLAGS_key);
-  request.add_keys()->assign(FLAGS_key2);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnBatchGet", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnBatchRollback(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnBatchRollbackRequest request;
-  dingodb::pb::store::TxnBatchRollbackResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  request.add_keys()->assign(FLAGS_key);
-
-  if (!FLAGS_key2.empty()) {
-    request.add_keys()->assign(FLAGS_key2);
-  }
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnBatchRollback", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnScanLockRequest request;
-  dingodb::pb::store::TxnScanLockResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_max_ts == 0) {
-    DINGO_LOG(ERROR) << "max_ts is empty";
-    return;
-  }
-  request.set_max_ts(FLAGS_max_ts);
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  request.set_start_key(FLAGS_start_key);
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  request.set_end_key(FLAGS_end_key);
-
-  if (FLAGS_limit == 0) {
-    DINGO_LOG(ERROR) << "limit is empty";
-    return;
-  }
-  request.set_limit(FLAGS_limit);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnScanLock", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnHeartBeatRequest request;
-  dingodb::pb::store::TxnHeartBeatResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_primary_lock.empty()) {
-    DINGO_LOG(ERROR) << "primary_lock is empty";
-    return;
-  }
-  request.set_primary_lock(FLAGS_primary_lock);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_advise_lock_ttl == 0) {
-    DINGO_LOG(ERROR) << "advise_lock_ttl is empty";
-    return;
-  }
-  request.set_advise_lock_ttl(FLAGS_advise_lock_ttl);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnHeartBeat", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnGcRequest request;
-  dingodb::pb::store::TxnGcResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_safe_point_ts == 0) {
-    DINGO_LOG(ERROR) << "safe_point_ts is empty";
-    return;
-  }
-  request.set_safe_point_ts(FLAGS_safe_point_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnGc", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnDeleteRangeRequest request;
-  dingodb::pb::store::TxnDeleteRangeResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  request.set_start_key(FLAGS_start_key);
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  request.set_end_key(FLAGS_end_key);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnDeleteRange", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void StoreSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnDumpRequest request;
-  dingodb::pb::store::TxnDumpResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  request.set_start_key(FLAGS_start_key);
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  request.set_end_key(FLAGS_end_key);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_end_ts == 0) {
-    DINGO_LOG(ERROR) << "end_ts is empty";
-    return;
-  }
-  request.set_end_ts(FLAGS_end_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnDump", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
 // index
-void IndexSendTxnGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnGetRequest request;
-  dingodb::pb::index::TxnGetResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  request.set_key(FLAGS_key);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnGet", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnScan(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnScanRequest request;
-  dingodb::pb::index::TxnScanResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  dingodb::pb::common::RangeWithOptions range;
-  range.mutable_range()->set_start_key(FLAGS_start_key);
-  range.mutable_range()->set_end_key(FLAGS_end_key);
-  range.set_with_start(FLAGS_with_start);
-  range.set_with_end(FLAGS_with_end);
-
-  if (FLAGS_limit == 0) {
-    DINGO_LOG(ERROR) << "limit is empty";
-    return;
-  }
-  request.set_limit(FLAGS_limit);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  request.set_is_reverse(FLAGS_is_reverse);
-  request.set_key_only(FLAGS_key_only);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnScan", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
 void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnPrewriteRequest request;
+  dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
   request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
   if (FLAGS_rc) {
     request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
@@ -808,7 +425,8 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Put);
 
-    mutation->set_key(dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id));
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
 
     dingodb::pb::common::VectorWithId vector_with_id;
 
@@ -821,16 +439,17 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     for (int j = 0; j < dimension; j++) {
       vector_with_id.mutable_vector()->add_float_values(distrib(rng));
     }
-    mutation->mutable_vector()->CopyFrom(vector_with_id);
+    *mutation->mutable_vector() = vector_with_id;
   } else if (FLAGS_mutation_op == "delete") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Delete);
-    mutation->set_key(dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id));
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
   } else if (FLAGS_mutation_op == "insert") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
-
-    mutation->set_key(dingodb::Helper::EncodeVectorIndexRegionHeader(part_id, vector_id));
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
 
     dingodb::pb::common::VectorWithId vector_with_id;
 
@@ -843,376 +462,36 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     for (int j = 0; j < dimension; j++) {
       vector_with_id.mutable_vector()->add_float_values(distrib(rng));
     }
-    mutation->mutable_vector()->CopyFrom(vector_with_id);
+    *mutation->mutable_vector() = vector_with_id;
   } else {
     DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
     return;
   }
 
+  if (!FLAGS_extra_data.empty()) {
+    DINGO_LOG(INFO) << "extra_data is: " << FLAGS_extra_data;
+  }
+
+  if (FLAGS_for_update_ts > 0) {
+    DINGO_LOG(INFO) << "for_update_ts > 0, do pessimistic check : " << FLAGS_for_update_ts;
+    for (int i = 0; i < request.mutations_size(); i++) {
+      request.add_pessimistic_checks(::dingodb::pb::store::TxnPrewriteRequest_PessimisticCheck::
+                                         TxnPrewriteRequest_PessimisticCheck_DO_PESSIMISTIC_CHECK);
+      auto* for_update_ts_check = request.add_for_update_ts_checks();
+      for_update_ts_check->set_expected_for_update_ts(FLAGS_for_update_ts);
+      for_update_ts_check->set_index(i);
+
+      if (!FLAGS_extra_data.empty()) {
+        auto* extra_data = request.add_lock_extra_datas();
+        extra_data->set_index(i);
+        extra_data->set_extra_data(FLAGS_extra_data);
+      }
+    }
+  }
+
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnPrewrite", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnCommit(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnCommitRequest request;
-  dingodb::pb::store::TxnCommitResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_commit_ts == 0) {
-    DINGO_LOG(ERROR) << "commit_ts is empty";
-    return;
-  }
-  request.set_commit_ts(FLAGS_commit_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnCommit", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnCheckTxnStatus(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnCheckTxnStatusRequest request;
-  dingodb::pb::store::TxnCheckTxnStatusResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_primary_key.empty()) {
-    DINGO_LOG(ERROR) << "primary_key is empty";
-    return;
-  }
-  request.set_primary_key(FLAGS_primary_key);
-
-  if (FLAGS_lock_ts == 0) {
-    DINGO_LOG(ERROR) << "lock_ts is 0";
-    return;
-  }
-  request.set_lock_ts(FLAGS_lock_ts);
-
-  if (FLAGS_caller_start_ts == 0) {
-    DINGO_LOG(ERROR) << "caller_start_ts is 0";
-    return;
-  }
-  request.set_caller_start_ts(FLAGS_caller_start_ts);
-
-  if (FLAGS_current_ts == 0) {
-    DINGO_LOG(ERROR) << "current_ts is 0";
-    return;
-  }
-  request.set_current_ts(FLAGS_current_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnCheckTxnStatus", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnResolveLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnResolveLockRequest request;
-  dingodb::pb::store::TxnResolveLockResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is 0";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_commit_ts == 0) {
-    DINGO_LOG(ERROR) << "commit_ts is 0";
-    return;
-  }
-  request.set_commit_ts(FLAGS_commit_ts);
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  request.add_keys()->assign(FLAGS_key);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnResolveLock", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnBatchGet(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnBatchGetRequest request;
-  dingodb::pb::index::TxnBatchGetResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  if (FLAGS_key2.empty()) {
-    DINGO_LOG(ERROR) << "key2 is empty";
-    return;
-  }
-  request.add_keys()->assign(FLAGS_key);
-  request.add_keys()->assign(FLAGS_key2);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnBatchGet", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnBatchRollback(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnBatchRollbackRequest request;
-  dingodb::pb::store::TxnBatchRollbackResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
-    return;
-  }
-  request.add_keys()->assign(FLAGS_key);
-
-  if (!FLAGS_key2.empty()) {
-    request.add_keys()->assign(FLAGS_key2);
-  }
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnBatchRollback", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnScanLock(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnScanLockRequest request;
-  dingodb::pb::store::TxnScanLockResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_max_ts == 0) {
-    DINGO_LOG(ERROR) << "max_ts is empty";
-    return;
-  }
-  request.set_max_ts(FLAGS_max_ts);
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  request.set_start_key(FLAGS_start_key);
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  request.set_end_key(FLAGS_end_key);
-
-  if (FLAGS_limit == 0) {
-    DINGO_LOG(ERROR) << "limit is empty";
-    return;
-  }
-  request.set_limit(FLAGS_limit);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnScanLock", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnHeartBeat(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnHeartBeatRequest request;
-  dingodb::pb::index::TxnHeartBeatResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_primary_lock.empty()) {
-    DINGO_LOG(ERROR) << "primary_lock is empty";
-    return;
-  }
-  request.set_primary_lock(FLAGS_primary_lock);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_advise_lock_ttl == 0) {
-    DINGO_LOG(ERROR) << "advise_lock_ttl is empty";
-    return;
-  }
-  request.set_advise_lock_ttl(FLAGS_advise_lock_ttl);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnHeartBeat", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnGc(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::index::TxnGcRequest request;
-  dingodb::pb::index::TxnGcResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_safe_point_ts == 0) {
-    DINGO_LOG(ERROR) << "safe_point_ts is empty";
-    return;
-  }
-  request.set_safe_point_ts(FLAGS_safe_point_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnGc", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnDeleteRange(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnDeleteRangeRequest request;
-  dingodb::pb::store::TxnDeleteRangeResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  request.set_start_key(FLAGS_start_key);
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  request.set_end_key(FLAGS_end_key);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnDeleteRange", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void IndexSendTxnDump(uint64_t region_id, const dingodb::pb::common::Region& region) {
-  dingodb::pb::store::TxnDumpRequest request;
-  dingodb::pb::store::TxnDumpResponse response;
-
-  request.mutable_context()->set_region_id(region_id);
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
-  if (FLAGS_rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (FLAGS_start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
-    return;
-  }
-  request.set_start_key(FLAGS_start_key);
-
-  if (FLAGS_end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
-    return;
-  }
-  request.set_end_key(FLAGS_end_key);
-
-  if (FLAGS_start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
-    return;
-  }
-  request.set_start_ts(FLAGS_start_ts);
-
-  if (FLAGS_end_ts == 0) {
-    DINGO_LOG(ERROR) << "end_ts is empty";
-    return;
-  }
-  request.set_end_ts(FLAGS_end_ts);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnDump", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
@@ -1226,14 +505,40 @@ void SendTxnGet(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnGet(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnGet(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnGetRequest request;
+  dingodb::pb::store::TxnGetResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  std::string key = FLAGS_key;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+  }
+  request.set_key(key);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnGet", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnScan(uint64_t region_id) {
@@ -1243,14 +548,53 @@ void SendTxnScan(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnScan(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnScan(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnScanRequest request;
+  dingodb::pb::store::TxnScanResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_start_key.empty()) {
+    DINGO_LOG(ERROR) << "start_key is empty";
+    return;
+  }
+  if (FLAGS_end_key.empty()) {
+    DINGO_LOG(ERROR) << "end_key is empty";
+    return;
+  }
+  dingodb::pb::common::RangeWithOptions range;
+  range.mutable_range()->set_start_key(FLAGS_start_key);
+  range.mutable_range()->set_end_key(FLAGS_end_key);
+  range.set_with_start(FLAGS_with_start);
+  range.set_with_end(FLAGS_with_end);
+
+  if (FLAGS_limit == 0) {
+    DINGO_LOG(ERROR) << "limit is empty";
+    return;
+  }
+  request.set_limit(FLAGS_limit);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  request.set_is_reverse(FLAGS_is_reverse);
+  request.set_key_only(FLAGS_key_only);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnScan", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnPessimisticLock(uint64_t region_id) {
@@ -1260,24 +604,13 @@ void SendTxnPessimisticLock(uint64_t region_id) {
     return;
   }
 
-  std::string service_name;
-
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    service_name = "StoreService";
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter() &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    service_name = "IndexService";
-  } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
-    return;
-  }
+  std::string service_name = GetServiceName(region);
 
   dingodb::pb::store::TxnPessimisticLockRequest request;
   dingodb::pb::store::TxnPessimisticLockResponse response;
 
   request.mutable_context()->set_region_id(region.id());
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
   if (FLAGS_rc) {
     request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
@@ -1316,9 +649,17 @@ void SendTxnPessimisticLock(uint64_t region_id) {
     DINGO_LOG(ERROR) << "key is empty";
     return;
   }
+  std::string key = FLAGS_key;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+  }
   if (FLAGS_value.empty()) {
     DINGO_LOG(ERROR) << "value is empty";
     return;
+  }
+  std::string value = FLAGS_value;
+  if (FLAGS_value_is_hex) {
+    value = HexToString(FLAGS_value);
   }
   if (FLAGS_mutation_op == "lock") {
     if (FLAGS_value.empty()) {
@@ -1327,8 +668,8 @@ void SendTxnPessimisticLock(uint64_t region_id) {
     }
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Lock);
-    mutation->set_key(FLAGS_key);
-    mutation->set_value(FLAGS_value);
+    mutation->set_key(key);
+    mutation->set_value(value);
   } else {
     DINGO_LOG(ERROR) << "mutation_op MUST be [lock]";
     return;
@@ -1349,7 +690,7 @@ void SendTxnPessimisticRollback(uint64_t region_id) {
   }
 
   std::string service_name;
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
+  if (!region.definition().index_parameter().has_vector_index_parameter()) {
     service_name = "StoreService";
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
@@ -1363,7 +704,7 @@ void SendTxnPessimisticRollback(uint64_t region_id) {
   dingodb::pb::store::TxnPessimisticRollbackResponse response;
 
   request.mutable_context()->set_region_id(region.id());
-  request.mutable_context()->mutable_region_epoch()->CopyFrom(region.definition().epoch());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
   if (FLAGS_rc) {
     request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
@@ -1386,7 +727,11 @@ void SendTxnPessimisticRollback(uint64_t region_id) {
     DINGO_LOG(ERROR) << "key is empty";
     return;
   }
-  *request.add_keys() = FLAGS_key;
+  std::string key = FLAGS_key;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+  }
+  *request.add_keys() = key;
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
@@ -1402,7 +747,7 @@ void SendTxnPrewrite(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
+  if (!region.definition().index_parameter().has_vector_index_parameter()) {
     StoreSendTxnPrewrite(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
@@ -1419,14 +764,56 @@ void SendTxnCommit(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnCommit(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnCommit(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnCommitRequest request;
+  dingodb::pb::store::TxnCommitResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_commit_ts == 0) {
+    DINGO_LOG(ERROR) << "commit_ts is empty";
+    return;
+  }
+  request.set_commit_ts(FLAGS_commit_ts);
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  std::string key = FLAGS_key;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+  }
+  request.add_keys()->assign(key);
+  DINGO_LOG(INFO) << "key: " << FLAGS_key;
+
+  if (!FLAGS_key2.empty()) {
+    std::string key2 = FLAGS_key2;
+    if (FLAGS_key_is_hex) {
+      key2 = HexToString(FLAGS_key2);
+    }
+    request.add_keys()->assign(key2);
+    DINGO_LOG(INFO) << "key2: " << FLAGS_key2;
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnCommit", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnCheckTxnStatus(uint64_t region_id) {
@@ -1436,14 +823,48 @@ void SendTxnCheckTxnStatus(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnCheckTxnStatus(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnCheckTxnStatus(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnCheckTxnStatusRequest request;
+  dingodb::pb::store::TxnCheckTxnStatusResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_primary_key.empty()) {
+    DINGO_LOG(ERROR) << "primary_key is empty";
+    return;
+  }
+  request.set_primary_key(FLAGS_primary_key);
+
+  if (FLAGS_lock_ts == 0) {
+    DINGO_LOG(ERROR) << "lock_ts is 0";
+    return;
+  }
+  request.set_lock_ts(FLAGS_lock_ts);
+
+  if (FLAGS_caller_start_ts == 0) {
+    DINGO_LOG(ERROR) << "caller_start_ts is 0";
+    return;
+  }
+  request.set_caller_start_ts(FLAGS_caller_start_ts);
+
+  if (FLAGS_current_ts == 0) {
+    DINGO_LOG(ERROR) << "current_ts is 0";
+    return;
+  }
+  request.set_current_ts(FLAGS_current_ts);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnCheckTxnStatus", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnResolveLock(uint64_t region_id) {
@@ -1453,14 +874,49 @@ void SendTxnResolveLock(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnResolveLock(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnResolveLock(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnResolveLockRequest request;
+  dingodb::pb::store::TxnResolveLockResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is 0";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  DINGO_LOG(INFO) << "commit_ts is: " << FLAGS_commit_ts;
+  if (FLAGS_commit_ts != 0) {
+    DINGO_LOG(WARNING) << "commit_ts is not 0, will do commit";
+  } else {
+    DINGO_LOG(WARNING) << "commit_ts is 0, will do rollback";
+  }
+  request.set_commit_ts(FLAGS_commit_ts);
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(INFO) << "key is empty, will do resolve lock for all keys of this transaction";
+  } else {
+    std::string key = FLAGS_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_key);
+    }
+    request.add_keys()->assign(key);
+    DINGO_LOG(INFO) << "key: " << FLAGS_key;
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnResolveLock", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnBatchGet(uint64_t region_id) {
@@ -1470,14 +926,49 @@ void SendTxnBatchGet(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnBatchGet(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnBatchGet(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnBatchGetRequest request;
+  dingodb::pb::store::TxnBatchGetResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  if (FLAGS_key2.empty()) {
+    DINGO_LOG(ERROR) << "key2 is empty";
+    return;
+  }
+  std::string key = FLAGS_key;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+  }
+  std::string key2 = FLAGS_key2;
+  if (FLAGS_key_is_hex) {
+    key2 = HexToString(FLAGS_key2);
+  }
+  request.add_keys()->assign(key);
+  request.add_keys()->assign(key2);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnBatchGet", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnBatchRollback(uint64_t region_id) {
@@ -1487,14 +978,44 @@ void SendTxnBatchRollback(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnBatchRollback(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnBatchRollback(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnBatchRollbackRequest request;
+  dingodb::pb::store::TxnBatchRollbackResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_key.empty()) {
+    DINGO_LOG(ERROR) << "key is empty";
+    return;
+  }
+  std::string key = FLAGS_key;
+  if (FLAGS_key_is_hex) {
+    key = HexToString(FLAGS_key);
+  }
+  request.add_keys()->assign(key);
+
+  if (!FLAGS_key2.empty()) {
+    request.add_keys()->assign(FLAGS_key2);
+  }
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnBatchRollback", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnScanLock(uint64_t region_id) {
@@ -1504,14 +1025,48 @@ void SendTxnScanLock(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnScanLock(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnScanLock(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnScanLockRequest request;
+  dingodb::pb::store::TxnScanLockResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_max_ts == 0) {
+    DINGO_LOG(ERROR) << "max_ts is empty";
+    return;
+  }
+  request.set_max_ts(FLAGS_max_ts);
+
+  if (FLAGS_start_key.empty()) {
+    DINGO_LOG(ERROR) << "start_key is empty";
+    return;
+  }
+  request.set_start_key(FLAGS_start_key);
+
+  if (FLAGS_end_key.empty()) {
+    DINGO_LOG(ERROR) << "end_key is empty";
+    return;
+  }
+  request.set_end_key(FLAGS_end_key);
+
+  if (FLAGS_limit == 0) {
+    DINGO_LOG(ERROR) << "limit is empty";
+    return;
+  }
+  request.set_limit(FLAGS_limit);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnScanLock", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnHeartBeat(uint64_t region_id) {
@@ -1521,14 +1076,42 @@ void SendTxnHeartBeat(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnHeartBeat(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnHeartBeat(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnHeartBeatRequest request;
+  dingodb::pb::store::TxnHeartBeatResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_primary_lock.empty()) {
+    DINGO_LOG(ERROR) << "primary_lock is empty";
+    return;
+  }
+  request.set_primary_lock(FLAGS_primary_lock);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_advise_lock_ttl == 0) {
+    DINGO_LOG(ERROR) << "advise_lock_ttl is empty";
+    return;
+  }
+  request.set_advise_lock_ttl(FLAGS_advise_lock_ttl);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnHeartBeat", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnGc(uint64_t region_id) {
@@ -1538,14 +1121,30 @@ void SendTxnGc(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnGc(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnGc(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnGcRequest request;
+  dingodb::pb::store::TxnGcResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_safe_point_ts == 0) {
+    DINGO_LOG(ERROR) << "safe_point_ts is empty";
+    return;
+  }
+  request.set_safe_point_ts(FLAGS_safe_point_ts);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnGc", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnDeleteRange(uint64_t region_id) {
@@ -1555,14 +1154,36 @@ void SendTxnDeleteRange(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnDeleteRange(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnDeleteRange(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnDeleteRangeRequest request;
+  dingodb::pb::store::TxnDeleteRangeResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
+
+  if (FLAGS_start_key.empty()) {
+    DINGO_LOG(ERROR) << "start_key is empty";
+    return;
+  }
+  request.set_start_key(FLAGS_start_key);
+
+  if (FLAGS_end_key.empty()) {
+    DINGO_LOG(ERROR) << "end_key is empty";
+    return;
+  }
+  request.set_end_key(FLAGS_end_key);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnDeleteRange", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnDump(uint64_t region_id) {
@@ -1572,13 +1193,79 @@ void SendTxnDump(uint64_t region_id) {
     return;
   }
 
-  if (region.region_type() == dingodb::pb::common::STORE_REGION) {
-    StoreSendTxnDump(region_id, region);
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    IndexSendTxnDump(region_id, region);
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnDumpRequest request;
+  dingodb::pb::store::TxnDumpResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_start_key.empty()) {
+    DINGO_LOG(ERROR) << "start_key is empty";
+    return;
+  }
+  std::string start_key = FLAGS_start_key;
+
+  if (FLAGS_end_key.empty()) {
+    DINGO_LOG(ERROR) << "end_key is empty";
+    return;
+  }
+  std::string end_key = FLAGS_end_key;
+
+  if (FLAGS_key_is_hex) {
+    start_key = dingodb::Helper::HexToString(start_key);
+    end_key = dingodb::Helper::HexToString(end_key);
+  }
+
+  request.set_start_key(start_key);
+  request.set_end_key(end_key);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_end_ts == 0) {
+    DINGO_LOG(ERROR) << "end_ts is empty";
+    return;
+  }
+  request.set_end_ts(FLAGS_end_ts);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnDump", request, response);
+
+  if (response.has_error()) {
+    DINGO_LOG(ERROR) << "Response ERROR: " << response.error().ShortDebugString();
+  }
+  if (response.has_txn_result()) {
+    DINGO_LOG(INFO) << "Response TxnResult: " << response.txn_result().ShortDebugString();
+  }
+
+  DINGO_LOG(INFO) << "data_size: " << response.data_keys_size();
+  DINGO_LOG(INFO) << "lock_size: " << response.lock_keys_size();
+  DINGO_LOG(INFO) << "write_size: " << response.write_keys_size();
+
+  for (int i = 0; i < response.data_keys_size(); i++) {
+    DINGO_LOG(INFO) << "data[" << i << "]key: [" << response.data_keys(i).ShortDebugString() << "], value: ["
+                    << response.data_values(i).ShortDebugString() << "]";
+  }
+
+  for (int i = 0; i < response.lock_keys_size(); i++) {
+    DINGO_LOG(INFO) << "lock[" << i << "]key: [" << response.lock_keys(i).ShortDebugString() << "], value: ["
+                    << response.lock_values(i).ShortDebugString() << "]";
+  }
+
+  for (int i = 0; i < response.write_keys_size(); i++) {
+    DINGO_LOG(INFO) << "write[" << i << "]key: [" << response.write_keys(i).ShortDebugString() << "], value: ["
+                    << response.write_values(i).ShortDebugString() << "]";
   }
 }
 

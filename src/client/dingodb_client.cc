@@ -91,8 +91,10 @@ DEFINE_string(store_addrs, "", "server addrs");
 DEFINE_string(raft_addrs, "127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0", "raft addrs");
 DEFINE_string(key, "", "Request key");
 DEFINE_bool(key_is_hex, false, "Request key is hex");
+DEFINE_bool(value_is_hex, false, "Request value is hex");
 DEFINE_string(value, "", "Request values");
 DEFINE_string(prefix, "", "key prefix");
+DEFINE_string(region_prefix, "", "region_prefix");
 DEFINE_uint64(region_count, 1, "region count");
 DEFINE_uint64(table_id, 0, "table id");
 DEFINE_string(table_name, "", "table name");
@@ -862,23 +864,82 @@ int CoordinatorSender() {
     }
     auto str = client::HexToString(FLAGS_key);
     DINGO_LOG(INFO) << fmt::format("hex: {} to key: {}", FLAGS_key, str);
-  } else if (method == "VectorPrefixToHex") {
-    if (FLAGS_vector_id == 0) {
-      DINGO_LOG(ERROR) << "vector_id is empty";
+  } else if (method == "EncodeTablePrefixToHex") {
+    if (FLAGS_key.empty() && FLAGS_part_id == 0) {
+      DINGO_LOG(ERROR) << "key and part_id is empty";
       exit(-1);
+    }
+    if (FLAGS_region_prefix.empty()) {
+      DINGO_LOG(ERROR) << "region_prefix is empty";
+      exit(-1);
+    } else if (FLAGS_region_prefix.size() != 1) {
+      DINGO_LOG(ERROR) << "region_prefix size is not 1";
+      exit(-1);
+    }
+    std::string region_header;
+
+    std::string key = FLAGS_key;
+    if (FLAGS_key_is_hex) {
+      key = client::HexToString(FLAGS_key);
+    }
+    if (FLAGS_key.empty()) {
+      region_header = client::TablePrefixToHex(FLAGS_region_prefix.at(0), FLAGS_part_id);
+    } else if (FLAGS_part_id == 0) {
+      region_header = client::TablePrefixToHex(FLAGS_region_prefix.at(0), key);
+    } else {
+      region_header = client::TablePrefixToHex(FLAGS_region_prefix.at(0), FLAGS_part_id, key);
+    }
+    DINGO_LOG(INFO) << fmt::format("prefix: {} part_id: {}, key: {} to key: {}", FLAGS_region_prefix, FLAGS_part_id,
+                                   FLAGS_key, region_header);
+  } else if (method == "EncodeVectorPrefixToHex") {
+    if (FLAGS_vector_id == 0) {
+      DINGO_LOG(WARNING) << "vector_id is empty, will encode 9 bit region header";
+    } else {
+      DINGO_LOG(WARNING) << "vector_id is " << FLAGS_vector_id << ", will encode 17 bit region header";
     }
     if (FLAGS_part_id == 0) {
       DINGO_LOG(ERROR) << "part_id is empty";
       exit(-1);
     }
-    auto str = client::VectorPrefixToHex(FLAGS_part_id, FLAGS_vector_id);
-    DINGO_LOG(INFO) << fmt::format("part_id: {}, vector_id {} to key: {}", FLAGS_part_id, FLAGS_vector_id, str);
+    if (FLAGS_region_prefix.empty()) {
+      DINGO_LOG(ERROR) << "region_prefix is empty";
+      exit(-1);
+    } else if (FLAGS_region_prefix.size() != 1) {
+      DINGO_LOG(ERROR) << "region_prefix size is not 1";
+      exit(-1);
+    }
+    std::string region_header;
+    if (FLAGS_vector_id == 0) {
+      region_header = client::VectorPrefixToHex(FLAGS_region_prefix.at(0), FLAGS_part_id);
+    } else {
+      region_header = client::VectorPrefixToHex(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_vector_id);
+    }
+    DINGO_LOG(INFO) << fmt::format("prefix: {} part_id: {}, vector_id {} to key(hex): [{}]", FLAGS_region_prefix,
+                                   FLAGS_part_id, FLAGS_vector_id, region_header);
+  } else if (method == "DecodeTablePrefix") {
+    if (FLAGS_key.empty()) {
+      DINGO_LOG(ERROR) << "key is empty";
+      exit(-1);
+    }
+    std::string key = FLAGS_key;
+    if (!FLAGS_key_is_hex) {
+      key = client::StringToHex(FLAGS_key);
+    }
+    bool has_part_id = FLAGS_part_id > 0;
+    DINGO_LOG(INFO) << "part_id: " << FLAGS_part_id << " has_part_id: " << has_part_id;
+
+    auto str = client::HexToTablePrefix(key, has_part_id);
+    DINGO_LOG(INFO) << fmt::format("hex: {} to key: {}", FLAGS_key, str);
   } else if (method == "DecodeVectorPrefix") {
     if (FLAGS_key.empty()) {
       DINGO_LOG(ERROR) << "key is empty";
       exit(-1);
     }
-    auto str = client::HexToVectorPrefix(FLAGS_key);
+    std::string key = FLAGS_key;
+    if (!FLAGS_key_is_hex) {
+      key = client::StringToHex(FLAGS_key);
+    }
+    auto str = client::HexToVectorPrefix(key);
     DINGO_LOG(INFO) << fmt::format("hex: {} to key: {}", FLAGS_key, str);
   } else if (method == "OctalToHex") {
     if (FLAGS_key.empty()) {

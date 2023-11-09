@@ -1698,6 +1698,11 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
                            "vector index region range end_key size is not 8 or 16 bytes");
     }
 
+    if (part_id <= 0) {
+      DINGO_LOG(ERROR) << "CreateRegion vector index region part_id is not legal, part_id=" << part_id;
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "vector index region part_id is not legal");
+    }
+
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==
         pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -1853,6 +1858,11 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
                        << Helper::StringToHex(region_range.end_key());
       return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
                            "vector index region range end_key size is not 8 or 16 bytes");
+    }
+
+    if (part_id <= 0) {
+      DINGO_LOG(ERROR) << "CreateRegion vector index region part_id is not legal, part_id=" << part_id;
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "vector index region part_id is not legal");
     }
 
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4

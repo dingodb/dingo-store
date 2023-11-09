@@ -1072,8 +1072,9 @@ static butil::Status ValidateTxnGetRequest(const pb::store::TxnGetRequest* reque
   return butil::Status();
 }
 
-void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
-              pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
+void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                    const pb::store::TxnGetRequest* request, pb::store::TxnGetResponse* response,
+                    google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1127,16 +1128,17 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller, c
       response->mutable_vector()->Swap(&vector_with_id);
     }
   }
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
 }
 
 void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
-                              pb::index::TxnGetResponse* response, google::protobuf::Closure* done) {
+                              pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGet(storage, controller, request, response, svr_done); });
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoTxnGetVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
@@ -1184,9 +1186,9 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
   return butil::Status();
 }
 
-void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
-               const pb::store::TxnScanRequest* request, pb::index::TxnScanResponse* response,
-               google::protobuf::Closure* done) {
+void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                     const pb::store::TxnScanRequest* request, pb::store::TxnScanResponse* response,
+                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1248,19 +1250,20 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   if (txn_result_info.ByteSizeLong() > 0) {
-    response->mutable_txn_result()->CopyFrom(txn_result_info);
+    *response->mutable_txn_result() = txn_result_info;
   }
   response->set_end_key(end_key);
   response->set_has_more(has_more);
 }
 
 void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
-                               pb::index::TxnScanResponse* response, google::protobuf::Closure* done) {
+                               pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScan(storage, controller, request, response, svr_done); });
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoTxnScanVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
@@ -1316,7 +1319,7 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   }
 }
 
-static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::index::TxnPrewriteRequest* request) {
+static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::store::TxnPrewriteRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1452,9 +1455,9 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::in
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
-void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::index::TxnPrewriteRequest* request, pb::store::TxnPrewriteResponse* response,
-                   google::protobuf::Closure* done, bool is_sync) {
+void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const pb::store::TxnPrewriteRequest* request, pb::store::TxnPrewriteResponse* response,
+                         google::protobuf::Closure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1480,8 +1483,22 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
     store_mutation.set_value(mutation.vector().SerializeAsString());
   }
 
+  std::map<int32_t, int64_t> for_update_ts_checks;
+  for (const auto& for_update_ts_check : request->for_update_ts_checks()) {
+    for_update_ts_checks.insert_or_assign(for_update_ts_check.index(), for_update_ts_check.expected_for_update_ts());
+  }
+
+  std::map<int32_t, std::string> lock_extra_datas;
+  for (const auto& lock_extra_data : request->lock_extra_datas()) {
+    lock_extra_datas.insert_or_assign(lock_extra_data.index(), lock_extra_data.extra_data());
+  }
+
+  std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnPrewrite(ctx, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
-                                request->txn_size(), request->try_one_pc(), request->max_commit_ts());
+                                request->txn_size(), request->try_one_pc(), request->max_commit_ts(),
+                                Helper::PbRepeatedToVector(request->pessimistic_checks()), for_update_ts_checks,
+                                lock_extra_datas);
+
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1490,14 +1507,14 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 }
 
 void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
-                                   const pb::index::TxnPrewriteRequest* request,
+                                   const pb::store::TxnPrewriteRequest* request,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnPrewrite(storage, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>(
+      [=]() { DoTxnPrewriteVector(storage, controller, request, response, svr_done, true); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1703,9 +1720,9 @@ static butil::Status ValidateTxnBatchGetRequest(const pb::store::TxnBatchGetRequ
   return butil::Status();
 }
 
-void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const pb::store::TxnBatchGetRequest* request, pb::index::TxnBatchGetResponse* response,
-                   google::protobuf::Closure* done) {
+void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const pb::store::TxnBatchGetRequest* request, pb::store::TxnBatchGetResponse* response,
+                         google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -1757,17 +1774,18 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
       response->add_vectors()->Swap(&vector_with_id);
     }
   }
-  response->mutable_txn_result()->CopyFrom(txn_result_info);
+  *response->mutable_txn_result() = txn_result_info;
 }
 
 void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    const pb::store::TxnBatchGetRequest* request,
-                                   pb::index::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
+                                   pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
   StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnBatchGet(storage, controller, request, response, svr_done); });
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoTxnBatchGetVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(done);
@@ -1857,13 +1875,13 @@ static butil::Status ValidateTxnScanLockRequest(const pb::store::TxnScanLockRequ
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_key is empty");
   }
 
+  if (request->start_key() >= request->end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key >= end_key");
+  }
+
   std::vector<std::string_view> keys;
   keys.push_back(request->start_key());
-
-  std::string str(1, '\x01');
-  std::string end_key = Helper::StringSubtractRightAlign(request->end_key(), str);
-
-  keys.push_back(end_key);
+  keys.push_back(request->end_key());
 
   auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
   if (!status.ok()) {

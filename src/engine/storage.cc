@@ -594,7 +594,10 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int6
 
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts) {
+                                   int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
+                                   const std::vector<int>& pessimistic_checks,
+                                   const std::map<int32_t, int64_t>& for_update_ts_checks,
+                                   const std::map<int32_t, std::string>& lock_extra_datas) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -605,7 +608,8 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
                   << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
 
   auto writer = engine_->NewTxnWriter(engine_);
-  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts);
+  status = writer->TxnPrewrite(ctx, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts,
+                               pessimistic_checks, for_update_ts_checks, lock_extra_datas);
   if (!status.ok()) {
     return status;
   }
@@ -690,7 +694,7 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
 
 butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const std::string& start_key,
                                    int64_t limit, const std::string& end_key, pb::store::TxnResultInfo& txn_result_info,
-                                   std::vector<pb::store::LockInfo>& locks) {
+                                   std::vector<pb::store::LockInfo>& lock_infos) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -698,12 +702,11 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
 
   DINGO_LOG(INFO) << "TxnScanLock max_ts : " << max_ts << " start_key : " << start_key << " limit : " << limit
                   << " end_key : " << end_key << " txn_result_info : " << txn_result_info.ShortDebugString()
-                  << " locks size : " << locks.size();
+                  << " lock_infos size : " << lock_infos.size();
 
   pb::common::Range range;
   range.set_start_key(start_key);
   range.set_end_key(end_key);
-  std::vector<pb::store::LockInfo> lock_infos;
 
   auto reader = engine_->NewTxnReader();
   status = reader->TxnScanLock(ctx, 0, max_ts, range, limit, lock_infos);
@@ -769,7 +772,7 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
 }
 
 butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,
-                               int64_t start_ts, int64_t end_ts, pb::store::TxnResultInfo& txn_result_info,
+                               int64_t start_ts, int64_t end_ts, pb::store::TxnResultInfo& /*txn_result_info*/,
                                std::vector<pb::store::TxnWriteKey>& txn_write_keys,
                                std::vector<pb::store::TxnWriteValue>& txn_write_values,
                                std::vector<pb::store::TxnLockKey>& txn_lock_keys,
@@ -781,14 +784,8 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnDump start_key : " << start_key << " end_key : " << end_key
-                  << " txn_result_info : " << txn_result_info.ShortDebugString()
-                  << " txn_write_keys size : " << txn_write_keys.size()
-                  << " txn_write_values size : " << txn_write_values.size()
-                  << " txn_lock_keys size : " << txn_lock_keys.size()
-                  << " txn_lock_values size : " << txn_lock_values.size()
-                  << " txn_data_keys size : " << txn_data_keys.size()
-                  << " txn_data_values size : " << txn_data_values.size();
+  DINGO_LOG(INFO) << "TxnDump start_key : " << start_key << " end_key : " << end_key << ", start_ts: " << start_ts
+                  << ", end_ts: " << end_ts;
 
   auto data_reader = engine_->NewReader();
   auto lock_reader = engine_->NewReader();
@@ -810,19 +807,23 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
       DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "data_reader->KvScan failed");
     }
-    Buf buf(kv.key().length());
-    buf.Write(kv.key());
-    buf.Skip(kv.key().length() - 8);
+
+    std::string user_key;
+    int64_t ts = 0;
+    Helper::DecodeTxnKey(kv.key(), user_key, ts);
 
     pb::store::TxnDataKey txn_data_key;
-    txn_data_key.set_key(kv.key().substr(kv.key().length() - 8));
-    txn_data_key.set_start_ts(buf.ReadLong());
+    txn_data_key.set_key(user_key);
+    txn_data_key.set_start_ts(ts);
 
     txn_data_keys.push_back(txn_data_key);
 
     pb::store::TxnDataValue txn_data_value;
     txn_data_value.set_value(kv.value());
     txn_data_values.push_back(txn_data_value);
+
+    DINGO_LOG(INFO) << fmt::format("TxnDump data key : {} value : {}", txn_data_key.ShortDebugString(),
+                                   txn_data_value.ShortDebugString());
   }
 
   // scan [start_key, end_key) for lock
@@ -848,6 +849,9 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     pb::store::TxnLockValue txn_lock_value;
     txn_lock_value.mutable_lock_info()->ParseFromString(kv.value());
     txn_lock_values.push_back(txn_lock_value);
+
+    DINGO_LOG(INFO) << fmt::format("TxnDump lock key : {} value : {}", txn_lock_key.ShortDebugString(),
+                                   txn_lock_value.ShortDebugString());
   }
 
   // scan [start_key, end_key) for write
@@ -866,13 +870,14 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
       DINGO_LOG(ERROR) << fmt::format("write_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "write_reader->KvScan failed");
     }
-    Buf buf(kv.key().length());
-    buf.Write(kv.key());
-    buf.Skip(kv.key().length() - 8);
+
+    std::string user_key;
+    int64_t ts = 0;
+    Helper::DecodeTxnKey(kv.key(), user_key, ts);
 
     pb::store::TxnWriteKey txn_write_key;
-    txn_write_key.set_key(kv.key().substr(kv.key().length() - 8));
-    txn_write_key.set_commit_ts(buf.ReadLong());
+    txn_write_key.set_key(user_key);
+    txn_write_key.set_commit_ts(ts);
 
     txn_write_keys.push_back(txn_write_key);
 
@@ -880,6 +885,9 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     txn_write_value.mutable_write_info()->ParseFromString(kv.value());
 
     txn_write_values.push_back(txn_write_value);
+
+    DINGO_LOG(INFO) << fmt::format("TxnDump write key : {} value : {}", txn_write_key.ShortDebugString(),
+                                   txn_write_value.ShortDebugString());
   }
 
   return butil::Status::OK();

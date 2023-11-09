@@ -349,14 +349,28 @@ enum Op {
 
 message Mutation {
   Op op = 1;
-  bytes key = 2;    // for put/putifabsent, key is the key to be put
-                    // for delete, key is the key to be deleted
-                    // for rollback, key is the key to be rollbacked
-                    // for lock, key is the key to be locked
-  bytes value = 3;  // for put/putifabsent, value is the value to be put
-                    // for delete, value is empty
-                    // for rollback, value is empty
-                    // for lock, value is the extra_data executor want to store in lock
+
+  // for put/putifabsent, key is the key to be put
+  // for delete, key is the key to be deleted
+  // for rollback, key is the key to be rollbacked
+  // for lock, key is the key to be locked
+  // if executor is operating a vector index region, the key must be a vector region key
+  // the vector region key is encoded from a char prefix and two int64 using big-endian, the first int64 is the part id,
+  // direct encode use big-endian.
+  // the second int64 is the vector id, is encoded with dingo's memory comparable
+  // big-endian encoding
+  // The key MUST be 17 bytes.
+  bytes key = 2;
+
+  // for store table/index region, executor use the value to do put/putifabsent
+  // for put/putifabsent, value is the value to be put
+  // for delete, value is empty
+  // for rollback, value is empty
+  // for lock, value is the extra_data executor want to store in lock
+  bytes value = 3;
+
+  // for vector index region, executor must use the VectorWithId to do put/putifabsent
+  dingodb.pb.common.VectorWithId vector = 4;
 }
 
 message WriteConflict {
@@ -423,11 +437,16 @@ message TxnGetResponse {
   // the lock then retry.
   // 2. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
+  // for store table/index region:
   // The value associated with the key, if not found, is empty and error is NOT_FOUND
   // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
   bytes value = 3;
+  // for vector index region:
+  // The vector value associated with the key, if not found, is empty and error is NOT_FOUND
+  // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
+  dingodb.pb.common.VectorWithId vector = 4;
   // True if the key does not exist in the database.
-  // bool not_found = 4;
+  // bool not_found = 5;
 }
 
 // TxnScan fetches values for a range of keys in the transaction with start_ts.
@@ -461,13 +480,15 @@ message TxnScanResponse {
   // 1. LockInfo: Read conflict with key which is locked by another transaction.
   // 2. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
-  // kvs is the return value of the scan request
+  // for store table/index region, kvs is the return value of the scan request
   repeated dingodb.pb.common.KeyValue kvs = 3;
+  // for vector index region, vectors is the return value of the scan request
+  repeated dingodb.pb.common.VectorWithId vectors = 4;
   // if scan is not finished, has_more is true, otherwise false
-  bool has_more = 4;
+  bool has_more = 5;
   // the last iteratered key of this scan response.
   // if end_key is null, means scan do not successfully iterate any key.
-  bytes end_key = 5;
+  bytes end_key = 6;
 }
 
 // Lock a set of keys to prepare to write to them.
@@ -516,6 +537,33 @@ message TxnPessimisticRollbackResponse {
 }
 
 message TxnPrewriteRequest {
+  // What kind of checks need to be performed for keys in a pessimistic transaction.
+  enum PessimisticCheck {
+    // The key needn't be locked, this is for optimistic transaction.
+    SKIP_PESSIMISTIC_CHECK = 0;
+    // The key should have been locked at the time of prewrite, this is for pessimistic transaction.
+    DO_PESSIMISTIC_CHECK = 1;
+  }
+
+  // for pessimistic transaction
+  // for_update_ts that should be checked when prewriting a pessimistic transaction.
+  message ForUpdateTsCheck {
+    // The index of key in the prewrite request that should be checked.
+    int32 index = 1;
+    // The expected for_update_ts of the pessimistic lock of the key.
+    int64 expected_for_update_ts = 2;
+  }
+
+  // The extra_data executor want to store in lock when doing prewrite
+  // if there is extra_data in a pessimistic lock, and no extra_data in the corresponding prewrite request, the
+  // extra_data in lock will not update, else the new extra_data will replace previous extra_data in lock
+  message LockExtraData {
+    // The index of key in the prewrite request that will store extra_data to lock
+    int32 index = 1;
+    // The extra_data to store in lock
+    bytes extra_data = 2;
+  }
+
   Context context = 1;
   // The data to be written to the database.
   repeated Mutation mutations = 2;
@@ -533,7 +581,16 @@ message TxnPrewriteRequest {
   // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
   // schema change. This field is unused now.
   int64 max_commit_ts = 8;  // NOT IMPLEMENTED
-  int64 for_update_ts = 9;  // for pessimistic transaction
+
+  // for pessimistic transaction
+  // check if the keys is locked by pessimistic transaction
+  repeated PessimisticCheck pessimistic_checks = 9;
+  // fo pessimistic transaction
+  // for_update_ts constriants that should be checked when prewriting a pessimistic transaction.
+  repeated ForUpdateTsCheck for_update_ts_checks = 10;
+  // for both pessimistic and optimistic transaction
+  // the extra_data executor want to store in lock
+  repeated LockExtraData lock_extra_datas = 11;
 }
 
 message TxnPrewriteResponse {
@@ -648,6 +705,7 @@ message TxnBatchGetRequest {
 message TxnBatchGetResponse {
   // error code
   dingodb.pb.error.Error error = 1;
+
   // This txn_result exists when some key is locked but we cannot check locks of
   // all keys. In this case, `kvs` should be empty and the client should redo
   // batch get all the keys after resolving the lock.
@@ -656,10 +714,18 @@ message TxnBatchGetResponse {
   // the lock then retry.
   // 2. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
+
+  // for store table/index region:
   // When some key is locked but we cannot check locks of
   // all keys. In this case, `kvs` should be empty and the client should redo
   // batch get all the keys after resolving the lock.
   repeated dingodb.pb.common.KeyValue kvs = 3;
+
+  // for vector index region:
+  // When some key is locked but we cannot check locks of
+  // all keys. In this case, `vectors` should be empty and the client should redo
+  // batch get all the keys after resolving the lock.
+  repeated dingodb.pb.common.VectorWithId vectors = 4;
 }
 
 // Rollback a prewritten transaction. This will remove the preliminary data from
@@ -685,16 +751,14 @@ message TxnBatchRollbackResponse {
 // old locks.
 message TxnScanLockRequest {
   Context context = 1;
-  // Returns all locks with a start timestamp before `max_ts`.
+  // Returns all locks with a start timestamp before `max_ts`, not include `max_ts`.
   int64 max_ts = 2;
-  // Start scanning from this key.
-  // if start_key is empty, means scan from the beginning of region
+  // The inclusive lowerbound for scanning, can't be empty.
   bytes start_key = 3;
+  // The exclusive upperbound for scanning, can't be empty.
+  bytes end_key = 5;
   // The maximum number of locks to return.
   uint32 limit = 4;
-  // The exclusive upperbound for scanning.
-  // if end_key is empty, means scan to the end of region
-  bytes end_key = 5;
 }
 
 message TxnScanLockResponse {
