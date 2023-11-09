@@ -644,6 +644,57 @@ class DingoSafeStdMap {
     return values.size();
   }
 
+  // FinIntervalValues
+  // The real range is [lower_bound, upper_bound)
+  int FindIntervalValues(std::vector<T_VALUE> &values, T_KEY lower_bound, T_KEY upper_bound,
+                         std::function<bool(T_KEY)> key_filter = nullptr,
+                         std::function<bool(T_VALUE)> value_filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    if (ptr->empty() || lower_bound >= upper_bound) {
+      return 0;
+    }
+
+    typename TypeRawMap::const_iterator it = ptr->lower_bound(lower_bound);
+    if (it == ptr->end()) {
+      auto reverse_it = ptr->rbegin();
+      if (reverse_it == ptr->rend()) {
+        return 0;
+      }
+      if (reverse_it->first >= upper_bound) {
+        return 0;
+      } else {
+        if ((key_filter == nullptr || key_filter(reverse_it->first)) &
+            (value_filter == nullptr || value_filter(reverse_it->second))) {
+          values.push_back(reverse_it->second);
+        }
+        return values.size();
+      }
+    } else {
+      if (it->first > lower_bound) {
+        --it;
+      }
+      for (; it != ptr->end(); ++it) {
+        if (it == ptr->end()) {
+          break;
+        }
+        if (it->first >= upper_bound) {
+          break;
+        }
+        if ((key_filter == nullptr || key_filter(it->first)) & (value_filter == nullptr || value_filter(it->second))) {
+          values.push_back(it->second);
+        }
+      }
+
+      return values.size();
+    }
+
+    return values.size();
+  }
+
   // GetRangeKeyValues
   // get keys and values of range
   int GetRangeKeyValues(std::vector<T_KEY> &keys, std::vector<T_VALUE> &values, T_KEY lower_bound, T_KEY upper_bound,
