@@ -22,6 +22,7 @@
 #include <string_view>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -33,9 +34,15 @@
 
 namespace dingodb {
 
-DECLARE_uint32(max_short_value_in_write_cf);
-DEFINE_uint32(max_scan_line_count, 10000, "max scan line count");
-DEFINE_uint32(max_scan_memory_size, 32 * 1024 * 1024, "max scan memory size");
+DEFINE_int64(max_short_value_in_write_cf, 1024, "max short value in write cf");
+DEFINE_int64(max_scan_memory_size, 32 * 1024 * 1024, "max scan memory size");
+DEFINE_int64(max_scan_line_limit, 2048, "max scan line limit");
+DEFINE_int64(max_scan_lock_limit, 2048, "Max scan lock limit");
+DEFINE_int64(max_prewrite_count, 1024, "max prewrite count");
+DEFINE_int64(max_commit_count, 1024, "max commit count");
+DEFINE_int64(max_rollback_count, 1024, "max rollback count");
+DEFINE_int64(max_resolve_count, 1024, "max rollback count");
+DEFINE_int64(max_pessimistic_count, 1024, "max pessimistic count");
 
 bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
                                         int64_t start_ts, pb::store::TxnResultInfo &txn_result_info) {
@@ -136,8 +143,18 @@ butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const st
 }
 
 butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_lock_ts, int64_t max_lock_ts,
-                                            const std::string &start_key, const std::string &end_key, uint32_t limit,
+                                            const std::string &start_key, const std::string &end_key, int64_t limit,
                                             std::vector<pb::store::LockInfo> &lock_infos) {
+  DINGO_LOG(INFO) << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
+                  << ", start_key: " << Helper::StringToHex(start_key) << ", end_key: " << Helper::StringToHex(end_key)
+                  << ", limit: " << limit;
+
+  if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_lock_limit)) {
+    DINGO_LOG(ERROR) << "[txn]ScanLockInfo limit: " << limit
+                     << " is too large, max_scan_lock_limit: " << FLAGS_max_scan_lock_limit;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scan lock limit is too large");
+  }
+
   IteratorOptions iter_options;
   iter_options.lower_bound = Helper::EncodeTxnKey(start_key, Constant::kLockVer);
   iter_options.upper_bound = Helper::EncodeTxnKey(end_key, Constant::kLockVer);
@@ -530,6 +547,12 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
                   << ", key_only: " << key_only << ", is_reverse: " << is_reverse
                   << ", txn_result_info: " << txn_result_info.ShortDebugString();
 
+  if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_line_limit)) {
+    DINGO_LOG(ERROR) << "[txn]Scan limit: " << limit
+                     << " is too large, max_scan_line_limit: " << FLAGS_max_scan_line_limit;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scan limit is too large");
+  }
+
   if (raw_engine == nullptr) {
     DINGO_LOG(FATAL) << "[txn]Scan engine is null";
   }
@@ -588,6 +611,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   std::string start_iter_key = last_iter_key;
   std::string iter_key;
   std::string data_value;
+  int64_t response_memory_size = 0;
 
   while (true) {
     data_value.clear();
@@ -626,9 +650,11 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
         kv.set_value(data_value);
       }
       kvs.push_back(kv);
+      response_memory_size += kv.ByteSizeLong();
     }
 
-    if ((limit > 0 && kvs.size() >= limit) || kvs.size() >= FLAGS_max_scan_line_count) {
+    if ((limit > 0 && kvs.size() >= limit) || kvs.size() >= FLAGS_max_scan_line_limit ||
+        response_memory_size >= FLAGS_max_scan_memory_size) {
       has_more = true;
       break;
     }
@@ -776,6 +802,16 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                   << ", mutations_size: " << mutations.size() << ", primary_lock: " << Helper::StringToHex(primary_lock)
                   << ", lock_ttl: " << lock_ttl << ", for_update_ts: " << for_update_ts;
+
+  if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_pessimistic_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                     << ", mutations_size: " << mutations.size()
+                     << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+                     << ", for_update_ts: " << for_update_ts << ", mutations.size() > FLAGS_max_pessimistic_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "pessimistic lock mutations.size() > FLAGS_max_pessimistic_count");
+  }
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -981,6 +1017,15 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
                   << ", keys_size: " << keys.size();
 
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_pessimistic_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                     << ", for_update_ts: " << for_update_ts << ", keys_size: " << keys.size()
+                     << ", keys.size() > FLAGS_max_pessimistic_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "pessimistic rollback keys.size() > FLAGS_max_pessimistic_count");
+  }
+
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
@@ -1098,9 +1143,9 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                                         std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                         const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
                                         int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-                                        const std::vector<int32_t> &pessimistic_checks,
-                                        const std::map<int32_t, int64_t> &for_update_ts_checks,
-                                        const std::map<int32_t, std::string> &lock_extra_datas) {
+                                        const std::vector<int64_t> &pessimistic_checks,
+                                        const std::map<int64_t, int64_t> &for_update_ts_checks,
+                                        const std::map<int64_t, std::string> &lock_extra_datas) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                   << ", mutations_size: " << mutations.size() << ", primary_lock: " << Helper::StringToHex(primary_lock)
@@ -1108,6 +1153,21 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                   << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
                   << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
                   << ", lock_extra_datas_size: " << lock_extra_datas.size();
+
+  if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_prewrite_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                     << ", mutations_size: " << mutations.size()
+                     << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+                     << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc
+                     << ", max_commit_ts: " << max_commit_ts
+                     << ", pessimistic_checks_size: " << pessimistic_checks.size()
+                     << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
+                     << ", lock_extra_datas_size: " << lock_extra_datas.size()
+                     << ", mutations.size() > FLAGS_max_prewrite_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "prewrite mutations.size() > FLAGS_max_prewrite_count");
+  }
 
   if (!pessimistic_checks.empty()) {
     if (mutations.size() != pessimistic_checks.size()) {
@@ -1141,7 +1201,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
   auto reader = raw_engine->Reader();
   // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
-  for (int32_t i = 0; i < mutations.size(); i++) {
+  for (int64_t i = 0; i < mutations.size(); i++) {
     const auto &mutation = mutations[i];
 
     // 1.check if the key is locked
@@ -1516,6 +1576,13 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
                   << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_commit_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+                     << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_commit_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit keys.size() > FLAGS_max_commit_count");
+  }
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -1974,6 +2041,13 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
 
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_rollback_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size()
+                     << ", keys.size() > FLAGS_max_rollback_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "rollback keys.size() > FLAGS_max_rollback_count");
+  }
+
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
@@ -2164,6 +2238,13 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
                   << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+                     << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_resolve_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "resolve keys.size() > FLAGS_max_resolve_count");
+  }
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {

@@ -459,15 +459,15 @@ std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader() {
   return std::make_shared<RaftStoreEngine::TxnReader>(raw_engine_);
 }
 
-butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, uint64_t start_ts,
+butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
                                                       const std::vector<std::string>& keys,
                                                       std::vector<pb::common::KeyValue>& kvs,
                                                       pb::store::TxnResultInfo& txn_result_info) {
   return TxnEngineHelper::BatchGet(raw_engine_, ctx->IsolationLevel(), start_ts, keys, kvs, txn_result_info);
 }
 
-butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, uint64_t start_ts,
-                                                  const pb::common::Range& range, uint64_t limit, bool key_only,
+butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                  const pb::common::Range& range, int64_t limit, bool key_only,
                                                   bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
                                                   std::vector<pb::common::KeyValue>& kvs, bool& has_more,
                                                   std::string& end_key) {
@@ -475,9 +475,9 @@ butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, 
                                txn_result_info, kvs, has_more, end_key);
 }
 
-butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, uint64_t min_lock_ts,
-                                                      uint64_t max_lock_ts, const pb::common::Range& range,
-                                                      uint64_t limit, std::vector<pb::store::LockInfo>& lock_infos) {
+butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, int64_t min_lock_ts,
+                                                      int64_t max_lock_ts, const pb::common::Range& range,
+                                                      int64_t limit, std::vector<pb::store::LockInfo>& lock_infos) {
   return TxnEngineHelper::ScanLockInfo(raw_engine_, min_lock_ts, max_lock_ts, range.start_key(), range.end_key(), limit,
                                        lock_infos);
 }
@@ -503,8 +503,8 @@ butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr
 butil::Status RaftStoreEngine::TxnWriter::TxnPrewrite(
     std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations, const std::string& primary_lock,
     int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-    const std::vector<int32_t>& pessimistic_checks, const std::map<int32_t, int64_t>& for_update_ts_checks,
-    const std::map<int32_t, std::string>& lock_extra_datas) {
+    const std::vector<int64_t>& pessimistic_checks, const std::map<int64_t, int64_t>& for_update_ts_checks,
+    const std::map<int64_t, std::string>& lock_extra_datas) {
   return TxnEngineHelper::Prewrite(raw_engine_, raft_engine_, ctx, mutations, primary_lock, start_ts, lock_ttl,
                                    txn_size, try_one_pc, max_commit_ts, pessimistic_checks, for_update_ts_checks,
                                    lock_extra_datas);

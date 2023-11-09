@@ -1638,17 +1638,9 @@ uint32_t Helper::CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dime
   return static_cast<uint32_t>(count);
 }
 
-std::string Helper::GenMaxStartKey() {
-  Buf buf(8);
-  buf.WriteLong(UINT64_MAX);
-  return buf.GetString();
-}
+std::string Helper::GenMaxStartKey() { return std::string(9, '\xff'); }
 
-std::string Helper::GenMinStartKey() {
-  Buf buf(8);
-  buf.WriteLong(0);
-  return buf.GetString();
-}
+std::string Helper::GenMinStartKey() { return std::string(1, '\x00'); }
 
 // Parse region meta
 butil::Status Helper::ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
