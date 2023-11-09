@@ -149,8 +149,9 @@ enum RegionState {
   REGION_MERGED = 17;   // region is merged
 
   // other state add here
-  REGION_ILLEGAL = 20;  // region is not create by coordinator
-  REGION_STANDBY = 21;  // region is standby, used in split
+  REGION_ILLEGAL = 20;    // region is not create by coordinator
+  REGION_STANDBY = 21;    // region is standby, used in split
+  REGION_TOMBSTONE = 22;  // region is tombstone, need to delete
 }
 
 enum RegionHeartbeatState {
@@ -169,6 +170,7 @@ enum StoreRegionState {
   DELETING = 5;   // region is deleting
   DELETED = 6;    // region is deleted
   ORPHAN = 7;     // region is orphan, need to delete
+  TOMBSTONE = 8;  // region is tombstone, need to delete
 }
 
 // RegionRaftStatus
