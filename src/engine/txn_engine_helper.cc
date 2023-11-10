@@ -35,6 +35,8 @@
 namespace dingodb {
 
 DEFINE_int64(max_short_value_in_write_cf, 1024, "max short value in write cf");
+DEFINE_int64(max_batch_get_count, 1024, "max batch get count");
+DEFINE_int64(max_batch_get_memory_size, 32 * 1024 * 1024, "max batch get memory size");
 DEFINE_int64(max_scan_memory_size, 32 * 1024 * 1024, "max scan memory size");
 DEFINE_int64(max_scan_line_limit, 2048, "max scan line limit");
 DEFINE_int64(max_scan_lock_limit, 2048, "Max scan lock limit");
@@ -238,11 +240,19 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
   }
 
+  if (keys.size() > FLAGS_max_batch_get_count) {
+    DINGO_LOG(ERROR) << "[txn]BatchGet keys_count: " << keys.size()
+                     << " is too large, max_batch_get_count: " << FLAGS_max_batch_get_count;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "keys_count is too large");
+  }
+
   if (txn_result_info.ByteSizeLong() > 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "txn_result_info is not empty");
   }
 
   auto reader = engine->Reader();
+
+  int64_t response_memory_size = 0;
 
   // for every key in keys, get lock info, if lock_ts < start_ts, return LockInfo
   // else find the latest write below our start_ts
@@ -266,27 +276,51 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       return butil::Status::OK();
     }
 
+    int64_t iter_start_ts;
+    bool is_valid = false;
+    if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
+      iter_start_ts = start_ts;
+    } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
+      iter_start_ts = Constant::kMaxVer;
+    } else {
+      DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
+    }
+
     IteratorOptions iter_options;
-    iter_options.lower_bound = Helper::EncodeTxnKey(key, start_ts);
+    iter_options.lower_bound = Helper::EncodeTxnKey(key, iter_start_ts);
     iter_options.upper_bound = Helper::EncodeTxnKey(key, 0);
     auto iter = reader->NewIterator(Constant::kTxnWriteCF, iter_options);
     if (iter == nullptr) {
       DINGO_LOG(FATAL) << "[txn]BatchGet NewIterator failed, start_ts: " << start_ts;
     }
 
-    // if the key is committed after start_ts, return WriteConflict
+    // check isolation level and return value
     iter->SeekToFirst();
     while (iter->Valid()) {
       if (iter->Key().length() <= 8) {
-        DINGO_LOG(FATAL) << ", invalid write_key, key: " << Helper::StringToHex(iter->Key())
+        DINGO_LOG(ERROR) << ", invalid write_key, key: " << Helper::StringToHex(iter->Key())
                          << ", start_ts: " << start_ts
                          << ", write_key is less than 8 bytes: " << Helper::StringToHex(iter->Key());
+        return butil::Status(pb::error::Errno::EINTERNAL, "invalid write_key");
       }
       std::string write_key;
       int64_t write_ts;
       Helper::DecodeTxnKey(iter->Key(), write_key, write_ts);
 
-      if (write_ts <= start_ts) {
+      bool is_valid = false;
+      if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
+        if (write_ts <= start_ts) {
+          is_valid = true;
+        }
+      } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
+        is_valid = true;
+      } else {
+        DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
+      }
+
+      if (is_valid) {
         // write_ts <= start_ts, return write_info
         pb::store::WriteInfo write_info;
         auto ret = write_info.ParseFromArray(iter->Value().data(), iter->Value().size());
@@ -322,6 +356,14 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     }
 
     kvs.emplace_back(kv);
+    response_memory_size += kv.ByteSizeLong();
+
+    if (response_memory_size >= FLAGS_max_batch_get_memory_size) {
+      DINGO_LOG(INFO) << "[txn]BatchGet kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
+                      << ", max_batch_get_count: " << FLAGS_max_batch_get_count
+                      << ", max_batch_get_memory_size: " << FLAGS_max_batch_get_memory_size;
+      break;
+    }
   }
 
   return butil::Status::OK();
@@ -572,9 +614,9 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   auto snapshot = raw_engine->GetSnapshot();
 
   auto reader = raw_engine->Reader();
-  // construct lock iter
+  // construct write iter
   IteratorOptions write_iter_options;
-  write_iter_options.lower_bound = Helper::EncodeTxnKey(range.start_key(), start_ts);
+  write_iter_options.lower_bound = Helper::EncodeTxnKey(range.start_key(), Constant::kMaxVer);
   write_iter_options.upper_bound = Helper::EncodeTxnKey(range.end_key(), 0);
 
   auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
@@ -613,10 +655,21 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   std::string data_value;
   int64_t response_memory_size = 0;
 
+  int64_t iter_start_ts;
+  bool is_valid = false;
+  if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
+    iter_start_ts = start_ts;
+  } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
+    iter_start_ts = Constant::kMaxVer;
+  } else {
+    DINGO_LOG(ERROR) << "[txn]Scan invalid isolation_level: " << isolation_level;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
+  }
+
   while (true) {
     data_value.clear();
     iter_key.clear();
-    auto ret = ScanGetNextKeyValue(reader, write_iter, lock_iter, start_ts, isolation_level, start_iter_key,
+    auto ret = ScanGetNextKeyValue(reader, write_iter, lock_iter, iter_start_ts, isolation_level, start_iter_key,
                                    last_lock_key, last_write_key, txn_result_info, iter_key, data_value);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "[txn]Scan ScanGetNextKeyValue failed, start_ts: " << start_ts
@@ -656,6 +709,9 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
     if ((limit > 0 && kvs.size() >= limit) || kvs.size() >= FLAGS_max_scan_line_limit ||
         response_memory_size >= FLAGS_max_scan_memory_size) {
       has_more = true;
+      DINGO_LOG(INFO) << "[txn]Scan kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
+                      << ", max_scan_line_limit: " << FLAGS_max_scan_line_limit
+                      << ", max_scan_memory_size: " << FLAGS_max_scan_memory_size;
       break;
     }
 
