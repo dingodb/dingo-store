@@ -284,9 +284,12 @@ TEST_F(VectorIndexIvfPqTest, DeleteNoData) {
     int64_t id = 10000000;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_ivf_pq_l2->Delete(ids);
-    vector_index_ivf_pq_ip->Delete(ids);
-    vector_index_ivf_pq_consine->Delete(ids);
+    ok = vector_index_ivf_pq_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_consine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
   // id exist
@@ -294,9 +297,12 @@ TEST_F(VectorIndexIvfPqTest, DeleteNoData) {
     int64_t id = 0;
     std::vector<int64_t> ids;
     ids.push_back(id);
-    vector_index_ivf_pq_l2->Delete(ids);
-    vector_index_ivf_pq_ip->Delete(ids);
-    vector_index_ivf_pq_consine->Delete(ids);
+    ok = vector_index_ivf_pq_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_consine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
   // id exist batch
@@ -305,9 +311,12 @@ TEST_F(VectorIndexIvfPqTest, DeleteNoData) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_ivf_pq_l2->Delete(ids);
-    vector_index_ivf_pq_ip->Delete(ids);
-    vector_index_ivf_pq_consine->Delete(ids);
+    ok = vector_index_ivf_pq_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_consine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
   // id exist batch again
@@ -316,10 +325,161 @@ TEST_F(VectorIndexIvfPqTest, DeleteNoData) {
     for (size_t i = 0; i < data_base_size; i++) {
       ids.push_back(i);
     }
-    vector_index_ivf_pq_l2->Delete(ids);
-    vector_index_ivf_pq_ip->Delete(ids);
-    vector_index_ivf_pq_consine->Delete(ids);
+    ok = vector_index_ivf_pq_l2->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_ip->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = vector_index_ivf_pq_consine->Delete(ids);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
+}
+
+TEST_F(VectorIndexIvfPqTest, SearchNotTrain) {
+  butil::Status ok;
+
+  // create random data
+  {
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib;
+
+    data_base.resize(dimension * data_base_size, 0.0f);
+    // float* xb = new float[dimension_ * data_base_size_];
+
+    for (int i = 0; i < data_base_size; i++) {
+      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
+      data_base[dimension * i] += i / 1000.;
+    }
+
+    for (size_t i = 0; i < data_base_size; i++) {
+      // std::cout << "[" << i << "]"
+      //           << " [";
+      for (faiss::idx_t j = 0; j < dimension; j++) {
+        if (0 != j) {
+          // std::cout << ",";
+        }
+        // std::cout << std::setw(10) << data_base[i * dimension + j];
+      }
+
+      // std::cout << "]" << '\n';
+    }
+  }
+
+  std::cout << "create random data complete!!!" << '\n';
+
+  // ok with param
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = 3;
+    std::vector<pb::index::VectorWithDistanceResult> results_l2;
+    std::vector<pb::index::VectorWithDistanceResult> results_ip;
+    std::vector<pb::index::VectorWithDistanceResult> results_consine;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    std::vector<int64_t> vector_ids;
+    for (int64_t i = 0; i < data_base_size; i++) {
+      vector_ids.emplace_back(i + start_id);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(vector_ids.begin(), vector_ids.end(), g);
+
+    std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
+    std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
+
+    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
+        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    const bool reconstruct = false;
+    pb::common::VectorSearchParameter parameter;
+    parameter.mutable_ivf_pq()->set_nprobe(10);
+    ok = vector_index_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = vector_index_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = vector_index_ivf_pq_consine->Search(vector_with_ids, topk, {filter}, results_consine, false, parameter);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+}
+
+TEST_F(VectorIndexIvfPqTest, AddNotTrain) {
+  butil::Status ok;
+
+  std::vector<float> internal_data_base;
+  auto internal_data_base_size = 65536 + 1;
+
+  // create random data
+  {
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib;
+
+    internal_data_base.resize(dimension * internal_data_base_size, 0.0f);
+    // float* xb = new float[dimension_ * data_base_size_];
+
+    for (int i = 0; i < internal_data_base_size; i++) {
+      for (int j = 0; j < dimension; j++) internal_data_base[dimension * i + j] = distrib(rng);
+      internal_data_base[dimension * i] += i / 1000.;
+    }
+    std::cout << "create random data complete!!!" << '\n';
+  }
+
+  auto internal_start_id = start_id;
+
+  // one ok flat
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    pb::common::VectorWithId vector_with_id;
+
+    vector_with_id.set_id(internal_start_id);
+    for (size_t i = 0; i < dimension; i++) {
+      vector_with_id.mutable_vector()->add_float_values(internal_data_base[i]);
+    }
+
+    vector_with_ids.push_back(vector_with_id);
+
+    ok = vector_index_ivf_pq_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_ivf_pq_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_ivf_pq_consine->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  ReCreate();
+
+  // ivf_pq
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+
+    for (size_t id = 1; id < internal_data_base_size; id++) {
+      pb::common::VectorWithId vector_with_id;
+
+      vector_with_id.set_id(internal_start_id + id);
+      for (size_t i = 0; i < dimension; i++) {
+        vector_with_id.mutable_vector()->add_float_values(internal_data_base[id * dimension + i]);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    ok = vector_index_ivf_pq_l2->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_ivf_pq_ip->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = vector_index_ivf_pq_consine->Add(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  ReCreate();
 }
 
 TEST_F(VectorIndexIvfPqTest, NeedToSave) {
