@@ -64,7 +64,7 @@ class VectorIndexIvfPq : public VectorIndex {
   // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
-  butil::Status AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
+  butil::Status AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
 
   // not exist add. if exist update
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
@@ -129,7 +129,7 @@ class VectorIndexIvfPq : public VectorIndex {
 
   template <typename FLAT_FUNC_PTR, typename PQ_FUNC_PTR, typename... Args>
   butil::Status InvokeConcreteFunction(const char* name, FLAT_FUNC_PTR flat_func_ptr, PQ_FUNC_PTR pq_func_ptr,
-                                       Args&&... args);
+                                       bool use_glog, Args&&... args);
 };
 
 }  // namespace dingodb

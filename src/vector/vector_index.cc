@@ -445,23 +445,6 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
   }
 
   auto status = vector_index->Add(vector_with_ids);
-  if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
-    std::vector<float> train_datas;
-    train_datas.reserve(vector_index->GetDimension() * vector_with_ids.size());
-    for (const auto& vector_with_id : vector_with_ids) {
-      train_datas.insert(train_datas.end(), vector_with_id.vector().float_values().begin(),
-                         vector_with_id.vector().float_values().end());
-    }
-    status = vector_index->Train(train_datas);
-    if (BAIDU_LIKELY(status.ok())) {
-      // try again
-      status = vector_index->Add(vector_with_ids);
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] train failed size : {}", Id(),
-                                      train_datas.size());
-      return status;
-    }
-  }
   if (status.ok()) {
     write_key_count_ += vector_with_ids.size();
   }
@@ -489,23 +472,7 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
   }
 
   auto status = vector_index->Upsert(vector_with_ids);
-  if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
-    std::vector<float> train_datas;
-    train_datas.reserve(vector_index->GetDimension() * vector_with_ids.size());
-    for (const auto& vector_with_id : vector_with_ids) {
-      train_datas.insert(train_datas.end(), vector_with_id.vector().float_values().begin(),
-                         vector_with_id.vector().float_values().end());
-    }
-    status = vector_index->Train(train_datas);
-    if (BAIDU_LIKELY(status.ok())) {
-      // try again
-      status = vector_index->Upsert(vector_with_ids);
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] train failed size : {}", Id(),
-                                      train_datas.size());
-      return status;
-    }
-  }
+
   if (status.ok()) {
     write_key_count_ += vector_with_ids.size();
   }

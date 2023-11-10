@@ -88,6 +88,11 @@ VectorIndexFlat::~VectorIndexFlat() {
 //   }
 // }
 
+butil::Status VectorIndexFlat::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                  bool is_upsert) {
+  return AddOrUpsert(vector_with_ids, is_upsert);
+}
+
 butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                            bool is_upsert) {
   if (vector_with_ids.empty()) {
@@ -149,11 +154,11 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
 }
 
 butil::Status VectorIndexFlat::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return AddOrUpsert(vector_with_ids, true);
+  return AddOrUpsertWrapper(vector_with_ids, true);
 }
 
 butil::Status VectorIndexFlat::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return AddOrUpsert(vector_with_ids, false);
+  return AddOrUpsertWrapper(vector_with_ids, false);
 }
 
 butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {

@@ -79,32 +79,58 @@ VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexPara
 
 VectorIndexIvfPq::~VectorIndexIvfPq() { bthread_mutex_destroy(&mutex_); }
 
-butil::Status VectorIndexIvfPq::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                            bool is_upsert) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  butil::Status status = InvokeConcreteFunction("AddOrUpsert", &VectorIndexFlat::AddOrUpsert,
-                                                &VectorIndexRawIvfPq::AddOrUpsert, vector_with_ids, is_upsert);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "VectorIndexIvfPq::AddOrUpsert failed " << status.error_cstr();
+butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                   bool is_upsert) {
+  butil::Status status;
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
+                                    &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
+  }
+
+  if (status.ok()) {
     return status;
   }
 
-  return butil::Status::OK();
+  if (!status.ok() && pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code()) {
+    DINGO_LOG(ERROR) << "VectorIndexIvfPq::AddOrUpsertWrapper failed " << status.error_cstr();
+    return status;
+  }
+
+  // train
+  status = Train(vector_with_ids);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "VectorIndexIvfPq::Train failed " << status.error_cstr();
+    return status;
+  }
+
+  // add again
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
+                                    &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+  }
+
+  return status;
 }
 
 butil::Status VectorIndexIvfPq::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return AddOrUpsert(vector_with_ids, true);
+  return AddOrUpsertWrapper(vector_with_ids, true);
 }
 
 butil::Status VectorIndexIvfPq::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return AddOrUpsert(vector_with_ids, false);
+  return AddOrUpsertWrapper(vector_with_ids, false);
 }
 
 butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
   BAIDU_SCOPED_LOCK(mutex_);
   butil::Status status =
-      InvokeConcreteFunction("Delete", &VectorIndexFlat::Delete, &VectorIndexRawIvfPq::Delete, delete_ids);
-  if (!status.ok()) {
+      InvokeConcreteFunction("Delete", &VectorIndexFlat::Delete, &VectorIndexRawIvfPq::Delete, false, delete_ids);
+  if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     DINGO_LOG(ERROR) << "VectorIndexIvfPq::Delete failed " << status.error_cstr();
     return status;
   }
@@ -117,9 +143,9 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
                                        std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
                                        const pb::common::VectorSearchParameter& parameter) {
   BAIDU_SCOPED_LOCK(mutex_);
-  butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search,
+  butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
                                                 vector_with_ids, topk, filters, results, reconstruct, parameter);
-  if (!status.ok()) {
+  if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     DINGO_LOG(ERROR) << "VectorIndexIvfPq::Search failed " << status.error_cstr();
     return status;
   }
@@ -136,7 +162,8 @@ bool VectorIndexIvfPq::SupportSave() { return true; }
 butil::Status VectorIndexIvfPq::Save(const std::string& path) {
   // The outside has been locked. Remove the locking operation here.
   // BAIDU_SCOPED_LOCK(mutex_);
-  butil::Status status = InvokeConcreteFunction("Save", &VectorIndexFlat::Save, &VectorIndexRawIvfPq::Save, path);
+  butil::Status status =
+      InvokeConcreteFunction("Save", &VectorIndexFlat::Save, &VectorIndexRawIvfPq::Save, false, path);
   if (!status.ok()) {
     // DINGO_LOG(ERROR) << "VectorIndexIvfPq::Save failed " << status.error_cstr();
     return status;
@@ -513,10 +540,10 @@ void VectorIndexIvfPq::Reset() {
 
 template <typename FLAT_FUNC_PTR, typename PQ_FUNC_PTR, typename... Args>
 butil::Status VectorIndexIvfPq::InvokeConcreteFunction(const char* name, FLAT_FUNC_PTR flat_func_ptr,
-                                                       PQ_FUNC_PTR pq_func_ptr, Args&&... args) {
+                                                       PQ_FUNC_PTR pq_func_ptr, bool use_glog, Args&&... args) {
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("{} : ivf pq not train. train first.", name);
-    // DINGO_LOG(ERROR) << name << " : " << s;
+    if (use_glog) DINGO_LOG(ERROR) << name << " : " << s;
     return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
   }
 
@@ -531,7 +558,7 @@ butil::Status VectorIndexIvfPq::InvokeConcreteFunction(const char* name, FLAT_FU
       [[fallthrough]];
     default: {
       std::string s = fmt::format("{} : ivf pq not train. train first.", name);
-      // DINGO_LOG(ERROR) << name << " : " << s;
+      if (use_glog) DINGO_LOG(ERROR) << name << " : " << s;
       return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
     }
   }

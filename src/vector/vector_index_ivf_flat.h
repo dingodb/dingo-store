@@ -82,7 +82,7 @@ class VectorIndexIvfFlat : public VectorIndex {
   // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
-  butil::Status AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
+  butil::Status AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
 
   // not exist add. if exist update
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
@@ -117,6 +117,9 @@ class VectorIndexIvfFlat : public VectorIndex {
 
   // train failed. reset
   void Reset();
+
+  butil::Status AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
+
 
   // Dimension of the elements
   faiss::idx_t dimension_;

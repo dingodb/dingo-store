@@ -147,12 +147,33 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
   return butil::Status::OK();
 }
 
+butil::Status VectorIndexIvfFlat::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                     bool is_upsert) {
+  auto status = AddOrUpsert(vector_with_ids, is_upsert);
+  if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
+    status = Train(vector_with_ids);
+    if (BAIDU_LIKELY(status.ok())) {
+      // try again
+      status = AddOrUpsert(vector_with_ids, is_upsert);
+      if (BAIDU_LIKELY(!status.ok())) {  // AddOrUpsert
+        DINGO_LOG(ERROR) << status;
+        return status;
+      }
+    } else {  // Train failed
+      DINGO_LOG(ERROR) << status;
+      return status;
+    }
+  }
+
+  return status;
+}
+
 butil::Status VectorIndexIvfFlat::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return AddOrUpsert(vector_with_ids, true);
+  return AddOrUpsertWrapper(vector_with_ids, true);
 }
 
 butil::Status VectorIndexIvfFlat::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
-  return AddOrUpsert(vector_with_ids, false);
+  return AddOrUpsertWrapper(vector_with_ids, false);
 }
 
 butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids) {
@@ -180,9 +201,9 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
   {
     BAIDU_SCOPED_LOCK(mutex_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
-      std::string s = fmt::format("ivf flat not train. train first.");
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
+      std::string s = fmt::format("ivf flat not train. train first. ignored");
+      DINGO_LOG(WARNING) << s;
+      return butil::Status::OK();
     }
 
     std::thread([&]() { remove_count = index_->remove_ids(sel); }).join();
@@ -256,18 +277,18 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
 
   {
     BAIDU_SCOPED_LOCK(mutex_);
+    if (BAIDU_UNLIKELY(!DoIsTrained())) {
+      std::string s = fmt::format("ivf flat not train. train first. ignored");
+      DINGO_LOG(WARNING) << s;
+      return butil::Status::OK();
+    }
+
     if (BAIDU_UNLIKELY(nprobe <= 0)) {
       nprobe = index_->nprobe;
     }
 
     // Prevent users from passing parameters out of bounds.
     nprobe = std::min(nprobe, static_cast<int32_t>(index_->nlist));
-
-    if (BAIDU_UNLIKELY(!DoIsTrained())) {
-      std::string s = fmt::format("ivf flat not train. train first.");
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
-    }
 
     faiss::IVFSearchParameters ivf_search_parameters;
     ivf_search_parameters.nprobe = nprobe;
@@ -328,7 +349,7 @@ bool VectorIndexIvfFlat::SupportSave() { return true; }
 butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   if (BAIDU_UNLIKELY(path.empty())) {
     std::string s = fmt::format("path empty. not support");
-    //DINGO_LOG(ERROR) << s;
+    // DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
@@ -356,7 +377,7 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   t.join();
 
   if (status.ok()) {
-    //DINGO_LOG(INFO) << fmt::format("VectorIndexIvfFlat::Save success. path : {}", path);
+    // DINGO_LOG(INFO) << fmt::format("VectorIndexIvfFlat::Save success. path : {}", path);
   }
 
   return status;
@@ -617,6 +638,8 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
   t.join();
 
   if (!status.ok()) {
+    Reset();
+    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
