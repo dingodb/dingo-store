@@ -397,6 +397,7 @@ message WriteConflict {
 message TxnNotFound {
   int64 start_ts = 1;
   bytes primary_key = 2;
+  bytes key = 3;
 }
 
 message PrimaryMismatch {
@@ -500,11 +501,10 @@ message TxnPessimisticLockRequest {
   uint64 start_ts = 4;
   // the lock's ttl is timestamp in milisecond, it's the absolute timestamp when the lock is expired.
   uint64 lock_ttl = 5;
-  // Each locking command in a pessimistic transaction has its own timestamp.
-  // If locking fails, then the corresponding SQL statement can be retried with a later timestamp, Executor does not
-  // need to retry the whole transaction.
-  // The name comes from the `SELECT ... FOR UPDATE` SQL statement which is a locking read. Each `SELECT ... FOR UPDATE`
-  // in a transaction will be assigned its own timestamp.
+  // Each locking command in a pessimistic transaction has its own timestamp oracle.
+  // If locking fails, then the corresponding SQL statement can be retried with a later timestamp oracle, Executor does
+  // not need to retry the whole transaction. The name comes from the `SELECT ... FOR UPDATE` SQL statement which is a
+  // locking read. Each `SELECT ... FOR UPDATE` in a transaction will be assigned its own timestamp oracle.
   uint64 for_update_ts = 6;
 }
 
@@ -604,7 +604,6 @@ message TxnPrewriteResponse {
   // 3. otherwise, txn_result is empty
   // for success prewrite, txn_result is empty
   // for failure prewrite, txn_result is not empty
-  // if txn_result is AlreadyExist, there will be many txn_result, each txn_result is for one key
   // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
   repeated TxnResultInfo txn_result = 2;
   // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
@@ -634,7 +633,8 @@ message TxnCommitResponse {
   // 2. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
   // committing primary key meet this error, the transaction may be rolled back. If committing secondary key meet this,
   // Executor can think its lock is resolved, and continue to commit.
-  // 3. otherwise, txn_result is empty
+  // 3. WriteConflict: SelfRolledBack: the transaction itself has been rolled back when it tries to commit.
+  // 4. otherwise, txn_result is empty
   TxnResultInfo txn_result = 2;
   // The commit_ts of the transaction.
   int64 commit_ts = 3;
@@ -648,11 +648,11 @@ message TxnCheckTxnStatusRequest {
   Context context = 1;
   // Primary key and lock ts together to locate the primary lock of a transaction.
   bytes primary_key = 2;
-  // Starting timestamp of the transaction being checked.
+  // Starting timestamp oracle of the transaction being checked.
   int64 lock_ts = 3;
-  // The start timestamp of the transaction which this request is part of.
+  // The start timestamp oracle of the transaction which this request is part of.
   int64 caller_start_ts = 4;
-  // The client must specify the current time to dingo-store using this timestamp.
+  // The client must specify the current time to dingo-store using this timestamp oracle.
   // It is used to check TTL timeouts. It may be inaccurate.
   int64 current_ts = 5;
 }
@@ -683,7 +683,7 @@ message TxnResolveLockRequest {
   Context context = 1;
   int64 start_ts = 2;
   // `commit_ts == 0` means the transaction was rolled back.
-  // `commit_ts > 0` means the transaction was committed at the given timestamp.
+  // `commit_ts > 0` means the transaction was committed at the given timestamp oracle.
   int64 commit_ts = 3;
   // Only resolve specified keys.
   repeated bytes keys = 4;
@@ -751,7 +751,7 @@ message TxnBatchRollbackResponse {
 // old locks.
 message TxnScanLockRequest {
   Context context = 1;
-  // Returns all locks with a start timestamp before `max_ts`, not include `max_ts`.
+  // Returns all locks with a start timestamp oracle before `max_ts`, not include `max_ts`.
   int64 max_ts = 2;
   // The inclusive lowerbound for scanning, can't be empty.
   bytes start_key = 3;
@@ -809,7 +809,7 @@ message TxnGcResponse {
 // Delete a range of data from dingo-store.
 // All keys in the range will be deleted permanently regardless of their
 // timestamps. This means that deleted keys will not be retrievable by
-// specifying an older timestamp.
+// specifying an older timestamp oracle.
 // the range is [start_key, end_key)
 message TxnDeleteRangeRequest {
   Context context = 1;
