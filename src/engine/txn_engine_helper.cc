@@ -246,6 +246,11 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "keys_count is too large");
   }
 
+  if (isolation_level != pb::store::SnapshotIsolation && isolation_level != pb::store::ReadCommitted) {
+    DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
+  }
+
   if (txn_result_info.ByteSizeLong() > 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "txn_result_info is not empty");
   }
@@ -601,6 +606,11 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
 
   if (limit == 0) {
     return butil::Status::OK();
+  }
+
+  if (isolation_level != pb::store::SnapshotIsolation && isolation_level != pb::store::ReadCommitted) {
+    DINGO_LOG(ERROR) << "[txn]TxnScan invalid isolation_level: " << isolation_level;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
   }
 
   if (!kvs.empty()) {
@@ -1408,6 +1418,9 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
     // 2.2 check commit
     // if there is a commit, there will be a key | commit_ts : WriteInfo| in write_cf
+    // for optimistic prewrite, we need to check if commit_ts >= start_ts
+    // for pessimistic prewrite, we need to check if commit_ts >= for_update_ts, but this check is done in lock phase,
+    // so we do not need to check here
     int64_t commit_ts = 0;
     auto ret2 =
         GetWriteInfo(raw_engine, 0, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info, commit_ts);
@@ -1422,25 +1435,30 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                     << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
 
     if (commit_ts >= start_ts) {
-      DINGO_LOG(INFO) << "find this transaction is committed,return  WriteConflict start_ts: " << start_ts
-                      << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
+      if (!need_check_pessimistic_lock) {
+        DINGO_LOG(INFO)
+            << "Optimistic Prewrite find this transaction is committed after start_ts,return WriteConflict start_ts: "
+            << start_ts << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
 
-      // prewrite meet write_conflict here
-      // add txn_result for response
-      // setup write_conflict ( this may not be necessary, when lock_info is set)
-      auto *txn_result = response->add_txn_result();
-      auto *write_conflict = txn_result->mutable_write_conflict();
-      write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_Optimistic);
-      write_conflict->set_start_ts(start_ts);
-      write_conflict->set_conflict_ts(commit_ts);
-      write_conflict->set_key(mutation.key());
-      // write_conflict->set_primary_key(lock_info.primary_lock());
+        // prewrite meet write_conflict here
+        // add txn_result for response
+        // setup write_conflict ( this may not be necessary, when lock_info is set)
+        auto *txn_result = response->add_txn_result();
+        auto *write_conflict = txn_result->mutable_write_conflict();
+        write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_Optimistic);
+        write_conflict->set_start_ts(start_ts);
+        write_conflict->set_conflict_ts(commit_ts);
+        write_conflict->set_key(mutation.key());
+        // write_conflict->set_primary_key(lock_info.primary_lock());
 
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                      << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
-                      << ", write_info: " << write_info.ShortDebugString();
-
-      break;
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                        << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
+                        << ", write_info: " << write_info.ShortDebugString();
+        break;
+      } else {
+        DINGO_LOG(INFO) << "Pessimistic Prewrite find this transaction is committed after start_ts, it's ok. start_ts: "
+                        << start_ts << ", commit_ts: " << commit_ts;
+      }
     }
 
     if (response->txn_result_size() > 0) {
@@ -1738,8 +1756,8 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
       // check if the key is already committed, if it is committed can skip it
       pb::store::WriteInfo write_info;
       int64_t prev_commit_ts = 0;
-      auto ret2 = TxnEngineHelper::GetWriteInfo(raw_engine, start_ts, Constant::kMaxVer, start_ts, key, false, true,
-                                                true, write_info, prev_commit_ts);
+      auto ret2 = TxnEngineHelper::GetWriteInfo(raw_engine, start_ts, commit_ts, start_ts, key, false, true, true,
+                                                write_info, prev_commit_ts);
       if (!ret2.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
                                         commit_ts)
@@ -1789,6 +1807,11 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
 
         return butil::Status::OK();
       }
+
+      // no committed and no rollbacked, there may be BUG
+      auto *txn_not_found = txn_result->mutable_txn_not_found();
+      txn_not_found->set_start_ts(start_ts);
+      txn_not_found->set_key(key);
     }
 
     // now txn is match, prepare to commit
