@@ -167,7 +167,7 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
                      << ", end_key: " << Helper::StringToHex(end_key);
   }
 
-  iter->SeekToFirst();
+  iter->Seek(iter_options.lower_bound);
   while (iter->Valid()) {
     auto lock_value = iter->Value();
     if (lock_value.length() <= 8) {
@@ -292,6 +292,8 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
     }
 
+    DINGO_LOG(INFO) << "key: " << Helper::StringToHex(key) << ", iter_start_ts: " << iter_start_ts;
+
     IteratorOptions iter_options;
     iter_options.lower_bound = Helper::EncodeTxnKey(key, iter_start_ts);
     iter_options.upper_bound = Helper::EncodeTxnKey(key, 0);
@@ -300,8 +302,11 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       DINGO_LOG(FATAL) << "[txn]BatchGet NewIterator failed, start_ts: " << start_ts;
     }
 
+    DINGO_LOG(INFO) << "iter_options.lower_bound: " << Helper::StringToHex(iter_options.lower_bound)
+                    << ", iter_options.upper_bound: " << Helper::StringToHex(iter_options.upper_bound);
+
     // check isolation level and return value
-    iter->SeekToFirst();
+    iter->Seek(iter_options.lower_bound);
     while (iter->Valid()) {
       if (iter->Key().length() <= 8) {
         DINGO_LOG(ERROR) << ", invalid write_key, key: " << Helper::StringToHex(iter->Key())
@@ -645,8 +650,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   }
 
   // iter write and lock iter, if lock_ts < start_ts, return LockInfo
-  write_iter->SeekToFirst();
-  lock_iter->SeekToFirst();
+  write_iter->Seek(write_iter_options.lower_bound);
+  lock_iter->Seek(lock_iter_options.lower_bound);
 
   if ((!write_iter->Valid()) && (!lock_iter->Valid())) {
     DINGO_LOG(ERROR) << "[txn]Scan write_iter is not valid and lock_iter is not valid, start_ts: " << start_ts
@@ -747,7 +752,7 @@ butil::Status TxnEngineHelper::GetWriteInfo(RawEnginePtr engine, int64_t min_com
 
   // if the key is committed after start_ts, return WriteConflict
   pb::store::WriteInfo tmp_write_info;
-  iter->SeekToFirst();
+  iter->Seek(iter_options.lower_bound);
   while (iter->Valid()) {
     if (iter->Key().length() <= 8) {
       DINGO_LOG(ERROR) << "invalid write_key, key: " << Helper::StringToHex(iter->Key())

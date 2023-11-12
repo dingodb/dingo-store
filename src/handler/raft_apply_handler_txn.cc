@@ -44,9 +44,29 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
                                                   const pb::raft::MultiCfPutAndDeleteRequest &request,
                                                   [[maybe_unused]] store::RegionMetricsPtr region_metrics,
                                                   int64_t term_id, int64_t log_id) {
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}", region->Id(),
-                                 term_id, log_id)
-                  << ", request: " << request.ShortDebugString();
+  DINGO_LOG(DEBUG) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
+                                  region->Id(), term_id, log_id)
+                   << ", request: " << request.ShortDebugString();
+
+  if (request.puts_with_cf_size() > 0) {
+    for (const auto &puts : request.puts_with_cf()) {
+      for (const auto &kv : puts.kvs()) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
+                                       region->Id(), term_id, log_id)
+                        << ", put cf: " << puts.cf_name() << ", put key: " << Helper::StringToHex(kv.key())
+                        << ", value: " << Helper::StringToHex(kv.value());
+      }
+    }
+  }
+  if (request.deletes_with_cf_size() > 0) {
+    for (const auto &dels : request.deletes_with_cf()) {
+      for (const auto &key : dels.keys()) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
+                                       region->Id(), term_id, log_id)
+                        << ", delete cf: " << dels.cf_name() << ", delete key: " << Helper::StringToHex(key);
+      }
+    }
+  }
 
   butil::Status status;
 
