@@ -38,8 +38,9 @@
 
 namespace dingodb {
 
-DEFINE_uint64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
-DEFINE_uint64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
+DEFINE_int64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
+DEFINE_int64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
+DEFINE_int64(version_lease_max_count, 50000, "max lease count");
 
 butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64_t &granted_id,
                                     int64_t &granted_ttl_seconds,
@@ -54,6 +55,13 @@ butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64
     granted_ttl_seconds = FLAGS_version_lease_min_ttl_seconds;
   } else {
     granted_ttl_seconds = ttl_seconds;
+  }
+
+  if (kv_lease_map_.Size() > FLAGS_version_lease_max_count) {
+    DINGO_LOG(ERROR) << "lease_id " << lease_id << ", lease count " << kv_lease_map_.Size()
+                     << " is too large, max lease count is " << FLAGS_version_lease_max_count;
+    return butil::Status(pb::error::Errno::ELEASE_COUNT_EXCEEDS_LIMIT, "lease count %lu is too large",
+                         kv_lease_map_.Size());
   }
 
   if (lease_id == 0) {

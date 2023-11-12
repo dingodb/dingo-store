@@ -30,10 +30,13 @@
 #include "butil/status.h"
 #include "common/logging.h"
 #include "coordinator/kv_control.h"
+#include "gflags/gflags.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/version.pb.h"
 
 namespace dingodb {
+
+DEFINE_int64(version_watch_max_count, 50000, "max count of version watch");
 
 void WatchCancelCallback(KvControl* kv_control, google::protobuf::Closure* done) {
   DINGO_LOG(INFO) << "WatchCancelCallback, done:" << done;
@@ -53,6 +56,16 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
                   << ", done:" << done;
 
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
+
+  if (one_time_watch_map_.size() > FLAGS_version_watch_max_count) {
+    DINGO_LOG(ERROR) << "OneTimeWatch, one_time_watch_map_.size() > FLAGS_version_watch_max_count, watch_key:"
+                     << watch_key << ", start_revision:" << start_revision << ", no_put_event:" << no_put_event
+                     << ", no_delete_event:" << no_delete_event << ", need_prev_kv:" << need_prev_kv
+                     << ", wait_on_not_exist_key:" << wait_on_not_exist_key << ", done:" << done
+                     << ", one_time_watch_map_.size:" << one_time_watch_map_.size();
+    return butil::Status(pb::error::Errno::EWATCH_COUNT_EXCEEDS_LIMIT,
+                         "OneTimeWatch, one_time_watch_map_.size() > FLAGS_version_watch_max_count");
+  }
 
   if (start_revision == 0) {
     start_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
