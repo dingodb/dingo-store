@@ -17,16 +17,61 @@
 
 #include <sys/stat.h>
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/constant.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "meta/store_meta_manager.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
+
+class TxnIterator {
+ public:
+  TxnIterator(RawEnginePtr raw_engine, const pb::common::Range &range, int64_t start_ts,
+              pb::store::IsolationLevel isolation_level)
+      : raw_engine_(raw_engine), range_(range), isolation_level_(isolation_level) {
+    if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
+      start_ts_ = Constant::kMaxVer;
+    } else {
+      start_ts_ = start_ts;
+    }
+  }
+
+  ~TxnIterator() = default;
+  butil::Status Init();
+  butil::Status Seek(const std::string &key);
+  butil::Status Next();
+  bool Valid(pb::store::TxnResultInfo &txn_result_info);
+  std::string Key();
+  std::string Value();
+
+  std::string GetLastLockKey() { return last_lock_key_; }
+  std::string GetLastWriteKey() { return last_write_key_; }
+
+ private:
+  butil::Status GetCurrentValue();
+
+  RawEnginePtr raw_engine_;
+  pb::common::Range range_;
+  int64_t start_ts_;
+  pb::store::IsolationLevel isolation_level_;
+
+  SnapshotPtr snapshot_;
+  RawEngine::ReaderPtr reader_;
+  std::shared_ptr<Iterator> write_iter_;
+  std::shared_ptr<Iterator> lock_iter_;
+  std::string last_lock_key_{};
+  std::string last_write_key_{};
+  pb::store::TxnResultInfo txn_result_info_;
+
+  std::string key_{};
+  std::string value_{};
+};
 
 class TxnEngineHelper {
  public:
@@ -41,13 +86,6 @@ class TxnEngineHelper {
   static butil::Status BatchGet(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
                                 int64_t start_ts, const std::vector<std::string> &keys,
                                 std::vector<pb::common::KeyValue> &kvs, pb::store::TxnResultInfo &txn_result_info);
-
-  static butil::Status ScanGetNextKeyValue(RawEngine::ReaderPtr reader, std::shared_ptr<Iterator> write_iter,
-                                           std::shared_ptr<Iterator> lock_iter, int64_t start_ts,
-                                           const pb::store::IsolationLevel &isolation_level,
-                                           const std::string &start_iter_key, std::string &last_lock_key,
-                                           std::string &last_write_key, pb::store::TxnResultInfo &txn_result_info,
-                                           std::string &iter_key, std::string &data_value);
 
   static butil::Status Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                             const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
