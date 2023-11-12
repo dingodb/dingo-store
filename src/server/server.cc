@@ -55,12 +55,12 @@ DEFINE_string(coor_url, "",
 
 namespace dingodb {
 
-DECLARE_uint32(compaction_retention_rev_count);
+DECLARE_int64(compaction_retention_rev_count);
 DECLARE_bool(auto_compaction);
 
 DEFINE_bool(ip2hostname, false, "resolve ip to hostname for get map api");
 DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
-DEFINE_uint32(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
+DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
 Server& Server::GetInstance() {
   static Server instance;

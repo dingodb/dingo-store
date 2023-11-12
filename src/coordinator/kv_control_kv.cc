@@ -33,15 +33,18 @@
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "proto/version.pb.h"
 #include "serial/buf.h"
 
 namespace dingodb {
 
-DEFINE_uint32(max_kv_key_size, 4096, "max kv put count");
-DEFINE_uint32(max_kv_value_size, 8192, "max kv put count");
-DEFINE_uint32(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
+DEFINE_int64(max_kv_key_size, 4096, "max kv put count");
+DEFINE_int64(max_kv_value_size, 8192, "max kv put count");
+DEFINE_int64(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
 DEFINE_bool(auto_compaction, false, "auto compaction on/off");
+DEFINE_int64(version_kv_max_count, 100000, "max kv count for version kv");
+DEFINE_int64(version_kv_max_rev_count, 500000, "max kv count for version kv");
 
 std::string KvControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
   Buf buf(17);
@@ -342,6 +345,16 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
                   << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << ignore_value
                   << ", ignore_lease: " << ignore_lease;
+
+  if (kv_index_map_.Size() > FLAGS_version_kv_max_count) {
+    DINGO_LOG(ERROR) << "KvPut kv_index_map_ size: " << kv_index_map_.Size() << ", will do compaction";
+    return butil::Status(pb::error::Errno::EKV_COUNT_EXCEEDS_LIMIT, "KvPut kv_index_map_ size is too large");
+  }
+
+  if (kv_rev_map_.Size() > FLAGS_version_kv_max_rev_count) {
+    DINGO_LOG(ERROR) << "KvPut kv_rev_map_ size: " << kv_rev_map_.Size() << ", will do compaction";
+    return butil::Status(pb::error::Errno::EKV_REV_COUNT_EXCEEDS_LIMIT, "KvPut kv_rev_map_ size is too large");
+  }
 
   // check key
   if (key_value_in.key().empty()) {
