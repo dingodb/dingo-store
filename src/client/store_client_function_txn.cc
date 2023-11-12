@@ -574,6 +574,7 @@ void SendTxnScan(uint64_t region_id) {
   range.mutable_range()->set_end_key(FLAGS_end_key);
   range.set_with_start(FLAGS_with_start);
   range.set_with_end(FLAGS_with_end);
+  *request.mutable_range() = range;
 
   if (FLAGS_limit == 0) {
     DINGO_LOG(ERROR) << "limit is empty";
