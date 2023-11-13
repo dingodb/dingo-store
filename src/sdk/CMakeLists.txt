@@ -24,3 +24,5 @@ target_link_libraries(sdk
     fmt
     ${DYNAMIC_LIB}
 )
+
+add_dependencies(sdk ${DEPEND_LIBS})
