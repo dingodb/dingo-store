@@ -1660,4 +1660,15 @@ butil::Status Helper::ParseRaftSnapshotRegionMeta(const std::string& snapshot_pa
   return butil::Status();
 }
 
+butil::Status Helper::CheckRange(const pb::common::Range& range) {
+  if (range.start_key().empty() || range.end_key().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+  }
+  if (range.start_key() >= range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+  }
+
+  return butil::Status();
+}
+
 }  // namespace dingodb

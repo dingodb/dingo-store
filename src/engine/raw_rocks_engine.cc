@@ -114,6 +114,13 @@ bool Iterator::Valid() const {
   return true;
 }
 
+butil::Status Iterator::Status() const {
+  if (iter_->status().ok()) {
+    return butil::Status();
+  }
+  return butil::Status(pb::error::EINTERNAL, "Internal iterator error");
+}
+
 butil::Status SstFileWriter::SaveFile(const std::vector<pb::common::KeyValue>& kvs, const std::string& filename) {
   auto status = sst_writer_->Open(filename);
   if (!status.ok()) {

@@ -209,6 +209,7 @@ class ScopeGuard {
 #define SCOPEGUARD_LINENAME_CAT(name, line) name##line
 #define SCOPEGUARD_LINENAME(name, line) SCOPEGUARD_LINENAME_CAT(name, line)
 #define ON_SCOPE_EXIT(callback) ScopeGuard SCOPEGUARD_LINENAME(scope_guard, __LINE__)(callback)
+#define DEFER(expr) ON_SCOPE_EXIT([&]() { expr; })
 
 };  // namespace dingodb
 

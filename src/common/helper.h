@@ -321,6 +321,8 @@ class Helper {
 
   static butil::Status ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
                                                    pb::store_internal::RaftSnapshotRegionMeta& meta);
+
+  static butil::Status CheckRange(const pb::common::Range& range);
 };
 
 }  // namespace dingodb

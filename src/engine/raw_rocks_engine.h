@@ -106,6 +106,8 @@ class Iterator : public dingodb::Iterator {
   std::string_view Key() const override { return std::string_view(iter_->key().data(), iter_->key().size()); }
   std::string_view Value() const override { return std::string_view(iter_->value().data(), iter_->value().size()); }
 
+  butil::Status Status() const override;
+
  private:
   IteratorOptions options_;
   std::unique_ptr<rocksdb::Iterator> iter_;

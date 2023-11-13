@@ -1,0 +1,2090 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "engine/raw_bdb_engine.h"
+
+#include "common/constant.h"
+#include "common/helper.h"
+#include "common/logging.h"
+#include "common/synchronization.h"
+#include "fmt/core.h"
+#include "serial/buf.h"
+#include "serial/schema/string_schema.h"
+
+#define BDB_BUILD_USE_SNAPSHOT
+
+namespace dingodb {
+
+namespace bdb {
+
+// BdbHelper
+std::string BdbHelper::EncodeKey(const std::string& cf_name, const std::string& key) {
+  Buf buf(32);
+
+  DingoSchema<std::optional<std::shared_ptr<std::string>>> schema;
+  schema.SetIsKey(true);
+  schema.SetAllowNull(false);
+  schema.EncodeKeyPrefix(&buf, std::make_shared<std::string>(cf_name));
+  return buf.GetString().append(key);
+}
+
+std::string BdbHelper::EncodeCfName(const std::string& cf_name) { return BdbHelper::EncodeKey(cf_name, std::string()); }
+
+int BdbHelper::DecodeKey(const std::string& cf_name, const Dbt& bdb_key, std::string& key) { return -1; }
+
+void BdbHelper::DbtToBinary(const Dbt& dbt, std::string& binary) {
+  binary.assign((const char*)dbt.get_data(), dbt.get_size());
+}
+
+void BdbHelper::BinaryToDbt(const std::string& binary, Dbt& dbt) {
+  dbt.set_data((void*)binary.c_str());
+  dbt.set_size(binary.size());
+}
+
+int BdbHelper::DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv) {
+  std::string encoded_cf_name = EncodeCfName(cf_name);
+  if (!IsBdbKeyPrefixWith(bdb_key, encoded_cf_name)) {
+    return -1;
+  }
+
+  kv.set_key((const char*)bdb_key.get_data() + encoded_cf_name.size(), bdb_key.get_size() - encoded_cf_name.size());
+  kv.set_value((const char*)value.get_data(), value.get_size());
+  return 0;
+}
+
+int BdbHelper::DbtCompare(const Dbt& dbt1, const Dbt& dbt2) {
+  assert(dbt1.get_data() != nullptr && dbt2.get_data() != nullptr);
+  const int32_t min_len = (dbt1.get_size() < dbt2.get_size()) ? dbt1.get_size() : dbt2.get_size();
+  int ret = memcmp(dbt1.get_data(), dbt2.get_data(), min_len);
+  if (ret == 0) {
+    if (dbt1.get_size() < dbt2.get_size()) {
+      ret = -1;
+    } else if (dbt1.get_size() > dbt2.get_size()) {
+      ret = 1;
+    }
+  }
+  return ret;
+}
+
+bool BdbHelper::IsBdbKeyPrefixWith(const Dbt& bdb_key, const std::string& binary) {
+  if (binary.size() > bdb_key.get_size()) {
+    return false;
+  }
+
+  return memcmp(bdb_key.get_data(), binary.c_str(), binary.size()) == 0;
+}
+
+// Iterator
+Iterator::Iterator(const std::string& cf_name, /*bool snapshot_mode,*/ IteratorOptions options, Dbc* cursorp)
+    : /*snapshot_mode_(snapshot_mode),*/ options_(options), /*cf_name_(cf_name), */ cursorp_(cursorp), valid_(false) {
+  encoded_cf_name_ = BdbHelper::EncodeCfName(cf_name);
+  encoded_for_seek_to_last_ = BdbHelper::EncodeCfName(cf_name + "\1");
+  bdb_value_.set_flags(DB_DBT_MALLOC);
+}
+
+Iterator::~Iterator() {
+  if (cursorp_ != nullptr) {
+    try {
+      cursorp_->close();
+    } catch (DbException& db_exception) {
+      DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+    }
+  }
+};
+
+bool Iterator::Valid() const {
+  if (!valid_) {
+    return false;
+  }
+
+  // cf_name check
+  if (!BdbHelper::IsBdbKeyPrefixWith(bdb_key_, encoded_cf_name_)) {
+    return false;
+  }
+
+  if (!options_.upper_bound.empty()) {
+    Dbt upper_key;
+    BdbHelper::BinaryToDbt(encoded_cf_name_ + options_.upper_bound, upper_key);
+    if (BdbHelper::DbtCompare(upper_key, bdb_key_) <= 0) {
+      return false;
+    }
+  }
+  if (!options_.lower_bound.empty()) {
+    Dbt lower_key;
+    BdbHelper::BinaryToDbt(encoded_cf_name_ + options_.lower_bound, lower_key);
+    if (BdbHelper::DbtCompare(lower_key, bdb_key_) > 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void Iterator::SeekToFirst() { Seek(std::string()); }
+
+void Iterator::SeekToLast() {
+  valid_ = false;
+  status_ = butil::Status();
+
+  BdbHelper::BinaryToDbt(encoded_for_seek_to_last_, bdb_key_);
+  try {
+    int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
+    if (ret == 0) {
+      Prev();
+      return;
+    } else if (ret == DB_NOTFOUND) {
+      ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_LAST);
+      if (ret == 0) {
+        valid_ = true;
+        return;
+      }
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] get failed ret: {}.", ret);
+      status_ = butil::Status(pb::error::EINTERNAL, "internal cursor seek to last error.");
+    }
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
+    status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {}.", db_exception.what());
+    status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    status_ = butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+}
+
+void Iterator::Seek(const std::string& target) {
+  valid_ = false;
+  status_ = butil::Status();
+
+  std::string store_key = encoded_cf_name_ + target;
+  BdbHelper::BinaryToDbt(store_key, bdb_key_);
+
+  try {
+    // find smallest key greater than or equal to the target.
+    int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
+    if (ret == 0) {
+      valid_ = true;
+      // if (snapshot_mode_) {
+      //   Next();
+      // }
+      return;
+    }
+
+    if (ret != DB_NOTFOUND) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] get failed ret: {}.", ret);
+      status_ = butil::Status(pb::error::EINTERNAL, "internal cursor seek error.");
+    }
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
+    status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {}.", db_exception.what());
+    status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    status_ = butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+}
+
+void Iterator::SeekForPrev(const std::string& target) {
+  valid_ = false;
+  status_ = butil::Status();
+
+  std::string store_key = encoded_cf_name_ + target;
+  Dbt bdb_target_key;
+  BdbHelper::BinaryToDbt(store_key, bdb_target_key);
+  BdbHelper::BinaryToDbt(store_key, bdb_key_);
+
+  try {
+    // find smallest key greater than or equal to the target.
+    int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
+    if (ret == 0) {
+      if (BdbHelper::DbtCompare(bdb_target_key, bdb_key_) == 0) {
+        valid_ = true;
+      } else {
+        Prev();
+      }
+      return;
+    }
+
+    // target is greater than max key in bdb, find the last one.
+    if (ret == DB_NOTFOUND) {
+      ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_LAST);
+      if (ret == 0) {
+        valid_ = true;
+        return;
+      }
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[bdb] get failed ret: {}.", ret);
+
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
+    status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {}.", db_exception.what());
+    status_ =
+        butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek for prev failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    status_ = butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+}
+
+void Iterator::Next() {
+  valid_ = false;
+  status_ = butil::Status();
+
+  try {
+    int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_NEXT);
+    if (ret == 0) {
+      valid_ = true;
+      return;
+    }
+
+    if (ret != DB_NOTFOUND) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] get failed ret: {}.", ret);
+      status_ = butil::Status(pb::error::EINTERNAL, "internal cursor next error.");
+    }
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
+    status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor next failed, exception: {}.", db_exception.what());
+    status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db cursor next failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    status_ = butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+}
+
+void Iterator::Prev() {
+  valid_ = false;
+  status_ = butil::Status();
+
+  try {
+    int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_PREV);
+    if (ret == 0) {
+      valid_ = true;
+      return;
+    }
+
+    if (ret != DB_NOTFOUND) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] get failed ret: {}.", ret);
+      status_ = butil::Status(pb::error::EINTERNAL, "internal cursor prev error.");
+    }
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
+    status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor prev failed, exception: {}.", db_exception.what());
+    status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db cursor prev failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    status_ = butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+}
+
+// Snapshot
+Snapshot::~Snapshot() {
+  if (txn_ != nullptr) {
+    int ret = 0;
+    // commit
+    try {
+      ret = txn_->commit(0);
+      if (ret == 0) {
+        txn_ = nullptr;
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+      ret = BdbHelper::kCommitException;
+    }
+
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+      txn_->abort();
+      txn_ = nullptr;
+    }
+  }
+}
+
+// Reader
+butil::Status Reader::KvGet(const std::string& cf_name, const std::string& key, std::string& value) {
+#ifdef BDB_BUILD_USE_SNAPSHOT
+  return KvGet(cf_name, GetSnapshot(), key, value);
+#else
+  return KvGet(cf_name, nullptr, key, value);
+#endif
+}
+
+butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr snapshot, const std::string& key,
+                            std::string& value) {
+  if (BAIDU_UNLIKELY(key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  try {
+    std::string store_key = BdbHelper::EncodeKey(cf_name, key);
+    Dbt bdb_key;
+    BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+    Dbt bdb_value;
+    bdb_value.set_flags(DB_DBT_MALLOC);
+
+    int ret = 0;
+    if (snapshot != nullptr) {
+      std::shared_ptr<bdb::Snapshot> ss = std::dynamic_pointer_cast<bdb::Snapshot>(snapshot);
+      if (ss == nullptr) {
+        DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
+        return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
+      }
+      ret = GetDb()->get(ss->GetDbTxn(), &bdb_key, &bdb_value, 0);
+    } else {
+      ret = GetDb()->get(nullptr, &bdb_key, &bdb_value, 0);
+    }
+
+    if (ret == 0) {
+      BdbHelper::DbtToBinary(bdb_value, value);
+      return butil::Status();
+    } else if (ret == DB_NOTFOUND) {
+      DINGO_LOG(WARNING) << "[bdb] key not found.";
+      return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key.");
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db get failed, ret: {}.", ret);
+    return butil::Status(pb::error::EINTERNAL, "Internal get error.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << "[bdb] db exception: " << db_exception.what();
+    return butil::Status(pb::error::EBDB_EXCEPTION, db_exception.what());
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << "[bdb] std exception: " << std_exception.what();
+    return butil::Status(pb::error::ESTD_EXCEPTION, std_exception.what());
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknow error.");
+}
+
+butil::Status Reader::KvScan(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
+                             std::vector<pb::common::KeyValue>& kvs) {
+#ifdef BDB_BUILD_USE_SNAPSHOT
+  return KvScan(cf_name, GetSnapshot(), start_key, end_key, kvs);
+#else
+  return KvScan(cf_name, nullptr, start_key, end_key, kvs);
+#endif
+}
+
+butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr snapshot, const std::string& start_key,
+                             const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
+  if (BAIDU_UNLIKELY(start_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty start_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(end_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty end_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(start_key >= end_key)) {
+    return butil::Status();
+  }
+
+  // Acquire a cursor
+  Dbc* cursorp = nullptr;
+  // Release the cursor later
+  DEFER(  // NOLINT
+      if (cursorp != nullptr) {
+        try {
+          cursorp->close();
+        } catch (DbException& db_exception) {
+          DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+        }
+      });
+
+  try {
+    int ret = 0;
+    if (snapshot != nullptr) {
+      std::shared_ptr<bdb::Snapshot> ss = std::dynamic_pointer_cast<bdb::Snapshot>(snapshot);
+      if (ss == nullptr) {
+        DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
+        return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
+      }
+      ret = GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_TXN_SNAPSHOT);
+    } else {
+      ret = GetDb()->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
+    }
+
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] create cursor failed ret: {}.", ret);
+      return butil::Status(pb::error::EINTERNAL, "Internal create cursor error.");
+    }
+
+    std::string store_key = BdbHelper::EncodeKey(cf_name, start_key);
+    Dbt bdb_key;
+    BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+    std::string store_end_key = BdbHelper::EncodeKey(cf_name, end_key);
+    Dbt bdb_end_key;
+    BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+
+    Dbt bdb_value;
+    bdb_value.set_flags(DB_DBT_MALLOC);
+
+    // find fist postion
+    ret = cursorp->get(&bdb_key, &bdb_value, DB_SET_RANGE);
+    if (ret != 0) {
+      if (ret == DB_NOTFOUND) {
+        // can not find data in the range, return OK;
+        return butil::Status();
+      }
+      DINGO_LOG(ERROR) << fmt::format("[bdb] txn get failed ret: {}.", ret);
+      return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
+    }
+
+    pb::common::KeyValue first_kv;
+    if (BdbHelper::DbtPairToKv(cf_name, bdb_key, bdb_value, first_kv) != 0) {
+      DINGO_LOG(WARNING) << fmt::format("[bdb] invalid bdb key, size: {}, data: {}.", bdb_key.get_size(),
+                                        bdb_key.get_data());
+      return butil::Status();
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[bdb] get real start key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
+    kvs.emplace_back(std::move(first_kv));
+
+    int index = 0;
+    while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
+      if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
+        pb::common::KeyValue kv;
+        if (BAIDU_UNLIKELY(BdbHelper::DbtPairToKv(cf_name, bdb_key, bdb_value, kv) != 0)) {
+          DINGO_LOG(WARNING) << fmt::format("[bdb] invalid bdb key, size: {}, data: {}.", bdb_key.get_size(),
+                                            bdb_key.get_data());
+          return butil::Status();
+        }
+        kvs.emplace_back(std::move(kv));
+      }
+    }
+    return butil::Status();
+
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
+    return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db scan failed, exception: {}.", db_exception.what());
+    return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db scan failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Reader::KvCount(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
+                              int64_t& count) {
+#ifdef BDB_BUILD_USE_SNAPSHOT
+  return KvCount(cf_name, GetSnapshot(), start_key, end_key, count);
+#else
+  return KvCount(cf_name, nullptr, start_key, end_key, count);
+#endif
+}
+
+butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr snapshot, const std::string& start_key,
+                              const std::string& end_key, int64_t& count) {
+  count = 0;
+
+  DbTxn* txn = nullptr;
+  int32_t isolation_flag = DB_READ_COMMITTED;
+  if (snapshot != nullptr) {
+    std::shared_ptr<bdb::Snapshot> ss = std::dynamic_pointer_cast<bdb::Snapshot>(snapshot);
+    if (ss == nullptr) {
+      DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
+      return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
+    }
+    txn = ss->GetDbTxn();
+    isolation_flag = DB_TXN_SNAPSHOT;
+  }
+
+  return GetRangeCountByCursor(cf_name, txn, start_key, end_key, isolation_flag, count);
+}
+
+std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, IteratorOptions options) {
+#ifdef BDB_BUILD_USE_SNAPSHOT
+  return NewIterator(cf_name, GetSnapshot(), options);
+#else
+  return NewIterator(cf_name, nullptr, options);
+#endif
+}
+
+std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
+                                                       IteratorOptions options) {
+  // Acquire a cursor
+  Dbc* cursorp = nullptr;
+  int ret = 0;
+  try {
+    if (snapshot != nullptr) {
+      std::shared_ptr<bdb::Snapshot> ss = std::dynamic_pointer_cast<bdb::Snapshot>(snapshot);
+      if (ss != nullptr) {
+        // ret = GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_TXN_SNAPSHOT);
+        ret = GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
+        if (ret == 0) {
+          return std::make_shared<Iterator>(cf_name, options, cursorp);
+        }
+      } else {
+        DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
+      }
+    } else {
+      ret = GetDb()->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
+      if (ret == 0) {
+        return std::make_shared<Iterator>(cf_name, options, cursorp);
+      }
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, ret: {}.", ret);
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, exception: {}.", db_exception.what());
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+  }
+
+  return nullptr;
+}
+
+butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* txn, const std::string& start_key,
+                                            const std::string& end_key, const int32_t isolation_flag, int64_t& count) {
+  count = 0;
+
+  if (BAIDU_UNLIKELY(start_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty start_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(end_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty end_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(start_key >= end_key)) {
+    return butil::Status();
+  }
+
+  // Acquire a cursor
+  Dbc* cursorp = nullptr;
+  // Release the cursor later
+  DEFER(  // NOLINT
+      if (cursorp != nullptr) {
+        try {
+          cursorp->close();
+        } catch (DbException& db_exception) {
+          DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+        }
+      });
+
+  int ret = GetDb()->cursor(txn, &cursorp, isolation_flag);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] create cursor failed ret: {}.", ret);
+    return butil::Status(pb::error::EINTERNAL, "Internal create cursor error.");
+  }
+
+  std::string store_key = BdbHelper::EncodeKey(cf_name, start_key);
+  Dbt bdb_key;
+  BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+  std::string store_end_key = BdbHelper::EncodeKey(cf_name, end_key);
+  Dbt bdb_end_key;
+  BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+
+  Dbt bdb_value;
+  bdb_value.set_flags(DB_DBT_MALLOC);
+
+  // find fist postion
+  ret = cursorp->get(&bdb_key, &bdb_value, DB_SET_RANGE);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] txn get failed ret: {}.", ret);
+    return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[bdb] get key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
+  ++count;
+
+  int index = 0;
+  while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
+    if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
+      ++count;
+    }
+  }
+  return butil::Status();
+}
+
+std::shared_ptr<RawBdbEngine> Reader::GetRawEngine() {
+  auto raw_engine = raw_engine_.lock();
+  if (raw_engine == nullptr) {
+    DINGO_LOG(FATAL) << "[bdb] get raw engine failed.";
+  }
+
+  return raw_engine;
+}
+
+std::shared_ptr<Db> Reader::GetDb() { return GetRawEngine()->GetDb(); }
+
+dingodb::SnapshotPtr Reader::GetSnapshot() { return GetRawEngine()->GetSnapshot(); }
+
+butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, const std::string& key,
+                                       std::string& value) {
+  if (BAIDU_UNLIKELY(key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty.");
+  }
+
+  Dbc* cursorp = nullptr;
+  // close cursorp
+  DEFER(  // NOLINT
+      if (cursorp != nullptr) {
+        try {
+          cursorp->close();
+          cursorp = nullptr;
+        } catch (DbException& db_exception) {
+          DINGO_LOG(WARNING) << fmt::format("[bdb] cursor close failed, exception: {}.", db_exception.what());
+        }
+      });
+
+  try {
+    // Get the cursor
+    GetDb()->cursor(txn, &cursorp, DB_READ_COMMITTED);
+
+    std::string store_key = BdbHelper::EncodeKey(cf_name, key);
+    Dbt bdb_key;
+    BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+    Dbt bdb_value;
+    int ret = cursorp->get(&bdb_key, &bdb_value, DB_FIRST);
+    if (ret == 0) {
+      BdbHelper::DbtToBinary(bdb_value, value);
+      return butil::Status();
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor failed, ret: {}.", ret);
+    return butil::Status(pb::error::EINTERNAL, "Internal get error.");
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got deadlock.");
+    return butil::Status(pb::error::EBDB_DEADLOCK, "retrive by cursor, got deadlock.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got db exception: {}.", db_exception.what());
+    return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("retrive by cursor, failed, {}.", db_exception.what()));
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+    return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+// Writer
+butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) {
+  if (BAIDU_UNLIKELY(kv.key().empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+      Dbt bdb_key;
+      BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+      Dbt bdb_value;
+      BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+
+      ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) {
+  return KvBatchPutAndDelete(cf_name, kvs, {});
+}
+
+butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kv_puts,
+                                          const std::vector<pb::common::KeyValue>& kv_deletes) {
+  if (BAIDU_UNLIKELY(kv_puts.empty() && kv_deletes.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty keys.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      for (const auto& kv : kv_puts) {
+        if (BAIDU_UNLIKELY(kv.key().empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+          return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+        }
+
+        std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+        Dbt bdb_key;
+        BdbHelper::BinaryToDbt(store_key, bdb_key);
+        Dbt bdb_value;
+        BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+        ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+        if (ret != 0) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
+          return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+        }
+      }
+
+      for (const auto& kv : kv_deletes) {
+        if (BAIDU_UNLIKELY(kv.key().empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+          return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+        }
+
+        std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+        Dbt bdb_key;
+        BdbHelper::BinaryToDbt(store_key, bdb_key);
+        GetDb()->del(txn, &bdb_key, 0);
+        if (ret != 0 && ret != DB_NOTFOUND) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
+          return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+        }
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          (void)txn->abort();
+        };
+
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvBatchPutAndDelete(
+    const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
+    const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) {
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      // put
+      for (const auto& [cf_name, kv_puts] : kv_puts_with_cf) {
+        if (BAIDU_UNLIKELY(kv_puts.empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] keys empty not support");
+          return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+        }
+
+        for (const auto& kv : kv_puts) {
+          if (BAIDU_UNLIKELY(kv.key().empty())) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] key empty not support");
+            return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+          }
+
+          std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+          Dbt bdb_key;
+          BdbHelper::BinaryToDbt(store_key, bdb_key);
+          Dbt bdb_value;
+          BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+          ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+          if (ret != 0) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
+            return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+          }
+        }
+      }
+
+      // delete
+      for (const auto& [cf_name, kv_deletes] : kv_deletes_with_cf) {
+        if (BAIDU_UNLIKELY(kv_deletes.empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] keys empty not support");
+          return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+        }
+
+        for (const auto& key : kv_deletes) {
+          if (BAIDU_UNLIKELY(key.empty())) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] key empty not support");
+            return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+          }
+
+          std::string store_key = BdbHelper::EncodeKey(cf_name, key);
+          Dbt bdb_key;
+          BdbHelper::BinaryToDbt(store_key, bdb_key);
+          GetDb()->del(txn, &bdb_key, 0);
+          if (ret != 0 && ret != DB_NOTFOUND) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
+            return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+          }
+        }
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          (void)txn->abort();
+        };
+
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvPutIfAbsent(const std::string& cf_name, const pb::common::KeyValue& kv, bool& key_state) {
+  pb::common::KeyValue internal_kv;
+  internal_kv.set_key(kv.key());
+  internal_kv.set_value("");
+
+  const std::string& value = kv.value();
+
+  return KvCompareAndSet(cf_name, internal_kv, value, false, key_state);
+}
+
+butil::Status Writer::KvBatchPutIfAbsent(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
+                                         std::vector<bool>& key_states, bool is_atomic) {
+  if (BAIDU_UNLIKELY(kvs.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty keys");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  // Warning : be careful with vector<bool>
+  key_states.clear();
+  key_states.resize(kvs.size(), false);
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      size_t key_index = 0;
+      for (const auto& kv : kvs) {
+        if (BAIDU_UNLIKELY(kv.key().empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty keys");
+          key_states.clear();
+          key_states.resize(kvs.size(), false);
+          return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+        }
+
+        std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+        Dbt bdb_key;
+        BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+        std::string old_value;
+        Dbt bdb_old_value;
+        bdb_old_value.set_flags(DB_DBT_MALLOC);
+
+        // get
+        ret = GetDb()->get(txn, &bdb_key, &bdb_old_value, 0);
+        if (is_atomic) {
+          if (ret != DB_NOTFOUND) {
+            key_states.clear();
+            key_states.resize(kvs.size(), false);
+            DINGO_LOG(INFO) << fmt::format("[bdb] get failed, ret: {}.", ret);
+            return butil::Status(pb::error::EINTERNAL, "Internal get error");
+          }
+        } else {
+          if (ret != DB_NOTFOUND) {
+            key_index++;
+            continue;
+          }
+        }
+
+        Dbt bdb_value;
+        BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+
+        ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+        if (BAIDU_UNLIKELY(ret != 0)) {
+          if (is_atomic) {
+            key_states.clear();
+            key_states.resize(kvs.size(), false);
+          }
+          DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
+          return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+        }
+
+        key_states[key_index] = true;
+        key_index++;
+      }  // end for
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        key_states.clear();
+        key_states.resize(kvs.size(), false);
+
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv,
+                                      const std::string& value, bool& key_state) {
+  return KvCompareAndSet(cf_name, kv, value, true, key_state);
+}
+
+butil::Status Writer::KvBatchCompareAndSet(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
+                                           const std::vector<std::string>& expect_values, std::vector<bool>& key_states,
+                                           bool is_atomic) {
+  if (BAIDU_UNLIKELY(kvs.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(kvs.size() != expect_values.size())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] size not match, actual({}) expect({})", kvs.size(), expect_values.size());
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is mismatch");
+  }
+
+  // Warning : be careful with vector<bool>
+  key_states.clear();
+  key_states.resize(kvs.size(), false);
+
+  size_t key_index = 0;
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      for (const auto& kv : kvs) {
+        if (BAIDU_UNLIKELY(kv.key().empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+          key_states.clear();
+          key_states.resize(kvs.size(), false);
+          return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+        }
+
+        std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+        Dbt bdb_key;
+        BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+        std::string old_value;
+        Dbt bdb_old_value;
+        bdb_old_value.set_flags(DB_DBT_MALLOC);
+
+        // get
+        ret = GetDb()->get(txn, &bdb_key, &bdb_old_value, 0);
+        if (is_atomic) {
+          if (ret == 0) {
+            BdbHelper::DbtToBinary(bdb_old_value, old_value);
+            if (old_value != expect_values[key_index]) {
+              key_states.clear();
+              key_states.resize(kvs.size(), false);
+              DINGO_LOG(DEBUG) << fmt::format("[bdb] compare and set old_value: {} expect_value: {}", old_value,
+                                              expect_values[key_index]);
+              return butil::Status();
+            }
+          } else if (ret == DB_NOTFOUND) {
+            if (!expect_values[key_index].empty()) {
+              key_states.clear();
+              key_states.resize(kvs.size(), false);
+              DINGO_LOG(ERROR) << fmt::format("[bdb] not found and not empty key, expect_values[{}].", key_index);
+              return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
+            }
+          } else {
+            key_states.clear();
+            key_states.resize(kvs.size(), false);
+            DINGO_LOG(ERROR) << fmt::format("[bdb] get failed, key_index({}) ret: {}.", key_index, ret);
+            return butil::Status(pb::error::EINTERNAL, "Internal get error");
+          }
+        } else {  // if is_atomic else
+          if (ret == 0) {
+            BdbHelper::DbtToBinary(bdb_old_value, old_value);
+            if (old_value != expect_values[key_index]) {
+              key_index++;
+              continue;
+            }
+          } else if (ret == DB_NOTFOUND) {
+            if (!expect_values[key_index].empty()) {
+              key_index++;
+              continue;
+            }
+          } else {
+            key_index++;
+            continue;
+          }
+        }  // end if is_atomic
+
+        // value empty means delete
+        if (kv.value().empty()) {
+          // delete a key in this batch
+          std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+          GetDb()->del(txn, &bdb_key, 0);
+          if (BAIDU_UNLIKELY(ret != 0 && ret != DB_NOTFOUND)) {
+            if (is_atomic) {
+              key_states.clear();
+              key_states.resize(kvs.size(), false);
+            }
+            DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, key_index({}) ret: {}.", key_index, ret);
+            return butil::Status(pb::error::EINTERNAL, "Internal delete error");
+          }
+
+        } else {
+          // write a key in this batch
+          Dbt bdb_value;
+          BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+
+          ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+          if (BAIDU_UNLIKELY(ret != 0)) {
+            if (is_atomic) {
+              key_states.clear();
+              key_states.resize(kvs.size(), false);
+            }
+            DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, key_index({}) ret: {}.", key_index, ret);
+            return butil::Status(pb::error::EINTERNAL, "Internal put error");
+          }
+        }
+
+        key_states[key_index] = true;
+        key_index++;
+
+      }  // end for
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        key_states.clear();
+        key_states.resize(kvs.size(), false);
+
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& key) {
+  if (BAIDU_UNLIKELY(key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      std::string store_key = BdbHelper::EncodeKey(cf_name, key);
+      Dbt bdb_key;
+      BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+      ret = GetDb()->del(txn, &bdb_key, 0);
+      if (ret != 0 && ret != DB_NOTFOUND) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal delete error.");
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) {
+  std::vector<pb::common::KeyValue> kvs;
+  for (const auto& key : keys) {
+    pb::common::KeyValue kv;
+    kv.set_key(key);
+
+    kvs.emplace_back(std::move(kv));
+  }
+
+  return KvBatchPutAndDelete(cf_name, {}, kvs);
+}
+
+butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) {
+  return KvBatchDeleteRange(std::vector<std::string>{cf_name}, std::vector<pb::common::Range>{range});
+}
+
+butil::Status Writer::KvDeleteRange(const std::vector<std::string>& cf_names, const pb::common::Range& range) {
+  return KvBatchDeleteRange(cf_names, std::vector<pb::common::Range>{range});
+}
+
+butil::Status Writer::KvBatchDeleteRange(const std::string& cf_name, const std::vector<pb::common::Range>& ranges) {
+  return KvBatchDeleteRange(std::vector<std::string>{cf_name}, ranges);
+}
+
+butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      for (const auto& [cf_name, ranges] : range_with_cfs) {
+        for (const auto& range : ranges) {
+          butil::Status status = DeleteRangeByCursor(cf_name, range, txn);
+          if (!status.ok()) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] delete range by cursor: {}.", status.error_cstr());
+            return status;
+          }
+        }
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvDeleteIfEqual(const std::string& cf_name, const pb::common::KeyValue& kv) {
+  if (BAIDU_UNLIKELY(kv.key().empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+      Dbt bdb_key;
+      BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+      std::string old_value;
+      Dbt bdb_old_value;
+      bdb_old_value.set_flags(DB_DBT_MALLOC);
+
+      // get
+      ret = GetDb()->get(txn, &bdb_key, &bdb_old_value, 0);
+      if (ret != 0) {
+        if (ret == DB_NOTFOUND) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] get failed, not found key.");
+          return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
+        }
+        DINGO_LOG(ERROR) << fmt::format("[bdb] get failed, ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal get error");
+      }
+      BdbHelper::DbtToBinary(bdb_old_value, old_value);
+
+      if (kv.value() != old_value) {
+        DINGO_LOG(WARNING) << fmt::format("[rocksdb] value is not equal, {} | {}.", kv.value(), old_value);
+        return butil::Status(pb::error::EINTERNAL, "Internal compare value error");
+      }
+
+      ret = GetDb()->del(txn, &bdb_key, 0);
+      if (ret != 0 && ret != DB_NOTFOUND) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal delete error.");
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv,
+                                      const std::string& value, bool is_key_exist, bool& key_state) {
+  if (BAIDU_UNLIKELY(kv.key().empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  key_state = false;
+
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+      Dbt bdb_key;
+      BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+      std::string old_value;
+      Dbt bdb_old_value;
+      bdb_old_value.set_flags(DB_DBT_MALLOC);
+
+      // get
+      ret = GetDb()->get(txn, &bdb_key, &bdb_old_value, 0);
+      if (ret == 0) {
+        if (!is_key_exist) {
+          // The key already exists, the client requests not to return an error code and key_state set false
+          key_state = false;
+          DINGO_LOG(INFO) << fmt::format("[bdb] is_key_exist: {}, key_state: {}.", is_key_exist, key_state);
+          return butil::Status();
+        }
+
+        BdbHelper::DbtToBinary(bdb_old_value, old_value);
+      } else if (ret == DB_NOTFOUND) {
+        if (is_key_exist || (!is_key_exist && !kv.value().empty())) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] get failed, not found key, is_key_exist: {}, key_state: {}.",
+                                          is_key_exist, key_state);
+          return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
+        }
+      } else {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] get failed, ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal get error");
+      }
+
+      if (kv.value() != old_value) {
+        DINGO_LOG(INFO) << fmt::format("[bdb] compare and set, old_value: {} expect_value: {}", old_value, kv.value());
+        return butil::Status();
+      }
+
+      Dbt bdb_value;
+      BdbHelper::BinaryToDbt(value, bdb_value);
+
+      ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal put error.");
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          key_state = true;  // set kv state
+
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::KvBatchDeleteRange(const std::vector<std::string>& cf_names,
+                                         const std::vector<pb::common::Range>& ranges) {
+  DbEnv* envp = GetDb()->get_env();
+  DbTxn* txn = nullptr;
+  // release txn if commit failed.
+  DEFER(  // NOLINT
+      if (txn != nullptr) {
+        txn->abort();
+        txn = nullptr;
+      });
+
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  while (retry) {
+    try {
+      int ret = envp->txn_begin(nullptr, &txn, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
+      }
+
+      for (auto& name : cf_names) {
+        for (const auto& range : ranges) {
+          butil::Status status = DeleteRangeByCursor(name, range, txn);
+          if (!status.ok()) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] delete range by cursor: {}.", status.error_cstr());
+            return status;
+          }
+        }
+      }
+
+      // commit
+      try {
+        ret = txn->commit(0);
+        if (ret == 0) {
+          txn = nullptr;
+          return butil::Status();
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        ret = BdbHelper::kCommitException;
+      }
+
+      if (BAIDU_UNLIKELY(ret != 0)) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
+      }
+
+    } catch (DbDeadlockException&) {
+      // Now we decide if we want to retry the operation.
+      // If we have retried less than max_retries_,
+      // increment the retry count and goto retry.
+      if (retry_count < max_retries_) {
+        // First thing that we MUST do is abort the transaction.
+        if (txn != nullptr) {
+          txn->abort();
+          txn = nullptr;
+        };
+        DINGO_LOG(WARNING) << fmt::format(
+            "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
+        retry_count++;
+        retry = true;
+      } else {
+        // Otherwise, just give up.
+        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
+                                        retry_count);
+        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {}.", db_exception.what());
+      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+    }
+  }
+
+  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+}
+
+butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn) {
+  butil::Status status = Helper::CheckRange(range);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] check range: {}.", status.error_cstr());
+    return status;
+  }
+
+  // Acquire a cursor
+  Dbc* cursorp = nullptr;
+  // Release the cursor later
+  DEFER(  // NOLINT
+      if (cursorp != nullptr) {
+        try {
+          cursorp->close();
+        } catch (DbException& db_exception) {
+          DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+        }
+      });
+
+  GetDb()->cursor(txn, &cursorp, DB_READ_COMMITTED);
+
+  std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
+  Dbt bdb_key;
+  BdbHelper::BinaryToDbt(store_key, bdb_key);
+
+  std::string store_end_key = BdbHelper::EncodeKey(cf_name, range.end_key());
+  Dbt bdb_end_key;
+  BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+
+  Dbt bdb_value;
+  bdb_value.set_flags(DB_DBT_MALLOC);
+
+  // find fist postion
+  int ret = cursorp->get(&bdb_key, &bdb_value, DB_SET_RANGE);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] txn get failed ret: {}.", ret);
+    return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[bdb] get key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
+  cursorp->del(0);
+
+  int index = 0;
+  while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
+    if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
+      cursorp->del(0);
+    }
+  }
+  return butil::Status();
+}
+
+std::shared_ptr<RawBdbEngine> Writer::GetRawEngine() {
+  auto raw_engine = raw_engine_.lock();
+  if (raw_engine == nullptr) {
+    DINGO_LOG(FATAL) << "[bdb] get raw engine failed.";
+  }
+
+  return raw_engine;
+}
+
+std::shared_ptr<Db> Writer::GetDb() { return GetRawEngine()->GetDb(); }
+
+}  // namespace bdb
+
+// Open a BDB database
+int32_t RawBdbEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint32_t extra_flags) {
+  int ret;
+  uint32_t open_flags;
+
+  try {
+    Db* db = new Db(envp, 0);
+
+    // Point to the new'd Db
+    *dbpp = db;
+
+    if (extra_flags != 0) {
+      ret = db->set_flags(extra_flags);
+    }
+
+    // Now open the database */
+    open_flags = DB_CREATE |            // Allow database creation
+                 DB_READ_UNCOMMITTED |  // Allow uncommitted reads
+                 DB_AUTO_COMMIT |       // Allow autocommit
+                 DB_MULTIVERSION |      // Multiversion concurrency control
+                 DB_THREAD;             // Cause the database to be free-threade1
+
+    db->open(nullptr,     // Txn pointer
+             file_name,   // File name
+             nullptr,     // Logical db name
+             DB_BTREE,    // Database type (using btree)
+             open_flags,  // Open flags
+             0);          // File mode. Using defaults
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("OpenDb: db open failed: {}.", db_exception.what());
+    return -1;
+  }
+
+  return 0;
+}
+
+// override functions
+bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {
+  if (BAIDU_UNLIKELY(!config)) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] config empty not support!");
+    return false;
+  }
+
+  std::string store_db_path_value = config->GetString(Constant::kStorePathConfigName) + "/bdb";
+  if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] can not find: {}/bdb", Constant::kStorePathConfigName);
+    return false;
+  }
+
+  // Initialize our handles
+  Db* db = nullptr;
+  DbEnv* envp = nullptr;
+  const char* file_name = "888.db";
+
+  // Env open flags
+  uint32_t env_flags = DB_CREATE |        // Create the environment if it does not exist
+                       DB_RECOVER |       // Run normal recovery.
+                       DB_INIT_LOCK |     // Initialize the locking subsystem
+                       DB_INIT_LOG |      // Initialize the logging subsystem
+                       DB_INIT_TXN |      // Initialize the transactional subsystem. This
+                                          // also turns on logging.
+                       DB_INIT_MPOOL |    // Initialize the memory pool (in-memory cache)
+                       DB_MULTIVERSION |  // Multiversion concurrency control
+                       DB_THREAD;         // Cause the environment to be free-threaded
+  try {
+    // Create and open the environment
+    envp = new DbEnv(0);
+
+    // Indicate that we want db to internally perform deadlock
+    // detection.  Also indicate that the transaction with
+    // the fewest number of write locks will receive the
+    // deadlock notification in the event of a deadlock.
+    envp->set_lk_detect(DB_LOCK_MINWRITE);
+
+    envp->open((const char*)store_db_path_value.c_str(), env_flags, 0);
+
+    // If we had utility threads (for running checkpoints or
+    // deadlock detection, for example) we would spawn those
+    // here.
+
+    // Open the database
+    int ret = OpenDb(&db, file_name, envp, 0);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", store_db_path_value, file_name,
+                                      ret);
+      return false;
+    }
+  } catch (DbException& db_exctption) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database environment: {}, exception: {}.", db_path_,
+                                    db_exctption.what());
+    return false;
+  }
+
+  db_path_ = store_db_path_value + "/" + file_name;
+  db_.reset(db);
+
+  reader_ = std::make_shared<bdb::Reader>(GetSelfPtr());
+  writer_ = std::make_shared<bdb::Writer>(GetSelfPtr());
+  DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
+
+  return true;
+}
+
+std::string RawBdbEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_BDB); }
+
+pb::common::RawEngine RawBdbEngine::GetID() { return pb::common::RAW_ENG_BDB; }
+
+dingodb::SnapshotPtr RawBdbEngine::GetSnapshot() {
+  try {
+    DbEnv* envp = db_->get_env();
+    DbTxn* txn = nullptr;
+    int ret = envp->txn_begin(nullptr, &txn, DB_TXN_SNAPSHOT);
+    if (ret == 0) {
+      return std::make_shared<bdb::Snapshot>(db_, txn);
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
+    }
+
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {}.", db_exception.what());
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+  }
+
+  DINGO_LOG(ERROR) << "unknown error.";
+  return nullptr;
+}
+
+butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
+  // TODO
+  DINGO_LOG(ERROR) << "[bdb] not supported now!";
+  return butil::Status(pb::error::EBDB_UNSUPPORTED, "not supported now!");
+}
+
+void RawBdbEngine::Flush(const std::string& /*cf_name*/) {
+  db_->sync(0);
+  return;
+}
+
+butil::Status RawBdbEngine::Compact(const std::string& cf_name) {
+  // TODO
+  DINGO_LOG(ERROR) << "[bdb] not supported now!";
+  return butil::Status(pb::error::EBDB_UNSUPPORTED, "not supported now!");
+}
+
+std::vector<int64_t> RawBdbEngine::GetApproximateSizes(const std::string& cf_name,
+                                                       std::vector<pb::common::Range>& ranges) {
+  std::vector<int64_t> result;
+  std::shared_ptr<bdb::Reader> bdb_reader = std::dynamic_pointer_cast<bdb::Reader>(reader_);
+  if (bdb_reader == nullptr) {
+    DINGO_LOG(ERROR) << "[bdb] reader pointer cast error.";
+    return result;
+  }
+
+  for (const auto& range : ranges) {
+    int64_t count = 0;
+    butil::Status status = bdb_reader->GetRangeCountByCursor(cf_name, nullptr, range.start_key(), range.end_key(),
+                                                             DB_READ_UNCOMMITTED, count);
+    if (BAIDU_UNLIKELY(!status.ok())) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] get range by cursor failed, status code: {}, message: {}",
+                                      status.error_code(), status.error_str());
+      return std::vector<int64_t>();
+    }
+    result.push_back(count);
+  }
+
+  return result;
+}
+
+}  // namespace dingodb
