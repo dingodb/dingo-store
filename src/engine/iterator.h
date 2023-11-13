@@ -19,6 +19,7 @@
 #include <string_view>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/logging.h"
 
 namespace dingodb {
@@ -30,6 +31,7 @@ enum class IteratorType {
   kRocksEngine = 3,
   kRaftEngine = 4,
   kColumnarEngine = 5,
+  kBdbEngine = 6,
 };
 
 struct IteratorOptions {
@@ -61,6 +63,8 @@ class Iterator {
 
   virtual std::string_view Key() const = 0;
   virtual std::string_view Value() const = 0;
+
+  virtual butil::Status Status() const = 0;
 };
 
 using IteratorPtr = std::shared_ptr<Iterator>;

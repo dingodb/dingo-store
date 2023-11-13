@@ -207,6 +207,7 @@ enum Errno {
   EBDB_DEADLOCK = 120002;
   EBDB_COMMIT = 120003;
   EBDB_UNKNOW = 120004;
+  EBDB_UNSUPPORTED = 120005;
 }
 
 message StoreRegionInfo {
