@@ -150,6 +150,12 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
     return status;
   }
 
+  if (pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code()) {
+    for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+      auto& result = results.emplace_back();
+    }
+  }
+
   return butil::Status::OK();
 }
 

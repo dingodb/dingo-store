@@ -280,6 +280,11 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
+
+      for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+        auto& result = results.emplace_back();
+      }
+
       return butil::Status::OK();
     }
 
