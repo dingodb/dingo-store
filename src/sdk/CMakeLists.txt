@@ -1,7 +1,14 @@
 
 add_library(sdk
+    client_stub.cc
+    client_impl.cc
+    client.cc
+    raw_kv_impl.cc
     meta_cache.cc
+    rpc_interaction.cc
     status.cc
+    store_rpc_controller.cc
+    store_rpc.cc
     # TODO: use libary
     ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
     ${PROJECT_SOURCE_DIR}/src/common/role.cc
@@ -17,11 +24,11 @@ add_library(sdk
 target_link_libraries(sdk 
     PRIVATE
     $<TARGET_OBJECTS:PROTO_OBJS>
-    ${GFLAGS_LIBRARIES}
     protobuf
     glog
     brpc
     fmt
+    ${GFLAGS_LIBRARIES}
     ${DYNAMIC_LIB}
 )
 

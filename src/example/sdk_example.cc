@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <unistd.h>
+
+#include <memory>
+
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "glog/logging.h"
+#include "sdk/client.h"
 #include "sdk/meta_cache.h"
 #include "sdk/status.h"
 
@@ -48,6 +53,45 @@ void CreateRegion(std::string name, std::string start_key, std::string end_key, 
   DINGO_LOG(INFO) << response.DebugString();
 }
 
+void MetaCacheExample() {
+  auto meta_cache = std::make_shared<MetaCache>(coordinator_interaction);
+
+  std::shared_ptr<Region> region;
+  Status got = meta_cache->LookupRegionByKey("wb", region);
+  DINGO_LOG(INFO) << got.ToString() << ", " << (got.IsOK() ? region->ToString() : "null");
+  CHECK(got.IsOK());
+
+  got = meta_cache->LookupRegionByKey("wc00000000", region);
+  DINGO_LOG(INFO) << got.ToString();
+  CHECK(got.IsNotFound());
+
+  meta_cache->Dump();
+}
+
+void RawKVExample() {
+  std::shared_ptr<dingodb::sdk::Client> client;
+  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, client);
+  CHECK(built.IsOK()) << "dingo client build fail";
+  CHECK_NOTNULL(client.get());
+
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
+  built = client->NewRawKV(raw_kv);
+  CHECK(built.IsOK()) << "dingo raw_kv build fail";
+  CHECK_NOTNULL(raw_kv.get());
+
+  std::string key = "wb01";
+  std::string value = "pong";
+  Status put = raw_kv->Put(key, value);
+  DINGO_LOG(INFO) << "raw_kv put:" << put.ToString();
+
+  std::string to_get;
+  Status got = raw_kv->Get(key, to_get);
+  DINGO_LOG(INFO) << "raw_kv get:" << got.ToString() << ", value:" << to_get;
+  if (got.IsOK()) {
+    CHECK_EQ(value, to_get);
+  }
+}
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = true;
@@ -70,15 +114,12 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  CreateRegion("meta_cache_example", "wa00000000", "wc00000000", 3);
+  CreateRegion("skd_example", "wa00000000", "wc00000000", 3);
 
-  auto meta_cache = std::make_shared<MetaCache>(coordinator_interaction);
-  std::shared_ptr<Region> region;
-  Status got = meta_cache->LookupRegionByKey("wb", region);
-  DINGO_LOG(INFO) << got.ToString() << ", " << (got.ok() ? region->ToString() : "null");
-  got = meta_cache->LookupRegionByKey("wc00000000", region);
-  CHECK(got.IsNotFound());
-  DINGO_LOG(INFO) << got.ToString();
+  // wait region ready
+  sleep(3);
 
-  meta_cache->Dump();
+  MetaCacheExample();
+
+  RawKVExample();
 }

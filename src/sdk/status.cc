@@ -43,7 +43,7 @@ std::string Status::ToString() const {
   } else {
     char tmp[30];
     const char* type;
-    switch (code()) {
+    switch (GetCode()) {
       case kOk:
         type = "OK";
         break;
@@ -102,13 +102,16 @@ std::string Status::ToString() const {
         type = "NotLeader";
         break;
       default:
-        std::string tmp = fmt::format("Unknown code({}):", static_cast<int>(code()));
+        std::string tmp = fmt::format("Unknown code({}):", static_cast<int>(GetCode()));
         CHECK(false) << tmp;
     }
 
     std::string result(type);
     uint32_t length;
     std::memcpy(&length, state_, sizeof(length));
+    if(length) {
+      result.append(": ");
+    }
     result.append(state_ + 5, length);
     return result;
   }
