@@ -482,6 +482,8 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
       break;
     case pb::common::StoreRegionState::DELETED:
       break;
+    case pb::common::StoreRegionState::TOMBSTONE:
+      break;
     default:
       DINGO_LOG(ERROR) << "Unknown region state " << pb::common::StoreRegionState_Name(cur_state);
       break;

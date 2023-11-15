@@ -99,7 +99,7 @@ void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* contro
       std::make_shared<ServiceTask>([=]() { DoVectorCalcDistance(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
