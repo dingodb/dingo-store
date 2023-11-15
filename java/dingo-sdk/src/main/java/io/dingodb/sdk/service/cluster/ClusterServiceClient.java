@@ -20,6 +20,8 @@ import io.dingodb.common.Common;
 import io.dingodb.coordinator.Coordinator;
 import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.sdk.common.cluster.Executor;
+import io.dingodb.sdk.common.cluster.InternalRegion;
+import io.dingodb.sdk.common.cluster.Store;
 import io.dingodb.sdk.common.utils.EntityConversion;
 import io.dingodb.sdk.service.connector.ServiceConnector;
 
@@ -58,4 +60,43 @@ public class ClusterServiceClient {
                 .map(EntityConversion::mapping)
                 .collect(Collectors.toList());
     }
+    
+    public List<io.dingodb.sdk.common.cluster.Coordinator> getCoordinatorMap(long clusterId) {
+       	Coordinator.GetCoordinatorMapRequest req = Coordinator.GetCoordinatorMapRequest.newBuilder()
+       	        .setClusterId(clusterId)
+       	        .build();
+       	Coordinator.GetCoordinatorMapResponse response = connector.exec(stub -> stub.getCoordinatorMap(req));
+       	return response.getCoordinatorLocationsList()
+       	        .stream()
+       	        .map(EntityConversion::mapping)
+       	        .map(location -> EntityConversion.mapping(location, mapping(response.getLeaderLocation())))
+       	        .collect(Collectors.toList());        
+    }
+    
+    public List<Store> getStoreMap(long epoch) {
+    	  Coordinator.GetStoreMapRequest req = Coordinator.GetStoreMapRequest.newBuilder()
+    	          .setEpoch(epoch)
+    	          .build();
+    	          
+    	  Coordinator.GetStoreMapResponse response = connector.exec(stub -> stub.getStoreMap(req));
+    	  return response.getStoremap()
+    	          .getStoresList()
+                  .stream()
+    	          .map(EntityConversion::mapping)
+    	          .collect(Collectors.toList());        
+    }
+
+    public io.dingodb.sdk.common.cluster.Region queryRegion(long regionId) {
+          Coordinator.QueryRegionRequest req = Coordinator.QueryRegionRequest.newBuilder()
+                 .setRegionId(regionId)
+                 .build();
+
+          Coordinator.QueryRegionResponse response = connector.exec(stub -> stub.queryRegion(req));
+          int regionType = response.getRegion().getRegionTypeValue();
+          int regionState = response.getRegion().getStateValue();
+          long createTime = response.getRegion().getCreateTimestamp();
+          long deleteTime = response.getRegion().getDeletedTimestamp();
+          return new InternalRegion(regionType, regionState, createTime, deleteTime);
+    }
+
 }

@@ -676,6 +676,10 @@ public class MetaServiceClient {
             throw new DingoClientException("Index" + index + " does not exist");
         }
 
+        return getIndexMetrics(indexId);
+    }
+
+    public IndexMetrics getIndexMetrics(DingoCommonId indexId) {
         return Optional.ofNullable(indexId)
                 .map(__ -> {
                     Meta.GetIndexMetricsRequest request = Meta.GetIndexMetricsRequest.newBuilder()

@@ -31,9 +31,11 @@ import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.cluster.Executor;
 import io.dingodb.sdk.common.cluster.ExecutorMap;
 import io.dingodb.sdk.common.cluster.ExecutorUser;
+import io.dingodb.sdk.common.cluster.InternalCoordinator;
 import io.dingodb.sdk.common.cluster.InternalExecutor;
 import io.dingodb.sdk.common.cluster.InternalExecutorMap;
 import io.dingodb.sdk.common.cluster.InternalExecutorUser;
+import io.dingodb.sdk.common.cluster.InternalStore;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
@@ -876,6 +878,22 @@ public class EntityConversion {
                 .setSqlType(column.getType())
                 .setIsAutoIncrement(column.isAutoIncrement())
                 .build();
+    }
+    
+    public static InternalCoordinator mapping(Location location, Location leaderLocation) {
+        boolean isLeader = false;
+        if (location.equals(leaderLocation)) {
+            isLeader = true;
+        }
+        return new InternalCoordinator(location, isLeader);
+    }
+
+    public static InternalStore mapping(Common.Store store) {
+        return new InternalStore(store.getId(),
+                store.getStoreType().getNumber(),
+                mapping(store.getServerLocation()),
+                mapping(store.getRaftLocation())
+        );
     }
 
 }
