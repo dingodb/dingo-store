@@ -1240,6 +1240,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     // for region_map_ multiput
     std::vector<int64_t> region_id_to_write;
+    std::vector<int64_t> region_id_to_delete;
     std::vector<pb::coordinator_internal::RegionInternal> region_internal_to_write;
     // for range_region_map_ multiput
     std::vector<std::string> region_start_key_to_write;
@@ -1251,13 +1252,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       const auto& region = meta_increment.regions(i);
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         // add region to region_map
-        // region_map_[region.id()] = region.region();
-        // int ret = region_map_.Put(region.id(), region.region());
-        // if (ret > 0) {
-        //   DINGO_LOG(INFO) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] success";
-        // } else {
-        //   DINGO_LOG(WARNING) << "ApplyMetaIncrement region CREATE, [id=" << region.id() << "] failed";
-        // }
         region_id_to_write.push_back(region.id());
         region_internal_to_write.push_back(region.region());
 
@@ -1310,28 +1304,31 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // get old region
         pb::coordinator_internal::RegionInternal old_region;
         auto ret = region_map_.Get(region.id(), old_region);
-        if (ret > 0) {
-          if (region.region().definition().range().start_key() != old_region.definition().range().start_key()) {
-            // update range_region_map_
-            // range_region_map_.Erase(old_region.definition().range().start_key());
-            bool need_delete = true;
-            for (const auto& start_key : region_start_key_to_write) {
-              if (start_key == old_region.definition().range().start_key()) {
-                need_delete = false;
-                break;
-              }
-            }
+        if (ret < 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] failed, not found";
+          continue;
+        }
 
-            if (need_delete) {
-              region_start_key_to_delete_for_update.push_back(old_region.definition().range().start_key());
-              DINGO_LOG(INFO) << "erase range_region_map_ success, region_id=[" << region.region().id()
-                              << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
-                              << "]";
-            } else {
-              DINGO_LOG(INFO) << "erase range_region_map_ skipped, region_id=[" << region.region().id()
-                              << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
-                              << "]";
+        if (region.region().definition().range().start_key() != old_region.definition().range().start_key()) {
+          // update range_region_map_
+          // range_region_map_.Erase(old_region.definition().range().start_key());
+          bool need_delete = true;
+          for (const auto& start_key : region_start_key_to_write) {
+            if (start_key == old_region.definition().range().start_key()) {
+              need_delete = false;
+              break;
             }
+          }
+
+          if (need_delete) {
+            region_start_key_to_delete_for_update.push_back(old_region.definition().range().start_key());
+            DINGO_LOG(INFO) << "erase range_region_map_ success, region_id=[" << region.region().id()
+                            << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
+                            << "]";
+          } else {
+            DINGO_LOG(INFO) << "erase range_region_map_ skipped, region_id=[" << region.region().id()
+                            << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
+                            << "]";
           }
         }
 
@@ -1354,16 +1351,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                           << Helper::StringToHex(old_region.definition().range().end_key()) << "]";
         }
 
-        // update region to region_map
-        // int ret = region_map_.PutIfExists(region.id(), region.region());
-        // if (ret > 0) {
-        //   DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] success";
-        //   // meta_write_kv
-        //   meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
-        // } else {
-        //   DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, [id=" << region.id() << "] failed";
-        // }
-
         region_id_to_write.push_back(region.id());
         region_internal_to_write.push_back(region.region());
 
@@ -1371,13 +1358,16 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        // remove region from region_map
-        int ret = region_map_.Erase(region.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] success";
-        } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] failed";
+        pb::coordinator_internal::RegionInternal old_region;
+        int ret1 = region_map_.Get(region.id(), old_region);
+        if (ret1 < 0) {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] failed, not found";
+          continue;
         }
+
+        // remove region from region_map
+        region_id_to_delete.push_back(region.id());
+        DINGO_LOG(INFO) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] will be deleted";
 
         // meta_delete_kv
         meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
@@ -1387,62 +1377,57 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         // update range_region_map_
         // range_region_map_.Erase(region.region().definition().range().start_key());
-        region_start_key_to_delete.push_back(region.region().definition().range().start_key());
+        region_start_key_to_delete.push_back(old_region.definition().range().start_key());
         DINGO_LOG(INFO) << "erase range_region_map_ success, region_id=[" << region.region().id() << "], start_key=["
-                        << Helper::StringToHex(region.region().definition().range().start_key()) << "]";
+                        << Helper::StringToHex(old_region.definition().range().start_key()) << "]";
+      }
+    }
+
+    if (!region_id_to_write.empty()) {
+      if (region_id_to_write.size() != region_internal_to_write.size()) {
+        DINGO_LOG(FATAL) << "ApplyMetaIncrement region_id_to_write.size() != region_internal_to_write.size(), size="
+                         << region_id_to_write.size() << " " << region_internal_to_write.size();
       }
 
-      if (!region_id_to_write.empty()) {
-        if (region_id_to_write.size() != region_internal_to_write.size()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement region_id_to_write.size() != region_internal_to_write.size(), size="
-                           << region_id_to_write.size() << " " << region_internal_to_write.size();
-        }
-
-        auto ret = region_map_.MultiPut(region_id_to_write, region_internal_to_write);
-        if (ret < 0) {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] failed";
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] success";
-        }
+      auto ret = region_map_.MultiPut(region_id_to_write, region_internal_to_write);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] failed";
+      } else {
+        DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, count=[" << region_id_to_write.size() << "] success";
       }
+    }
 
-      if (!region_start_key_to_delete_for_update.empty()) {
-        auto ret = range_region_map_.MultiErase(region_start_key_to_delete_for_update);
-        if (ret < 0) {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region DELETE for update, size=["
-                             << region_start_key_to_delete_for_update.size() << "] failed";
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement range_region DELETE for update, size=["
-                          << region_start_key_to_delete_for_update.size() << "] success";
-        }
+    if (!region_id_to_delete.empty()) {
+      auto ret = region_map_.MultiErase(region_id_to_delete);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "ApplyMetaIncrement region DELETE, count=[" << region_id_to_delete.size() << "] failed";
+      } else {
+        DINGO_LOG(INFO) << "ApplyMetaIncrement region DELETE, count=[" << region_id_to_delete.size() << "] success";
       }
+    }
 
-      if (!region_start_key_to_write.empty()) {
-        if (region_start_key_to_write.size() != region_start_key_internal_to_write.size()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement region_start_key_to_write.size() != "
-                              "region_start_key_internal_to_write.size(), size="
-                           << region_start_key_internal_to_write.size() << " " << region_start_key_to_write.size();
-        }
-
-        auto ret = range_region_map_.MultiPut(region_start_key_to_write, region_start_key_internal_to_write);
-        if (ret < 0) {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region UPDATE, count=["
-                             << region_start_key_internal_to_write.size() << "] failed";
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement range_region UPDATE, count=["
-                          << region_start_key_internal_to_write.size() << "] success";
-        }
+    if (!region_start_key_to_delete_for_update.empty() || !region_start_key_to_write.empty()) {
+      auto ret = range_region_map_.MultiEraseThenPut(region_start_key_to_delete_for_update, region_start_key_to_write,
+                                                     region_start_key_internal_to_write);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region UPDATE, size=["
+                           << region_start_key_to_delete_for_update.size() << "] put_size=["
+                           << region_start_key_to_write.size() << "] failed";
+      } else {
+        DINGO_LOG(INFO) << "ApplyMetaIncrement range_region UPDATE, del_size=["
+                        << region_start_key_to_delete_for_update.size() << "] put_size=["
+                        << region_start_key_to_write.size() << "] success";
       }
+    }
 
-      if (!region_start_key_to_delete.empty()) {
-        auto ret = range_region_map_.MultiErase(region_start_key_to_delete);
-        if (ret < 0) {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region DELETE, size=[" << region_start_key_to_delete.size()
-                             << "] failed";
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement range_region DELETE, size=[" << region_start_key_to_delete.size()
-                          << "] success";
-        }
+    if (!region_start_key_to_delete.empty()) {
+      auto ret = range_region_map_.MultiErase(region_start_key_to_delete);
+      if (ret < 0) {
+        DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region DELETE, size=[" << region_start_key_to_delete.size()
+                           << "] failed";
+      } else {
+        DINGO_LOG(INFO) << "ApplyMetaIncrement range_region DELETE, size=[" << region_start_key_to_delete.size()
+                        << "] success";
       }
     }
   }

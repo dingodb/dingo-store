@@ -4690,8 +4690,8 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
     upper_bound = end_key;
   }
 
-  DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
-                  << " upper_bound=" << Helper::StringToHex(upper_bound);
+  // DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
+  //                 << " upper_bound=" << Helper::StringToHex(upper_bound);
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
   auto ret = range_region_map_.FindIntervalValues(
@@ -4703,6 +4703,10 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
     DINGO_LOG(ERROR) << "range_region_map_.GetRangeValues failed";
     return butil::Status(pb::error::EINTERNAL, "range_region_map_.GetRangeValues failed");
   }
+
+  DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
+                  << " upper_bound=" << Helper::StringToHex(upper_bound)
+                  << " region_internals.size()=" << region_internals.size();
 
   for (const auto& region_internal : region_internals) {
     if (end_key.empty()) {
