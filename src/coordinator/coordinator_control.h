@@ -493,6 +493,8 @@ class CoordinatorControl : public MetaControl {
   butil::Status GetRegionCmd(int64_t store_id, int64_t start_region_cmd_id, int64_t end_region_cmd_id,
                              std::vector<pb::coordinator::RegionCmd> &region_cmds,
                              std::vector<pb::error::Error> &region_cmd_errors);
+  butil::Status AddCoordinatorOperation(const pb::coordinator::CoordinatorOperation &coordinator_operation,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // UpdateRegionMapAndStoreOperation
   void UpdateRegionMapAndStoreOperation(const pb::common::StoreMetrics &store_metrics,
