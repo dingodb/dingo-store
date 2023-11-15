@@ -1722,6 +1722,7 @@ int SendKvPut(int64_t region_id, const std::string& key, std::string value) {
   dingodb::pb::store::KvPutResponse response;
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  // request.mutable_context()->mutable_region_epoch()->set_version(0);
   auto* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(value.empty() ? Helper::GenRandomString(256) : value);

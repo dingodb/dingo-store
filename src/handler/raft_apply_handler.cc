@@ -685,8 +685,11 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
   auto log_entries =
       GetRaftLogEntries(source_region_definition.id(), request.min_applied_log_id() + 1, prepare_merge_log_id);
 
+  // Timing commit CommitMerge command to target region
+  // Just target region leader node will success
   int retry_count = 0;
   for (;;) {
+    // CommitMerge command already commit success
     if (target_region->LastChangeCmdId() >= request.merge_id()) {
       break;
     }
@@ -695,11 +698,11 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
     ctx->SetRegionId(request.target_region_id());
     ctx->SetRegionEpoch(request.target_region_epoch());
 
-    // Try to commit local.
+    // Try to commit local target region raft.
     auto status =
         storage->CommitMerge(ctx, request.merge_id(), source_region_definition, prepare_merge_log_id, log_entries);
     DINGO_LOG(INFO) << fmt::format(
-        "[merge.merging][merge_id({}).region({}/{})] commit CommitMerge failed, times({}) error: {} {}",
+        "[merge.merging][merge_id({}).region({}/{})] Commit CommitMerge failed, times({}) error: {} {}",
         request.merge_id(), source_region_definition.id(), request.target_region_id(), ++retry_count,
         pb::error::Errno_Name(status.error_code()), status.error_str());
 
@@ -707,7 +710,7 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][merge_id({}).region({}/{})] commit CommitMerge finish, log_entries({}) elapsed time({}ms)",
+      "[merge.merging][merge_id({}).region({}/{})] Commit CommitMerge finish, log_entries({}) elapsed time({}ms)",
       request.merge_id(), source_region_definition.id(), request.target_region_id(), log_entries.size(),
       Helper::TimestampMs() - start_time);
 }
@@ -725,6 +728,8 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
       request.merge_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
       source_region->RangeToString(), request.min_applied_log_id(), log_id,
       Helper::RegionEpochToString(request.target_region_epoch()), Helper::RangeToString(request.target_region_range()));
+
+  uint64_t start_time = Helper::TimestampMs();
 
   // Update last_change_cmd_id
   store_region_meta->UpdateLastChangeCmdId(source_region, request.merge_id());
@@ -756,6 +761,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
             request.merge_id(), source_region->Id(), target_region->Id(), source_region->EpochToString(),
             source_region->RangeToString(), Helper::RegionEpochToString(request.target_region_epoch()),
             target_region->EpochToString(), target_region->RangeToString());
+        return 0;
       }
     }
   } else {
@@ -782,10 +788,11 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
 
   DINGO_LOG(INFO) << fmt::format(
       "[merge.merging][merge_id({}).region({}/{})] Apply PrepareMerge finish, source_region({}/{}/log[{},{})) "
-      "target_region({}/{})",
+      "target_region({}/{}) elapsed_time({})",
       request.merge_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
       source_region->RangeToString(), request.min_applied_log_id(), log_id,
-      Helper::RegionEpochToString(request.target_region_epoch()), Helper::RangeToString(request.target_region_range()));
+      Helper::RegionEpochToString(request.target_region_epoch()), Helper::RangeToString(request.target_region_range()),
+      Helper::TimestampMs() - start_time);
 
   return 0;
 }
@@ -805,10 +812,11 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
       Helper::RegionEpochToString(request.source_region_epoch()), Helper::RangeToString(request.source_region_range()),
       request.entries().size(), target_region->EpochToString(), target_region->RangeToString());
 
+  uint64_t start_time = Helper::TimestampMs();
+
   // Update last_change_cmd_id
   store_region_meta->UpdateLastChangeCmdId(target_region, request.merge_id());
 
-  uint64_t start_time = Helper::TimestampMs();
   auto source_region = store_region_meta->GetRegion(request.source_region_id());
   if (source_region == nullptr) {
     DINGO_LOG(FATAL) << fmt::format(
