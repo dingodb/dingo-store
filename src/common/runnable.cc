@@ -152,6 +152,8 @@ void WorkerSet::Destroy() {
 bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
                      pending_task_counter_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
+    DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
+                                      pending_task_counter_.load(std::memory_order_relaxed), max_pending_task_count_);
     return false;
   }
 
@@ -167,6 +169,8 @@ bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
 bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
                      pending_task_counter_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
+    DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
+                                      pending_task_counter_.load(std::memory_order_relaxed), max_pending_task_count_);
     return false;
   }
 

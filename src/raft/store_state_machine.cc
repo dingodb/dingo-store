@@ -112,9 +112,10 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     }
 
     if (region_->State() == pb::common::StoreRegionState::DELETING ||
-        region_->State() == pb::common::StoreRegionState::DELETED) {
-      DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is deleting/deleted, abandon apply log.",
-                                        region_->Id());
+        region_->State() == pb::common::StoreRegionState::DELETED ||
+        region_->State() == pb::common::StoreRegionState::TOMBSTONE) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.sm][region({})] region is deleting/deleted/tombstone, abandon apply log.", region_->Id());
       break;
     }
 

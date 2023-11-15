@@ -147,7 +147,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
       std::make_shared<ServiceTask>([=]() { DoVectorBatchQuery(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -281,7 +281,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
       std::make_shared<ServiceTask>([=]() { DoVectorSearch(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -598,7 +598,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
       std::make_shared<ServiceTask>([=]() { DoVectorGetBorderId(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -703,7 +703,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
       std::make_shared<ServiceTask>([=]() { DoVectorScanQuery(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -787,7 +787,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
       [=]() { DoVectorGetRegionMetrics(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -896,7 +896,7 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
   auto task = std::make_shared<ServiceTask>([=]() { DoVectorCount(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1048,7 +1048,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
       std::make_shared<ServiceTask>([=]() { DoVectorSearchDebug(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1146,7 +1146,7 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
       std::make_shared<ServiceTask>([=]() { DoTxnGetVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1272,7 +1272,7 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
       std::make_shared<ServiceTask>([=]() { DoTxnScanVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1640,7 +1640,7 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
       [=]() { DoTxnCheckTxnStatus(storage, controller, request, response, svr_done, true); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1800,7 +1800,7 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
       std::make_shared<ServiceTask>([=]() { DoTxnBatchGetVector(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -1917,7 +1917,7 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnScanLock(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -2100,7 +2100,7 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnDump(storage, controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
@@ -2152,7 +2152,7 @@ void IndexServiceImpl::Hello(google::protobuf::RpcController* controller, const 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
-    brpc::ClosureGuard done_guard(done);
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
