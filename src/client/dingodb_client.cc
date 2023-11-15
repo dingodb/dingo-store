@@ -683,6 +683,8 @@ int CoordinatorSender() {
     SendGetOrphanRegion(coordinator_interaction);
   } else if (FLAGS_method == "ScanRegions") {
     SendScanRegions(coordinator_interaction);
+  } else if (FLAGS_method == "GetRangeRegionMap") {
+    SendGetRangeRegionMap(coordinator_interaction);
   } else if (FLAGS_method == "GetStoreOperation") {
     SendGetStoreOperation(coordinator_interaction);
   } else if (FLAGS_method == "GetTaskList") {

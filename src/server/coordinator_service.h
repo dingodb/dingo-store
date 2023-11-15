@@ -269,6 +269,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   // ScanRegions
   void ScanRegions(google::protobuf::RpcController* controller, const pb::coordinator::ScanRegionsRequest* request,
                    pb::coordinator::ScanRegionsResponse* response, google::protobuf::Closure* done) override;
+  void GetRangeRegionMap(google::protobuf::RpcController* controller,
+                         const pb::coordinator::GetRangeRegionMapRequest* request,
+                         pb::coordinator::GetRangeRegionMapResponse* response,
+                         google::protobuf::Closure* done) override;
 
   // GC
   void UpdateGCSafePoint(google::protobuf::RpcController* controller,

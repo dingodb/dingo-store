@@ -354,6 +354,19 @@ message GetRegionMapResponse {
   dingodb.pb.common.RegionMap regionmap = 3;
 }
 
+message GetRangeRegionMapRequest {}
+
+message RangeRegion {
+  bytes start_key = 1;
+  int64 region_id = 2;
+  bytes end_key = 3;
+}
+
+message GetRangeRegionMapResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated RangeRegion range_regions = 2;
+}
+
 message GetDeletedRegionMapRequest {
   int64 epoch = 1;
 }
@@ -882,6 +895,7 @@ service CoordinatorService {
   rpc TransferLeaderRegion(TransferLeaderRegionRequest) returns (TransferLeaderRegionResponse);
   rpc GetOrphanRegion(GetOrphanRegionRequest) returns (GetOrphanRegionResponse);
   rpc ScanRegions(ScanRegionsRequest) returns (ScanRegionsResponse);
+  rpc GetRangeRegionMap(GetRangeRegionMapRequest) returns (GetRangeRegionMapResponse);
 
   // StoreOperation
   rpc GetStoreOperation(GetStoreOperationRequest) returns (GetStoreOperationResponse);

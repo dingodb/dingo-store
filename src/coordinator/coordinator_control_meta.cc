@@ -497,7 +497,9 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   std::vector<int64_t> new_part_ids;
   std::vector<pb::common::Range> new_part_ranges;
 
+  pb::common::Range table_internal_range;
   if (table_partition.partitions_size() > 0) {
+    table_internal_range = table_partition.partitions(0).range();
     for (const auto& part : table_partition.partitions()) {
       if (part.id().entity_id() <= 0) {
         DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id()
@@ -511,6 +513,19 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
+
+      if (!part.range().start_key().empty() && !part.range().end_key().empty()) {
+        if (table_internal_range.start_key() > part.range().start_key()) {
+          table_internal_range.set_start_key(part.range().start_key());
+        }
+        if (table_internal_range.end_key() < part.range().end_key()) {
+          table_internal_range.set_end_key(part.range().end_key());
+        }
+      } else {
+        DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id()
+                         << ", table_definition:" << table_definition.ShortDebugString();
+        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
+      }
     }
   } else {
     DINGO_LOG(ERROR) << "no range provided " << table_definition.ShortDebugString();
@@ -649,6 +664,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   table_internal.set_id(new_table_id);
   table_internal.set_schema_id(schema_id);
   table_internal.set_table_id(new_table_id);
+  *table_internal.mutable_range() = table_internal_range;
   auto* definition = table_internal.mutable_definition();
   *definition = table_definition;
   definition->set_create_timestamp(butil::gettimeofday_ms());
@@ -657,7 +673,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   for (int i = 0; i < new_region_ids.size(); i++) {
     // create part and set region_id & range
     auto* part_internal = table_internal.add_partitions();
-    part_internal->set_region_id(new_region_ids[i]);
+    // part_internal->set_region_id(new_region_ids[i]);
     part_internal->set_part_id(new_part_ids[i]);
   }
 
@@ -1164,7 +1180,9 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   std::vector<int64_t> new_part_ids;
   std::vector<pb::common::Range> new_part_ranges;
 
+  pb::common::Range table_internal_range;
   if (index_partition.partitions_size() > 0) {
+    table_internal_range = index_partition.partitions(0).range();
     for (const auto& part : index_partition.partitions()) {
       if (part.id().entity_id() <= 0) {
         DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id()
@@ -1178,6 +1196,19 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
+
+      if (!part.range().start_key().empty() && !part.range().end_key().empty()) {
+        if (table_internal_range.start_key() > part.range().start_key()) {
+          table_internal_range.set_start_key(part.range().start_key());
+        }
+        if (table_internal_range.end_key() < part.range().end_key()) {
+          table_internal_range.set_end_key(part.range().end_key());
+        }
+      } else {
+        DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id()
+                         << ", table_definition:" << table_definition.ShortDebugString();
+        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
+      }
     }
   } else {
     DINGO_LOG(ERROR) << "no range provided , table_definition=" << table_definition.ShortDebugString();
@@ -1312,6 +1343,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   table_internal.set_id(new_index_id);
   table_internal.set_schema_id(schema_id);
   table_internal.set_table_id(table_id);
+  *table_internal.mutable_range() = table_internal_range;
   auto* definition = table_internal.mutable_definition();
   *definition = table_definition;
   definition->set_create_timestamp(butil::gettimeofday_ms());
@@ -1320,7 +1352,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   for (int i = 0; i < new_region_ids.size(); i++) {
     // create part and set region_id & range
     auto* part_internal = table_internal.add_partitions();
-    part_internal->set_region_id(new_region_ids[i]);
+    // part_internal->set_region_id(new_region_ids[i]);
     part_internal->set_part_id(new_part_ids[i]);
   }
 
@@ -1404,6 +1436,23 @@ butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_i
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "index type not match");
   }
 
+  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: index range is empty, index_id=" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "index range is empty");
+  }
+
+  std::vector<pb::coordinator_internal::RegionInternal> region_internals;
+  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions failed");
+  }
+
+  if (region_internals.empty()) {
+    DINGO_LOG(WARNING) << "ERRROR: ScanRegions empty, table_id=" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions empty");
+  }
+
   if (new_table_definition.index_parameter().vector_index_parameter().vector_index_type() ==
       pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     if (new_table_definition.index_parameter().vector_index_parameter().hnsw_parameter().max_elements() >
@@ -1430,16 +1479,17 @@ butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_i
       std::vector<pb::coordinator::StoreOperation> store_operations;
 
       // for each partition(region) of the index, build store_operation
-      for (int i = 0; i < table_internal.partitions_size(); i++) {
-        auto region_id = table_internal.partitions(i).region_id();
 
-        pb::coordinator_internal::RegionInternal region;
-        auto ret = this->region_map_.Get(region_id, region);
-        if (ret < 0) {
-          DINGO_LOG(ERROR) << "ERRROR: region_id not found" << region_id;
-          return butil::Status(pb::error::Errno::EREGION_NOT_FOUND,
-                               "region_id not found, region_id=" + std::to_string(region_id));
+      for (const auto& region : region_internals) {
+        if (region.definition().index_id() != index_id) {
+          DINGO_LOG(WARNING) << fmt::format("region table_id not match, index_id={} part_id={} region_id={} range={}",
+                                            index_id, region.definition().part_id(), region.id(),
+                                            region.definition().range().ShortDebugString())
+                             << ", region_state: " << pb::common::RegionState_Name(region.state());
+          continue;
         }
+
+        auto region_id = region.id();
 
         // generate new region_definition
         auto region_definition = region.definition();
@@ -1949,44 +1999,47 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
     }
   }
 
-  std::vector<int64_t> region_ids;
+  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: table range is empty, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table range is empty");
+  }
+
+  DINGO_LOG(INFO) << "table_internal.range: " << Helper::StringToHex(table_internal.range().start_key()) << " - "
+                  << Helper::StringToHex(table_internal.range().end_key());
+
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  std::vector<bool> region_exists;
-  for (const auto& part : table_internal.partitions()) {
-    region_ids.push_back(part.region_id());
+  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ScanRegions failed");
   }
 
-  // get regions
-  auto ret = region_map_.MultiGet(region_ids, region_internals, region_exists);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << table_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
-  }
+  DINGO_LOG(INFO) << "ScanRegions table_id=" << table_id << " regions count=" << region_internals.size();
 
-  if (region_internals.size() != region_ids.size()) {
-    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << table_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
-  }
-
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
-    // range_distribution id
-    int64_t region_id = table_internal.partitions(i).region_id();
-    int64_t part_id = table_internal.partitions(i).part_id();
-
-    // get region
-    const auto& part_region = region_internals[i];
+  for (const auto& part_region : region_internals) {
+    if (part_region.definition().table_id() != table_id) {
+      DINGO_LOG(WARNING) << fmt::format("region table_id not match, table_id={} part_id={} region_id={} range={}",
+                                        table_id, part_region.definition().part_id(), part_region.id(),
+                                        part_region.definition().range().ShortDebugString())
+                         << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      continue;
+    }
 
     if (part_region.definition().range().start_key() >= part_region.definition().range().end_key()) {
-      DINGO_LOG(INFO) << fmt::format("region range illegal, table_id={} region_id={} range={}", table_id, region_id,
-                                     part_region.definition().range().ShortDebugString())
+      DINGO_LOG(INFO) << fmt::format("region range illegal, table_id={} region_id={} range={}", table_id,
+                                     part_region.id(), part_region.definition().range().ShortDebugString())
                       << ", region_state: " << pb::common::RegionState_Name(part_region.state());
       continue;
     }
 
+    DINGO_LOG(INFO) << fmt::format("region range, table_id={} region_id={} range={}", table_id, part_region.id(),
+                                   part_region.definition().range().ShortDebugString())
+                    << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+
     auto* range_distribution = table_range.add_range_distribution();
     auto* common_id_region = range_distribution->mutable_id();
-    common_id_region->set_entity_id(region_id);
-    common_id_region->set_parent_entity_id(part_id);
+    common_id_region->set_entity_id(part_region.id());
+    common_id_region->set_parent_entity_id(part_region.definition().part_id());
     common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // region epoch
@@ -1998,7 +2051,7 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
 
     int64_t leader_id = 0;
     pb::common::RegionStatus inner_region_status;
-    GetRegionLeaderAndStatus(region_id, inner_region_status, leader_id);
+    GetRegionLeaderAndStatus(part_region.id(), inner_region_status, leader_id);
 
     region_status->set_raft_status(inner_region_status.raft_status());
     region_status->set_replica_status(inner_region_status.replica_status());
@@ -2020,7 +2073,6 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
       const auto& part_peer = part_region.definition().peers(j);
       if (part_peer.store_id() == leader_id) {
         *leader_location = part_peer.server_location();
-
         // transform ip to hostname
         Server::GetInstance().Ip2Hostname(*leader_location->mutable_host());
       }
@@ -2036,25 +2088,6 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
         // transform ip to hostname
         Server::GetInstance().Ip2Hostname(*learner_location->mutable_host());
       }
-    }
-
-    // if leader_location is null, set up a default value
-    // this is only for fist time refresh route table
-    if (leader_location->host().empty()) {
-      std::srand(std::time(nullptr));
-      int random_int = std::rand() % (part_region.definition().peers_size());  // NOLINT
-
-      *leader_location = part_region.definition().peers(random_int).server_location();
-
-      // transform ip to hostname
-      Server::GetInstance().Ip2Hostname(*leader_location->mutable_host());
-
-      DINGO_LOG(WARNING) << fmt::format("leader_location is null, set up a default value, table_id={} region_id={}",
-                                        table_id, region_id)
-                         << ", leader_location: " << leader_location->ShortDebugString()
-                         << ", peers_size: " << part_region.definition().peers_size()
-                         << ", region_create_timestamp: " << part_region.create_timestamp()
-                         << ", life span(ms): " << butil::gettimeofday_ms() - part_region.create_timestamp();
     }
 
     // range_distribution regionmap_epoch
@@ -2091,44 +2124,43 @@ butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index
     }
   }
 
-  std::vector<int64_t> region_ids;
+  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: index range is empty, index_id=" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index range is empty");
+  }
+
+  DINGO_LOG(INFO) << "index_internal.range: " << Helper::StringToHex(table_internal.range().start_key()) << " - "
+                  << Helper::StringToHex(table_internal.range().end_key());
+
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  std::vector<bool> region_exists;
-  for (const auto& part : table_internal.partitions()) {
-    region_ids.push_back(part.region_id());
+  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << index_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ScanRegions failed");
   }
 
-  // get regions
-  auto ret = region_map_.MultiGet(region_ids, region_internals, region_exists);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << index_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
-  }
+  DINGO_LOG(INFO) << "ScanRegions found region_internals count=" << region_internals.size();
 
-  if (region_internals.size() != region_ids.size()) {
-    DINGO_LOG(ERROR) << "ERRROR: MultiGet regions failed, table_id=" << index_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MultiGet regions failed");
-  }
-
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
-    // range_distribution id
-    int64_t region_id = table_internal.partitions(i).region_id();
-    int64_t part_id = table_internal.partitions(i).part_id();
-
-    // get region
-    const auto& part_region = region_internals[i];
+  for (const auto& part_region : region_internals) {
+    if (part_region.definition().index_id() != index_id) {
+      DINGO_LOG(WARNING) << fmt::format("region table_id not match, table_id={} part_id={} region_id={} range={}",
+                                        index_id, part_region.definition().part_id(), part_region.id(),
+                                        part_region.definition().range().ShortDebugString())
+                         << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      continue;
+    }
 
     if (part_region.definition().range().start_key() >= part_region.definition().range().end_key()) {
-      DINGO_LOG(INFO) << fmt::format("region range illegal, index_id={} region_id={} range={}", index_id, region_id,
-                                     part_region.definition().range().ShortDebugString())
+      DINGO_LOG(INFO) << fmt::format("region range illegal, index_id={} region_id={} range={}", index_id,
+                                     part_region.id(), part_region.definition().range().ShortDebugString())
                       << ", region_state: " << pb::common::RegionState_Name(part_region.state());
       continue;
     }
 
     auto* range_distribution = index_range.add_range_distribution();
     auto* common_id_region = range_distribution->mutable_id();
-    common_id_region->set_entity_id(region_id);
-    common_id_region->set_parent_entity_id(part_id);
+    common_id_region->set_entity_id(part_region.id());
+    common_id_region->set_parent_entity_id(part_region.definition().part_id());
     common_id_region->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
 
     // region epoch
@@ -2140,7 +2172,7 @@ butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index
 
     int64_t leader_id = 0;
     pb::common::RegionStatus inner_region_status;
-    GetRegionLeaderAndStatus(region_id, inner_region_status, leader_id);
+    GetRegionLeaderAndStatus(part_region.id(), inner_region_status, leader_id);
 
     region_status->set_raft_status(inner_region_status.raft_status());
     region_status->set_replica_status(inner_region_status.replica_status());
@@ -2347,9 +2379,29 @@ int64_t CoordinatorControl::CalculateTableMetricsSingle(int64_t table_id, pb::me
   std::string min_key(10, '\x00');
   std::string max_key(10, '\xFF');
 
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
+  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: table range is empty, table_id=" << table_id;
+    return -1;
+  }
+
+  std::vector<pb::coordinator_internal::RegionInternal> region_internals;
+  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_id;
+    return -1;
+  }
+
+  for (const auto& region_internal : region_internals) {
+    if (region_internal.definition().table_id() != table_id) {
+      DINGO_LOG(WARNING) << fmt::format("region table_id not match, table_id={} part_id={} region_id={} range={}",
+                                        table_id, region_internal.definition().part_id(), region_internal.id(),
+                                        region_internal.definition().range().ShortDebugString())
+                         << ", region_state: " << pb::common::RegionState_Name(region_internal.state());
+      continue;
+    }
+
     // part id
-    int64_t region_id = table_internal.partitions(i).region_id();
+    int64_t region_id = region_internal.id();
 
     // get region
     pb::common::RegionMetrics region_metrics;
@@ -2423,9 +2475,29 @@ int64_t CoordinatorControl::CalculateIndexMetricsSingle(int64_t index_id, pb::me
   int64_t min_id = -1;
   int64_t memory_bytes = 0;
 
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
+  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: index range is empty, index_id=" << index_id;
+    return -1;
+  }
+
+  std::vector<pb::coordinator_internal::RegionInternal> region_internals;
+  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << index_id;
+    return -1;
+  }
+
+  for (const auto& region_internal : region_internals) {
+    if (region_internal.definition().index_id() != index_id) {
+      DINGO_LOG(WARNING) << fmt::format("region table_id not match, index_id={} part_id={} region_id={} range={}",
+                                        index_id, region_internal.definition().part_id(), region_internal.id(),
+                                        region_internal.definition().range().ShortDebugString())
+                         << ", region_state: " << pb::common::RegionState_Name(region_internal.state());
+      continue;
+    }
+
     // part id
-    int64_t region_id = table_internal.partitions(i).region_id();
+    int64_t region_id = region_internal.id();
 
     // get region
     pb::common::RegionMetrics region_metrics;
@@ -2764,17 +2836,33 @@ butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t tab
     }
   }
 
-  for (int i = 0; i < table_internal.partitions_size(); i++) {
-    int64_t region_id = table_internal.partitions(i).region_id();
+  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
+    DINGO_LOG(ERROR) << "ERRROR: table range is empty, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "table range is empty");
+  }
 
-    // get region
-    pb::coordinator_internal::RegionInternal part_region;
-    int ret = region_map_.Get(region_id, part_region);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << fmt::format("ERROR cannot find region in regionmap_ while GetTable, table_id={} region_id={}",
-                                      table_id, region_id);
+  std::vector<pb::coordinator_internal::RegionInternal> region_internals;
+  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "ScanRegions failed");
+  }
+
+  if (region_internals.empty()) {
+    DINGO_LOG(WARNING) << "ERRROR: ScanRegions empty, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "ScanRegions empty");
+  }
+
+  for (const auto& part_region : region_internals) {
+    if (part_region.definition().table_id() != table_id && part_region.definition().index_id() != table_id) {
+      DINGO_LOG(WARNING) << fmt::format("region table_id not match, table_id={} part_id={} region_id={} range={}",
+                                        table_id, part_region.definition().part_id(), part_region.id(),
+                                        part_region.definition().range().ShortDebugString())
+                         << ", region_state: " << pb::common::RegionState_Name(part_region.state());
       continue;
     }
+
+    auto region_id = part_region.id();
 
     auto leader_store_id = GetRegionLeaderId(region_id);
     if (leader_store_id <= 0) {

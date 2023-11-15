@@ -2019,6 +2019,41 @@ void DoScanRegions(google::protobuf::RpcController * /*controller*/, const pb::c
   }
 }
 
+void DoGetRangeRegionMap(google::protobuf::RpcController * /*controller*/,
+                         const pb::coordinator::GetRangeRegionMapRequest *request,
+                         pb::coordinator::GetRangeRegionMapResponse *response, google::protobuf::Closure *done,
+                         std::shared_ptr<CoordinatorControl> coordinator_control,
+                         std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive GetRangeRegionMap Request:" << request->ShortDebugString();
+
+  auto is_leader = coordinator_control->IsLeader();
+  if (!is_leader) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  std::vector<std::string> start_keys;
+  std::vector<pb::coordinator_internal::RegionInternal> regions;
+  auto ret = coordinator_control->GetRangeRegionMap(start_keys, regions);
+  if (!ret.ok()) {
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+  }
+
+  if (start_keys.size() != regions.size()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+    response->mutable_error()->set_errmsg("start_keys size not equal regions size");
+    return;
+  }
+
+  for (int i = 0; i < start_keys.size(); i++) {
+    auto *new_range_region_map = response->add_range_regions();
+    new_range_region_map->set_start_key(start_keys[i]);
+    new_range_region_map->set_end_key(regions[i].definition().range().end_key());
+    new_range_region_map->set_region_id(regions[i].definition().id());
+  }
+}
+
 void DoUpdateGCSafePoint(google::protobuf::RpcController *controller,
                          const pb::coordinator::UpdateGCSafePointRequest *request,
                          pb::coordinator::UpdateGCSafePointResponse *response, google::protobuf::Closure *done,
@@ -3182,6 +3217,28 @@ void CoordinatorServiceImpl::ScanRegions(google::protobuf::RpcController *contro
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void CoordinatorServiceImpl::GetRangeRegionMap(google::protobuf::RpcController *controller,
+                                               const pb::coordinator::GetRangeRegionMapRequest *request,
+                                               pb::coordinator::GetRangeRegionMapResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive GetRangeRegionMap Request:" << request->ShortDebugString();
+
+  auto is_leader = coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoGetRangeRegionMap(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
   }
 }
 

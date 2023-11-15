@@ -1243,7 +1243,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     std::vector<pb::coordinator_internal::RegionInternal> region_internal_to_write;
     // for range_region_map_ multiput
     std::vector<std::string> region_start_key_to_write;
-    std::vector<int64_t> region_start_key_id_to_write;
+    std::vector<std::string> region_start_key_to_delete_for_update;
     std::vector<pb::coordinator_internal::RegionInternal> region_start_key_internal_to_write;
     std::vector<std::string> region_start_key_to_delete;
 
@@ -1306,86 +1306,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
         }
 
-        // update table/index if this is a split region create
-        const auto& new_region = region.region();
-        if (new_region.region_type() == pb::common::RegionType::STORE_REGION) {
-          pb::coordinator_internal::TableInternal table_internal;
-
-          int64_t table_id = new_region.definition().table_id();
-
-          auto ret = table_map_.Get(table_id, table_internal);
-          if (ret < 0) {
-            DINGO_LOG(INFO) << "process RegionCreate in fsm table_id not exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-          } else {
-            DINGO_LOG(INFO) << "process RegionCreate in fsm table_id exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-
-            bool need_to_add_part = true;
-            for (const auto& part : table_internal.partitions()) {
-              if (part.region_id() == new_region.id()) {
-                need_to_add_part = false;
-                break;
-              }
-            }
-
-            if (need_to_add_part) {
-              auto* new_part = table_internal.add_partitions();
-              new_part->set_region_id(new_region.id());
-              new_part->set_part_id(new_region.definition().part_id());
-
-              // update table to table_map
-              ret = table_map_.Put(table_id, table_internal);
-              if (ret > 0) {
-                DINGO_LOG(INFO) << "ApplyMetaIncrement table UPDATE, [id=" << table_id << "] success";
-              } else {
-                DINGO_LOG(WARNING) << "ApplyMetaIncrement table UPDATE, [id=" << table_id << "] failed";
-              }
-
-              // meta_write_kv
-              meta_write_to_kv.push_back(table_meta_->TransformToKvValue(table_internal));
-            }
-          }
-        } else if (new_region.region_type() == pb::common::RegionType::INDEX_REGION) {
-          pb::coordinator_internal::TableInternal index_internal;
-
-          int64_t index_id = new_region.definition().index_id();
-
-          auto ret = index_map_.Get(index_id, index_internal);
-          if (ret < 0) {
-            DINGO_LOG(INFO) << "process RegionCreate in fsm index_id not exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-          } else {
-            DINGO_LOG(INFO) << "process RegionCreate in fsm index_id exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-
-            bool need_to_add_part = true;
-            for (const auto& part : index_internal.partitions()) {
-              if (part.region_id() == new_region.id()) {
-                need_to_add_part = false;
-                break;
-              }
-            }
-
-            if (need_to_add_part) {
-              auto* new_part = index_internal.add_partitions();
-              new_part->set_region_id(new_region.id());
-              new_part->set_part_id(new_region.definition().part_id());
-
-              // update kv_index to kv_index_map
-              auto ret = index_map_.Put(index_id, index_internal);
-              if (ret > 0) {
-                DINGO_LOG(INFO) << "ApplyMetaIncrement index UPDATE, [id=" << index_id << "] success";
-              } else {
-                DINGO_LOG(WARNING) << "ApplyMetaIncrement index UPDATE, [id=" << index_id << "] failed";
-              }
-
-              // meta_write_kv
-              meta_write_to_kv.push_back(index_meta_->TransformToKvValue(index_internal));
-            }
-          }
-        }
-
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // get old region
         pb::coordinator_internal::RegionInternal old_region;
@@ -1403,7 +1323,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             }
 
             if (need_delete) {
-              region_start_key_to_delete.push_back(old_region.definition().range().start_key());
+              region_start_key_to_delete_for_update.push_back(old_region.definition().range().start_key());
               DINGO_LOG(INFO) << "erase range_region_map_ success, region_id=[" << region.region().id()
                               << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
                               << "]";
@@ -1470,84 +1390,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         region_start_key_to_delete.push_back(region.region().definition().range().start_key());
         DINGO_LOG(INFO) << "erase range_region_map_ success, region_id=[" << region.region().id() << "], start_key=["
                         << Helper::StringToHex(region.region().definition().range().start_key()) << "]";
-
-        // update table/index if this is a merge region delete
-        const auto& new_region = region.region();
-        if (new_region.region_type() == pb::common::RegionType::STORE_REGION) {
-          pb::coordinator_internal::TableInternal table_internal;
-
-          int64_t table_id = new_region.definition().table_id();
-
-          ret = table_map_.Get(table_id, table_internal);
-          if (ret < 0) {
-            DINGO_LOG(INFO) << "process RegionDrop in fsm table_id not exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-          } else {
-            DINGO_LOG(INFO) << "process RegionDrop in fsm table_id exists, id=" << table_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-
-            pb::coordinator_internal::TableInternal new_table_internal = table_internal;
-            new_table_internal.clear_partitions();
-
-            for (const auto& part : table_internal.partitions()) {
-              if (part.region_id() != new_region.id()) {
-                auto* new_part = new_table_internal.add_partitions();
-                new_part->set_region_id(part.region_id());
-                new_part->set_part_id(part.part_id());
-              }
-            }
-
-            if (new_table_internal.partitions_size() != table_internal.partitions_size()) {
-              // update table to table_map
-              ret = table_map_.Put(table_id, table_internal);
-              if (ret > 0) {
-                DINGO_LOG(INFO) << "ApplyMetaIncrement table UPDATE, [id=" << table_id << "] success";
-              } else {
-                DINGO_LOG(WARNING) << "ApplyMetaIncrement table UPDATE, [id=" << table_id << "] failed";
-              }
-
-              // meta_write_kv
-              meta_write_to_kv.push_back(table_meta_->TransformToKvValue(new_table_internal));
-            }
-          }
-        } else if (new_region.region_type() == pb::common::RegionType::INDEX_REGION) {
-          pb::coordinator_internal::TableInternal index_internal;
-
-          int64_t index_id = new_region.definition().index_id();
-
-          ret = index_map_.Get(index_id, index_internal);
-          if (ret < 0) {
-            DINGO_LOG(INFO) << "process RegionDrop in fsm index_id not exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-          } else {
-            DINGO_LOG(INFO) << "process RegionDrop in fsm index_id exists, id=" << index_id
-                            << ", region_id=" << new_region.id() << ",region=" << new_region.ShortDebugString();
-
-            pb::coordinator_internal::TableInternal new_index_internal = index_internal;
-            new_index_internal.clear_partitions();
-
-            for (const auto& part : index_internal.partitions()) {
-              if (part.region_id() != new_region.id()) {
-                auto* new_part = new_index_internal.add_partitions();
-                new_part->set_region_id(part.region_id());
-                new_part->set_part_id(part.part_id());
-              }
-            }
-
-            if (new_index_internal.partitions_size() != index_internal.partitions_size()) {
-              // update table to table_map
-              ret = table_map_.Put(index_id, index_internal);
-              if (ret > 0) {
-                DINGO_LOG(INFO) << "ApplyMetaIncrement table UPDATE, [id=" << index_id << "] success";
-              } else {
-                DINGO_LOG(WARNING) << "ApplyMetaIncrement table UPDATE, [id=" << index_id << "] failed";
-              }
-
-              // meta_write_kv
-              meta_write_to_kv.push_back(table_meta_->TransformToKvValue(new_index_internal));
-            }
-          }
-        }
       }
 
       if (!region_id_to_write.empty()) {
@@ -1564,11 +1406,22 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
       }
 
+      if (!region_start_key_to_delete_for_update.empty()) {
+        auto ret = range_region_map_.MultiErase(region_start_key_to_delete_for_update);
+        if (ret < 0) {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region DELETE for update, size=["
+                             << region_start_key_to_delete_for_update.size() << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement range_region DELETE for update, size=["
+                          << region_start_key_to_delete_for_update.size() << "] success";
+        }
+      }
+
       if (!region_start_key_to_write.empty()) {
         if (region_start_key_to_write.size() != region_start_key_internal_to_write.size()) {
-          DINGO_LOG(FATAL)
-              << "ApplyMetaIncrement region_start_key_id_to_write.size() != region_start_key_to_write.size(), size="
-              << region_start_key_internal_to_write.size() << " " << region_start_key_to_write.size();
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement region_start_key_to_write.size() != "
+                              "region_start_key_internal_to_write.size(), size="
+                           << region_start_key_internal_to_write.size() << " " << region_start_key_to_write.size();
         }
 
         auto ret = range_region_map_.MultiPut(region_start_key_to_write, region_start_key_internal_to_write);
@@ -1582,15 +1435,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       }
 
       if (!region_start_key_to_delete.empty()) {
-        for (auto& key : region_start_key_to_delete) {
-          auto ret = range_region_map_.Erase(key);
-          if (ret < 0) {
-            DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region DELETE, key=[" << Helper::StringToHex(key)
-                               << "] failed";
-          } else {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement range_region DELETE, key=[" << Helper::StringToHex(key)
-                            << "] success";
-          }
+        auto ret = range_region_map_.MultiErase(region_start_key_to_delete);
+        if (ret < 0) {
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement range_region DELETE, size=[" << region_start_key_to_delete.size()
+                             << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement range_region DELETE, size=[" << region_start_key_to_delete.size()
+                          << "] success";
         }
       }
     }

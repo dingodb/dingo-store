@@ -36,13 +36,7 @@ message RegionCmdInternal {
 // TableRegionInternal is storage structure for coordinator
 // TableRegionInternal is not table partition in SQL, its only use for storage.
 message TableRegionInternal {
-  int64 region_id = 1;  // the region id of this part
-  int64 part_id = 2;    // the part id of this part
-}
-
-// @Deprecated
-message IndexRegionInternal {
-  int64 region_id = 1;  // the region id of this part
+  int64 part_id = 1;  // the part id of this part
 }
 
 // TableInternal is storage structure for coordinator
@@ -52,21 +46,13 @@ message TableInternal {
   repeated TableRegionInternal partitions = 3;
   int64 schema_id = 4;
   int64 table_id = 5;
+  dingodb.pb.common.Range range = 6;
 }
 
 // TableMetricsInternal is storage structure for table_metrics
 message TableMetricsInternal {
   int64 id = 1;
   dingodb.pb.meta.TableMetrics table_metrics = 2;
-}
-
-// @Deprecated
-// IndexInternal is storage structure for coordinator
-message IndexInternal {
-  int64 id = 1;
-  dingodb.pb.meta.IndexDefinition definition = 2;
-  repeated IndexRegionInternal partitions = 3;
-  int64 schema_id = 4;
 }
 
 // TableIndexInternal is storage structure for table

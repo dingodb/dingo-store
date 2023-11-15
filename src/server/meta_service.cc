@@ -2432,7 +2432,7 @@ void MetaServiceImpl::CreateTable(google::protobuf::RpcController *controller,
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoCreateTable(controller, request, response, svr_done, coordinator_control_, engine_);
   });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(0, task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -2889,7 +2889,7 @@ void MetaServiceImpl::CreateIndex(google::protobuf::RpcController *controller,
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoCreateIndex(controller, request, response, svr_done, coordinator_control_, engine_);
   });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(0, task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -3017,7 +3017,7 @@ void MetaServiceImpl::CreateTables(google::protobuf::RpcController *controller,
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoCreateTables(controller, request, response, svr_done, coordinator_control_, engine_);
   });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(0, task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
