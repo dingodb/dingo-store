@@ -28,8 +28,7 @@
 #include "faiss/MetricType.h"
 #include "faiss/utils/extra_distances-inl.h"
 #include "fmt/core.h"
-#include "hnswlib/space_ip.h"
-#include "hnswlib/space_l2.h"
+#include "hnswlib/hnswlib.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 

@@ -35,8 +35,6 @@
 #include "faiss/impl/AuxIndexStructures.h"
 #include "faiss/index_io.h"
 #include "fmt/core.h"
-#include "hnswlib/space_ip.h"
-#include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -291,7 +289,7 @@ butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId>
     }
   }
 
-  VectorIndexUtils ::FillRangeSearchResult(range_search_result, metric_type_, dimension_, results);
+  VectorIndexUtils::FillRangeSearchResult(range_search_result, metric_type_, dimension_, results);
 
   DINGO_LOG(DEBUG) << "result.size() = " << results.size();
 

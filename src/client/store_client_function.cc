@@ -59,6 +59,7 @@ DECLARE_bool(with_vector_ids);
 DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
 DECLARE_uint32(vector_ids_count);
+DECLARE_bool(key_is_hex);
 
 namespace client {
 

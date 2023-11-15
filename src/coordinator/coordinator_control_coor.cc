@@ -2569,21 +2569,14 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
 
   // build drop region task
   auto* drop_region_task = new_task_list->add_tasks();
-
-  // call drop_region to get store_operations
-  pb::coordinator_internal::MetaIncrement meta_increment_tmp;
-  std::vector<pb::coordinator::StoreOperation> store_operations;
-  DropRegionFinal(merge_from_region_id, store_operations, meta_increment_tmp);
-  for (const auto& it : store_operations) {
-    auto* new_store_operation = drop_region_task->add_store_operations();
-    *new_store_operation = it;
-  }
-
-  // update region_map for drop region
-  for (const auto& it : meta_increment_tmp.regions()) {
-    auto* new_region = meta_increment.add_regions();
-    *new_region = it;
-  }
+  auto* task_pre_check_drop = drop_region_task->mutable_pre_check();
+  task_pre_check_drop->set_type(pb::coordinator::TaskPreCheckType::REGION_CHECK);
+  auto* region_check = task_pre_check_drop->mutable_region_check();
+  region_check->set_region_id(merge_from_region_id);
+  region_check->set_state(::dingodb::pb::common::RegionState::REGION_TOMBSTONE);
+  auto* coordinator_operation = drop_region_task->add_coordinator_operations();
+  coordinator_operation->set_coordinator_op_type(pb::coordinator::COORDINATOR_OP_TYPE_DROP_REGION);
+  coordinator_operation->mutable_drop_region_operation()->set_region_id(merge_from_region_id);
 
   // check if merge_to_region'state change to NORMAL, this state change means split is fininshed.
   AddCheckMergeResultTask(new_task_list, merge_to_region_id, new_range);
@@ -3501,7 +3494,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
 
 pb::common::RegionState CoordinatorControl::GenRegionState(
     const pb::common::RegionMetrics& region_metrics, const pb::coordinator_internal::RegionInternal& region_internal) {
-  DINGO_LOG(INFO) << fmt::format("===regoin state: {} {}", region_metrics.id(),
+  DINGO_LOG(INFO) << fmt::format("===region state: {} {}", region_metrics.id(),
                                  pb::common::StoreRegionState_Name(region_metrics.store_region_state()));
   if (region_internal.state() == pb::common::RegionState::REGION_DELETE ||
       region_internal.state() == pb::common::RegionState::REGION_DELETING ||
@@ -3660,7 +3653,7 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       region_metrics_is_not_leader = true;
     }
 
-    // DINGO_LOG(INFO) << "regoin_id: " << region_metrics.id()
+    // DINGO_LOG(INFO) << "region_id: " << region_metrics.id()
     //                 << ", region_metrics_is_not_leader: " << region_metrics_is_not_leader
     //                 << ", leader_store_id: " << region_metrics.leader_store_id();
 
@@ -4575,6 +4568,15 @@ butil::Status CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::T
     }
   }
 
+  // do task, submit all coordinator_operations
+  for (const auto& it : task.coordinator_operations()) {
+    auto ret = AddCoordinatorOperation(it, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "AddCoordinatorOperation failed, coordinator_operation=" << it.ShortDebugString();
+      return ret;
+    }
+  }
+
   // advance step, update task_list
   auto* task_list_increment = meta_increment.add_task_lists();
   task_list_increment->set_id(task_list.id());
@@ -4743,6 +4745,43 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point, int64_t&
 
 butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point) {
   safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::AddCoordinatorOperation(
+    const pb::coordinator::CoordinatorOperation& coordinator_operation,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (coordinator_operation.coordinator_op_type() == pb::coordinator::COORDINATOR_OP_TYPE_DROP_REGION) {
+    const auto& drop_region = coordinator_operation.drop_region_operation();
+    if (drop_region.region_id() > 0) {
+      pb::coordinator_internal::RegionInternal region;
+      auto ret = region_map_.Get(drop_region.region_id(), region);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << "region_map_.Get(" << drop_region.region_id() << ") failed";
+        return butil::Status(pb::error::EINTERNAL, "region_map_.Get failed");
+      }
+
+      // call drop_region to get store_operations
+      std::vector<pb::coordinator::StoreOperation> store_operations;
+      auto ret1 = DropRegionFinal(drop_region.region_id(), store_operations, meta_increment);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "DropRegionFinal failed, region_id=" << drop_region.region_id();
+        return ret1;
+      }
+
+      DINGO_LOG(INFO) << "DropRegionFinal success, region_id=" << drop_region.region_id()
+                      << " store_operations.size()=" << store_operations.size();
+
+      return butil::Status::OK();
+    } else {
+      DINGO_LOG(ERROR) << "drop_region.region_id() <= 0";
+      return butil::Status(pb::error::EINTERNAL, "drop_region.region_id() <= 0");
+    }
+  } else {
+    DINGO_LOG(ERROR) << "AddCoordinatorOperation failed, coordinator_operation.coordinator_op_type()="
+                     << coordinator_operation.coordinator_op_type() << " not support";
+    return butil::Status(pb::error::EINTERNAL, "coordinator_operation.coordinator_op_type() not support");
+  }
   return butil::Status::OK();
 }
 

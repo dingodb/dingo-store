@@ -35,8 +35,6 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
-#include "hnswlib/space_ip.h"
-#include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index.h"
@@ -468,10 +466,11 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexHnsw::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                           std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                                           std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                                           bool reconstruct, const pb::common::VectorSearchParameter& parameter) {
+butil::Status VectorIndexHnsw::RangeSearch(std::vector<pb::common::VectorWithId> /*vector_with_ids*/, float /*radius*/,
+                                           std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> /*filters*/,
+                                           std::vector<pb::index::VectorWithDistanceResult>& /*results*/,
+                                           bool /*reconstruct*/,
+                                           const pb::common::VectorSearchParameter& /*parameter*/) {
   DINGO_LOG(ERROR) << "RangeSearch not support in Hnsw!!!";
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "RangeSearch not support in Hnsw!!!");
 }

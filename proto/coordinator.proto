@@ -62,9 +62,26 @@ message TaskPreCheck {
   }
 }
 
+enum CoordinatorOperationType {
+  COORDINATOR_OP_TYPE_NONE = 0;  // this is a placeholder
+  COORDINATOR_OP_TYPE_DROP_REGION = 1;
+}
+
+message CoordinatorDropRegionOperation {
+  int64 region_id = 1;  // region id to be droped
+}
+
+message CoordinatorOperation {
+  CoordinatorOperationType coordinator_op_type = 1;
+  oneof Operation {
+    CoordinatorDropRegionOperation drop_region_operation = 2;
+  }
+}
+
 message Task {
   TaskPreCheck pre_check = 1;
   repeated StoreOperation store_operations = 2;
+  repeated CoordinatorOperation coordinator_operations = 3;
 }
 
 message TaskList {

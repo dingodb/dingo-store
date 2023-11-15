@@ -24,8 +24,6 @@
 
 #include "butil/status.h"
 #include "common/logging.h"
-#include "hnswlib/space_ip.h"
-#include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"

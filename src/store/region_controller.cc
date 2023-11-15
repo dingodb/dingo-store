@@ -446,7 +446,7 @@ butil::Status CheckChangeRegionLog(int64_t region_id, int64_t min_applied_log_id
     return butil::Status(pb::error::ERAFT_NOT_FOUND_LOG_STORAGE, fmt::format("Not found log storage {}", region_id));
   }
 
-  bool has = log_storage->HasSpecificLog(min_applied_log_id, INT64_MAX, [](const LogEntry& log_entry) -> bool {
+  bool has = log_storage->HasSpecificLog(min_applied_log_id, INT64_MAX, [&](const LogEntry& log_entry) -> bool {
     if (log_entry.type == LogEntryType::kEntryTypeData) {
       auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
       butil::IOBufAsZeroCopyInputStream wrapper(log_entry.data);
@@ -455,10 +455,15 @@ butil::Status CheckChangeRegionLog(int64_t region_id, int64_t min_applied_log_id
         if (request.cmd_type() == pb::raft::CmdType::SPLIT || request.cmd_type() == pb::raft::CmdType::PREPARE_MERGE ||
             request.cmd_type() == pb::raft::CmdType::COMMIT_MERGE ||
             request.cmd_type() == pb::raft::CmdType::ROLLBACK_MERGE) {
+          LOG(INFO) << fmt::format("[merge.merging][region({})] Exist split/merge/change_peer log recently", region_id)
+                    << ", min_applied_log_id: " << min_applied_log_id
+                    << ", cmd_type: " << pb::raft::CmdType_Name(request.cmd_type());
           return true;
         }
       }
     } else if (log_entry.type == LogEntryType::kEntryTypeConfiguration) {
+      LOG(INFO) << fmt::format("[merge.merging][region({})] Exist split/merge/change_peer log recently", region_id)
+                << ", min_applied_log_id: " << min_applied_log_id << ", log_entry_type: kEntryTypeConfiguration";
       return true;
     }
     return false;
