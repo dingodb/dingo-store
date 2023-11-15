@@ -24,6 +24,7 @@
 
 #include "butil/containers/flat_map.h"
 #include "butil/string_printf.h"
+#include "common/helper.h"
 #include "common/safe_map.h"
 
 class DingoSafeMapTest : public testing::Test {
@@ -138,8 +139,40 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapGetRangeValues) {
 }
 
 TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
+  std::vector<std::string> values;
+  std::string start_key;
+  std::string end_key;
+  int ret = 0;
   dingodb::DingoSafeStdMap<std::string, std::string> safe_map;
 
+  safe_map.Put(dingodb::Helper::HexToString("77000000000000ea62"), "77000000000000ea62");
+  safe_map.Put(dingodb::Helper::HexToString("77000000000000ea63"), "77000000000000ea63");
+
+  values.clear();
+  start_key = dingodb::Helper::HexToString("77000000000000ea61");
+  end_key = dingodb::Helper::HexToString("77000000000000ea63");
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << dingodb::Helper::StringToHex(start_key) << "," << dingodb::Helper::StringToHex(end_key) << "]"
+              << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  values.clear();
+  start_key = dingodb::Helper::HexToString("7700");
+  end_key = dingodb::Helper::HexToString("77000000000000ea63");
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << dingodb::Helper::StringToHex(start_key) << "," << dingodb::Helper::StringToHex(end_key) << "]"
+              << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
+
+  safe_map.Clear();
   safe_map.Put("wa", "wa0");
   safe_map.Put("wa0", "wb");
   safe_map.Put("wb", "wb0");
@@ -148,10 +181,16 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   safe_map.Put("wc", "wc0");
   safe_map.Put("wc0", "wd");
 
-  std::vector<std::string> values;
-  std::string start_key;
-  std::string end_key;
-  int ret = 0;
+  values.clear();
+  start_key = "w0";
+  end_key = "wa0";
+  ret = safe_map.FindIntervalValues(values, start_key, end_key);
+
+  for (auto& value : values) {
+    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+  }
+
+  EXPECT_EQ(ret, 1);
 
   values.clear();
   start_key = "wd";

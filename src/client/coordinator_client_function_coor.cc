@@ -132,7 +132,7 @@ void SendRaftAddPeer() {
     DINGO_LOG(INFO) << "Received response"
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG_INFO << response.DebugString();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -183,7 +183,7 @@ void SendRaftRemovePeer() {
     DINGO_LOG(INFO) << "Received response"
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG_INFO << response.DebugString();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -238,7 +238,7 @@ void SendRaftTransferLeader() {
     DINGO_LOG(INFO) << "Received response"
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG_INFO << response.DebugString();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -281,7 +281,7 @@ void SendRaftSnapshot() {
     DINGO_LOG(INFO) << "Received response"
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG_INFO << response.DebugString();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -346,7 +346,7 @@ void SendRaftResetPeer() {
     DINGO_LOG(INFO) << "Received response"
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
-    DINGO_LOG_INFO << response.DebugString();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -1699,7 +1699,7 @@ void SendCleanStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> co
 
   auto status = coordinator_interaction->SendRequest("CleanStoreOperation", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendAddStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1725,7 +1725,7 @@ void SendAddStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
   auto status = coordinator_interaction->SendRequest("AddStoreOperation", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1748,7 +1748,7 @@ void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> c
 
   auto status = coordinator_interaction->SendRequest("RemoveStoreOperation", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1757,7 +1757,7 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1772,7 +1772,7 @@ void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
 
   auto status = coordinator_interaction->SendRequest("CleanTaskList", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1800,7 +1800,7 @@ void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   auto status = coordinator_interaction->SendRequest("GetRegionCmd", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendScanRegions(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1830,7 +1830,20 @@ void SendScanRegions(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("ScanRegions", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendGetRangeRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetRangeRegionMapRequest request;
+  dingodb::pb::coordinator::GetRangeRegionMapResponse response;
+
+  DINGO_LOG(INFO) << "GetRangeRegionMap request: " << request.DebugString();
+
+  auto status = coordinator_interaction->SendRequest("GetRangeRegionMap", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+
+  DINGO_LOG(INFO) << "region count: " << response.range_regions_size();
 }
 
 void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1839,7 +1852,7 @@ void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
   DINGO_LOG(INFO) << "gc_safe_point=" << response.safe_point();
 }
 
@@ -1856,5 +1869,5 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
   auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }

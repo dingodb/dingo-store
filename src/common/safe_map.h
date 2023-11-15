@@ -675,7 +675,9 @@ class DingoSafeStdMap {
       }
     } else {
       if (it->first > lower_bound) {
-        --it;
+        if (it != ptr->begin()) {
+          --it;
+        }
       }
       for (; it != ptr->end(); ++it) {
         if (it == ptr->end()) {
@@ -804,6 +806,16 @@ class DingoSafeStdMap {
     }
   }
 
+  // MultiErase
+  // erase multi keys
+  int MultiErase(const std::vector<T_KEY> &key_list) {
+    if (safe_map.Modify(InnerMultiErase, key_list) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
   // PutIfExists
   // put key-value pair into map if key exists
   int PutIfExists(const T_KEY &key, const T_VALUE &value) {
@@ -905,6 +917,17 @@ class DingoSafeStdMap {
       map.insert_or_assign(key_list[i], value_list[i]);
     }
     return key_list.size();
+  }
+
+  static size_t InnerMultiErase(TypeRawMap &map, const std::vector<T_KEY> &key_list) {
+    if (key_list.empty()) {
+      return 0;
+    }
+
+    for (int i = 0; i < key_list.size(); i++) {
+      map.erase(key_list[i]);
+    }
+    return 1;
   }
 
   static size_t InnerPutIfExists(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {

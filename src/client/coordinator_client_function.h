@@ -82,6 +82,7 @@ void SendRemovePeerRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 void SendGetOrphanRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendTransferLeaderRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendScanRegions(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetRangeRegionMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // store operation
 void SendGetStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

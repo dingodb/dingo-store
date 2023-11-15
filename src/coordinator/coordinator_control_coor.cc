@@ -4668,6 +4668,12 @@ butil::Status CoordinatorControl::CleanTaskList(int64_t task_list_id,
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::GetRangeRegionMap(std::vector<std::string>& start_keys,
+                                                    std::vector<pb::coordinator_internal::RegionInternal>& regions) {
+  range_region_map_.GetAllKeyValues(start_keys, regions);
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, const std::string& end_key, int64_t limit,
                                               std::vector<pb::coordinator_internal::RegionInternal>& regions) {
   DINGO_LOG(INFO) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
