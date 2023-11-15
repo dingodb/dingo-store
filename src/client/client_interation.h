@@ -154,9 +154,11 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
 
   } while (retry_count < kMaxRetry);
 
-  DINGO_LOG(ERROR) << fmt::format("{} response failed, error ERAFT_NOTLEADER Not raft leader", api_name);
+  DINGO_LOG(ERROR) << fmt::format("{} response failed, error: {} {}", api_name,
+                                  dingodb::pb::error::Errno_Name(response.error().errcode()),
+                                  response.error().errmsg());
 
-  return butil::Status(dingodb::pb::error::ERAFT_NOTLEADER, "Not raft leader");
+  return butil::Status(response.error().errcode(), response.error().errmsg());
 }
 
 template <typename Request, typename Response>

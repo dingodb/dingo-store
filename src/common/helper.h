@@ -171,6 +171,10 @@ class Helper {
   // range1 contain range2
   static bool IsContainRange(const pb::common::Range& range1, const pb::common::Range& range2);
 
+  static bool InvalidRange(const pb::common::Range& range);
+
+  static butil::Status CheckRange(const pb::common::Range& range);
+
   static std::string StringToHex(const std::string& str);
   static std::string StringToHex(const std::string_view& str);
   static std::string HexToString(const std::string& hex_str);
@@ -327,7 +331,6 @@ class Helper {
   static butil::Status ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
                                                    pb::store_internal::RaftSnapshotRegionMeta& meta);
 
-  static butil::Status CheckRange(const pb::common::Range& range);
   // 0: src_epoch == dst_epoch
   // -1: src_epoch < dst_epoch
   // 1: src_epoch > dst_epoch
