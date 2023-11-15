@@ -274,6 +274,16 @@ class DingoSafeMap {
     }
   }
 
+  // MultiErase
+  // erase multi keys
+  int MultiErase(const std::vector<T_KEY> &key_list) {
+    if (safe_map.Modify(InnerMultiErase, key_list) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
   // PutIfExists
   // put key-value pair into map if key exists
   int PutIfExists(const T_KEY &key, const T_VALUE &value) {
@@ -375,6 +385,17 @@ class DingoSafeMap {
       map.insert(key_list[i], value_list[i]);
     }
     return key_list.size();
+  }
+
+  static size_t InnerMultiErase(TypeRawMap &map, const std::vector<T_KEY> &key_list) {
+    if (key_list.empty()) {
+      return 0;
+    }
+
+    for (int i = 0; i < key_list.size(); i++) {
+      map.erase(key_list[i]);
+    }
+    return 1;
   }
 
   static size_t InnerPutIfExists(TypeRawMap &map, const T_KEY &key, const T_VALUE &value) {
@@ -816,6 +837,24 @@ class DingoSafeStdMap {
     }
   }
 
+  // MultiEraseThenPut
+  // erase multi keys
+  int MultiEraseThenPut(const std::vector<T_KEY> &key_list_delete, const std::vector<T_KEY> &key_list_put,
+                        const std::vector<T_VALUE> &value_list_put) {
+    if (key_list_put.size() != value_list_put.size()) {
+      return -1;
+    }
+    std::map<T_KEY, T_VALUE> map;
+    for (int i = 0; i < key_list_put.size(); i++) {
+      map.insert(std::make_pair(key_list_put[i], value_list_put[i]));
+    }
+    if (safe_map.Modify(InnerMultiEraseThenPut, key_list_delete, map) > 0) {
+      return 1;
+    }
+
+    return -1;
+  }
+
   // PutIfExists
   // put key-value pair into map if key exists
   int PutIfExists(const T_KEY &key, const T_VALUE &value) {
@@ -917,6 +956,23 @@ class DingoSafeStdMap {
       map.insert_or_assign(key_list[i], value_list[i]);
     }
     return key_list.size();
+  }
+
+  static size_t InnerMultiEraseThenPut(TypeRawMap &map, const std::vector<T_KEY> &key_list_delete,
+                                       const std::map<T_KEY, T_VALUE> &kv_put_map) {
+    if (kv_put_map.empty() && key_list_delete.empty()) {
+      return 1;
+    }
+
+    for (int i = 0; i < key_list_delete.size(); i++) {
+      map.erase(key_list_delete[i]);
+    }
+
+    for (const auto &kv : kv_put_map) {
+      map.insert_or_assign(kv.first, kv.second);
+    }
+
+    return 1;
   }
 
   static size_t InnerMultiErase(TypeRawMap &map, const std::vector<T_KEY> &key_list) {

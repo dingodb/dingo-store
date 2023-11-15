@@ -2018,10 +2018,11 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
 
   for (const auto& part_region : region_internals) {
     if (part_region.definition().table_id() != table_id) {
-      DINGO_LOG(WARNING) << fmt::format("region table_id not match, table_id={} part_id={} region_id={} range={}",
-                                        table_id, part_region.definition().part_id(), part_region.id(),
-                                        part_region.definition().range().ShortDebugString())
-                         << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      DINGO_LOG(WARNING)
+          << fmt::format("region table_id not match, table_id={}, region_table_id={} part_id={} region_id={} range={}",
+                         table_id, part_region.definition().table_id(), part_region.definition().part_id(),
+                         part_region.id(), part_region.definition().range().ShortDebugString())
+          << ", region_state: " << pb::common::RegionState_Name(part_region.state());
       continue;
     }
 
@@ -2143,10 +2144,11 @@ butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index
 
   for (const auto& part_region : region_internals) {
     if (part_region.definition().index_id() != index_id) {
-      DINGO_LOG(WARNING) << fmt::format("region table_id not match, table_id={} part_id={} region_id={} range={}",
-                                        index_id, part_region.definition().part_id(), part_region.id(),
-                                        part_region.definition().range().ShortDebugString())
-                         << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+      DINGO_LOG(WARNING)
+          << fmt::format("region index_id not match, index_id={} region_index_id={} part_id={} region_id={} range={}",
+                         index_id, part_region.definition().index_id(), part_region.definition().part_id(),
+                         part_region.id(), part_region.definition().range().ShortDebugString())
+          << ", region_state: " << pb::common::RegionState_Name(part_region.state());
       continue;
     }
 
