@@ -104,9 +104,6 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       continue;
     }
 
-    applied_term_ = iter.term();
-    applied_index_ = iter.index();
-
     // region is STANDBY state, don't apply.
     while (region_->State() == pb::common::StoreRegionState::STANDBY) {
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is standby for spliting, waiting...",
@@ -130,6 +127,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
     }
 
+    bool need_apply = true;
     if (!Helper::IsEqualRegionEpoch(raft_cmd->header().epoch(), region_->Epoch())) {
       auto* done = dynamic_cast<StoreClosure*>(iter.done());
       auto ctx = done ? done->GetCtx() : nullptr;
@@ -140,7 +138,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
         ctx->SetStatus(butil::Status(pb::error::EREGION_VERSION, s));
       }
-      continue;
+      need_apply = false;
     }
 
     DINGO_LOG(DEBUG) << fmt::format(
@@ -149,17 +147,22 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
         iter.index(), applied_index_,
         raft_cmd->requests().empty() ? "" : pb::raft::CmdType_Name(raft_cmd->requests().at(0).cmd_type()));
 
-    // Build event
-    auto event = std::make_shared<SmApplyEvent>();
-    event->region = region_;
-    event->engine = engine_;
-    event->done = iter.done();
-    event->raft_cmd = raft_cmd;
-    event->region_metrics = region_metrics_;
-    event->term_id = iter.term();
-    event->log_id = iter.index();
+    if (need_apply) {
+      // Build event
+      auto event = std::make_shared<SmApplyEvent>();
+      event->region = region_;
+      event->engine = engine_;
+      event->done = iter.done();
+      event->raft_cmd = raft_cmd;
+      event->region_metrics = region_metrics_;
+      event->term_id = iter.term();
+      event->log_id = iter.index();
 
-    DispatchEvent(EventType::kSmApply, event);
+      DispatchEvent(EventType::kSmApply, event);
+    }
+
+    applied_term_ = iter.term();
+    applied_index_ = iter.index();
 
     // bvar metrics
     StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
@@ -229,6 +232,7 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
       ++actual_apply_log_count;
     }
   }
+
   DINGO_LOG(INFO) << fmt::format(
       "[raft.sm][region({})] catch up apply log finish, start_applied_id({}), apply_log_count({}/{}) elapsed time({})",
       region_->Id(), start_applied_id, actual_apply_log_count, entries.size(), Helper::TimestampMs() - start_time);

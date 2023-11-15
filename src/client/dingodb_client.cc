@@ -413,6 +413,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->region_id = FLAGS_region_id;
       ctx->thread_num = FLAGS_thread_num;
       ctx->req_num = FLAGS_req_num;
+      ctx->prefix = FLAGS_prefix;
 
       client::TestBatchPut(ctx);
     } else if (method == "TestBatchPutGet") {

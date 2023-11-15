@@ -789,7 +789,7 @@ int main(int argc, char *argv[]) {
 
     auto coordinator_service_worker_max_pending_num = GetCoordinatorServiceWorkerMaxPendingNum(config);
     if (coordinator_service_worker_max_pending_num < 0) {
-      DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+      DINGO_LOG(ERROR) << "GetCoordinatorServiceWorkerMaxPendingNum failed!";
       return -1;
     }
 
@@ -809,7 +809,7 @@ int main(int argc, char *argv[]) {
 
     auto meta_service_worker_max_pending_num = GetMetaServiceWorkerMaxPendingNum(config);
     if (meta_service_worker_max_pending_num < 0) {
-      DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+      DINGO_LOG(ERROR) << "GetMetaServiceWorkerMaxPendingNum failed!";
       return -1;
     }
 
@@ -828,7 +828,7 @@ int main(int argc, char *argv[]) {
 
     auto version_service_worker_max_pending_num = GetVersionServiceWorkerMaxPendingNum(config);
     if (version_service_worker_max_pending_num < 0) {
-      DINGO_LOG(ERROR) << "GetServiceWorkerMaxPendingNum failed!";
+      DINGO_LOG(ERROR) << "GetVersionServiceWorkerMaxPendingNum failed!";
       return -1;
     }
 
