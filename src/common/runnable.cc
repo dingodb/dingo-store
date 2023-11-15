@@ -121,13 +121,13 @@ void Worker::Nodify(EventType type) {
   }
 }
 
-WorkerSet::WorkerSet(std::string name, uint32_t worker_num, uint32_t max_pending_task_count)
+WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
     : name_(name),
       worker_num_(worker_num),
       max_pending_task_count_(max_pending_task_count),
       active_worker_id_(0),
-      total_task_count_(fmt::format("dingo_{}_total_task_count", name)),
-      pending_task_count_(fmt::format("dingo_{}_pending_task_count", name)) {}
+      total_task_count_metrics_(fmt::format("dingo_{}_total_task_count", name)),
+      pending_task_count_metrics_(fmt::format("dingo_{}_pending_task_count", name)) {}
 
 WorkerSet::~WorkerSet() = default;
 
@@ -151,9 +151,9 @@ void WorkerSet::Destroy() {
 
 bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
-                     pending_task_counter_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
+                     pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
     DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
-                                      pending_task_counter_.load(std::memory_order_relaxed), max_pending_task_count_);
+                                      pending_task_count_.load(std::memory_order_relaxed), max_pending_task_count_);
     return false;
   }
 
@@ -168,9 +168,9 @@ bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
 
 bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
-                     pending_task_counter_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
+                     pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
     DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
-                                      pending_task_counter_.load(std::memory_order_relaxed), max_pending_task_count_);
+                                      pending_task_count_.load(std::memory_order_relaxed), max_pending_task_count_);
     return false;
   }
 
@@ -189,20 +189,20 @@ void WorkerSet::WatchWorker(Worker::EventType type) {
   }
 }
 
-uint64_t WorkerSet::TotalTaskCount() { return total_task_count_.get_value(); }
+uint64_t WorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }
 
-void WorkerSet::IncTotalTaskCount() { total_task_count_ << 1; }
+void WorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
 
-uint64_t WorkerSet::PendingTaskCount() { return pending_task_count_.get_value(); }
+uint64_t WorkerSet::PendingTaskCount() { return pending_task_count_metrics_.get_value(); }
 
 void WorkerSet::IncPendingTaskCount() {
-  pending_task_count_ << 1;
-  pending_task_counter_.fetch_add(1, std::memory_order_relaxed);
+  pending_task_count_metrics_ << 1;
+  pending_task_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void WorkerSet::DecPendingTaskCount() {
-  pending_task_count_ << -1;
-  pending_task_counter_.fetch_sub(1, std::memory_order_relaxed);
+  pending_task_count_metrics_ << -1;
+  pending_task_count_.fetch_sub(1, std::memory_order_relaxed);
 }
 
 }  // namespace dingodb

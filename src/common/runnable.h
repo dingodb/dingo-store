@@ -50,8 +50,7 @@ class Worker {
   };
   using NotifyFuncer = std::function<void(EventType)>;
 
-  Worker(NotifyFuncer notify_func)
-      : is_available_(false), total_task_count_(0), pending_task_count_(0), notify_func_(notify_func) {}
+  Worker(NotifyFuncer notify_func) : is_available_(false), notify_func_(notify_func) {}
   ~Worker() = default;
 
   static std::shared_ptr<Worker> New() { return std::make_shared<Worker>(nullptr); }
@@ -77,8 +76,8 @@ class Worker {
   bthread::ExecutionQueueId<TaskRunnablePtr> queue_id_;  // NOLINT
 
   // Metrics
-  std::atomic<uint64_t> total_task_count_;
-  std::atomic<uint64_t> pending_task_count_;
+  std::atomic<uint64_t> total_task_count_{0};
+  std::atomic<int64_t> pending_task_count_{0};
 
   // Notify
   NotifyFuncer notify_func_;
@@ -88,7 +87,7 @@ using WorkerPtr = std::shared_ptr<Worker>;
 
 class WorkerSet {
  public:
-  WorkerSet(std::string name, uint32_t worker_num, uint32_t max_pending_task_count);
+  WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count);
   ~WorkerSet();
 
   static std::shared_ptr<WorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
@@ -112,15 +111,16 @@ class WorkerSet {
 
  private:
   const std::string name_;
-  uint64_t max_pending_task_count_;
+  int64_t max_pending_task_count_;
   uint32_t worker_num_;
   std::vector<WorkerPtr> workers_;
   std::atomic<uint64_t> active_worker_id_;
 
+  std::atomic<int64_t> pending_task_count_{0};
+
   // Metrics
-  bvar::Adder<uint64_t> total_task_count_;
-  bvar::Adder<uint64_t> pending_task_count_;
-  std::atomic<uint64_t> pending_task_counter_{0};
+  bvar::Adder<uint64_t> total_task_count_metrics_;
+  bvar::Adder<int64_t> pending_task_count_metrics_;
 };
 
 using WorkerSetPtr = std::shared_ptr<WorkerSet>;
