@@ -213,11 +213,13 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  auto writer = Server::GetInstance().GetRawEngine()->Writer();
-  status = writer->KvDeleteRange(Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range());
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled, error: {} {}.", region_id,
-                                    pb::error::Errno_Name(status.error_code()), status.error_str());
+  if (!Helper::InvalidRange(region->Range())) {
+    auto writer = Server::GetInstance().GetRawEngine()->Writer();
+    status = writer->KvDeleteRange(Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range());
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled, error: {} {}.",
+                                      region_id, pb::error::Errno_Name(status.error_code()), status.error_str());
+    }
   }
 
   // Index region

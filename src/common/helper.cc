@@ -384,6 +384,19 @@ bool Helper::IsContainRange(const pb::common::Range& range1, const pb::common::R
   return range2.start_key() >= range1.start_key() && range2.end_key() <= range1.end_key();
 }
 
+bool Helper::InvalidRange(const pb::common::Range& range) { return range.start_key() >= range.end_key(); }
+
+butil::Status Helper::CheckRange(const pb::common::Range& range) {
+  if (range.start_key().empty() || range.end_key().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+  }
+  if (range.start_key() >= range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+  }
+
+  return butil::Status();
+}
+
 std::string Helper::StringToHex(const std::string& str) {
   std::stringstream ss;
   for (const auto& ch : str) {
@@ -1663,17 +1676,6 @@ butil::Status Helper::ParseRaftSnapshotRegionMeta(const std::string& snapshot_pa
   }
   if (!meta.ParseFromIstream(&file)) {
     return butil::Status(pb::error::EINTERNAL, "parse region meta file failed, filepath: %s", filepath.c_str());
-  }
-
-  return butil::Status();
-}
-
-butil::Status Helper::CheckRange(const pb::common::Range& range) {
-  if (range.start_key().empty() || range.end_key().empty()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
-  }
-  if (range.start_key() >= range.end_key()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
   }
 
   return butil::Status();
