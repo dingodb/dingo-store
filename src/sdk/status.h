@@ -10,7 +10,8 @@
 // non-const method, all threads accessing the same Status must use
 // external synchronization.
 
-#pragma once
+#ifndef DINGODB_SDK_STATUS_H_
+#define DINGODB_SDK_STATUS_H_
 
 #include <algorithm>
 #include <string>
@@ -20,6 +21,7 @@
 namespace dingodb {
 namespace sdk {
 
+// TODO:: add sub code
 class Status {
  public:
   // Create a success status.
@@ -85,50 +87,50 @@ class Status {
   static Status NotLeader(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kNotLeader, msg, msg2); }
 
   // Returns true iff the status indicates success.
-  bool ok() const {  // NOLINT
+  bool IsOK() const {
     return (state_ == nullptr);
   }
 
   // Returns true iff the status indicates a NotFound error.
-  bool IsNotFound() const { return code() == kNotFound; }
+  bool IsNotFound() const { return GetCode() == kNotFound; }
 
   // Returns true iff the status indicates a Corruption error.
-  bool IsCorruption() const { return code() == kCorruption; }
+  bool IsCorruption() const { return GetCode() == kCorruption; }
 
   // Returns true iff the status indicates an IOError.
-  bool IsIOError() const { return code() == kIOError; }
+  bool IsIOError() const { return GetCode() == kIOError; }
 
   // Returns true iff the status indicates a NotSupportedError.
-  bool IsNotSupportedError() const { return code() == kNotSupported; }
+  bool IsNotSupportedError() const { return GetCode() == kNotSupported; }
 
   // Returns true iff the status indicates an InvalidArgument.
-  bool IsInvalidArgument() const { return code() == kInvalidArgument; }
+  bool IsInvalidArgument() const { return GetCode() == kInvalidArgument; }
 
-  bool IsAlreadyPresent() const { return code() == kAlreadyPresent; }
+  bool IsAlreadyPresent() const { return GetCode() == kAlreadyPresent; }
 
-  bool IsRuntimeError() const { return code() == kRuntimeError; }
+  bool IsRuntimeError() const { return GetCode() == kRuntimeError; }
 
-  bool IsNetworkError() const { return code() == kNetworkError; }
+  bool IsNetworkError() const { return GetCode() == kNetworkError; }
 
-  bool IsIllegalState() const { return code() == kIllegalState; }
+  bool IsIllegalState() const { return GetCode() == kIllegalState; }
 
-  bool IsNotAuthorized() const { return code() == kNotAuthorized; }
+  bool IsNotAuthorized() const { return GetCode() == kNotAuthorized; }
 
-  bool IsAborted() const { return code() == kAborted; }
+  bool IsAborted() const { return GetCode() == kAborted; }
 
-  bool IsRemoteError() const { return code() == kRemoteError; }
+  bool IsRemoteError() const { return GetCode() == kRemoteError; }
 
-  bool IsServiceUnavailable() const { return code() == kServiceUnavailable; }
+  bool IsServiceUnavailable() const { return GetCode() == kServiceUnavailable; }
 
-  bool IsTimedOut() const { return code() == kTimedOut; }
+  bool IsTimedOut() const { return GetCode() == kTimedOut; }
 
-  bool IsUninitialized() const { return code() == kUninitialized; }
+  bool IsUninitialized() const { return GetCode() == kUninitialized; }
 
-  bool IsConfigurationError() const { return code() == kConfigurationError; }
+  bool IsConfigurationError() const { return GetCode() == kConfigurationError; }
 
-  bool IsIncomplete() const { return code() == kIncomplete; }
+  bool IsIncomplete() const { return GetCode() == kIncomplete; }
 
-  bool IsNotLeader() const { return code() == kNotLeader; }
+  bool IsNotLeader() const { return GetCode() == kNotLeader; }
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
@@ -157,7 +159,7 @@ class Status {
     kNotLeader = 18
   };
 
-  Code code() const {  // NOLINT
+  Code GetCode() const {
     return (state_ == nullptr) ? kOk : static_cast<Code>(state_[4]);
   }
 
@@ -174,10 +176,8 @@ class Status {
 
 inline Status::Status(const Status& rhs) { state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_); }
 
-inline Status& Status::operator=(const Status& rhs) {  // NOLINT
-  // The following condition catches both aliasing (when this == &rhs),
-  // and the common case where both rhs and *this are ok.
-  if (state_ != rhs.state_) {
+inline Status& Status::operator=(const Status& rhs) {
+  if (this != &rhs) {
     delete[] state_;
     state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
   }
@@ -191,3 +191,5 @@ inline Status& Status::operator=(Status&& rhs) noexcept {
 
 }  // namespace sdk
 }  // namespace dingodb
+
+#endif  // DINGODB_SDK_STATUS_H_

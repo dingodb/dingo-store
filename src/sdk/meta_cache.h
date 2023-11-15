@@ -11,7 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#pragma once
+
+#ifndef DINGODB_SDK_META_CACHE_H_
+#define DINGODB_SDK_META_CACHE_H_
 
 #include <atomic>
 #include <cstdint>
@@ -149,6 +151,7 @@ class MetaCache {
   }
 
  private:
+  // TODO: backoff when region not ready
   Status SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<Region>& region);
 
   Status FastLookUpRegionByKeyUnlocked(const std::string& key, std::shared_ptr<Region>& region);
@@ -180,31 +183,6 @@ class MetaCache {
 
 inline std::ostream& operator<<(std::ostream& os, const Region& region) { return os << region.ToString(); }
 
-// if a == b, return 0
-// if a < b, return 1
-// if a > b, return -1
-static int EpochCompare(const pb::common::RegionEpoch& a, const pb::common::RegionEpoch& b) {
-  if (b.version() > a.version()) {
-    return 1;
-  }
-
-  if (b.version() < a.version()) {
-    return -1;
-  }
-
-  // below version equal
-
-  if (b.conf_version() > a.conf_version()) {
-    return 1;
-  }
-
-  if (b.conf_version() < a.conf_version()) {
-    return -1;
-  }
-
-  // version equal && conf_version equal
-  return 0;
-}
 
 static std::string RaftRoleName(const RaftRole& role) {
   switch (role) {
@@ -219,3 +197,4 @@ static std::string RaftRoleName(const RaftRole& role) {
 
 }  // namespace sdk
 }  // namespace dingodb
+#endif // DINGODB_SDK_META_CACHE_H_

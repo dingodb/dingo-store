@@ -1,4 +1,18 @@
-#include "test_meta_cache.h"
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "mock_meta_cache.h"
 
 #include <memory>
 #include <string>
@@ -14,24 +28,12 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "status.h"
+#include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
 
 using ::testing::_;
-
-const std::string kIpOne = "192.0.0.1";
-const std::string kIpTwo = "192.0.0.2";
-const std::string kIpThree = "192.0.0.3";
-
-const int kPort = 20001;
-
-const std::string kAddrOne = HostPortToAddrStr(kIpOne, kPort);
-const std::string kAddrTwo = HostPortToAddrStr(kIpTwo, kPort);
-const std::string kAddrThree = HostPortToAddrStr(kIpThree, kPort);
-
-const std::map<std::string, RaftRole> kInitReplica = {
-    {kAddrOne, kLeader}, {kAddrTwo, kFollower}, {kAddrThree, kFollower}};
 
 class RegionTest : public testing::Test {
  protected:
@@ -39,7 +41,7 @@ class RegionTest : public testing::Test {
 
   void TearDown() override {}
 
-  std::shared_ptr<Region> region_;  // NOLINT
+  std::shared_ptr<Region> region;
 
  private:
   void InitRegion() {
@@ -61,53 +63,53 @@ class RegionTest : public testing::Test {
       replicas.push_back({end_point, entry.second});
     }
 
-    region_.reset(new Region(1, range, epoch, type, replicas));
+    region.reset(new Region(1, range, epoch, type, replicas));
   }
 };
 
 TEST_F(RegionTest, TestInit) {
-  EXPECT_EQ(region_->RegionId(), 1);
-  EXPECT_EQ(region_->Range().start_key(), "a");
-  EXPECT_EQ(region_->Range().end_key(), "b");
-  EXPECT_EQ(region_->Epoch().version(), 1);
-  EXPECT_EQ(region_->Epoch().conf_version(), 1);
-  EXPECT_EQ(region_->RegionType(), pb::common::STORE_REGION);
+  EXPECT_EQ(region->RegionId(), 1);
+  EXPECT_EQ(region->Range().start_key(), "a");
+  EXPECT_EQ(region->Range().end_key(), "b");
+  EXPECT_EQ(region->Epoch().version(), 1);
+  EXPECT_EQ(region->Epoch().conf_version(), 1);
+  EXPECT_EQ(region->RegionType(), pb::common::STORE_REGION);
 
-  auto end_points = region_->ReplicaEndPoint();
+  auto end_points = region->ReplicaEndPoint();
 
   for (const auto& end : end_points) {
     EXPECT_TRUE(kInitReplica.find(Helper::EndPointToStr(end)) != kInitReplica.end());
   }
 
   butil::EndPoint leader;
-  Status got = region_->GetLeader(leader);
-  EXPECT_TRUE(got.ok());
+  Status got = region->GetLeader(leader);
+  EXPECT_TRUE(got.IsOK());
   EXPECT_EQ(Helper::EndPointToStr(leader), kAddrOne);
-  EXPECT_TRUE(region_->IsStale());
+  EXPECT_TRUE(region->IsStale());
 }
 
 TEST_F(RegionTest, TestMark) {
   butil::EndPoint end;
   butil::str2endpoint(kAddrOne.c_str(), &end);
-  region_->MarkFollower(end);
+  region->MarkFollower(end);
   butil::EndPoint leader;
-  Status got = region_->GetLeader(leader);
+  Status got = region->GetLeader(leader);
   EXPECT_TRUE(got.IsNotFound());
 
   butil::str2endpoint(kAddrTwo.c_str(), &end);
-  region_->MarkLeader(end);
-  got = region_->GetLeader(leader);
-  EXPECT_TRUE(got.ok());
+  region->MarkLeader(end);
+  got = region->GetLeader(leader);
+  EXPECT_TRUE(got.IsOK());
   EXPECT_EQ(Helper::EndPointToStr(leader), kAddrTwo);
 
   {
     // test mark and unmark stale
-    EXPECT_TRUE(region_->IsStale());
-    region_->TEST_UnMarkStale();
-    EXPECT_FALSE(region_->IsStale());
+    EXPECT_TRUE(region->IsStale());
+    region->TEST_UnMarkStale();
+    EXPECT_FALSE(region->IsStale());
 
-    region_->TEST_MarkStale();
-    EXPECT_TRUE(region_->IsStale());
+    region->TEST_MarkStale();
+    EXPECT_TRUE(region->IsStale());
   }
 }
 
@@ -115,117 +117,18 @@ class MetaCacheTest : public testing::Test {
  protected:
   void SetUp() override {
     auto coordinator_interaction = std::make_shared<CoordinatorInteraction>();
-    meta_cache_ = std::make_shared<MockMetaCache>(coordinator_interaction);
+    meta_cache = std::make_shared<MockMetaCache>(coordinator_interaction);
   }
 
-  void TearDown() override { meta_cache_.reset(); }
+  void TearDown() override { meta_cache.reset(); }
 
-  std::shared_ptr<MockMetaCache> meta_cache_;  // NOLINT
+  std::shared_ptr<MockMetaCache> meta_cache;  // NOLINT
 };
-
-static std::shared_ptr<Region> GenRegion(int64_t id, pb::common::Range range, pb::common::RegionEpoch epoch,
-                                         pb::common::RegionType type) {
-  std::vector<Replica> replicas;
-  replicas.reserve(kInitReplica.size());
-  for (const auto& entry : kInitReplica) {
-    butil::EndPoint end_point;
-    butil::str2endpoint(entry.first.c_str(), &end_point);
-    replicas.push_back({end_point, entry.second});
-  }
-  return std::make_shared<Region>(id, range, epoch, type, replicas);
-}
-
-static std::shared_ptr<Region> RegionA2C(int version = 1, int conf_version = 1,
-                                         pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
-  int64_t id = 'a';
-  pb::common::Range range;
-  range.set_start_key("a");
-  range.set_end_key("c");
-  pb::common::RegionEpoch epoch;
-  epoch.set_version(version);
-  epoch.set_conf_version(conf_version);
-  return GenRegion(id, range, epoch, type);
-}
-
-static std::shared_ptr<Region> RegionC2E(int version = 1, int conf_version = 1,
-                                         pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
-  int64_t id = 'c';
-  pb::common::Range range;
-  range.set_start_key("c");
-  range.set_end_key("e");
-  pb::common::RegionEpoch epoch;
-  epoch.set_version(version);
-  epoch.set_conf_version(conf_version);
-  return GenRegion(id, range, epoch, type);
-}
-
-static std::shared_ptr<Region> RegionE2G(int version = 1, int conf_version = 1,
-                                         pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
-  int64_t id = 'e';
-  pb::common::Range range;
-  range.set_start_key("e");
-  range.set_end_key("g");
-  pb::common::RegionEpoch epoch;
-  epoch.set_version(version);
-  epoch.set_conf_version(conf_version);
-
-  return GenRegion(id, range, epoch, type);
-}
-
-static std::shared_ptr<Region> RegionB2F(int version = 1, int conf_version = 1,
-                                         pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
-  int64_t id = 'b';
-  pb::common::Range range;
-  range.set_start_key("b");
-  range.set_end_key("f");
-
-  pb::common::RegionEpoch epoch;
-  epoch.set_version(version);
-  epoch.set_conf_version(conf_version);
-
-  return GenRegion(id, range, epoch, type);
-}
-
-static std::shared_ptr<Region> RegionA2Z(int version = 1, int conf_version = 1,
-                                         pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
-  int64_t id = 'a';
-  pb::common::Range range;
-  range.set_start_key("a");
-  range.set_end_key("z");
-
-  pb::common::RegionEpoch epoch;
-  epoch.set_version(version);
-  epoch.set_conf_version(conf_version);
-
-  return GenRegion(id, range, epoch, type);
-}
-
-static void Region2ScanRegionInfo(const std::shared_ptr<Region>& region,
-                                  pb::coordinator::ScanRegionInfo* scan_region_info) {
-  scan_region_info->set_region_id(region->RegionId());
-
-  auto* range = scan_region_info->mutable_range();
-  *range = region->Range();
-
-  auto* epoch = scan_region_info->mutable_region_epoch();
-  *epoch = region->Epoch();
-
-  auto replicas = region->Replicas();
-  for (const auto& r : replicas) {
-    if (r.role == kLeader) {
-      auto* leader = scan_region_info->mutable_leader();
-      *leader = Helper::EndPointToLocation(r.end_point);
-    } else {
-      auto* voter = scan_region_info->add_voters();
-      *voter = Helper::EndPointToLocation(r.end_point);
-    }
-  }
-}
 
 TEST_F(MetaCacheTest, LookupRegionByKey) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache_, SendScanRegionsRequest(_, _))
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest(_, _))
       .WillOnce(testing::Invoke(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
@@ -234,8 +137,8 @@ TEST_F(MetaCacheTest, LookupRegionByKey) {
           }));
 
   std::shared_ptr<Region> tmp;
-  Status got = meta_cache_->LookupRegionByKey("b", tmp);
-  EXPECT_TRUE(got.ok());
+  Status got = meta_cache->LookupRegionByKey("b", tmp);
+  EXPECT_TRUE(got.IsOK());
 
   EXPECT_EQ(tmp->RegionId(), region->RegionId());
   EXPECT_EQ(tmp->Range().start_key(), region->Range().start_key());
@@ -245,7 +148,7 @@ TEST_F(MetaCacheTest, LookupRegionByKey) {
 TEST_F(MetaCacheTest, ClearRange) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache_, SendScanRegionsRequest(_, _))
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest(_, _))
       .WillOnce(testing::Invoke(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
@@ -256,29 +159,29 @@ TEST_F(MetaCacheTest, ClearRange) {
   {
     // clear exist
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->LookupRegionByKey("b", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->LookupRegionByKey("b", tmp);
+    EXPECT_TRUE(got.IsOK());
 
-    meta_cache_->ClearRange(tmp);
+    meta_cache->ClearRange(tmp);
     EXPECT_TRUE(tmp->IsStale());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("b", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("b", tmp);
     EXPECT_TRUE(got.IsNotFound());
   }
 
   {
     // clear not exist
     std::shared_ptr<Region> tmp = RegionC2E();
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
     EXPECT_TRUE(got.IsNotFound());
-    meta_cache_->ClearRange(tmp);
+    meta_cache->ClearRange(tmp);
   }
 }
 
 TEST_F(MetaCacheTest, AddRegion) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache_, SendScanRegionsRequest(_, _))
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest(_, _))
       .WillOnce(testing::Invoke(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
@@ -287,32 +190,32 @@ TEST_F(MetaCacheTest, AddRegion) {
           }));
 
   std::shared_ptr<Region> tmp;
-  Status got = meta_cache_->LookupRegionByKey("b", tmp);
-  EXPECT_TRUE(got.ok());
+  Status got = meta_cache->LookupRegionByKey("b", tmp);
+  EXPECT_TRUE(got.IsOK());
 
   {
     // add c2e
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
     region = RegionC2E();
-    meta_cache_->MaybeAddRegion(region);
+    meta_cache->MaybeAddRegion(region);
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), region->RegionId());
   }
 
   {
     // add e2g
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
     region = RegionE2G();
-    meta_cache_->MaybeAddRegion(region);
+    meta_cache->MaybeAddRegion(region);
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), region->RegionId());
   }
 }
@@ -320,193 +223,193 @@ TEST_F(MetaCacheTest, AddRegion) {
 TEST_F(MetaCacheTest, AddInterleaveRegionFromSmall2Large) {
   std::shared_ptr<Region> a2c;
   {
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("b", a2c);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("b", a2c);
     EXPECT_TRUE(got.IsNotFound());
 
-    meta_cache_->MaybeAddRegion(RegionA2C());
+    meta_cache->MaybeAddRegion(RegionA2C());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("b", a2c);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("b", a2c);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_FALSE(a2c->IsStale());
   }
 
   std::shared_ptr<Region> c2e;
   {
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("c", c2e);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("c", c2e);
     EXPECT_TRUE(got.IsNotFound());
 
-    meta_cache_->MaybeAddRegion(RegionC2E());
+    meta_cache->MaybeAddRegion(RegionC2E());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", c2e);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", c2e);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_FALSE(c2e->IsStale());
   }
 
   std::shared_ptr<Region> e2g;
   {
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("e", e2g);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("e", e2g);
     EXPECT_TRUE(got.IsNotFound());
 
-    meta_cache_->MaybeAddRegion(RegionE2G());
+    meta_cache->MaybeAddRegion(RegionE2G());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", e2g);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", e2g);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_FALSE(e2g->IsStale());
   }
 
   std::shared_ptr<Region> b2f = RegionB2F();
   {
-    meta_cache_->MaybeAddRegion(b2f);
+    meta_cache->MaybeAddRegion(b2f);
     EXPECT_TRUE(a2c->IsStale());
     EXPECT_TRUE(c2e->IsStale());
     EXPECT_TRUE(e2g->IsStale());
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("b", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("b", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), b2f->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), b2f->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), b2f->RegionId());
   }
 
-  meta_cache_->Dump();
+  meta_cache->Dump();
 }
 
 TEST_F(MetaCacheTest, AddInterleaveRegionFromLarge2Small) {
   std::shared_ptr<Region> a2z = RegionA2Z();
   {
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("a", tmp);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("a", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("g", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("g", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    meta_cache_->MaybeAddRegion(a2z);
+    meta_cache->MaybeAddRegion(a2z);
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("a", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("a", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2z->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2z->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2z->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("g", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("g", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2z->RegionId());
   }
 
   std::shared_ptr<Region> b2f = RegionB2F();
   {
-    meta_cache_->MaybeAddRegion(b2f);
+    meta_cache->MaybeAddRegion(b2f);
     EXPECT_TRUE(a2z->IsStale());
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("a", tmp);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("a", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), b2f->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), b2f->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("g", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("g", tmp);
     EXPECT_TRUE(got.IsNotFound());
   }
 
   std::shared_ptr<Region> a2c = RegionA2C();
   {
-    meta_cache_->MaybeAddRegion(a2c);
+    meta_cache->MaybeAddRegion(a2c);
     EXPECT_TRUE(b2f->IsStale());
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("a", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("a", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2c->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("g", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("g", tmp);
     EXPECT_TRUE(got.IsNotFound());
   }
 
   std::shared_ptr<Region> c2e = RegionC2E();
   {
-    meta_cache_->MaybeAddRegion(c2e);
+    meta_cache->MaybeAddRegion(c2e);
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("a", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("a", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2c->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), c2e->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
     EXPECT_TRUE(got.IsNotFound());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("g", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("g", tmp);
     EXPECT_TRUE(got.IsNotFound());
   }
 
   std::shared_ptr<Region> e2g = RegionE2G();
   {
-    meta_cache_->MaybeAddRegion(e2g);
+    meta_cache->MaybeAddRegion(e2g);
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("a", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("a", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), a2c->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("c", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("c", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), c2e->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("e", tmp);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_EQ(tmp->RegionId(), e2g->RegionId());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("g", tmp);
+    got = meta_cache->TEST_FastLookUpRegionByKey("g", tmp);
     EXPECT_TRUE(got.IsNotFound());
   }
 
-  meta_cache_->Dump();
+  meta_cache->Dump();
 }
 
 TEST_F(MetaCacheTest, StaleRegion) {
   std::shared_ptr<Region> a2c;
   {
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("b", a2c);
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("b", a2c);
     EXPECT_TRUE(got.IsNotFound());
-    meta_cache_->MaybeAddRegion(RegionA2C());
+    meta_cache->MaybeAddRegion(RegionA2C());
 
-    got = meta_cache_->TEST_FastLookUpRegionByKey("b", a2c);
-    EXPECT_TRUE(got.ok());
+    got = meta_cache->TEST_FastLookUpRegionByKey("b", a2c);
+    EXPECT_TRUE(got.IsOK());
 
     EXPECT_FALSE(a2c->IsStale());
   }
@@ -514,11 +417,11 @@ TEST_F(MetaCacheTest, StaleRegion) {
   std::shared_ptr<Region> a2c_version2;
   {
     a2c_version2 = RegionA2C(2, 1);
-    meta_cache_->MaybeAddRegion(a2c_version2);
+    meta_cache->MaybeAddRegion(a2c_version2);
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("b", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("b", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_FALSE(tmp->IsStale());
     EXPECT_EQ(tmp->Epoch().version(), a2c_version2->Epoch().version());
     EXPECT_EQ(tmp->Epoch().conf_version(), a2c_version2->Epoch().conf_version());
@@ -529,11 +432,11 @@ TEST_F(MetaCacheTest, StaleRegion) {
   std::shared_ptr<Region> a2c_conf2;
   {
     a2c_conf2 = RegionA2C(2, 2);
-    meta_cache_->MaybeAddRegion(a2c_conf2);
+    meta_cache->MaybeAddRegion(a2c_conf2);
 
     std::shared_ptr<Region> tmp;
-    Status got = meta_cache_->TEST_FastLookUpRegionByKey("b", tmp);
-    EXPECT_TRUE(got.ok());
+    Status got = meta_cache->TEST_FastLookUpRegionByKey("b", tmp);
+    EXPECT_TRUE(got.IsOK());
     EXPECT_FALSE(tmp->IsStale());
     EXPECT_EQ(tmp->Epoch().version(), a2c_conf2->Epoch().version());
     EXPECT_EQ(tmp->Epoch().conf_version(), a2c_conf2->Epoch().conf_version());

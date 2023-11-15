@@ -31,6 +31,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
+#include "sdk/common.h"
 #include "sdk/status.h"
 
 namespace dingodb {
@@ -83,7 +84,7 @@ void Region::MarkLeader(const butil::EndPoint& end_point) {
 
   leader_addr_ = end_point;
 
-  DINGO_LOG_DEBUG << "region:" << region_id_ << " replicas:" << ReplicasAsStringUnlocked();
+  DINGO_LOG(INFO) << "region:" << region_id_ << " replicas:" << ReplicasAsStringUnlocked();
 }
 
 void Region::MarkFollower(const butil::EndPoint& end_point) {
@@ -98,7 +99,8 @@ void Region::MarkFollower(const butil::EndPoint& end_point) {
     leader_addr_.reset();
   }
 
-  DINGO_LOG_DEBUG << "region:" << region_id_ << " replicas:" << ReplicasAsStringUnlocked();
+  DINGO_LOG(INFO) << "region:" << region_id_ << " mark replica:" << butil::endpoint2str(end_point).c_str()
+                  << " follower, current replicas:" << ReplicasAsStringUnlocked();
 }
 
 Status Region::GetLeader(butil::EndPoint& leader) {
@@ -109,7 +111,7 @@ Status Region::GetLeader(butil::EndPoint& leader) {
   }
 
   std::string msg = fmt::format("region:{} not found leader", region_id_);
-  DINGO_LOG_INFO << msg << " replicas:" << ReplicasAsStringUnlocked();
+  DINGO_LOG(WARNING) << msg << " replicas:" << ReplicasAsStringUnlocked();
   return Status::NotFound(msg);
 }
 
@@ -141,7 +143,7 @@ Status MetaCache::LookupRegionByKey(const std::string& key, std::shared_ptr<Regi
   {
     std::shared_lock<std::shared_mutex> r(rw_lock_);
     s = FastLookUpRegionByKeyUnlocked(key, region);
-    if (s.ok()) {
+    if (s.IsOK()) {
       return s;
     }
   }
@@ -202,7 +204,7 @@ Status MetaCache::FastLookUpRegionByKeyUnlocked(const std::string& key, std::sha
     std::string msg =
         fmt::format("not found range, key:{} is out of bounds range:({}-{})", key, range.start_key(), range.end_key());
 
-    DINGO_LOG_DEBUG << msg;
+    DINGO_LOG(INFO) << msg;
     return Status::NotFound(msg);
   } else {
     // lucky we found it
@@ -216,7 +218,7 @@ Status MetaCache::SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<
   pb::coordinator::ScanRegionsResponse response;
   request.set_key(key);
   Status send = SendScanRegionsRequest(request, response);
-  if (!send.ok()) {
+  if (!send.IsOK()) {
     return send;
   }
 
@@ -241,11 +243,12 @@ Status MetaCache::ProcessScanRangeByKeyResponse(const pb::coordinator::ScanRegio
     }
     return Status::OK();
   } else {
-    DINGO_LOG_INFO << "response:" << response.DebugString();
+    DINGO_LOG(WARNING) << "response:" << response.DebugString();
     return Status::NotFound("region not found");
   }
 }
 
+// TODO: check region state
 void MetaCache::ProcessScanRegionInfo(const ScanRegionInfo& scan_region_info, std::shared_ptr<Region>& region) {
   int64_t region_id = scan_region_info.region_id();
   CHECK(scan_region_info.has_range());
@@ -254,16 +257,31 @@ void MetaCache::ProcessScanRegionInfo(const ScanRegionInfo& scan_region_info, st
   std::vector<Replica> replicas;
   if (scan_region_info.has_leader()) {
     const auto& leader = scan_region_info.leader();
-    replicas.push_back({Helper::LocationToEndPoint(leader), kLeader});
+    auto endpoint = Helper::LocationToEndPoint(leader);
+    if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
+      DINGO_LOG(WARNING) << "receive leader is invalid:" << butil::endpoint2str(endpoint);
+    } else {
+      replicas.push_back({endpoint, kLeader});
+    }
   }
 
   for (const auto& voter : scan_region_info.voters()) {
-    replicas.push_back({Helper::LocationToEndPoint(voter), kFollower});
+    auto endpoint = Helper::LocationToEndPoint(voter);
+    if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
+      DINGO_LOG(WARNING) << "receive voter is invalid:" << butil::endpoint2str(endpoint);
+    } else {
+      replicas.push_back({endpoint, kFollower});
+    }
   }
 
   // TODO: support learner
   for (const auto& leaner : scan_region_info.learners()) {
-    replicas.push_back({Helper::LocationToEndPoint(leaner), kFollower});
+    auto endpoint = Helper::LocationToEndPoint(leaner);
+    if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
+      DINGO_LOG(WARNING) << "receive leaner invalid:" << butil::endpoint2str(endpoint);
+    } else {
+      replicas.push_back({endpoint, kFollower});
+    }
   }
 
   region = std::make_shared<Region>(region_id, scan_region_info.range(), scan_region_info.region_epoch(),
@@ -290,7 +308,7 @@ void MetaCache::RemoveRegionUnlocked(int64_t region_id) {
 
   CHECK(region_by_key_.erase(region->Range().start_key()) == 1);
 
-  DINGO_LOG_INFO << "remove region and mark stale, region_id:" << region_id << ", region: " << region->ToString();
+  DINGO_LOG(WARNING) << "remove region and mark stale, region_id:" << region_id << ", region: " << region->ToString();
 }
 
 void MetaCache::AddRangeToCacheUnlocked(const std::shared_ptr<Region>& region) {
@@ -329,19 +347,19 @@ void MetaCache::AddRangeToCacheUnlocked(const std::shared_ptr<Region>& region) {
 
   region->UnMarkStale();
 
-  DINGO_LOG_DEBUG << "add region success, region:" << region->ToString();
+  DINGO_LOG(INFO) << "add region success, region:" << region->ToString();
 }
 
 void MetaCache::Dump() {
   std::shared_lock<std::shared_mutex> r(rw_lock_);
   for (const auto& r : region_by_id_) {
     std::string dump = fmt::format("region_id:{}, region:{}", r.first, r.second->ToString());
-    DINGO_LOG_INFO << dump;
+    DINGO_LOG(INFO) << dump;
   }
 
   for (const auto& r : region_by_key_) {
     std::string dump = fmt::format("start_key:{}, region:{}", r.first, r.second->ToString());
-    DINGO_LOG_INFO << dump;
+    DINGO_LOG(INFO) << dump;
   }
 }
 
