@@ -238,10 +238,8 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
   {
     BAIDU_SCOPED_LOCK(vector_index_mutex_);
 
-    int old_active_index = active_index_.load();
-    int new_active_index = old_active_index == 0 ? 1 : 0;
-    vector_indexs_[new_active_index] = vector_index;
-    active_index_.store(new_active_index);
+    auto old_vector_index = vector_index_;
+    vector_index_ = vector_index;
     share_vector_index_ = nullptr;
     ready_.store(true);
     ++version_;
@@ -259,8 +257,6 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
       SetSnapshotLogId(vector_index->SnapshotLogId());
     }
 
-    vector_indexs_[old_active_index] = nullptr;
-
     SaveMeta();
   }
 }
@@ -271,14 +267,13 @@ void VectorIndexWrapper::ClearVectorIndex() {
   BAIDU_SCOPED_LOCK(vector_index_mutex_);
 
   ready_.store(false);
-  vector_indexs_[0] = nullptr;
-  vector_indexs_[1] = nullptr;
+  vector_index_ = nullptr;
   share_vector_index_ = nullptr;
 }
 
 VectorIndexPtr VectorIndexWrapper::GetOwnVectorIndex() {
   BAIDU_SCOPED_LOCK(vector_index_mutex_);
-  return vector_indexs_[active_index_.load()];
+  return vector_index_;
 }
 
 VectorIndexPtr VectorIndexWrapper::GetVectorIndex() {
@@ -288,7 +283,7 @@ VectorIndexPtr VectorIndexWrapper::GetVectorIndex() {
     return share_vector_index_;
   }
 
-  return vector_indexs_[active_index_.load()];
+  return vector_index_;
 }
 
 VectorIndexPtr VectorIndexWrapper::ShareVectorIndex() {
