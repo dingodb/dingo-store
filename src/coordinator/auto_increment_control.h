@@ -61,6 +61,8 @@ class AutoIncrementControl : public MetaControl {
   butil::Status GetAutoIncrement(int64_t table_id, int64_t &start_id);
   butil::Status CreateAutoIncrement(int64_t table_id, int64_t start_id,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SyncCreateAutoIncrement(int64_t table_id, int64_t start_id);
+
   butil::Status UpdateAutoIncrement(int64_t table_id, int64_t start_id, bool force,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GenerateAutoIncrement(int64_t table_id, uint32_t count, uint32_t auto_increment_increment,
@@ -108,6 +110,8 @@ class AutoIncrementControl : public MetaControl {
 
   void GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo &memory_info);
 
+  void SetKvEngine(std::shared_ptr<Engine> engine) { engine_ = engine; };
+
  private:
   static int64_t GetGenerateEndId(int64_t start_id, uint32_t count, uint32_t increment, uint32_t offset);
   static int64_t GetRealStartId(int64_t start_id, uint32_t auto_increment_increment, uint32_t auto_increment_offset);
@@ -120,6 +124,9 @@ class AutoIncrementControl : public MetaControl {
 
   // raft node
   std::shared_ptr<RaftNode> raft_node_;
+
+  // raft kv engine
+  std::shared_ptr<Engine> engine_;
 
   // coordinator raft_location to server_location cache
   std::map<std::string, pb::common::Location> auto_increment_location_cache_;
