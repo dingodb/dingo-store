@@ -33,20 +33,13 @@ message RegionCmdInternal {
   dingodb.pb.error.Error error = 3;  // if region_cmd is not success, this field will be set from store response
 }
 
-// TableRegionInternal is storage structure for coordinator
-// TableRegionInternal is not table partition in SQL, its only use for storage.
-message TableRegionInternal {
-  int64 part_id = 1;  // the part id of this part
-}
-
 // TableInternal is storage structure for coordinator
 message TableInternal {
   int64 id = 1;
   dingodb.pb.meta.TableDefinition definition = 2;
-  repeated TableRegionInternal partitions = 3;
-  int64 schema_id = 4;
-  int64 table_id = 5;
-  dingodb.pb.common.Range range = 6;
+  int64 schema_id = 3;
+  int64 table_id = 4;
+  dingodb.pb.common.Range range = 5;
 }
 
 // TableMetricsInternal is storage structure for table_metrics

@@ -774,6 +774,8 @@ class CoordinatorControl : public MetaControl {
                             std::vector<pb::coordinator_internal::RegionInternal> &regions);
   butil::Status GetRangeRegionMap(std::vector<std::string> &start_keys,
                                   std::vector<pb::coordinator_internal::RegionInternal> &regions);
+  static butil::Status CalcTableInternalRange(const pb::meta::PartitionRule &partition_rule,
+                                              pb::common::Range &table_internal_range);
 
   // GC
   butil::Status UpdateGCSafePoint(int64_t safe_point, int64_t &new_safe_point,
