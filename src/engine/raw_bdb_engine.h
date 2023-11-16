@@ -15,8 +15,6 @@
 #ifndef DINGODB_ENGINE_RAW_BDB_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_RAW_BDB_ENGINE_H_
 
-#include <iostream>  // for debug
-
 #include "config/config.h"
 #include "db_cxx.h"
 #include "engine/iterator.h"
@@ -47,6 +45,8 @@ class BdbHelper {
 
   static bool IsBdbKeyPrefixWith(const Dbt& bdb_key, const std::string& binary);
 
+  static std::string GetEncodedCfNameUpperBound(const std::string& cf_name);
+
   inline static int kCommitException = -60000;
 };
 
@@ -68,7 +68,6 @@ class Iterator : public dingodb::Iterator {
   void SeekForPrev(const std::string& target) override;
 
   void Next() override;
-
   void Prev() override;
 
   std::string_view Key() const override {
@@ -86,7 +85,7 @@ class Iterator : public dingodb::Iterator {
   IteratorOptions options_;
   // const std::string& cf_name_;
   std::string encoded_cf_name_;
-  std::string encoded_for_seek_to_last_;
+  std::string encoded_cf_name_upper_bound_;
 
   Dbc* cursorp_;
   Dbt bdb_key_;
@@ -152,7 +151,7 @@ class Reader : public RawEngine::Reader {
 
 class Writer : public RawEngine::Writer {
  public:
-  Writer(std::shared_ptr<RawBdbEngine> raw_engine) : raw_engine_(raw_engine), max_retries_(20) {}
+  Writer(std::shared_ptr<RawBdbEngine> raw_engine) : raw_engine_(raw_engine) {}
   ~Writer() override = default;
 
   butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) override;
@@ -197,7 +196,6 @@ class Writer : public RawEngine::Writer {
 
   std::weak_ptr<RawBdbEngine> raw_engine_;
   std::shared_ptr<Db> db_;
-  int32_t max_retries_;
 };
 }  // namespace bdb
 
@@ -218,7 +216,7 @@ class RawBdbEngine : public RawEngine {
 
   // override functions
   bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) override;
-  void Close() override{};
+  void Close() override;
   void Destroy() override{};
   // bool Recover() override;
 
