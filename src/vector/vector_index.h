@@ -270,7 +270,6 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
         is_switching_vector_index_(false),
         apply_log_id_(0),
         snapshot_log_id_(0),
-        active_index_(0),
         index_parameter_(index_parameter),
         is_hold_vector_index_(false),
         pending_task_num_(0),
@@ -333,15 +332,9 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // this will poor performance and poor maintainability.
   pb::common::VectorIndexType SubType() {
     BAIDU_SCOPED_LOCK(vector_index_mutex_);
-    int active_index_int = active_index_.load();
-    switch (active_index_int) {
-      case 0:
-        [[fallthrough]];
-      case 1:
-        return vector_indexs_[active_index_int]->VectorIndexSubType();
-      default:
-        return pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
-    }
+
+    return vector_index_ != nullptr ? vector_index_->VectorIndexSubType()
+                                    : pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
   }
 
   pb::common::VectorIndexParameter IndexParameter() { return index_parameter_; }
@@ -451,13 +444,13 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // Indicate switching vector index.
   std::atomic<bool> is_switching_vector_index_;
 
-  // Active vector index position
-  std::atomic<int> active_index_;
-  VectorIndexPtr vector_indexs_[2] = {nullptr, nullptr};
-  bthread_mutex_t vector_index_mutex_;
-
+  // Own vector index
+  VectorIndexPtr vector_index_;
   // Share other vector index.
   VectorIndexPtr share_vector_index_;
+
+  // Protect vector_index_/share_vector_index_
+  bthread_mutex_t vector_index_mutex_;
 
   // Snapshot set
   vector_index::SnapshotMetaSetPtr snapshot_set_;
