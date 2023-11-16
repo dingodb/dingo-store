@@ -102,6 +102,43 @@ butil::Status AutoIncrementControl::CreateAutoIncrement(int64_t table_id, int64_
   return butil::Status::OK();
 }
 
+butil::Status AutoIncrementControl::SyncCreateAutoIncrement(int64_t table_id, int64_t start_id) {
+  DINGO_LOG(INFO) << "sync create auto increment table id: " << table_id << " start id: " << start_id << "";
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  {
+    BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+    if (auto_increment_map_.seek(table_id) != nullptr) {
+      if (auto_increment_map_[table_id] == start_id) {
+        DINGO_LOG(WARNING) << "auto increment table id: " << table_id
+                           << " is exist, start id is equal: " << auto_increment_map_[table_id]
+                           << " maybe this is a retry request";
+        return butil::Status::OK();
+      } else {
+        DINGO_LOG(WARNING) << "auto increment table id: " << table_id
+                           << " is exist, start id: " << auto_increment_map_[table_id];
+        return butil::Status(pb::error::Errno::EAUTO_INCREMENT_EXIST, "auto increment exist");
+      }
+    }
+  }
+
+  auto* auto_increment = meta_increment.add_auto_increment();
+  auto_increment->set_id(table_id);
+  auto* increment = auto_increment->mutable_increment();
+  increment->set_start_id(start_id);
+  auto_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::CREATE);
+
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kAutoIncrementRegionId);
+
+  auto status = engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status AutoIncrementControl::UpdateAutoIncrement(int64_t table_id, int64_t start_id, bool force,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << table_id << " | " << start_id << " | " << force;
@@ -438,6 +475,31 @@ butil::Status AutoIncrementControl::CheckAutoIncrementInTableDefinition(
 }
 
 butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(int64_t table_id, int64_t auto_increment) {
+  auto auto_increment_control = Server::GetInstance().GetAutoIncrementControl();
+  if (auto_increment_control == nullptr) {
+    DINGO_LOG(ERROR) << "CreateTable AutoIncrementControl is null";
+    return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE, "AutoIncrementControl is null");
+  }
+
+  if (auto_increment_control->IsLeader()) {
+    auto ret = auto_increment_control->SyncCreateAutoIncrement(table_id, auto_increment);
+    if (ret.ok()) {
+      DINGO_LOG(INFO) << "SyncCreateAutoIncrement success, table id: " << table_id
+                      << ", auto_increment: " << auto_increment;
+      return butil::Status::OK();
+    } else if (ret.error_code() != pb::error::Errno::ERAFT_NOTLEADER) {
+      DINGO_LOG(ERROR) << "SyncCreateAutoIncrement failed, table id: " << table_id
+                       << ", auto_increment: " << auto_increment << ", ret: " << ret;
+      return ret;
+    } else {
+      DINGO_LOG(WARNING) << "maybe there is a leader change when SyncCreateAutoIncrement, will use SendRequest, ret: "
+                         << ret << ", table id: " << table_id << ", auto_increment: " << auto_increment;
+    }
+  }
+
+  DINGO_LOG(INFO) << "SyncCreateAutoIncrement is not leader, will SendRequest, table id: " << table_id
+                  << ", auto_increment: " << auto_increment;
+
   pb::meta::CreateAutoIncrementRequest request;
   pb::meta::CreateAutoIncrementResponse response;
 

@@ -246,6 +246,9 @@ bool Server::InitEngine() {
       return false;
     }
 
+    // set raft_meta_engine to auto_increment_control
+    auto_increment_control_->SetKvEngine(raft_engine_);
+
     // 4.init TsoController
     tso_control_ = std::make_shared<TsoControl>();
     if (!tso_control_->Recover()) {

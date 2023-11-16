@@ -884,6 +884,11 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
+  if (FLAGS_with_auto_increment) {
+    DINGO_LOG(INFO) << "with_auto_increment";
+    index_definition->set_auto_increment(100);
+  }
+
   auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
