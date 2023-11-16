@@ -387,6 +387,71 @@ void DoCreateTableId(google::protobuf::RpcController *controller, const pb::meta
   DINGO_LOG(INFO) << "CreateTableId Success in meta_service table_d =" << new_table_id;
 }
 
+void DoCreateTableIds(google::protobuf::RpcController *controller, const pb::meta::CreateTableIdsRequest *request,
+                      pb::meta::CreateTableIdsResponse *response, google::protobuf::Closure *done,
+                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "CreateTableIds request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("schema_id must be set");
+    return;
+  }
+
+  if (request->count() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("count must be greater than 0");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  std::vector<int64_t> new_table_ids;
+  auto ret = coordinator_control->CreateTableIds(request->schema_id().entity_id(), request->count(), new_table_ids,
+                                                 meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CreateTableIds failed in meta_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+  DINGO_LOG(INFO) << "CreateTableIds new_table_id count=" << new_table_ids.size();
+
+  for (const auto id : new_table_ids) {
+    auto *table_id = response->add_table_ids();
+    table_id->set_entity_id(id);
+    table_id->set_parent_entity_id(request->schema_id().entity_id());
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  }
+
+  // prepare for raft process
+  CoordinatorClosure<pb::meta::CreateTableIdsRequest, pb::meta::CreateTableIdsResponse> *meta_closure =
+      new CoordinatorClosure<pb::meta::CreateTableIdsRequest, pb::meta::CreateTableIdsResponse>(request, response,
+                                                                                                done_guard.release());
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  ctx->SetRegionId(Constant::kMetaRegionId);
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateTableIds failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    brpc::ClosureGuard done_guard(meta_closure);
+    return;
+  }
+
+  DINGO_LOG(INFO) << "CreateTableIds Success in meta_service table_ids count =" << new_table_ids.size();
+}
+
 void DoCreateTable(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTableRequest *request,
                    pb::meta::CreateTableResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
@@ -2400,6 +2465,35 @@ void MetaServiceImpl::CreateTableId(google::protobuf::RpcController *controller,
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoCreateTableId(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void MetaServiceImpl::CreateTableIds(google::protobuf::RpcController *controller,
+                                     const pb::meta::CreateTableIdsRequest *request,
+                                     pb::meta::CreateTableIdsResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "CreateTableIds request:  schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  if (!request->has_schema_id()) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateTableIds(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {

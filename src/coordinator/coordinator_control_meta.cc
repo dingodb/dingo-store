@@ -50,10 +50,22 @@ void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t pa
                                                    pb::meta::EntityType entity_type,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment,
                                                    pb::meta::TableIdWithPartIds* ids) {
-  int64_t new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+  std::vector<int64_t> new_ids =
+      GetNextIds(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 1 + part_count, meta_increment);
+
+  if (new_ids.empty()) {
+    DINGO_LOG(ERROR) << "GenerateTableIdAndPartIds GetNextIds failed";
+    return;
+  }
+
+  if (new_ids.size() != 1 + part_count) {
+    DINGO_LOG(ERROR) << "GenerateTableIdAndPartIds GetNextIds failed, new_ids.size()=" << new_ids.size()
+                     << " part_count=" << part_count;
+    return;
+  }
 
   auto* table_id = ids->mutable_table_id();
-  table_id->set_entity_id(new_table_id);
+  table_id->set_entity_id(new_ids.at(0));
   table_id->set_parent_entity_id(schema_id);
   table_id->set_entity_type(entity_type);
 
@@ -62,7 +74,7 @@ void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t pa
 
     auto* part_id = ids->add_part_ids();
     part_id->set_entity_id(new_part_id);
-    part_id->set_parent_entity_id(new_table_id);
+    part_id->set_parent_entity_id(new_ids.at(i + 1));
     part_id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_PART);
   }
 }
@@ -389,6 +401,35 @@ butil::Status CoordinatorControl::CreateTableId(int64_t schema_id, int64_t& new_
   // create table id
   new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
   DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CreateTableIds(int64_t schema_id, int64_t count, std::vector<int64_t>& new_table_ids,
+                                                 pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate schema_id is existed
+  {
+    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
+    bool ret = schema_map_.Exists(schema_id);
+    if (!ret) {
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
+    }
+  }
+
+  if (count <= 0) {
+    DINGO_LOG(ERROR) << "count is illegal " << count;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "count is illegal");
+  }
+
+  // create table id
+  new_table_ids = GetNextIds(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, count, meta_increment);
+  if (new_table_ids.empty()) {
+    DINGO_LOG(ERROR) << "CreateTableIds GetNextIds failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "CreateTableIds GetNextIds failed");
+  }
+
+  DINGO_LOG(INFO) << "CreateTableIds new_table_ids req_count=" << count << ", get_count: " << new_table_ids.size();
 
   return butil::Status::OK();
 }

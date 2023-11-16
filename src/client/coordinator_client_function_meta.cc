@@ -48,6 +48,7 @@ DECLARE_string(metrics_type);
 DECLARE_int64(def_version);
 DECLARE_int32(nsubvector);
 DECLARE_int32(nbits_per_idx);
+DECLARE_uint64(count);
 
 DECLARE_int64(tso_save_physical);
 DECLARE_int64(tso_new_physical);
@@ -81,7 +82,7 @@ void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("GetSchemas", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& schema : response.schemas()) {
     DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
@@ -109,7 +110,7 @@ void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 
   auto status = coordinator_interaction->SendRequest("GetSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
                   << "schema_name=[" << response.schema().name() << "]"
@@ -131,7 +132,7 @@ void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetSchemaByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
                   << "schema_name=[" << response.schema().name() << "]"
@@ -156,7 +157,7 @@ void SendGetTablesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("GetTablesCount", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << "table_count=" << response.tables_count();
+  DINGO_LOG(INFO) << "table_count=" << response.tables_count();
 }
 
 void SendGetTablesBySchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -174,7 +175,7 @@ void SendGetTablesBySchema(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
   auto status = coordinator_interaction->SendRequest("GetTablesBySchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  // DINGO_LOG_INFO << response.DebugString();
+  // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& table_definition_with_id : response.table_definition_with_ids()) {
     DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
@@ -201,7 +202,7 @@ void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_i
 
   auto status = coordinator_interaction->SendRequest("GetTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -224,7 +225,7 @@ void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("GetTableByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -243,7 +244,7 @@ void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
 
   auto status = coordinator_interaction->SendRequest("GetTableRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& it : response.table_range().range_distribution()) {
     DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
@@ -264,7 +265,7 @@ void SendCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
 
   auto status = coordinator_interaction->SendRequest("CreateTableId", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t& table_id) {
@@ -278,7 +279,7 @@ int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("CreateTableId", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.has_table_id()) {
     table_id = response.table_id().entity_id();
@@ -286,6 +287,54 @@ int GetCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   } else {
     return -1;
   }
+}
+
+int GetCreateTableIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t count,
+                      std::vector<int64_t>& table_ids) {
+  dingodb::pb::meta::CreateTableIdsRequest request;
+  dingodb::pb::meta::CreateTableIdsResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  request.set_count(count);
+
+  auto status = coordinator_interaction->SendRequest("CreateTableIds", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+
+  if (response.table_ids_size() > 0) {
+    for (const auto& id : response.table_ids()) {
+      table_ids.push_back(id.entity_id());
+    }
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+void SendCreateTableIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CreateTableIdsRequest request;
+  dingodb::pb::meta::CreateTableIdsResponse response;
+
+  if (FLAGS_count <= 0) {
+    DINGO_LOG(WARNING) << "count is empty";
+    return;
+  }
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  request.set_count(FLAGS_count);
+
+  auto status = coordinator_interaction->SendRequest("CreateTableIds", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+  DINGO_LOG(INFO) << "count = " << response.table_ids_size();
 }
 
 void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_increment) {
@@ -306,27 +355,32 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
-  int64_t new_table_id = 0;
-  int ret = GetCreateTableId(coordinator_interaction, new_table_id);
-  if (ret != 0) {
-    DINGO_LOG(WARNING) << "GetCreateTableId failed";
-    return;
-  }
-  DINGO_LOG(INFO) << "table_id = " << new_table_id;
-
   if (FLAGS_part_count == 0) {
     FLAGS_part_count = 1;
   }
   uint32_t part_count = FLAGS_part_count;
 
+  std::vector<int64_t> new_ids;
+  int ret = GetCreateTableIds(coordinator_interaction, 1 + FLAGS_part_count, new_ids);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.empty()) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.size() != 1 + FLAGS_part_count) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+
+  int64_t new_table_id = new_ids.at(0);
+  DINGO_LOG(INFO) << "table_id = " << new_table_id;
+
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    int64_t new_part_id = 0;
-    int ret = GetCreateTableId(coordinator_interaction, new_part_id);
-    if (ret != 0) {
-      DINGO_LOG(WARNING) << "GetCreateTableId failed";
-      return;
-    }
+    int64_t new_part_id = new_ids.at(1 + i);
     part_ids.push_back(new_part_id);
   }
 
@@ -398,7 +452,7 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("CreateTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
   if (response.error().errcode() == 0) {
     DINGO_LOG(INFO) << "create table success, table_id==" << response.table_id().entity_id();
   }
@@ -419,7 +473,7 @@ void SendDropTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 
   auto status = coordinator_interaction->SendRequest("DropTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -437,7 +491,7 @@ void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("DropSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -458,7 +512,7 @@ void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   auto status = coordinator_interaction->SendRequest("CreateSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -476,7 +530,7 @@ void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetTableMetrics", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetIndexsCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -490,7 +544,7 @@ void SendGetIndexsCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("GetIndexsCount", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << "index_count=" << response.indexes_count();
+  DINGO_LOG(INFO) << "index_count=" << response.indexes_count();
 }
 
 void SendGetIndexs(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -508,7 +562,7 @@ void SendGetIndexs(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 
   auto status = coordinator_interaction->SendRequest("GetIndexs", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  // DINGO_LOG_INFO << response.DebugString();
+  // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
     DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
@@ -542,7 +596,7 @@ void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("GetIndex", get_request, get_response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << get_response.DebugString();
+  DINGO_LOG(INFO) << get_response.DebugString();
 
   DINGO_LOG(INFO) << "index_id=[" << get_response.index_definition_with_id().index_id().entity_id() << "]"
                   << "index_name=[" << get_response.index_definition_with_id().index_definition().name()
@@ -578,7 +632,7 @@ void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   status = coordinator_interaction->SendRequest("UpdateIndex", update_request, update_response);
 
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << update_response.DebugString();
+  DINGO_LOG(INFO) << update_response.DebugString();
 }
 
 void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -597,7 +651,7 @@ void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_i
 
   auto status = coordinator_interaction->SendRequest("GetIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -621,7 +675,7 @@ void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("GetIndexByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -640,7 +694,7 @@ void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
 
   auto status = coordinator_interaction->SendRequest("GetIndexRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& it : response.index_range().range_distribution()) {
     DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
@@ -661,7 +715,7 @@ void SendCreateIndexId(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
 
   auto status = coordinator_interaction->SendRequest("CreateIndexId", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -682,27 +736,32 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
-  int64_t new_index_id = 0;
-  int ret = GetCreateTableId(coordinator_interaction, new_index_id);
-  if (ret != 0) {
-    DINGO_LOG(WARNING) << "GetCreateTableId failed";
-    return;
-  }
-  DINGO_LOG(INFO) << "index_id = " << new_index_id;
-
   if (FLAGS_part_count == 0) {
     FLAGS_part_count = 1;
   }
   uint32_t part_count = FLAGS_part_count;
 
+  std::vector<int64_t> new_ids;
+  int ret = GetCreateTableIds(coordinator_interaction, 1 + FLAGS_part_count, new_ids);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.empty()) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.size() != 1 + FLAGS_part_count) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+
+  int64_t new_index_id = new_ids.at(0);
+  DINGO_LOG(INFO) << "index_id = " << new_index_id;
+
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    int64_t new_part_id = 0;
-    int ret = GetCreateTableId(coordinator_interaction, new_part_id);
-    if (ret != 0) {
-      DINGO_LOG(WARNING) << "GetCreateTableId failed";
-      return;
-    }
+    int64_t new_part_id = new_ids.at(1 + i);
     part_ids.push_back(new_part_id);
   }
 
@@ -827,7 +886,7 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
   if (response.error().errcode() == 0) {
     DINGO_LOG(INFO) << "create index success, index_id==" << response.index_id().entity_id();
   }
@@ -848,7 +907,7 @@ void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 
   auto status = coordinator_interaction->SendRequest("DropIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -866,7 +925,7 @@ void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetIndexMetrics", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetIndexesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -884,7 +943,7 @@ void SendGetIndexesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("GetIndexesCount", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << "index_count=" << response.indexes_count();
+  DINGO_LOG(INFO) << "index_count=" << response.indexes_count();
 }
 
 void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -902,7 +961,7 @@ void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("GetIndexes", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  // DINGO_LOG_INFO << response.DebugString();
+  // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
     DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
@@ -963,26 +1022,32 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     schema_id->set_entity_id(FLAGS_schema_id);
   }
 
-  int64_t new_table_id = 0;
-  int ret = GetCreateTableId(coordinator_interaction, new_table_id);
-  if (ret != 0) {
-    DINGO_LOG(WARNING) << "GetCreateTableId failed";
-    return;
-  }
-
   if (FLAGS_part_count == 0) {
     FLAGS_part_count = 1;
   }
   uint32_t part_count = FLAGS_part_count;
 
+  std::vector<int64_t> new_ids;
+  int ret = GetCreateTableIds(coordinator_interaction, 1 + FLAGS_part_count, new_ids);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.empty()) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.size() != 1 + FLAGS_part_count) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+
+  int64_t new_table_id = new_ids.at(0);
+  DINGO_LOG(INFO) << "table_id = " << new_table_id;
+
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
-    int64_t new_part_id = 0;
-    int ret = GetCreateTableId(coordinator_interaction, new_part_id);
-    if (ret != 0) {
-      DINGO_LOG(WARNING) << "GetCreateTableId failed";
-      return;
-    }
+    int64_t new_part_id = new_ids.at(1 + i);
     part_ids.push_back(new_part_id);
   }
 
@@ -1051,7 +1116,7 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   auto status = coordinator_interaction->SendRequest("CreateTables", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1362,7 +1427,7 @@ void SendUpdateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   auto status = coordinator_interaction->SendRequest("UpdateTables", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendAddIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1480,7 +1545,7 @@ void SendAddIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
   auto status = coordinator_interaction->SendRequest("AddIndexOnTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendDropIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1506,5 +1571,5 @@ void SendDropIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 
   auto status = coordinator_interaction->SendRequest("DropIndexOnTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }

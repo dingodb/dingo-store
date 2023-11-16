@@ -26,6 +26,7 @@
 
 #include "braft/configuration.h"
 #include "bthread/mutex.h"
+#include "butil/compiler_specific.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
@@ -545,6 +546,45 @@ int64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTyp
   idepoch_internal->set_value(next_id);
 
   return next_id;
+}
+
+std::vector<int64_t> CoordinatorControl::GetNextIds(const pb::coordinator_internal::IdEpochType& key, int64_t count,
+                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  std::vector<int64_t> next_ids_temp;
+
+  if (count <= 0) {
+    DINGO_LOG(ERROR) << "GetNextIds count=" << count << " key=" << key << ", ERROR count must > 0";
+    return next_ids_temp;
+  }
+
+  // get next id from id_epoch_map_safe_temp_
+  auto ret = id_epoch_map_safe_temp_.GetNextIds(key, count, next_ids_temp);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GetNextIds count=" << count << " key=" << key << ", ERROR GetNextIds failed";
+    return next_ids_temp;
+  }
+
+  if (next_ids_temp.empty()) {
+    DINGO_LOG(FATAL) << "GetNextIds count=" << count << " key=" << key << ", ERROR next_ids_temp is empty";
+  }
+
+  int64_t max_next_id = next_ids_temp.at(next_ids_temp.size() - 1);
+  for (const auto& id : next_ids_temp) {
+    if (BAIDU_UNLIKELY(id > max_next_id)) {
+      max_next_id = id;
+    }
+  }
+
+  // generate meta_increment
+  auto* idepoch = meta_increment.add_idepochs();
+  idepoch->set_id(key);
+  idepoch->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+  auto* idepoch_internal = idepoch->mutable_idepoch();
+  idepoch_internal->set_id(key);
+  idepoch_internal->set_value(max_next_id);
+
+  return next_ids_temp;
 }
 
 int64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {

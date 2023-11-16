@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "butil/containers/doubly_buffered_data.h"
@@ -85,6 +86,19 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
     }
   }
 
+  int GetNextIds(const int64_t &key, const int64_t &count, std::vector<int64_t> &values) {
+    if (count <= 0 || key <= 0) {
+      return -1;
+    }
+
+    std::pair<int64_t, int64_t> key_and_count{key, count};
+    if (safe_map.Modify(InnerGetNextIds, key_and_count, values) > 0) {
+      return 1;
+    } else {
+      return -1;
+    }
+  }
+
   int UpdatePresentId(const int64_t &key, const int64_t &value) {
     if (safe_map.Modify(InnerUpdatePresentId, key, value) > 0) {
       return 1;
@@ -112,6 +126,44 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
       value_ptr->set_value(value_ptr->value() + 1);
 
       value_mod = value_ptr->value();
+    }
+
+    return 1;
+  }
+
+  static size_t InnerGetNextIds(TypeFlatMap &map, const std::pair<int64_t, int64_t> &key_and_count,
+                                const std::vector<int64_t> &values) {
+    // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
+    // const_cast to modify the input parameter here
+    auto &values_mod = const_cast<std::vector<int64_t> &>(values);
+
+    bool need_insert = false;
+    if (values_mod.empty()) {
+      need_insert = true;
+    }
+
+    auto *value_ptr = map.seek(key_and_count.first);
+    if (value_ptr == nullptr) {
+      if (need_insert) {
+        for (int64_t i = 0; i < key_and_count.second; i++) {
+          values_mod.push_back(COORDINATOR_ID_OF_MAP_MIN + i + 1);
+        }
+      }
+
+      // if not exist, construct a new value and return
+      pb::coordinator_internal::IdEpochInternal new_value;
+      new_value.set_id(key_and_count.first);
+      new_value.set_value(COORDINATOR_ID_OF_MAP_MIN + key_and_count.second);
+      map.insert(key_and_count.first, new_value);
+
+    } else {
+      if (need_insert) {
+        for (int64_t i = 0; i < key_and_count.second; i++) {
+          values_mod.push_back(value_ptr->value() + i + 1);
+        }
+      }
+
+      value_ptr->set_value(value_ptr->value() + key_and_count.second);
     }
 
     return 1;

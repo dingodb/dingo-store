@@ -79,7 +79,7 @@ void SendOneTimeWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     DINGO_LOG(INFO) << "SendRequest watch_count=" << i;
     auto status = coordinator_interaction->SendRequest("Watch", request, response, 600000);
     DINGO_LOG(INFO) << "SendRequest status=" << status << ", watch_count=" << i;
-    DINGO_LOG_INFO << response.DebugString();
+    DINGO_LOG(INFO) << response.DebugString();
   }
 }
 
@@ -96,7 +96,7 @@ butil::Status CoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 
   auto status = coordinator_interaction->SendRequest("KvPut", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.error().errcode() == dingodb::pb::error::OK) {
     revision = response.header().revision();
@@ -121,7 +121,7 @@ butil::Status CoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 
   auto status = coordinator_interaction->SendRequest("KvRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.error().errcode() == dingodb::pb::error::OK) {
     for (int i = 0; i < response.kvs_size(); i++) {
@@ -186,7 +186,7 @@ butil::Status CoorLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> co
 
   auto status = coordinator_interaction->SendRequest("LeaseGrant", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.error().errcode() == dingodb::pb::error::OK) {
     lease_id = response.id();
@@ -206,7 +206,7 @@ butil::Status CoorLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> co
 
   auto status = coordinator_interaction->SendRequest("LeaseRenew", request, response);
   // DINGO_LOG(INFO) << "SendRequest status=" << status;
-  // DINGO_LOG_INFO << response.DebugString();
+  // DINGO_LOG(INFO) << response.DebugString();
 
   if (response.error().errcode() == dingodb::pb::error::OK) {
     return butil::Status::OK();

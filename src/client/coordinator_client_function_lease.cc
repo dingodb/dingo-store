@@ -48,7 +48,7 @@ void SendLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("LeaseGrant", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendLeaseRevoke(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -63,7 +63,7 @@ void SendLeaseRevoke(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("LeaseRevoke", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -77,7 +77,7 @@ void SendLeaseRenew(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("LeaseRenew", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendLeaseQuery(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -93,7 +93,7 @@ void SendLeaseQuery(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("LeaseQuery", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendListLeases(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -102,5 +102,5 @@ void SendListLeases(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 
   auto status = coordinator_interaction->SendRequest("ListLeases", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
