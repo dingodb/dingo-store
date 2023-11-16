@@ -42,7 +42,7 @@ void SendGetAutoIncrements(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
   auto status = coordinator_interaction->SendRequest("GetAutoIncrements", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -59,7 +59,7 @@ void SendGetAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 
   auto status = coordinator_interaction->SendRequest("GetAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCreateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -78,7 +78,7 @@ void SendCreateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
 
   auto status = coordinator_interaction->SendRequest("CreateAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendUpdateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -98,7 +98,7 @@ void SendUpdateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
 
   auto status = coordinator_interaction->SendRequest("UpdateAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGenerateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -119,7 +119,7 @@ void SendGenerateAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> 
 
   auto status = coordinator_interaction->SendRequest("GenerateAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendDeleteAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -136,5 +136,5 @@ void SendDeleteAutoIncrement(std::shared_ptr<dingodb::CoordinatorInteraction> co
 
   auto status = coordinator_interaction->SendRequest("DeleteAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }

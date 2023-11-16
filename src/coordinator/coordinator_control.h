@@ -305,6 +305,8 @@ class CoordinatorControl : public MetaControl {
   // return: errno
   butil::Status CreateTableId(int64_t schema_id, int64_t &new_table_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateTableIds(int64_t schema_id, int64_t count, std::vector<int64_t> &new_table_ids,
+                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create table
   // in: schema_id
@@ -654,6 +656,10 @@ class CoordinatorControl : public MetaControl {
   // get next id/epoch
   int64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // get next ids/epochs
+  std::vector<int64_t> GetNextIds(const pb::coordinator_internal::IdEpochType &key, int64_t count,
+                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get present id/epoch
   int64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);

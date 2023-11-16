@@ -107,6 +107,8 @@ class MetaServiceImpl : public pb::meta::MetaService {
                  pb::meta::DropTableResponse* response, google::protobuf::Closure* done) override;
   void CreateTableId(google::protobuf::RpcController* controller, const pb::meta::CreateTableIdRequest* request,
                      pb::meta::CreateTableIdResponse* response, google::protobuf::Closure* done) override;
+  void CreateTableIds(google::protobuf::RpcController* controller, const pb::meta::CreateTableIdsRequest* request,
+                      pb::meta::CreateTableIdsResponse* response, google::protobuf::Closure* done) override;
 
   void GetIndexes(google::protobuf::RpcController* controller, const pb::meta::GetIndexesRequest* request,
                   pb::meta::GetIndexesResponse* response, google::protobuf::Closure* done) override;

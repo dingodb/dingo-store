@@ -427,6 +427,16 @@ message CreateTableIdResponse {
   DingoCommonId table_id = 2;
 }
 
+message CreateTableIdsRequest {
+  DingoCommonId schema_id = 1;
+  int64 count = 2;
+}
+
+message CreateTableIdsResponse {
+  dingodb.pb.error.Error error = 1;
+  repeated DingoCommonId table_ids = 2;
+}
+
 message CreateIndexIdRequest {
   DingoCommonId schema_id = 1;
 }
@@ -766,6 +776,7 @@ service MetaService {
   // in: schema_id
   // out: table_id
   rpc CreateTableId(CreateTableIdRequest) returns (CreateTableIdResponse);
+  rpc CreateTableIds(CreateTableIdsRequest) returns (CreateTableIdsResponse);
 
   // CreateTable
   // in: schema_id table_id TableDefinition

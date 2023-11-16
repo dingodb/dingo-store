@@ -106,6 +106,7 @@ void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_i
 void SendGetTableByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateTableId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateTableIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, bool with_increment);
 void SendDropTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

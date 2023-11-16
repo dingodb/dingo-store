@@ -723,6 +723,8 @@ int CoordinatorSender() {
     SendCreateTable(coordinator_interaction_meta, false);
   } else if (FLAGS_method == "CreateTableWithIncrement") {
     SendCreateTable(coordinator_interaction_meta, true);
+  } else if (FLAGS_method == "CreateTableIds") {
+    SendCreateTableIds(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateTableId") {
     SendCreateTableId(coordinator_interaction_meta);
   } else if (FLAGS_method == "DropTable") {

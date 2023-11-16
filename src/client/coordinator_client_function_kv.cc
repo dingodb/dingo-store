@@ -70,7 +70,7 @@ void SendGetRawKvIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
 
   auto status = coordinator_interaction->SendRequest("GetRawKvIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendGetRawKvRev(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -87,7 +87,7 @@ void SendGetRawKvRev(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("GetRawKvRev", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -107,7 +107,7 @@ void SendCoorKvRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   auto status = coordinator_interaction->SendRequest("KvRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -130,7 +130,7 @@ void SendCoorKvPut(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 
   auto status = coordinator_interaction->SendRequest("KvPut", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -148,7 +148,7 @@ void SendCoorKvDeleteRange(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 
   auto status = coordinator_interaction->SendRequest("KvDeleteRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SendCoorKvCompaction(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -171,5 +171,5 @@ void SendCoorKvCompaction(std::shared_ptr<dingodb::CoordinatorInteraction> coord
 
   auto status = coordinator_interaction->SendRequest("KvCompaction", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 }

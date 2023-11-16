@@ -213,7 +213,7 @@ int GetCreateTableId(int64_t& table_id) {
   auto status =
       InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "CreateTableId", request, response);
   DINGO_LOG(INFO) << "SendRequestWithoutContext status=" << status;
-  DINGO_LOG_INFO << response.DebugString();
+  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.has_table_id()) {
     table_id = response.table_id().entity_id();
