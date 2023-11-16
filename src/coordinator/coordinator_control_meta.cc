@@ -1022,6 +1022,22 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
             "ivf_pq_parameter.bucket_max_size is illegal " + std::to_string(ivf_pq_parameter.bucket_max_size()));
       }
 
+      int32_t nsubvector = ivf_pq_parameter.nsubvector();
+      if (0 == nsubvector) {
+        nsubvector = Constant::kCreateIvfPqParamNsubvector;
+        DINGO_LOG(INFO) << "ivf_pq_parameter vector_index_parameter nsubvector = 0, use default "
+                        << Constant::kCreateIvfPqParamNsubvector;
+      }
+
+      uint32_t dimension = ivf_pq_parameter.dimension();
+      if (0 != (dimension % nsubvector)) {
+        std::string s = fmt::format(
+            "ivf_pq_parameter vector_index_parameter is illegal, dimension:{} / nsubvector:{} not divisible ",
+            dimension, nsubvector);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+
       // If all checks pass, return a butil::Status object with no error.
       return butil::Status::OK();
     }
@@ -1155,6 +1171,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   // validate index definition
   auto status = ValidateIndexDefinition(table_definition);
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
