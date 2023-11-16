@@ -1530,13 +1530,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           if (table.table().has_definition()) {
             *(table_internal.mutable_definition()) = table.table().definition();
           }
-          // we do not support change partitions now
-          // if (table.table().partitions_size() > 0) {
-          //   table_internal.clear_partitions();
-          //   for (const auto& it : table.table().partitions()) {
-          //     *(table_internal.add_partitions()) = it;
-          //   }
-          // }
           ret = table_map_.Put(table.id(), table_internal);
           if (ret > 0) {
             DINGO_LOG(INFO) << "ApplyMetaIncrement table UPDATE, [id=" << table.id() << "] success";
@@ -1974,12 +1967,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         if (ret > 0) {
           if (index.table().has_definition()) {
             *(table_internal.mutable_definition()) = index.table().definition();
-          }
-          if (index.table().partitions_size() > 0) {
-            table_internal.clear_partitions();
-            for (const auto& it : index.table().partitions()) {
-              *(table_internal.add_partitions()) = it;
-            }
           }
           ret = index_map_.Put(index.id(), table_internal);
           if (ret > 0) {

@@ -498,8 +498,14 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   std::vector<pb::common::Range> new_part_ranges;
 
   pb::common::Range table_internal_range;
+  auto ret3 = CalcTableInternalRange(table_partition, table_internal_range);
+  if (!ret3.ok()) {
+    DINGO_LOG(ERROR) << "CalcTableInternalRange error:" << ret3.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
+    return ret3;
+  }
+
   if (table_partition.partitions_size() > 0) {
-    table_internal_range = table_partition.partitions(0).range();
     for (const auto& part : table_partition.partitions()) {
       if (part.id().entity_id() <= 0) {
         DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id()
@@ -513,19 +519,6 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
-
-      if (!part.range().start_key().empty() && !part.range().end_key().empty()) {
-        if (table_internal_range.start_key() > part.range().start_key()) {
-          table_internal_range.set_start_key(part.range().start_key());
-        }
-        if (table_internal_range.end_key() < part.range().end_key()) {
-          table_internal_range.set_end_key(part.range().end_key());
-        }
-      } else {
-        DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id()
-                         << ", table_definition:" << table_definition.ShortDebugString();
-        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
-      }
     }
   } else {
     DINGO_LOG(ERROR) << "no range provided " << table_definition.ShortDebugString();
@@ -668,14 +661,6 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   auto* definition = table_internal.mutable_definition();
   *definition = table_definition;
   definition->set_create_timestamp(butil::gettimeofday_ms());
-
-  // set part for table_internal
-  for (int i = 0; i < new_region_ids.size(); i++) {
-    // create part and set region_id & range
-    auto* part_internal = table_internal.add_partitions();
-    // part_internal->set_region_id(new_region_ids[i]);
-    part_internal->set_part_id(new_part_ids[i]);
-  }
 
   // add table_internal to table_map_
   // update meta_increment
@@ -1198,8 +1183,14 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   std::vector<pb::common::Range> new_part_ranges;
 
   pb::common::Range table_internal_range;
+  auto ret3 = CalcTableInternalRange(index_partition, table_internal_range);
+  if (!ret3.ok()) {
+    DINGO_LOG(ERROR) << "CalcTableInternalRange error:" << ret3.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
+    return ret3;
+  }
+
   if (index_partition.partitions_size() > 0) {
-    table_internal_range = index_partition.partitions(0).range();
     for (const auto& part : index_partition.partitions()) {
       if (part.id().entity_id() <= 0) {
         DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id()
@@ -1213,19 +1204,6 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
       }
       new_part_ids.push_back(part.id().entity_id());
       new_part_ranges.push_back(part.range());
-
-      if (!part.range().start_key().empty() && !part.range().end_key().empty()) {
-        if (table_internal_range.start_key() > part.range().start_key()) {
-          table_internal_range.set_start_key(part.range().start_key());
-        }
-        if (table_internal_range.end_key() < part.range().end_key()) {
-          table_internal_range.set_end_key(part.range().end_key());
-        }
-      } else {
-        DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id()
-                         << ", table_definition:" << table_definition.ShortDebugString();
-        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
-      }
     }
   } else {
     DINGO_LOG(ERROR) << "no range provided , table_definition=" << table_definition.ShortDebugString();
@@ -1364,14 +1342,6 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   auto* definition = table_internal.mutable_definition();
   *definition = table_definition;
   definition->set_create_timestamp(butil::gettimeofday_ms());
-
-  // set part for table_internal
-  for (int i = 0; i < new_region_ids.size(); i++) {
-    // create part and set region_id & range
-    auto* part_internal = table_internal.add_partitions();
-    // part_internal->set_region_id(new_region_ids[i]);
-    part_internal->set_part_id(new_part_ids[i]);
-  }
 
   // add table_internal to index_map_
   // update meta_increment
@@ -2458,7 +2428,7 @@ int64_t CoordinatorControl::CalculateTableMetricsSingle(int64_t table_id, pb::me
   table_metrics.set_table_size(table_size);
   table_metrics.set_min_key(min_key);
   table_metrics.set_max_key(max_key);
-  table_metrics.set_part_count(table_internal.partitions_size());
+  table_metrics.set_part_count(table_internal.definition().table_partition().partitions_size());
 
   DINGO_LOG(DEBUG) << fmt::format(
       "table_metrics calculated in CalculateTableMetricsSingle, table_id={} row_count={} min_key={} max_key={} "
@@ -2581,7 +2551,7 @@ int64_t CoordinatorControl::CalculateIndexMetricsSingle(int64_t index_id, pb::me
   index_metrics.set_rows_count(row_count);
   index_metrics.set_min_key(min_key);
   index_metrics.set_max_key(max_key);
-  index_metrics.set_part_count(table_internal.partitions_size());
+  index_metrics.set_part_count(table_internal.definition().table_partition().partitions_size());
 
   // about vector
   if (vector_index_type != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE) {
@@ -3276,6 +3246,40 @@ butil::Status CoordinatorControl::DropIndexOnTable(int64_t table_id, int64_t ind
   table_index_increment->set_id(table_id);
   table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
   *(table_index_increment->mutable_table_indexes()) = table_index_internal_new;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CalcTableInternalRange(const pb::meta::PartitionRule& partition_rule,
+                                                         pb::common::Range& table_internal_range) {
+  if (partition_rule.partitions_size() > 0) {
+    table_internal_range = partition_rule.partitions(0).range();
+    for (const auto& part : partition_rule.partitions()) {
+      if (part.id().entity_id() <= 0) {
+        DINGO_LOG(ERROR) << "part_id is illegal, part_id=" << part.id().entity_id();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "part_id is illegal");
+      }
+      if (part.range().start_key().empty() || part.range().end_key().empty()) {
+        DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id();
+        return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part range is illegal");
+      }
+
+      if (!part.range().start_key().empty() && !part.range().end_key().empty()) {
+        if (table_internal_range.start_key() > part.range().start_key()) {
+          table_internal_range.set_start_key(part.range().start_key());
+        }
+        if (table_internal_range.end_key() < part.range().end_key()) {
+          table_internal_range.set_end_key(part.range().end_key());
+        }
+      } else {
+        DINGO_LOG(ERROR) << "part range is illegal, part_id=" << part.id().entity_id();
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "part range is illegal");
+      }
+    }
+  } else {
+    DINGO_LOG(ERROR) << "no range provided ";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "no partition provided");
+  }
 
   return butil::Status::OK();
 }
