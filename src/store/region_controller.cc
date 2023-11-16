@@ -45,7 +45,7 @@
 #include "vector/vector_index_hnsw.h"
 #include "vector/vector_index_snapshot_manager.h"
 
-DEFINE_int64(merge_commited_log_gap, 64, "merge commited log gap");
+DEFINE_int64(merge_committed_log_gap, 16, "merge commited log gap");
 
 namespace dingodb {
 
@@ -557,13 +557,11 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   // Check raft status
-  source_min_applied_log_id = INT64_MAX;
-  int64_t target_min_applied_log_id = INT64_MAX;
+  source_min_applied_log_id = source_raft_status->known_applied_index();
+  int64_t source_min_committed_log_id = source_raft_status->committed_index();
+  int64_t target_min_applied_log_id = target_raft_status->known_applied_index();
+  int64_t target_min_committed_log_id = target_raft_status->committed_index();
   for (const auto& [peer_addr, follower] : source_raft_status->stable_followers()) {
-    if (follower.consecutive_error_times() > 0) {
-      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal.", peer_addr.c_str());
-    }
-
     auto raft_status_entries =
         ServiceAccess::GetRaftStatus({source_region->Id(), target_region->Id()}, Helper::GetEndPoint(peer_addr));
     if (raft_status_entries.size() != 2) {
@@ -575,27 +573,38 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
       }
 
       if (entry.region_id() == source_region->Id()) {
-        if (entry.raft_status().committed_index() + FLAGS_merge_commited_log_gap < source_raft_status->last_index()) {
-          return butil::Status(pb::error::EINTERNAL, "Source region follower %s log fall behind exceed %ld.",
-                               peer_addr.c_str(), FLAGS_merge_commited_log_gap);
-        }
+        source_min_committed_log_id = std::min(source_min_committed_log_id, entry.raft_status().committed_index());
         source_min_applied_log_id = std::min(source_min_applied_log_id, entry.raft_status().known_applied_index());
+
       } else if (entry.region_id() == target_region->Id()) {
-        if (entry.raft_status().committed_index() + FLAGS_merge_commited_log_gap < target_raft_status->last_index()) {
-          return butil::Status(pb::error::EINTERNAL, "Target region follower %s log fall behind exceed %ld.",
-                               peer_addr.c_str(), FLAGS_merge_commited_log_gap);
-        }
+        target_min_committed_log_id = std::min(target_min_committed_log_id, entry.raft_status().committed_index());
         target_min_applied_log_id = std::min(target_min_applied_log_id, entry.raft_status().known_applied_index());
       }
     }
   }
 
+  if (source_raft_status->last_index() - source_min_committed_log_id > FLAGS_merge_committed_log_gap) {
+    return butil::Status(
+        pb::error::EINTERNAL,
+        fmt::format("Source region log gap too large, merge_committed_log_gap({}) "
+                    "last_index({}) committed_index({}).",
+                    FLAGS_merge_committed_log_gap, source_raft_status->last_index(), source_min_committed_log_id));
+  }
+
+  if (target_raft_status->last_index() - target_min_committed_log_id > FLAGS_merge_committed_log_gap) {
+    return butil::Status(
+        pb::error::EINTERNAL,
+        fmt::format("Target region log gap too large, merge_committed_log_gap({}) "
+                    "last_index({}) committed_index({}).",
+                    FLAGS_merge_committed_log_gap, target_raft_status->last_index(), target_min_committed_log_id));
+  }
+
   // Check whether have split/merge/change_peer raft log since min_applied_log_id.
-  auto status = CheckChangeRegionLog(source_region->Id(), source_min_applied_log_id);
+  auto status = CheckChangeRegionLog(source_region->Id(), source_min_committed_log_id + 1);
   if (!status.ok()) {
     return status;
   }
-  status = CheckChangeRegionLog(target_region->Id(), target_min_applied_log_id);
+  status = CheckChangeRegionLog(target_region->Id(), target_min_committed_log_id + 1);
   if (!status.ok()) {
     return status;
   }
@@ -610,12 +619,6 @@ butil::Status MergeRegionTask::MergeRegion() {
 
   // Todo: forbid truncate raft log.
 
-  int64_t min_applied_log_id = 0;
-  auto status = ValidateMergeRegion(store_region_meta, merge_request, min_applied_log_id);
-  if (!status.ok()) {
-    return status;
-  }
-
   auto source_region = store_region_meta->GetRegion(merge_request.source_region_id());
   if (source_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND,
@@ -626,6 +629,12 @@ butil::Status MergeRegionTask::MergeRegion() {
   if (target_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND,
                          fmt::format("Not found target region {}", merge_request.target_region_id()));
+  }
+
+  int64_t min_applied_log_id = 0;
+  auto status = ValidateMergeRegion(store_region_meta, merge_request, min_applied_log_id);
+  if (!status.ok()) {
+    return status;
   }
 
   // Commit raft cmd
