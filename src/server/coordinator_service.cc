@@ -41,6 +41,7 @@
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -1085,6 +1086,13 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
   int64_t new_region_id = 0;
   pb::common::RegionType region_type = request->region_type();
   pb::common::IndexParameter index_parameter = request->index_parameter();
+
+  if (index_parameter.has_vector_index_parameter() && region_type != pb::common::RegionType::INDEX_REGION) {
+    DINGO_LOG(WARNING) << "Create Region region_type is not INDEX_REGION, but index_parameter is not empty, request: "
+                       << request->ShortDebugString();
+    region_type = pb::common::RegionType::INDEX_REGION;
+    index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+  }
 
   if (!Helper::IsClientRaw(range.start_key()) && !Helper::IsClientTxn(range.start_key())) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
@@ -2814,6 +2822,42 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
+  }
+
+  if (request->has_index_parameter()) {
+    const auto &index_parameter = request->index_parameter();
+    if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_NONE) {
+      DINGO_LOG(ERROR) << "CreateRegion index_type is INDEX_TYPE_NONE, reject create region";
+      ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
+                              "index_type is INDEX_TYPE_NONE");
+      return;
+    }
+
+    if (index_parameter.has_vector_index_parameter() &&
+        index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR) {
+      DINGO_LOG(ERROR) << "CreateRegion index_type is not INDEX_TYPE_VECTOR, reject create region";
+      ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
+                              "index_type is not INDEX_TYPE_VECTOR");
+      return;
+    }
+
+    if (index_parameter.has_scalar_index_parameter() &&
+        index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_SCALAR) {
+      DINGO_LOG(ERROR) << "CreateRegion index_type is not INDEX_TYPE_SCALAR, reject create region";
+      ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
+                              "index_type is not INDEX_TYPE_SCALAR");
+      return;
+    }
+
+    if (index_parameter.has_vector_index_parameter()) {
+      auto ret = VectorIndexUtils::ValidateVectorIndexParameter(index_parameter.vector_index_parameter());
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion vector_index_parameter is invalid, reject create region";
+        ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
+                                "vector_index_parameter is invalid");
+        return;
+      }
+    }
   }
 
   // Run in queue.

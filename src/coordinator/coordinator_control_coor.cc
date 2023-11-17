@@ -42,6 +42,7 @@
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -565,6 +566,7 @@ void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInt
   *(region.mutable_definition()) = region_internal.definition();
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
+  region.set_region_type(region_internal.region_type());
 
   pb::common::RegionMetrics region_metrics;
   auto ret = region_metrics_map_.Get(region_internal.id(), region_metrics);
@@ -592,6 +594,7 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
+  region.set_region_type(region_internal.region_type());
 
   pb::common::RegionMetrics region_metrics;
   auto ret = region_metrics_map_.Get(region_internal.id(), region_metrics);
@@ -1922,9 +1925,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   region_definition->set_index_id(index_id);
   region_definition->set_part_id(part_id);
   region_definition->set_raw_engine(raw_engine);
-  if (new_index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
-    *(region_definition->mutable_index_parameter()) = new_index_parameter;
-  }
+  *(region_definition->mutable_index_parameter()) = new_index_parameter;
 
   // set region range in region definition, this is provided by sdk
   auto* range_in_definition = region_definition->mutable_range();
@@ -2299,6 +2300,11 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
 butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_region_id, int64_t split_to_region_id,
                                                           std::string split_watershed_key, bool store_create_region,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "SplitRegionWithTaskList split_from_region_id=" << split_from_region_id
+                  << ", split_to_region_id=" << split_to_region_id
+                  << ", split_watershed_key=" << Helper::StringToHex(split_watershed_key)
+                  << ", store_create_region=" << store_create_region;
+
   auto validate_ret = ValidateTaskListConflict(split_from_region_id, split_to_region_id);
   if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << "SplitRegionWithTaskList validate task list "
@@ -2425,6 +2431,9 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
 
 butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_region_id, int64_t merge_to_region_id,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "MergeRegionWithTaskList merge_from_region_id=" << merge_from_region_id
+                  << ", merge_to_region_id=" << merge_to_region_id;
+
   auto validate_ret = ValidateTaskListConflict(merge_from_region_id, merge_to_region_id);
   if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << "mergeRegionWithTaskList validate task list "
@@ -2546,6 +2555,57 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
                          "MergeRegion merge_from_region and merge_to_region has not continuous range");
   }
 
+  bool merge_from_is_vector_index = false;
+  bool merge_to_is_vector_index = false;
+
+  if (merge_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
+      merge_from_region.definition().index_parameter().has_vector_index_parameter()) {
+    DINGO_LOG(INFO) << "MergeRegion merge_from_region is vector index region, "
+                       "merge_from_region_id="
+                    << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
+    merge_from_is_vector_index = true;
+  }
+
+  if (merge_to_region.region_type() == pb::common::RegionType::INDEX_REGION &&
+      merge_to_region.definition().index_parameter().has_vector_index_parameter()) {
+    DINGO_LOG(INFO) << "MergeRegion merge_to_region is vector index region, "
+                       "merge_from_region_id="
+                    << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
+    merge_to_is_vector_index = true;
+  }
+
+  DINGO_LOG(INFO) << "MergeRegion merge_from_region_id=" << merge_from_region_id
+                  << ", merge_to_region_id=" << merge_to_region_id
+                  << ", merge_from_is_vector_index=" << merge_from_is_vector_index
+                  << ", merge_to_is_vector_index=" << merge_to_is_vector_index;
+
+  if (merge_from_is_vector_index != merge_to_is_vector_index) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different region type.";
+    return butil::Status(pb::error::Errno::EMERGE_REGION_TYPE_NOT_MATCH,
+                         "MergeRegion merge_from_region and merge_to_region has different region type");
+  }
+
+  if (merge_from_is_vector_index) {
+    // check if vector index parameter is match
+    auto merge_from_vector_index_parameter = merge_from_region.definition().index_parameter().vector_index_parameter();
+    auto merge_to_vector_index_parameter = merge_to_region.definition().index_parameter().vector_index_parameter();
+
+    if (merge_from_vector_index_parameter.vector_index_type() != merge_to_vector_index_parameter.vector_index_type()) {
+      DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different vector index type.";
+      return butil::Status(pb::error::Errno::EMERGE_VECTOR_INDEX_TYPE_NOT_MATCH,
+                           "MergeRegion merge_from_region and merge_to_region has different vector index type");
+    }
+
+    auto is_compatiablity = VectorIndexUtils::CheckVectorIndexParameterCompatibility(merge_from_vector_index_parameter,
+                                                                                     merge_to_vector_index_parameter);
+    if (!is_compatiablity.ok()) {
+      DINGO_LOG(ERROR)
+          << "MergeRegion merge_from_region and merge_to_region has different vector index parameter. errmsg: "
+          << is_compatiablity.error_str();
+      return is_compatiablity;
+    }
+  }
+
   // only send merge region_cmd to merge_from_region_id's leader store id
   auto leader_store_id = GetRegionLeaderId(merge_from_region_id);
   if (leader_store_id == 0) {
@@ -2558,6 +2618,23 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
 
   // build task list
   auto* new_task_list = CreateTaskList(meta_increment);
+
+  // check if need to send load vector index to store
+  if (merge_from_is_vector_index) {
+    DINGO_LOG(INFO) << "MergeRegion merge_from_region is vector index region, "
+                       "merge_from_region_id="
+                    << merge_from_region_id << ", merge_to_region_id=" << merge_to_region_id;
+
+    // send load vector index to store
+    for (const auto& peer : merge_from_region.definition().peers()) {
+      AddLoadVectorIndexTask(new_task_list, peer.store_id(), merge_from_region_id);
+    }
+
+    // check vector index is ready
+    for (const auto& peer : merge_from_region.definition().peers()) {
+      AddCheckVectorIndexTask(new_task_list, peer.store_id(), merge_from_region_id);
+    }
+  }
 
   // build merge task
   AddMergeTask(new_task_list, leader_store_id, merge_from_region_id, merge_to_region_id);

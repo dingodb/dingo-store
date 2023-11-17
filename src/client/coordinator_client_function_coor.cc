@@ -1172,6 +1172,9 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
       return;
     }
 
+    // set index_type for vector index
+    request.mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
+
     if (FLAGS_dimension == 0) {
       DINGO_LOG(WARNING) << "dimension is empty";
       return;
