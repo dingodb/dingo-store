@@ -51,6 +51,9 @@ class VectorIndexRawIvfPqTest : public testing::Test {
 
   static void ReCreate() {
     static const pb::common::Range kRange;
+    static pb::common::RegionEpoch kEpoch;  // NOLINT
+    kEpoch.set_conf_version(1);
+    kEpoch.set_version(10);
     // valid param IP
     {
       int64_t id = 1;
@@ -62,7 +65,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     }
 
     // valid param L2
@@ -75,7 +78,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     }
 
     // valid param cosine
@@ -89,7 +92,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     }
   }
 
@@ -112,6 +115,9 @@ class VectorIndexRawIvfPqTest : public testing::Test {
 
 TEST_F(VectorIndexRawIvfPqTest, Create) {
   butil::Status ok;
+  static pb::common::RegionEpoch kEpoch;  // NOLINT
+  kEpoch.set_conf_version(1);
+  kEpoch.set_version(10);
 
   std::ofstream outfile;
   const std::string &file_path = "./test_vector_index_raw_ivf_pq_boundary.txt";
@@ -163,7 +169,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+            raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
           }
 
           // valid param L2
@@ -177,7 +183,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+            raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
           }
 
           // valid param cosine
@@ -191,7 +197,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+            raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
           }
 
           if (data_base.empty()) {
@@ -364,7 +370,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
               return;
             }
             std::vector<pb::index::VectorWithDistanceResult> results;
-            butil::Status ok = raw_ivf->Search(vector_with_ids_clone, topk, {filter}, results, false, parameter);
+            butil::Status ok = raw_ivf->Search(vector_with_ids_clone, topk, {filter}, false, parameter, results);
             if (!ok.ok()) {
               std::cout << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} search failed",
                                        internal_dimension, internal_nbits_per_idx, internal_nsubvector,

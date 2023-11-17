@@ -189,6 +189,14 @@ void LoadOrBuildVectorIndexTask::Run() {
     return;
   }
 
+  // Get region meta
+  auto region =
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(vector_index_wrapper_->Id());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.loadorbuild][region({})] not found region.", vector_index_wrapper_->Id());
+    return;
+  }
+
   // Pull snapshot from peers.
   // New region don't pull snapshot, directly build.
   auto raft_meta =
@@ -197,7 +205,7 @@ void LoadOrBuildVectorIndexTask::Run() {
     DINGO_LOG(INFO) << fmt::format("[raft.loadorbuild][region({})] pull last snapshot from peers.",
                                    vector_index_wrapper_->Id());
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
-    auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set);
+    auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
     if (!status.ok()) {
       if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
           status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
@@ -208,7 +216,7 @@ void LoadOrBuildVectorIndexTask::Run() {
     }
   }
 
-  auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper_);
+  auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper_, region->Epoch());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.load][index_id({}_v{})] load or build vector index failed, error {}",
                                     vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), status.error_str());
@@ -238,14 +246,15 @@ void VectorIndexManager::Destroy() {
 
 // Load vector index for already exist vector index at bootstrap.
 // Priority load from snapshot, if snapshot not exist then load from original data.
-butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                                         const pb::common::RegionEpoch& epoch) {
   assert(vector_index_wrapper != nullptr);
 
   int64_t start_time = Helper::TimestampMs();
   int64_t vector_index_id = vector_index_wrapper->Id();
 
   // try to load vector index from snapshot
-  auto new_vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper);
+  auto new_vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper, epoch);
   if (new_vector_index != nullptr) {
     // replay wal
     DINGO_LOG(INFO) << fmt::format(
@@ -346,7 +355,7 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
       int64_t vector_index_id = vector_index_wrapper->Id();
       LOG(INFO) << fmt::format("Init load region {} vector index", vector_index_id);
 
-      auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper);
+      auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper, region->Epoch());
       if (!status.ok()) {
         LOG(ERROR) << fmt::format("Load region {} vector index failed, ", vector_index_id);
         param->results[offset] = -1;
@@ -481,7 +490,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   }
 
   auto range = region->Range();
-  auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), range);
+  auto vector_index =
+      VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), region->Epoch(), range);
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] New vector index failed.", vector_index_id);
     return nullptr;

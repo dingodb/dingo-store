@@ -49,6 +49,9 @@ class VectorIndexIvfFlatTest : public testing::Test {
 
   static void ReCreate() {
     static const pb::common::Range kRange;
+    static pb::common::RegionEpoch kEpoch;
+    kEpoch.set_conf_version(1);
+    kEpoch.set_version(10);
     // valid param IP
     {
       int64_t id = 1;
@@ -58,7 +61,7 @@ class VectorIndexIvfFlatTest : public testing::Test {
       index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
       index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+      vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     }
 
     // valid param L2
@@ -69,7 +72,7 @@ class VectorIndexIvfFlatTest : public testing::Test {
       index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
       index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
       index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+      vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     }
 
     // valid param cosine
@@ -81,7 +84,7 @@ class VectorIndexIvfFlatTest : public testing::Test {
       index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
       index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
+      vector_index_ivf_flat_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     }
   }
 
@@ -104,11 +107,15 @@ class VectorIndexIvfFlatTest : public testing::Test {
 
 TEST_F(VectorIndexIvfFlatTest, Create) {
   static const pb::common::Range kRange;
+  static pb::common::RegionEpoch kEpoch;
+  kEpoch.set_conf_version(1);
+  kEpoch.set_version(10);
+
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -117,7 +124,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -126,7 +133,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -136,7 +143,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -147,7 +154,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -159,7 +166,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -170,7 +177,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -183,7 +190,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_ivf_flat_ip.get(), nullptr);
   }
 
@@ -195,7 +202,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
     index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -208,7 +215,7 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
     index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_ivf_flat_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_ivf_flat_cosine.get(), nullptr);
   }
 }
@@ -317,11 +324,11 @@ TEST_F(VectorIndexIvfFlatTest, SearchNotTrain) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, results_cosine);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -373,11 +380,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchNotTrain) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results_l2);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results_ip);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results_cosine);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -838,11 +845,11 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -861,11 +868,11 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -885,11 +892,11 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, results_cosine);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -942,13 +949,13 @@ TEST_F(VectorIndexIvfFlatTest, Search) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {filter}, results_cosine, false, parameter);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {filter}, false, parameter, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1023,11 +1030,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearch) {
     vector_with_ids.push_back(vector_with_id);
     float radius = 1.1F;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
@@ -1046,11 +1053,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearch) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1070,11 +1077,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearch) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results_l2);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results_ip);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results_cosine);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1127,13 +1134,13 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearch) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {filter}, results_l2, false, parameter);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {filter}, results_ip, false, parameter);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {filter}, results_cosine, false, parameter);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1278,11 +1285,11 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1301,11 +1308,11 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1325,11 +1332,11 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, results_cosine);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1382,13 +1389,13 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    ok = vector_index_ivf_flat_l2->Search(vector_with_ids, topk, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    ok = vector_index_ivf_flat_ip->Search(vector_with_ids, topk, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {filter}, results_cosine, false, parameter);
+    ok = vector_index_ivf_flat_cosine->Search(vector_with_ids, topk, {filter}, false, parameter, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1452,7 +1459,6 @@ TEST_F(VectorIndexIvfFlatTest, SearchAfterLoad) {
     }
   }
 }
-
 
 TEST_F(VectorIndexIvfFlatTest, RangeSearchAfterLoad) {
   butil::Status ok;
@@ -1464,11 +1470,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchAfterLoad) {
     vector_with_ids.push_back(vector_with_id);
     float radius = 1.1F;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
@@ -1487,11 +1493,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchAfterLoad) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1511,11 +1517,11 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchAfterLoad) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, results_l2);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, results_ip);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, results_cosine);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1568,13 +1574,13 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchAfterLoad) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_flat()->set_nprobe(10);
-    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {filter}, results_l2, false, parameter);
+    ok = vector_index_ivf_flat_l2->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {filter}, results_ip, false, parameter);
+    ok = vector_index_ivf_flat_ip->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {filter}, results_cosine, false, parameter);
+    ok = vector_index_ivf_flat_cosine->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1638,6 +1644,5 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchAfterLoad) {
     }
   }
 }
-
 
 }  // namespace dingodb

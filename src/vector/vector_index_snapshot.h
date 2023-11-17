@@ -25,6 +25,7 @@
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "common/context.h"
+#include "proto/common.pb.h"
 #include "proto/node.pb.h"
 
 namespace dingodb {
@@ -50,10 +51,16 @@ class SnapshotMeta {
   std::string IndexDataPath();
   std::vector<std::string> ListFileNames();
 
+  pb::common::RegionEpoch Epoch() const { return epoch_; }
+  pb::common::Range Range() const { return range_; }
+
  private:
   int64_t vector_index_id_;
   int64_t snapshot_log_id_;
   std::string path_;
+
+  pb::common::RegionEpoch epoch_;
+  pb::common::Range range_;
 };
 
 using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;

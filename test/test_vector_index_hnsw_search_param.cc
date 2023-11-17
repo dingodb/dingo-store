@@ -89,6 +89,10 @@ class VectorIndexHnswSearchParamTest : public testing::Test {
 
 TEST_F(VectorIndexHnswSearchParamTest, Create) {
   static const pb::common::Range kRange;
+  pb::common::RegionEpoch epoch;
+  epoch.set_conf_version(1);
+  epoch.set_version(10);
+
   // valid param L2
   {
     int64_t id = id_for_l2;
@@ -100,7 +104,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_hnsw_for_l2 = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw_for_l2.get(), nullptr);
   }
 
@@ -116,7 +120,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_hnsw_for_ip = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw_for_ip.get(), nullptr);
   }
 
@@ -131,7 +135,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_hnsw_for_cosine = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw_for_cosine.get(), nullptr);
   }
 }
@@ -238,7 +242,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
 
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids_for_search));
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, filters, results, false);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, filters, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::vector<int64_t> result_vector_ids;
@@ -338,8 +342,7 @@ TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
     return std::tuple<std::vector<int64_t>, std::vector<int64_t>>(vector_ids, vector_ids_for_search);
   };
 
-  auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_hnsw,
-                                                       std::string name) {
+  auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_hnsw, std::string) {
     butil::Status ok;
     pb::common::VectorWithId vector_with_id;
     vector_with_id.set_id(0);
@@ -358,7 +361,7 @@ TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
 
     // std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
     // filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids_for_search));
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, {}, results, false);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     {

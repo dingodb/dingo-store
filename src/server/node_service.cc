@@ -461,7 +461,7 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
     return;
   }
 
-  auto status = VectorIndexSnapshotManager::HandlePullSnapshot(response, snapshot);
+  auto status = VectorIndexSnapshotManager::HandlePullSnapshot(snapshot, response);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }

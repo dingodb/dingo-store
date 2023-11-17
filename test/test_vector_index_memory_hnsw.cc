@@ -57,6 +57,10 @@ class VectorIndexMemoryTest : public testing::Test {
 
 TEST_F(VectorIndexMemoryTest, Create) {
   static const pb::common::Range kRange;
+  static pb::common::RegionEpoch kEpoch;
+  kEpoch.set_conf_version(1);
+  kEpoch.set_version(10);
+
   // valid param L2
   {
     int64_t id = 1;
@@ -70,7 +74,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 }

@@ -42,20 +42,20 @@ class VectorIndexFactory {
   VectorIndexFactory& operator=(VectorIndexFactory&& rhs) = delete;
 
   static std::shared_ptr<VectorIndex> New(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                          const pb::common::Range& range);
+                                          const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
  private:
   static std::shared_ptr<VectorIndex> NewHnsw(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                              const pb::common::Range& range);
+                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
   static std::shared_ptr<VectorIndex> NewFlat(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                              const pb::common::Range& range);
+                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
   static std::shared_ptr<VectorIndex> NewIvfFlat(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                                 const pb::common::Range& range);
+                                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
   static std::shared_ptr<VectorIndex> NewIvfPq(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                               const pb::common::Range& range);
+                                               const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 };
 
 }  // namespace dingodb

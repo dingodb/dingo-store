@@ -45,8 +45,8 @@ namespace dingodb {
 DEFINE_uint64(flat_need_save_count, 10000, "flat need save count");
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                 const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, range) {
+                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+    : VectorIndex(id, vector_index_parameter, epoch, range) {
   bthread_mutex_init(&mutex_, nullptr);
 
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
@@ -140,7 +140,6 @@ butil::Status VectorIndexFlat::Add(const std::vector<pb::common::VectorWithId>& 
 
 butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
-    DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
   }
 
@@ -167,9 +166,9 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
 }
 
 butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::vector<std::shared_ptr<FilterFunctor>> filters,
-                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool /*reconstruct*/,
-                                      const pb::common::VectorSearchParameter& /*parameter*/) {
+                                      std::vector<std::shared_ptr<FilterFunctor>> filters, bool,
+                                      const pb::common::VectorSearchParameter&,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
@@ -231,9 +230,8 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
 
 butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
                                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                                           std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                                           bool /*reconstruct*/,
-                                           const pb::common::VectorSearchParameter& /*parameter*/) {
+                                           bool /*reconstruct*/, const pb::common::VectorSearchParameter& /*parameter*/,
+                                           std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();

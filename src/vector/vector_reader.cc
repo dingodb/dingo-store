@@ -86,8 +86,8 @@ butil::Status VectorReader::SearchVector(
 
     } else {
       top_n *= 10;
-      butil::Status status = VectorReader::SearchAndRangeSearchWrapper(
-          vector_index, region_range, vector_with_ids, parameter, tmp_results, top_n, {});
+      butil::Status status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids,
+                                                                       parameter, tmp_results, top_n, {});
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
@@ -869,8 +869,8 @@ butil::Status VectorReader::SearchVectorDebug(
     } else {
       auto start = lambda_time_now_function();
       top_n *= 10;
-      butil::Status status = VectorReader::SearchAndRangeSearchWrapper(
-          vector_index, region_range, vector_with_ids, parameter, tmp_results, top_n, {});
+      butil::Status status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids,
+                                                                       parameter, tmp_results, top_n, {});
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
@@ -1109,17 +1109,19 @@ butil::Status VectorReader::SearchAndRangeSearchWrapper(
   float radius = parameter.radius();
   butil::Status status;
   if (enable_range_search) {
-    status = vector_index->RangeSearch(vector_with_ids, radius, region_range, filters, vector_with_distance_results,
-                                       with_vector_data, parameter);
+    status = vector_index->RangeSearch(vector_with_ids, radius, region_range, filters, with_vector_data, parameter,
+                                       vector_with_distance_results);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("vector_index::RangeSearch failed ");
+      DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", status.error_code(),
+                                      status.error_str());
       return status;
     }
   } else {
-    status = vector_index->Search(vector_with_ids, topk, region_range, filters, vector_with_distance_results,
-                                  with_vector_data, parameter);
+    status = vector_index->Search(vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
+                                  vector_with_distance_results);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("vector_index::Search failed ");
+      DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", status.error_code(),
+                                      status.error_str());
       return status;
     }
   }

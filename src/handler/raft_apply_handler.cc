@@ -395,7 +395,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] begin split, term({}) log_id({})", from_region->Id(),
                                  to_region->Id(), term_id, log_id);
 
-  // temporary disable split, avoid overlap change.
+  // temporary disable split/merge/change_peer, avoid overlap change.
   store_region_meta->UpdateTemporaryDisableChange(from_region, true);
   store_region_meta->UpdateTemporaryDisableChange(to_region, true);
 
@@ -457,7 +457,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                         from_region->Id(), to_region->Id());
     }
 
-    // build vector index
+    // Rebuild vector index
     VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), true);
     VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), true);
   }
@@ -734,7 +734,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   // Update last_change_cmd_id
   store_region_meta->UpdateLastChangeCmdId(source_region, request.merge_id());
   // Update disable_change
-  store_region_meta->UpdateDisableChange(source_region, true);
+  store_region_meta->UpdateTemporaryDisableChange(source_region, true);
 
   // Validate
   if (target_region != nullptr) {
@@ -816,6 +816,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
 
   // Update last_change_cmd_id
   store_region_meta->UpdateLastChangeCmdId(target_region, request.merge_id());
+  // Disable temporary change
+  store_region_meta->UpdateTemporaryDisableChange(target_region, true);
 
   auto source_region = store_region_meta->GetRegion(request.source_region_id());
   if (source_region == nullptr) {
@@ -864,10 +866,25 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
 
   store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range);
 
-  store_region_meta->UpdateDisableChange(target_region, false);
-
   // Do snapshot
   LaunchDoSnapshot(target_region);
+
+  if (target_region->Type() == pb::common::INDEX_REGION) {
+    // Set child share vector index
+    auto vector_index = source_region->VectorIndexWrapper()->GetOwnVectorIndex();
+    if (vector_index != nullptr) {
+      target_region->VectorIndexWrapper()->SetSiblingVectorIndex(vector_index);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[merge.merging][merge_id({}).region({}/{})] merge region get vector index failed.", source_region->Id(),
+          target_region->Id());
+    }
+
+    // Rebuild vector index
+    VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), true);
+  } else {
+    store_region_meta->UpdateTemporaryDisableChange(target_region, false);
+  }
 
   // Notify coordinator
   Heartbeat::TriggerStoreHeartbeat({request.source_region_id(), target_region->Id()}, true);

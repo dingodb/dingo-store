@@ -89,7 +89,8 @@ class VectorIndexManager {
 
   // Load vector index for already exist vector index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
-  static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
+  static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                              const pb::common::RegionEpoch &epoch);
   static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
   // Parallel load or build vector index at server bootstrap.
   static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);

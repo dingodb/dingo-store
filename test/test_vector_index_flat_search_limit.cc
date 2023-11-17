@@ -74,6 +74,10 @@ class VectorIndexFlatSearchParamTest : public testing::Test {
 
 TEST_F(VectorIndexFlatSearchParamTest, Create) {
   static const pb::common::Range kRange;
+  static pb::common::RegionEpoch kEpoch;  // NOLINT
+  kEpoch.set_conf_version(1);
+  kEpoch.set_version(10);
+
   // valid param L2
   {
     int64_t id = id_for_l2;
@@ -81,7 +85,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_flat_for_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_flat_for_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_flat_for_l2.get(), nullptr);
   }
 
@@ -93,7 +97,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_flat_for_ip = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_flat_for_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_flat_for_ip.get(), nullptr);
   }
 
@@ -104,7 +108,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-    vector_index_flat_for_cosine = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_flat_for_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_flat_for_cosine.get(), nullptr);
   }
 }
@@ -164,7 +168,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
       filters.emplace_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids_for_search)));
     }
 
-    ok = vector_index_flat->Search(vector_with_ids, topk, filters, results, false);
+    ok = vector_index_flat->Search(vector_with_ids, topk, filters, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     vector_ids_for_search = vector_ids_for_search_copy;
@@ -337,7 +341,7 @@ TEST_F(VectorIndexFlatSearchParamTest, SearchAfterInsert) {
     return std::tuple<std::vector<int64_t>, std::vector<int64_t>>(vector_ids, vector_ids_for_search);
   };
 
-  auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_flat, std::string name,
+  auto lambda_alg_function = [&lambda_random_function](std::shared_ptr<VectorIndex> vector_index_flat, std::string,
                                                        uint32_t search_topk_param, bool has_filter) {
     butil::Status ok;
     pb::common::VectorWithId vector_with_id;
@@ -369,7 +373,7 @@ TEST_F(VectorIndexFlatSearchParamTest, SearchAfterInsert) {
       filters.emplace_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids_for_search)));
     }
 
-    ok = vector_index_flat->Search(vector_with_ids, topk, filters, results, false);
+    ok = vector_index_flat->Search(vector_with_ids, topk, filters, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   };
 

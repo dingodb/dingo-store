@@ -66,7 +66,7 @@ class IvfFlatIDSelector : public faiss::IDSelector {
 class VectorIndexIvfFlat : public VectorIndex {
  public:
   explicit VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                              const pb::common::Range& ranges);
+                              const pb::common::RegionEpoch& epoch, const pb::common::Range& ranges);
 
   ~VectorIndexIvfFlat() override;
 
@@ -90,14 +90,14 @@ class VectorIndexIvfFlat : public VectorIndex {
   butil::Status Delete(const std::vector<int64_t>& delete_ids) override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::vector<std::shared_ptr<FilterFunctor>> filters,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
-                       [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
+                       std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+                       const pb::common::VectorSearchParameter& parameter,
+                       std::vector<pb::index::VectorWithDistanceResult>& results) override;
 
   butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {}) override;
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
+                            const pb::common::VectorSearchParameter& parameter,
+                            std::vector<pb::index::VectorWithDistanceResult>& results) override;
 
   void LockWrite() override;
   void UnlockWrite() override;
@@ -124,7 +124,6 @@ class VectorIndexIvfFlat : public VectorIndex {
   void Reset();
 
   butil::Status AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
-
 
   // Dimension of the elements
   faiss::idx_t dimension_;

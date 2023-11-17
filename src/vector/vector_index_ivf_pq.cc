@@ -45,8 +45,8 @@
 namespace dingodb {
 
 VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                   const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, range), index_type_in_ivf_pq_(IndexTypeInIvfPq::kUnknow) {
+                                   const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+    : VectorIndex(id, vector_index_parameter, epoch, range), index_type_in_ivf_pq_(IndexTypeInIvfPq::kUnknow) {
   bthread_mutex_init(&mutex_, nullptr);
 
   metric_type_ = vector_index_parameter.ivf_pq_parameter().metric_type();
@@ -79,6 +79,10 @@ VectorIndexIvfPq::~VectorIndexIvfPq() { bthread_mutex_destroy(&mutex_); }
 
 butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                    bool is_upsert) {
+  if (vector_with_ids.empty()) {
+    return butil::Status();
+  }
+
   butil::Status status;
   {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -126,6 +130,10 @@ butil::Status VectorIndexIvfPq::Add(const std::vector<pb::common::VectorWithId>&
 
 butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
   BAIDU_SCOPED_LOCK(mutex_);
+  if (delete_ids.empty()) {
+    return butil::Status::OK();
+  }
+
   butil::Status status =
       InvokeConcreteFunction("Delete", &VectorIndexFlat::Delete, &VectorIndexRawIvfPq::Delete, false, delete_ids);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
@@ -137,12 +145,12 @@ butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
 }
 
 butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                       std::vector<std::shared_ptr<FilterFunctor>> filters,
-                                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
-                                       const pb::common::VectorSearchParameter& parameter) {
+                                       std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+                                       const pb::common::VectorSearchParameter& parameter,
+                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
   BAIDU_SCOPED_LOCK(mutex_);
   butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
-                                                vector_with_ids, topk, filters, results, reconstruct, parameter);
+                                                vector_with_ids, topk, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     DINGO_LOG(ERROR) << "VectorIndexIvfPq::Search failed " << status.error_cstr();
     return status;
@@ -159,12 +167,12 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
 
 butil::Status VectorIndexIvfPq::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
                                             std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                                            bool reconstruct, const pb::common::VectorSearchParameter& parameter) {
+                                            bool reconstruct, const pb::common::VectorSearchParameter& parameter,
+                                            std::vector<pb::index::VectorWithDistanceResult>& results) {
   BAIDU_SCOPED_LOCK(mutex_);
   butil::Status status =
       InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch, false,
-                             vector_with_ids, radius, filters, results, reconstruct, parameter);
+                             vector_with_ids, radius, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     DINGO_LOG(ERROR) << "VectorIndexIvfPq::RangeSearch failed " << status.error_cstr();
     return status;
@@ -211,7 +219,7 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
 
   // first ivf pq
   auto internal_index_type_in_ivf_pq = IndexTypeInIvfPq::kIvfPq;
-  auto internal_index_raw_ivf_pq = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, range);
+  auto internal_index_raw_ivf_pq = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range);
 
   status = internal_index_raw_ivf_pq->Load(path);
   if (status.ok()) {
@@ -235,7 +243,7 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
   ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
   flat_parameter->set_metric_type(vector_index_parameter.ivf_pq_parameter().metric_type());
   flat_parameter->set_dimension(vector_index_parameter.ivf_pq_parameter().dimension());
-  auto internal_index_flat = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, range);
+  auto internal_index_flat = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range);
 
   status = internal_index_flat->Load(path);
   if (status.ok()) {
@@ -536,10 +544,10 @@ void VectorIndexIvfPq::Init() {
     ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
     flat_parameter->set_metric_type(vector_index_parameter.ivf_pq_parameter().metric_type());
     flat_parameter->set_dimension(vector_index_parameter.ivf_pq_parameter().dimension());
-    index_flat_ = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, range);
+    index_flat_ = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range);
 
   } else if (IndexTypeInIvfPq::kIvfPq == index_type_in_ivf_pq_) {
-    index_raw_ivf_pq_ = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, range);
+    index_raw_ivf_pq_ = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range);
   } else {
     DINGO_LOG(ERROR) << fmt::format("index_type_in_ivf_pq_ : {} . wrong  state.",
                                     static_cast<int>(index_type_in_ivf_pq_));
