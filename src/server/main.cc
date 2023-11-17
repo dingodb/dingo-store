@@ -92,6 +92,7 @@ extern int omp_get_num_threads(void) noexcept;              // NOLINT
 extern int omp_get_max_threads(void) noexcept;              // NOLINT
 extern int omp_get_thread_num(void) noexcept;               // NOLINT
 extern int omp_get_num_procs(void) noexcept;                // NOLINT
+extern void openblas_set_num_threads(int num_threads);      // NOLINT
 }
 
 namespace bvar {
@@ -634,6 +635,11 @@ int main(int argc, char *argv[]) {
 #endif
 #else
   DINGO_LOG(INFO) << "LINK_TCMALLOC is OFF";
+#endif
+
+#ifdef USE_OPENBLAS
+  DINGO_LOG(INFO) << "USE_OPENBLAS is ON";
+  openblas_set_num_threads(1);
 #endif
 
   // check system env

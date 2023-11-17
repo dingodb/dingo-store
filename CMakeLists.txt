@@ -297,9 +297,11 @@ else()
     #     message(FATAL_ERROR "The MKL is found, cannot build faiss with openblas, please disable MKL.")
     # endif()
 
+    message(STATUS "Enable USE_OPENBLAS")
     include_directories(${OPENBLAS_INCLUDE_DIR})
     set(DEPEND_LIBS ${DEPEND_LIBS} openblas)
     set(DYNAMIC_LIB ${DYNAMIC_LIB} ${OPENBLAS_LIBRARIES})
+    add_definitions(-DUSE_OPENBLAS=ON)
 endif()
 
 if(WITH_DISKANN)
