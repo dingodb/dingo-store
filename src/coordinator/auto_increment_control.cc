@@ -139,6 +139,33 @@ butil::Status AutoIncrementControl::SyncCreateAutoIncrement(int64_t table_id, in
   return butil::Status::OK();
 }
 
+butil::Status AutoIncrementControl::SyncDeleteAutoIncrement(int64_t table_id) {
+  DINGO_LOG(INFO) << "sync delete auto increment table id: " << table_id;
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  {
+    BAIDU_SCOPED_LOCK(auto_increment_map_mutex_);
+    if (auto_increment_map_.seek(table_id) == nullptr) {
+      DINGO_LOG(WARNING) << "table id: " << table_id << " not found, aready deleted?";
+      return butil::Status::OK();
+    }
+  }
+
+  auto* auto_increment = meta_increment.add_auto_increment();
+  auto_increment->set_id(table_id);
+  auto_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+
+  std::shared_ptr<Context> const ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kAutoIncrementRegionId);
+
+  auto status = engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "SubmitMetaIncrement failed, errno=" << status.error_code() << " errmsg=" << status.error_str();
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status AutoIncrementControl::UpdateAutoIncrement(int64_t table_id, int64_t start_id, bool force,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << table_id << " | " << start_id << " | " << force;
@@ -538,6 +565,26 @@ void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(int64_t table_id
 }
 
 void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(int64_t table_id) {
+  auto auto_increment_control = Server::GetInstance().GetAutoIncrementControl();
+  if (auto_increment_control == nullptr) {
+    DINGO_LOG(ERROR) << "CreateTable AutoIncrementControl is null";
+  }
+
+  if (auto_increment_control->IsLeader()) {
+    auto ret = auto_increment_control->SyncDeleteAutoIncrement(table_id);
+    if (ret.ok()) {
+      DINGO_LOG(INFO) << "SyncDeleteAutoIncrement success, table id: " << table_id;
+      return;
+    } else if (ret.error_code() != pb::error::Errno::ERAFT_NOTLEADER) {
+      DINGO_LOG(ERROR) << "SyncDeleteAutoIncrement failed, table id: " << table_id << ", ret: " << ret;
+    } else {
+      DINGO_LOG(WARNING) << "maybe there is a leader change when SyncDeleteAutoIncrement, will use SendRequest, ret: "
+                         << ret << ", table id: " << table_id;
+    }
+  }
+
+  DINGO_LOG(INFO) << "AsyncDeleteAutoIncrement is not leader, will SendRequest, table id: " << table_id;
+
   auto delete_function = [table_id]() {
     pb::meta::DeleteAutoIncrementRequest request;
     pb::meta::DeleteAutoIncrementResponse response;

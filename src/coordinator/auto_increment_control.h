@@ -62,6 +62,7 @@ class AutoIncrementControl : public MetaControl {
   butil::Status CreateAutoIncrement(int64_t table_id, int64_t start_id,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status SyncCreateAutoIncrement(int64_t table_id, int64_t start_id);
+  butil::Status SyncDeleteAutoIncrement(int64_t table_id);
 
   butil::Status UpdateAutoIncrement(int64_t table_id, int64_t start_id, bool force,
                                     pb::coordinator_internal::MetaIncrement &meta_increment);
