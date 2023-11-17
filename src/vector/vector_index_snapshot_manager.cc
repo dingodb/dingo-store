@@ -497,6 +497,13 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     return butil::Status::OK();
   }
 
+  // if vector index not train. ignore
+  if (!vector_index->IsTrained()) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.save_snapshot][index_id({})] VectorIndex not train, skip save",
+                                   vector_index_wrapper->Id());
+    return butil::Status::OK();
+  }
+
   int64_t vector_index_id = vector_index_wrapper->Id();
 
   int64_t start_time = Helper::TimestampMs();
