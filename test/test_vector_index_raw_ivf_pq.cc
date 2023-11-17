@@ -49,6 +49,10 @@ class VectorIndexRawIvfPqTest : public testing::Test {
 
   static void ReCreate() {
     static const pb::common::Range kRange;
+    static pb::common::RegionEpoch kEpoch;  // NOLINNT
+    kEpoch.set_conf_version(1);
+    kEpoch.set_version(10);
+
     // valid param IP
     {
       int64_t id = 1;
@@ -60,7 +64,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     }
 
     // valid param L2
@@ -73,7 +77,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     }
 
     // valid param cosine
@@ -87,7 +91,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     }
   }
 
@@ -113,11 +117,15 @@ class VectorIndexRawIvfPqTest : public testing::Test {
 
 TEST_F(VectorIndexRawIvfPqTest, Create) {
   static const pb::common::Range kRange;
+  static pb::common::RegionEpoch kEpoch;  // NOLINNT
+  kEpoch.set_conf_version(1);
+  kEpoch.set_version(10);
+
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -126,7 +134,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -135,7 +143,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -145,7 +153,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
     index_parameter.mutable_ivf_pq_parameter()->set_dimension(64);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -156,7 +164,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
     index_parameter.mutable_ivf_pq_parameter()->set_dimension(64);
     index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -167,7 +175,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
     index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -180,7 +188,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(-1);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -195,7 +203,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
 
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(3);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -211,7 +219,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(1);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(-1);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -227,7 +235,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(3);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(1);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -243,7 +251,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-    vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_raw_ivf_pq_ip.get(), nullptr);
   }
 
@@ -257,7 +265,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-    vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -271,7 +279,7 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-    vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kRange);
+    vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_raw_ivf_pq_cosine.get(), nullptr);
   }
 }
@@ -382,11 +390,11 @@ TEST_F(VectorIndexRawIvfPqTest, SearchNotTrain) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, results_cosine);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -439,11 +447,11 @@ TEST_F(VectorIndexRawIvfPqTest, RangeSearchNotTrain) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {}, results_cosine);
+    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
@@ -907,11 +915,11 @@ TEST_F(VectorIndexRawIvfPqTest, Search) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -930,11 +938,11 @@ TEST_F(VectorIndexRawIvfPqTest, Search) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -954,11 +962,11 @@ TEST_F(VectorIndexRawIvfPqTest, Search) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, results_cosine);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1011,13 +1019,13 @@ TEST_F(VectorIndexRawIvfPqTest, Search) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {filter}, results_cosine, false, parameter);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {filter}, false, parameter, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1092,11 +1100,11 @@ TEST_F(VectorIndexRawIvfPqTest, RangeSearch) {
     vector_with_ids.push_back(vector_with_id);
     float radius = 1.1F;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
   }
 
@@ -1115,11 +1123,11 @@ TEST_F(VectorIndexRawIvfPqTest, RangeSearch) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {}, results);
+    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1139,11 +1147,11 @@ TEST_F(VectorIndexRawIvfPqTest, RangeSearch) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {}, results_cosine);
+    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1196,14 +1204,14 @@ TEST_F(VectorIndexRawIvfPqTest, RangeSearch) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
-    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {filter}, results_l2, false, parameter);
+    ok = vector_index_raw_ivf_pq_l2->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {filter}, results_ip, false, parameter);
+    ok = vector_index_raw_ivf_pq_ip->RangeSearch(vector_with_ids, radius, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {filter}, results_cosine, false,
-                                                     parameter);
+    ok = vector_index_raw_ivf_pq_cosine->RangeSearch(vector_with_ids, radius, {filter}, false, parameter,
+                                                     results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1368,11 +1376,11 @@ TEST_F(VectorIndexRawIvfPqTest, SearchAfterLoad) {
     vector_with_ids.push_back(vector_with_id);
     uint32_t topk = 0;
     std::vector<pb::index::VectorWithDistanceResult> results;
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1391,11 +1399,11 @@ TEST_F(VectorIndexRawIvfPqTest, SearchAfterLoad) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, results);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1415,11 +1423,11 @@ TEST_F(VectorIndexRawIvfPqTest, SearchAfterLoad) {
     std::vector<pb::index::VectorWithDistanceResult> results_cosine;
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, results_l2);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, results_ip);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, results_cosine);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {
@@ -1472,13 +1480,13 @@ TEST_F(VectorIndexRawIvfPqTest, SearchAfterLoad) {
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
-    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, results_l2, false, parameter);
+    ok = vector_index_raw_ivf_pq_l2->Search(vector_with_ids, topk, {filter}, false, parameter, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, results_ip, false, parameter);
+    ok = vector_index_raw_ivf_pq_ip->Search(vector_with_ids, topk, {filter}, false, parameter, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {filter}, results_cosine, false, parameter);
+    ok = vector_index_raw_ivf_pq_cosine->Search(vector_with_ids, topk, {filter}, false, parameter, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto& result : results_l2) {

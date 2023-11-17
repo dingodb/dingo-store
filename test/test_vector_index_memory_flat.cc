@@ -57,6 +57,9 @@ class VectorIndexMemoryTest : public testing::Test {
 TEST_F(VectorIndexMemoryTest, Create) {
   static const pb::common::Range kRange;
   std::cout << "pid : " << getpid() << '\n';
+  static pb::common::RegionEpoch kEpoch;
+  kEpoch.set_conf_version(1);
+  kEpoch.set_version(10);
 
   // valid param L2
   {
@@ -65,7 +68,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kRange);
+    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_flat.get(), nullptr);
   }
 }

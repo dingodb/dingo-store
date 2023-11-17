@@ -50,8 +50,13 @@ namespace dingodb {
 class VectorIndex {
  public:
   VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-              const pb::common::Range& range)
-      : id(id), apply_log_id(0), snapshot_log_id(0), vector_index_parameter(vector_index_parameter), range(range) {
+              const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+      : id(id),
+        apply_log_id(0),
+        snapshot_log_id(0),
+        vector_index_parameter(vector_index_parameter),
+        epoch(epoch),
+        range(range) {
     vector_index_type = vector_index_parameter.vector_index_type();
   }
 
@@ -200,15 +205,14 @@ class VectorIndex {
   virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
                                [[maybe_unused]] uint32_t topk,
                                [[maybe_unused]] std::vector<std::shared_ptr<FilterFunctor>> filters,
-                               std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                               [[maybe_unused]] bool reconstruct = false,
-                               [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) = 0;
+                               [[maybe_unused]] bool reconstruct,
+                               [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,
+                               std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
   virtual butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                                    std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                                    bool reconstruct = false,
-                                    const pb::common::VectorSearchParameter& parameter = {}) = 0;
+                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
+                                    const pb::common::VectorSearchParameter& parameter,
+                                    std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
@@ -239,7 +243,8 @@ class VectorIndex {
   int64_t SnapshotLogId() const;
   void SetSnapshotLogId(int64_t snapshot_log_id);
 
-  pb::common::Range Range() { return range; }
+  pb::common::RegionEpoch Epoch() const { return epoch; };
+  pb::common::Range Range() const { return range; }
 
  protected:
   // vector index id
@@ -252,6 +257,7 @@ class VectorIndex {
   // last snapshot log id
   std::atomic<int64_t> snapshot_log_id;
 
+  pb::common::RegionEpoch epoch;
   pb::common::Range range;
 
   pb::common::VectorIndexParameter vector_index_parameter;
@@ -371,6 +377,9 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   VectorIndexPtr ShareVectorIndex();
   void SetShareVectorIndex(VectorIndexPtr vector_index);
 
+  VectorIndexPtr SiblingVectorIndex();
+  void SetSiblingVectorIndex(VectorIndexPtr vector_index);
+
   bool ExecuteTask(TaskRunnablePtr task);
 
   int PendingTaskNum();
@@ -400,15 +409,15 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   butil::Status Delete(const std::vector<int64_t>& delete_ids);
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                        const pb::common::Range& region_range,
-                       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
-                       const pb::common::VectorSearchParameter& parameter = {});
+                       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool reconstruct,
+                       const pb::common::VectorSearchParameter& parameter,
+                       std::vector<pb::index::VectorWithDistanceResult>& results);
 
   butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
                             const pb::common::Range& region_range,
-                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {});
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
+                            const pb::common::VectorSearchParameter& parameter,
+                            std::vector<pb::index::VectorWithDistanceResult>& results);
 
   static butil::Status SetVectorIndexFilter(
       VectorIndexPtr vector_index,
@@ -448,6 +457,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   VectorIndexPtr vector_index_;
   // Share other vector index.
   VectorIndexPtr share_vector_index_;
+  // Sibling vector index by merge source region.
+  VectorIndexPtr sibling_vector_index_;
 
   // Protect vector_index_/share_vector_index_
   bthread_mutex_t vector_index_mutex_;

@@ -37,7 +37,7 @@ namespace dingodb {
 class VectorIndexHnsw : public VectorIndex {
  public:
   explicit VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                           const pb::common::Range& range);
+                           const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
   ~VectorIndexHnsw() override;
 
@@ -58,14 +58,14 @@ class VectorIndexHnsw : public VectorIndex {
   void UnlockWrite() override;
 
   butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::vector<std::shared_ptr<FilterFunctor>> filters,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct = false,
-                       [[maybe_unused]] const pb::common::VectorSearchParameter& parameter = {}) override;
+                       std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+                       const pb::common::VectorSearchParameter& parameter,
+                       std::vector<pb::index::VectorWithDistanceResult>& results) override;
 
   butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                            std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                            bool reconstruct = false, const pb::common::VectorSearchParameter& parameter = {}) override;
+                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
+                            const pb::common::VectorSearchParameter& parameter,
+                            std::vector<pb::index::VectorWithDistanceResult>& results) override;
 
   int32_t GetDimension() override;
   butil::Status GetCount([[maybe_unused]] int64_t& count) override;

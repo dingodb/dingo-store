@@ -42,6 +42,7 @@
 #include "common/service_access.h"
 #include "common/synchronization.h"
 #include "fmt/core.h"
+#include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/file_service.pb.h"
 #include "proto/node.pb.h"
@@ -127,18 +128,20 @@ static int64_t ParseMetaLogId(const std::string& path) {
   return 0;
 }
 
-butil::Status VectorIndexSnapshotManager::GetSnapshotList(int64_t vector_index_id, std::vector<std::string>& paths) {
+std::vector<std::string> VectorIndexSnapshotManager::GetSnapshotList(int64_t vector_index_id) {
   std::string snapshot_parent_path = GetSnapshotParentPath(vector_index_id);
 
-  auto sub_paths = Helper::TraverseDirectory(snapshot_parent_path, "snapshot", false, true);
+  auto dir_names = Helper::TraverseDirectory(snapshot_parent_path, "snapshot", false, true);
 
-  std::sort(sub_paths.begin(), sub_paths.end());
+  std::sort(dir_names.begin(), dir_names.end());
 
-  for (const auto& sub_path : sub_paths) {
-    paths.push_back(fmt::format("{}/{}", snapshot_parent_path, sub_path));
+  std::vector<std::string> paths;
+  paths.reserve(dir_names.size());
+  for (const auto& dir_name : dir_names) {
+    paths.push_back(fmt::format("{}/{}", snapshot_parent_path, dir_name));
   }
 
-  return butil::Status();
+  return paths;
 }
 
 std::string VectorIndexSnapshotManager::GetSnapshotParentPath(int64_t vector_index_id) {
@@ -275,8 +278,8 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_inde
   return butil::Status();
 }
 
-butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(pb::node::GetVectorIndexSnapshotResponse* response,
-                                                             vector_index::SnapshotMetaPtr snapshot) {
+butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(vector_index::SnapshotMetaPtr snapshot,
+                                                             pb::node::GetVectorIndexSnapshotResponse* response) {
   assert(snapshot != nullptr);
 
   DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] last vector index snapshot: {}",
@@ -286,6 +289,8 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(pb::node::GetVector
   auto* meta = response->mutable_meta();
   meta->set_vector_index_id(snapshot->VectorIndexId());
   meta->set_snapshot_log_index(snapshot->SnapshotLogId());
+  *meta->mutable_epoch() = snapshot->Epoch();
+  *meta->mutable_range() = snapshot->Range();
   for (const auto& filename : snapshot->ListFileNames()) {
     meta->add_filenames(filename);
   }
@@ -308,7 +313,8 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(pb::node::GetVector
   return butil::Status();
 }
 
-butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index::SnapshotMetaSetPtr snapshot_set) {
+butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index::SnapshotMetaSetPtr snapshot_set,
+                                                                    const pb::common::RegionEpoch& epoch) {
   assert(snapshot_set != nullptr);
 
   int64_t start_time = Helper::TimestampMs();
@@ -338,6 +344,13 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
     pb::node::GetVectorIndexSnapshotResponse response;
     auto status = ServiceAccess::GetVectorIndexSnapshot(request, peer.addr, response);
     if (!status.ok()) {
+      continue;
+    }
+
+    if (response.meta().epoch().version() != epoch.version()) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[vector_index.snapshot][index({})] vector index snapshot epoch({}) not match region version({}).",
+          vector_index_id, response.meta().epoch().version(), epoch.version());
       continue;
     }
 
@@ -586,9 +599,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
       if (pb_file_result.save(&error, true) != 0) {
         log_file << fmt::format(
                         "[vector_index.child_save_snapshot][index_id({})] Save vector index failed, save result to "
-                        "result file "
-                        "failed, "
-                        "error: {}",
+                        "result file failed, error: {}",
                         vector_index_id, error.ShortDebugString())
                  << '\n';
         log_file.close();
@@ -613,9 +624,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
       if (pb_file_result.save(&error, true) != 0) {
         log_file << fmt::format(
                         "[vector_index.child_save_snapshot][index_id({})] Save vector index failed, save result to "
-                        "result file "
-                        "failed, "
-                        "error: {}",
+                        "result file failed, error: {}",
                         vector_index_id, error.ShortDebugString())
                  << '\n';
         log_file.close();
@@ -635,9 +644,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     if (pb_file_result.save(&error, true) != 0) {
       log_file << fmt::format(
                       "[vector_index.child_save_snapshot][index_id({})] Save vector index success, save result to "
-                      "result file "
-                      "failed, "
-                      "error: {}",
+                      "result file failed, error: {}",
                       vector_index_id, error.ShortDebugString())
                << '\n';
       log_file.close();
@@ -649,6 +656,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     meta.set_vector_index_id(vector_index_id);
     meta.set_snapshot_log_id(apply_log_index);
     *(meta.mutable_range()) = vector_index->Range();
+    *(meta.mutable_epoch()) = vector_index->Epoch();
 
     braft::ProtoBufFile pb_file_meta(meta_filepath);
     if (pb_file_meta.save(&meta, true) != 0) {
@@ -800,7 +808,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
 
 // Load vector index for already exist vector index at bootstrap.
 std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot(
-    VectorIndexWrapperPtr vector_index_wrapper) {
+    VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch) {
   assert(vector_index_wrapper != nullptr);
 
   int64_t vector_index_id = vector_index_wrapper->Id();
@@ -839,8 +847,16 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
     return nullptr;
   }
 
+  if (meta.epoch().version() != epoch.version()) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load_snapshot][index_id({})] vector index snapshot version({}) not match region epoch({}).",
+        vector_index_id, meta.epoch().version(), epoch.version());
+    return nullptr;
+  }
+
   // create a new vector_index
-  auto vector_index = VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), meta.range());
+  auto vector_index =
+      VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), meta.epoch(), meta.range());
   if (!vector_index) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] New vector index failed.",
                                       vector_index_id);

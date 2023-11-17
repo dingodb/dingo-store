@@ -649,8 +649,8 @@ butil::Status MergeRegionTask::MergeRegion() {
   }
 
   // Disable region change
-  store_region_meta->UpdateDisableChange(source_region, true);
-  store_region_meta->UpdateDisableChange(target_region, true);
+  store_region_meta->UpdateTemporaryDisableChange(source_region, true);
+  store_region_meta->UpdateTemporaryDisableChange(target_region, true);
 
   return butil::Status();
 }

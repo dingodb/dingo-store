@@ -75,7 +75,11 @@ TEST_F(VectorIndexHnswTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
+    pb::common::RegionEpoch epoch;
+    epoch.set_conf_version(1);
+    epoch.set_version(10);
+
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 
@@ -94,7 +98,11 @@ TEST_F(VectorIndexHnswTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
+    pb::common::RegionEpoch epoch;
+    epoch.set_conf_version(1);
+    epoch.set_version(10);
+
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 #endif
@@ -274,7 +282,7 @@ TEST_F(VectorIndexHnswTest, Search) {
     vector_with_ids.push_back(vector_with_id);
 
     auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, results, true);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, true, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto &result : results) {
@@ -311,7 +319,11 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
+    pb::common::RegionEpoch epoch;
+    epoch.set_conf_version(1);
+    epoch.set_version(10);
+
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 
@@ -329,7 +341,11 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kRange);
+    pb::common::RegionEpoch epoch;
+    epoch.set_conf_version(1);
+    epoch.set_version(10);
+
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 #endif
@@ -484,7 +500,7 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     vector_with_ids.push_back(vector_with_id);
     auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
-    ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, results, true);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, true, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto &result : results) {

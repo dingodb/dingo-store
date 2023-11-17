@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "braft/file_system_adaptor.h"
+#include "braft/protobuf_file.h"
 #include "butil/endpoint.h"
 #include "butil/iobuf.h"
 #include "butil/status.h"
@@ -53,7 +54,8 @@ SnapshotMeta::SnapshotMeta(int64_t vector_index_id, const std::string& path)
 
 SnapshotMeta::~SnapshotMeta() {
   // Delete directory
-  DINGO_LOG(INFO) << "Delete vector index snapshot directory" << path_;
+  DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index_id({})] Delete vector index snapshot directory.",
+                                 vector_index_id_, path_);
   Helper::RemoveAllFileOrDirectory(path_);
 }
 
@@ -67,18 +69,35 @@ bool SnapshotMeta::Init() {
     char* endptr;
     snapshot_index_id = strtoull(path.filename().c_str() + 9, &endptr, 10);
     if (*endptr != '\0') {
-      DINGO_LOG(ERROR) << fmt::format("Parse snapshot index id failed from snapshot name, {}", path_);
+      DINGO_LOG(ERROR) << fmt::format(
+          "[vector_index.snapshot][index_id({})] Parse snapshot index id failed from snapshot name, path: {}",
+          vector_index_id_, path_);
       return false;
     }
   } catch (const std::exception& e) {
-    DINGO_LOG(ERROR) << fmt::format("Parse snapshot index id failed from snapshot name, {}", path_);
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.snapshot][index_id({})] Parse snapshot index id failed from snapshot name, path: {}",
+        vector_index_id_, path_);
     return false;
   }
 
-  DINGO_LOG(INFO) << fmt::format("Load vector index snapshot meta, vector index id: {}, snapshot index id: {}",
-                                 vector_index_id_, snapshot_index_id);
-
   snapshot_log_id_ = snapshot_index_id;
+
+  pb::store_internal::VectorIndexSnapshotMeta meta;
+  braft::ProtoBufFile pb_file_meta(MetaPath());
+  if (pb_file_meta.load(&meta) != 0) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.snapshot][index_id({})] Parse vector index snapshot meta failed, path: {}", vector_index_id_,
+        path_);
+    return false;
+  }
+
+  epoch_ = meta.epoch();
+  range_ = meta.range();
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.snapshot][index_id({})] Load vector index snapshot meta, snapshot_index_id: {}, path: {}",
+      vector_index_id_, snapshot_index_id, path_);
 
   return true;
 }

@@ -132,8 +132,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
 }
 
 VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                 const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
+                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+    : VectorIndex(id, vector_index_parameter, epoch, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
   bthread_mutex_init(&mutex_, nullptr);
   if (FLAGS_max_hnsw_parallel_thread_num > 0) {
     hnsw_num_threads_ = FLAGS_max_hnsw_parallel_thread_num;
@@ -239,7 +239,6 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
 butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
-    DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
   }
 
@@ -288,9 +287,9 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::vector<std::shared_ptr<FilterFunctor>> filters,
-                                      std::vector<pb::index::VectorWithDistanceResult>& results, bool reconstruct,
-                                      const pb::common::VectorSearchParameter& /*parameter*/) {
+                                      std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+                                      const pb::common::VectorSearchParameter&,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
@@ -468,9 +467,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
 butil::Status VectorIndexHnsw::RangeSearch(std::vector<pb::common::VectorWithId> /*vector_with_ids*/, float /*radius*/,
                                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> /*filters*/,
-                                           std::vector<pb::index::VectorWithDistanceResult>& /*results*/,
-                                           bool /*reconstruct*/,
-                                           const pb::common::VectorSearchParameter& /*parameter*/) {
+                                           bool /*reconstruct*/, const pb::common::VectorSearchParameter& /*parameter*/,
+                                           std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {
   DINGO_LOG(ERROR) << "RangeSearch not support in Hnsw!!!";
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "RangeSearch not support in Hnsw!!!");
 }

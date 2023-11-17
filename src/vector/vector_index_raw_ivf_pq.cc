@@ -50,8 +50,8 @@ namespace dingodb {
 DEFINE_uint64(ivf_pq_need_save_count, 10000, "ivf pq need save count");
 
 VectorIndexRawIvfPq::VectorIndexRawIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                         const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, range) {
+                                         const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+    : VectorIndex(id, vector_index_parameter, epoch, range) {
   bthread_mutex_init(&mutex_, nullptr);
 
   metric_type_ = vector_index_parameter.ivf_pq_parameter().metric_type();
@@ -164,7 +164,6 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsertWrapper(const std::vector<pb::comm
 
 butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
-    DINGO_LOG(WARNING) << "delete ids is empty";
     return butil::Status::OK();
   }
 
@@ -197,10 +196,9 @@ butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids
 }
 
 butil::Status VectorIndexRawIvfPq::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                          std::vector<std::shared_ptr<FilterFunctor>> filters,
-                                          std::vector<pb::index::VectorWithDistanceResult>& results,
-                                          bool /*reconstruct*/,
-                                          const pb::common::VectorSearchParameter& parameter) {  // NOLINT
+                                          std::vector<std::shared_ptr<FilterFunctor>> filters, bool /*reconstruct*/,
+                                          const pb::common::VectorSearchParameter& parameter,
+                                          std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
@@ -279,9 +277,8 @@ butil::Status VectorIndexRawIvfPq::Search(std::vector<pb::common::VectorWithId> 
 
 butil::Status VectorIndexRawIvfPq::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
                                                std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
-                                               std::vector<pb::index::VectorWithDistanceResult>& results,  // NOLINT
-                                               bool /*reconstruct*/,
-                                               const pb::common::VectorSearchParameter& parameter) {
+                                               bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
+                                               std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
