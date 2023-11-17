@@ -53,6 +53,8 @@
 
 namespace dingodb {
 
+DEFINE_bool(vector_index_snapshot_use_fork, true, "Use fork to save vector index snapshot.");
+
 // Get all snapshot path, except tmp dir.
 static std::vector<std::string> GetSnapshotPaths(std::string path) {
   auto filenames = Helper::TraverseDirectory(path);
@@ -564,18 +566,26 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
                                  vector_index_id, index_filepath);
 
   // Save vector index to tmp file
-  // fork() a child process to save vector index to tmp file
-  pid_t pid = fork();
-  if (pid < 0) {
-    // unlock write
-    vector_index->UnlockWrite();
+  pid_t pid = 0;
 
-    DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] Save vector index snapshot failed, fork failed, error: {}",
-        vector_index_id, strerror(errno));
-    Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
-    return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, fork failed");
-  } else if (pid == 0) {
+  // fork() a child process to save vector index to tmp file, this can prevent main process from blocking
+  if (FLAGS_vector_index_snapshot_use_fork) {
+    pid = fork();
+
+    if (pid < 0) {
+      // unlock write
+      vector_index->UnlockWrite();
+
+      DINGO_LOG(ERROR) << fmt::format(
+          "[vector_index.save_snapshot][index_id({})] Save vector index snapshot failed, fork failed, error: {}",
+          vector_index_id, strerror(errno));
+      Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
+      return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, fork failed");
+    }
+  }
+
+  // if pid == 0, means this is a child process, or not use fork.
+  if (pid == 0) {
     // Caution: child process can't do any DINGO_LOG, because DINGO_LOG will overwrite the whole log file
     //          but there is DINGO_LOG call in RemoveAllFileOrDirectory if error ocurred, careful to use it.
     std::ofstream log_file(log_filepath);
@@ -676,10 +686,14 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
 
     log_file.close();
     _exit(0);
-  } else {
-    // unlock write
-    vector_index->UnlockWrite();
+  }
 
+  // unlock write
+  vector_index->UnlockWrite();
+
+  // only after fork, the pid may > 0, we must do waitpid.
+  // if no fork, pid == 0, so no need to waitpid
+  if (pid > 0) {
     // Wait for the child process to complete
     int status;
 
