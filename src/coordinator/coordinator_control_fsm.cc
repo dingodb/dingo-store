@@ -144,6 +144,12 @@ void CoordinatorControl::OnLeaderStop() {
   // clear all index_metrics on follower
   index_metrics_map_.Clear();
 
+  // clear all region_metrcs on follower
+  region_metrics_map_.Clear();
+
+  // clear all store_metrics on follower
+  DeleteStoreMetrics(0);
+
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
 
