@@ -46,7 +46,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
                                        std::shared_ptr<RawEngine> raw_engine_of_meta)
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
   // init bthread mutex
-  bthread_mutex_init(&store_need_push_mutex_, nullptr);
+  // bthread_mutex_init(&store_need_push_mutex_, nullptr);
   bthread_mutex_init(&executor_need_push_mutex_, nullptr);
   bthread_mutex_init(&store_metrics_map_mutex_, nullptr);
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
@@ -90,7 +90,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
       new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, kPrefixTableIndex);
 
   // init FlatMap
-  store_need_push_.init(100, 80);
+  // store_need_push_.init(100, 80);
   executor_need_push_.init(100, 80);
   store_metrics_map_.init(100, 80);
 

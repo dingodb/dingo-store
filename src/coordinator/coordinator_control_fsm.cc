@@ -1279,31 +1279,32 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // meta_write_kv
         meta_write_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
 
+        // DEPRECATED: will be removed in future
         // add_store_for_push
         // only create region will push to store now
-        {
-          BAIDU_SCOPED_LOCK(store_need_push_mutex_);
-          for (int j = 0; j < region.region().definition().peers_size(); j++) {
-            int64_t store_id = region.region().definition().peers(j).store_id();
-            DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().definition().peers_size()
-                            << " store_id =" << store_id;
+        // {
+        //   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
+        //   for (int j = 0; j < region.region().definition().peers_size(); j++) {
+        //     int64_t store_id = region.region().definition().peers(j).store_id();
+        //     DINGO_LOG(INFO) << " add_store_for_push, peers_size=" << region.region().definition().peers_size()
+        //                     << " store_id =" << store_id;
 
-            if (store_need_push_.seek(store_id) == nullptr) {
-              pb::common::Store store_to_push;
-              int ret = store_map_.Get(store_id, store_to_push);
-              if (ret > 0) {
-                store_need_push_.insert(store_id, store_to_push);
-                DINGO_LOG(INFO) << " add_store_for_push, store_id=" << store_id
-                                << " in create region=" << region.region().id()
-                                << " location=" << store_to_push.server_location().host() << ":"
-                                << store_to_push.server_location().port();
-              } else {
-                DINGO_LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
-                                 << " in create region=" << region.region().id();
-              }
-            }
-          }
-        }
+        //     if (store_need_push_.seek(store_id) == nullptr) {
+        //       pb::common::Store store_to_push;
+        //       int ret = store_map_.Get(store_id, store_to_push);
+        //       if (ret > 0) {
+        //         store_need_push_.insert(store_id, store_to_push);
+        //         DINGO_LOG(INFO) << " add_store_for_push, store_id=" << store_id
+        //                         << " in create region=" << region.region().id()
+        //                         << " location=" << store_to_push.server_location().host() << ":"
+        //                         << store_to_push.server_location().port();
+        //       } else {
+        //         DINGO_LOG(ERROR) << " add_store_for_push, illegal store_id=" << store_id
+        //                          << " in create region=" << region.region().id();
+        //       }
+        //     }
+        //   }
+        // }
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         // get old region

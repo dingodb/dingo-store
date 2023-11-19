@@ -508,7 +508,7 @@ class CoordinatorControl : public MetaControl {
 
   // get push storemap
   // this function will use std::swap to empty the class member store_need_push_
-  void GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store> &store_to_push);
+  // void GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store> &store_to_push);
 
   // get push executormap
   // this function will use std::swap to empty the class member executor_need_push_
@@ -810,9 +810,9 @@ class CoordinatorControl : public MetaControl {
 
   // 2.stores
   DingoSafeMap<int64_t, pb::common::Store> store_map_;
-  MetaSafeMapStorage<pb::common::Store> *store_meta_;           // need contruct
-  butil::FlatMap<int64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
-  bthread_mutex_t store_need_push_mutex_;
+  MetaSafeMapStorage<pb::common::Store> *store_meta_;  // need contruct
+  // butil::FlatMap<int64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
+  // bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
   DingoSafeStdMap<std::string, pb::common::Executor> executor_map_;
