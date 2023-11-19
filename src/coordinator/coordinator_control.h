@@ -802,28 +802,28 @@ class CoordinatorControl : public MetaControl {
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition
   DingoSafeIdEpochMap id_epoch_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::IdEpochInternal> *id_epoch_meta_;
 
   // 1.coordinators
   DingoSafeMap<int64_t, pb::coordinator_internal::CoordinatorInternal> coordinator_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::CoordinatorInternal> *coordinator_meta_;
 
   // 2.stores
   DingoSafeMap<int64_t, pb::common::Store> store_map_;
-  MetaSafeMapStorage<pb::common::Store> *store_meta_;  // need contruct
+  MetaMemMapFlat<pb::common::Store> *store_meta_;  // need contruct
   // butil::FlatMap<int64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
   // bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
   DingoSafeStdMap<std::string, pb::common::Executor> executor_map_;
-  MetaSafeStdMapStorage<pb::common::Executor> *executor_meta_;  // need construct
+  MetaMemMapStd<pb::common::Executor> *executor_meta_;  // need construct
   butil::FlatMap<std::string, pb::common::Executor>
       executor_need_push_;  // will send push msg to these executors in crontab
   bthread_mutex_t executor_need_push_mutex_;
 
   // 4.schemas
   DingoSafeMap<int64_t, pb::coordinator_internal::SchemaInternal> schema_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal> *schema_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::SchemaInternal> *schema_meta_;
 
   // schema map temp, only for leader use, is out of state machine
   // schema_name -> schema-id
@@ -831,19 +831,19 @@ class CoordinatorControl : public MetaControl {
 
   // 5.regions
   DingoSafeMap<int64_t, pb::coordinator_internal::RegionInternal> region_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::RegionInternal> *region_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::RegionInternal> *region_meta_;
   // 5.1 deleted_regions
   MetaDiskMap<pb::coordinator_internal::RegionInternal> *deleted_region_meta_;
   // 5.2 region_metrics, this map does not need to be persisted
   DingoSafeMap<int64_t, pb::common::RegionMetrics> region_metrics_map_;
-  MetaSafeMapStorage<pb::common::RegionMetrics> *region_metrics_meta_;
+  MetaMemMapFlat<pb::common::RegionMetrics> *region_metrics_meta_;
   // 5.3 range->region map
   DingoSafeStdMap<std::string, pb::coordinator_internal::RegionInternal> range_region_map_;
 
   // 6.tables
   // TableInternal is combination of Table & TableDefinition
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> table_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::TableInternal> *table_meta_;
   MetaDiskMap<pb::coordinator_internal::TableInternal> *deleted_table_meta_;
 
   // table map temp, only for leader use, is out of state machine
@@ -856,27 +856,26 @@ class CoordinatorControl : public MetaControl {
 
   // 8.table_metrics
   DingoSafeMap<int64_t, pb::coordinator_internal::TableMetricsInternal> table_metrics_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal> *table_metrics_meta_;
 
   // 9.store_operation
   DingoSafeMap<int64_t, pb::coordinator_internal::StoreOperationInternal> store_operation_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::StoreOperationInternal> *store_operation_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::StoreOperationInternal> *store_operation_meta_;
   DingoSafeMap<int64_t, pb::coordinator_internal::RegionCmdInternal> region_cmd_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::RegionCmdInternal> *region_cmd_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::RegionCmdInternal> *region_cmd_meta_;
   bthread_mutex_t store_operation_map_mutex_;  // may need a write lock
 
   // 10.executor_user
   DingoSafeStdMap<std::string, pb::coordinator_internal::ExecutorUserInternal>
-      executor_user_map_;  // executor_user -> keyring
-  MetaSafeStdMapStorage<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
+      executor_user_map_;                                                              // executor_user -> keyring
+  MetaMemMapStd<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
 
   // 11.task_list
   DingoSafeMap<int64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
-  MetaSafeMapStorage<pb::coordinator::TaskList> *task_list_meta_;   // need construct
+  MetaMemMapFlat<pb::coordinator::TaskList> *task_list_meta_;       // need construct
 
   // 12.indexes
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> index_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *index_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::TableInternal> *index_meta_;
   MetaDiskMap<pb::coordinator_internal::TableInternal> *deleted_index_meta_;
 
   // index map temp, only for leader use, is out of state machine
@@ -885,11 +884,10 @@ class CoordinatorControl : public MetaControl {
 
   // 13.index_metrics
   DingoSafeMap<int64_t, pb::coordinator_internal::IndexMetricsInternal> index_metrics_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal> *index_metrics_meta_;
 
   // 50. table index
   DingoSafeMap<int64_t, pb::coordinator_internal::TableIndexInternal> table_index_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal> *table_index_meta_;
+  MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal> *table_index_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

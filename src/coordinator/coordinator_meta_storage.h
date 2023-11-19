@@ -39,6 +39,20 @@ namespace dingodb {
 
 #define COORDINATOR_ID_OF_MAP_MIN 1000
 
+inline std::string EncodeInt64Id(int64_t id) {
+  Buf buf(sizeof(int64_t));
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, id);
+  return buf.GetString();
+}
+
+inline int64_t DecodeInt64Id(const std::string &str_id) {
+  CHECK(str_id.size() == sizeof(int64_t));
+
+  Buf buf(str_id);
+
+  return DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
+}
+
 // Implement a ThreadSafeMap
 // This is for IdEpoch with atomic GetNextId function
 // all membber functions return 1 if success, return -1 if failed
@@ -283,221 +297,6 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
   }
 };
 
-// MetaSafeMapStorage is a template class for meta storage
-// This is for read/write meta data from/to RocksDB storage
-template <typename T>
-class MetaSafeMapStorage {
- public:
-  const std::string internal_prefix;
-  MetaSafeMapStorage(DingoSafeMap<int64_t, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("METASFM") + prefix), elements_(elements_ptr){};
-  ~MetaSafeMapStorage() = default;
-
-  std::string Prefix() { return internal_prefix; }
-
-  bool Init() {
-    DINGO_LOG(INFO) << "coordinator server meta";
-    return true;
-  }
-
-  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
-    elements_->Clear();
-    TransformFromKv(kvs);
-    return true;
-  }
-
-  bool IsExist(int64_t id) {
-    auto it = elements_->find(id);
-    return static_cast<bool>(it != elements_->end());
-  }
-
-  int64_t ParseId(const std::string &str) {
-    if (str.size() <= internal_prefix.size()) {
-      DINGO_LOG(ERROR) << "Parse id failed, invalid str:[" << str << "], prefix:[" << internal_prefix << "]";
-      return 0;
-    }
-
-    // std::string s(str.c_str() + internal_prefix.size() + 1);
-    std::string s = str.substr(internal_prefix.size() + 1);
-    try {
-      return std::stoll(s, nullptr, 10);
-    } catch (std::invalid_argument &e) {
-      DINGO_LOG(ERROR) << "string to int64_t failed: " << e.what();
-    }
-
-    return 0;
-  }
-
-  std::string GenKey(int64_t id) { return internal_prefix + "_" + std::to_string(id); }
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(int64_t id) {
-    T value;
-    if (elements_->Get(id, value) < 0) {
-      return nullptr;
-    }
-
-    return TransformToKv(value);
-  };
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(T element) {
-    std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-    kv->set_key(GenKey(element.id()));
-    kv->set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  pb::common::KeyValue TransformToKvValue(T element) {
-    pb::common::KeyValue kv;
-    kv.set_key(GenKey(element.id()));
-    kv.set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    butil::FlatMap<int64_t, T> temp_map;
-    temp_map.init(10000);
-    elements_->GetRawMapCopy(temp_map);
-
-    std::vector<pb::common::KeyValue> kvs;
-    for (const auto &it : temp_map) {
-      pb::common::KeyValue kv;
-      kv.set_key(GenKey(it.first));
-      kv.set_value(it.second.SerializeAsString());
-      kvs.push_back(kv);
-    }
-
-    return kvs;
-  }
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    std::vector<int64_t> key_list;
-    std::vector<T> value_list;
-
-    for (const auto &kv : kvs) {
-      int64_t id = ParseId(kv.key());
-      T element;
-      element.ParsePartialFromString(kv.value());
-      key_list.push_back(id);
-      value_list.push_back(element);
-    }
-
-    elements_->MultiPut(key_list, value_list);
-  };
-
-  MetaSafeMapStorage(const MetaSafeMapStorage &) = delete;
-  const MetaSafeMapStorage &operator=(const MetaSafeMapStorage &) = delete;
-
- private:
-  // Coordinator all region meta data in this server.
-  // std::map<int64_t, std::shared_ptr<T>> *elements_;
-  DingoSafeMap<int64_t, T> *elements_;
-};
-
-// MetaSafeStdMapStorage is a template class for meta storage
-// This is for read/write meta data from/to RocksDB storage
-template <typename T>
-class MetaSafeStdMapStorage {
- public:
-  const std::string internal_prefix;
-  MetaSafeStdMapStorage(DingoSafeStdMap<std::string, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("METASTD") + prefix), elements_(elements_ptr){};
-  ~MetaSafeStdMapStorage() = default;
-
-  std::string Prefix() { return internal_prefix; }
-
-  bool Init() {
-    DINGO_LOG(INFO) << "coordinator server meta";
-    return true;
-  }
-
-  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
-    elements_->Clear();
-    TransformFromKv(kvs);
-    return true;
-  }
-
-  bool IsExist(std::string id) {
-    auto it = elements_->find(id);
-    return static_cast<bool>(it != elements_->end());
-  }
-
-  std::string ParseId(const std::string &str) {
-    if (str.size() <= internal_prefix.size()) {
-      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << str;
-      return std::string();
-    }
-
-    return str.substr(internal_prefix.size() + 1);
-  }
-
-  std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
-    T value;
-    if (elements_->Get(id, value) < 0) {
-      return nullptr;
-    }
-
-    return TransformToKv(value);
-  };
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(T element) {
-    std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-    kv->set_key(GenKey(element.id()));
-    kv->set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  pb::common::KeyValue TransformToKvValue(T element) {
-    pb::common::KeyValue kv;
-    kv.set_key(GenKey(element.id()));
-    kv.set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    butil::FlatMap<std::string, T> temp_map;
-    temp_map.init(10000);
-    elements_->GetRawMapCopy(temp_map);
-
-    std::vector<pb::common::KeyValue> kvs;
-    for (const auto &it : temp_map) {
-      pb::common::KeyValue kv;
-      kv.set_key(GenKey(it.first));
-      kv.set_value(it.second.SerializeAsString());
-      kvs.push_back(kv);
-    }
-
-    return kvs;
-  }
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    std::vector<std::string> key_list;
-    std::vector<T> value_list;
-
-    for (const auto &kv : kvs) {
-      std::string id = ParseId(kv.key());
-      T element;
-      element.ParsePartialFromString(kv.value());
-      key_list.push_back(id);
-      value_list.push_back(element);
-    }
-
-    elements_->MultiPut(key_list, value_list);
-  };
-
-  MetaSafeStdMapStorage(const MetaSafeStdMapStorage &) = delete;
-  const MetaSafeStdMapStorage &operator=(const MetaSafeStdMapStorage &) = delete;
-
- private:
-  // Coordinator all region meta data in this server.
-  DingoSafeStdMap<std::string, T> *elements_;
-};
-
 // MetaDiskMap is a template class for meta storage
 // This is for read/write meta data from/to RocksDB storage
 template <typename T>
@@ -507,6 +306,364 @@ class MetaDiskMap {
   MetaDiskMap(const std::string &prefix, std::shared_ptr<RawEngine> raw_engine)
       : internal_prefix(std::string("METADSK") + prefix), raw_engine_(raw_engine){};
   ~MetaDiskMap() = default;
+
+  std::string Prefix() { return internal_prefix; }
+
+  std::string ParseId(const std::string &key) {
+    if (key.size() <= internal_prefix.size()) {
+      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << key;
+      return std::string();
+    }
+
+    return key.substr(internal_prefix.size() + 1);
+  }
+
+  int64_t ParseIntId(const std::string &key) {
+    auto str_id = ParseId(key);
+    if (str_id.size() != sizeof(int64_t)) {
+      return 0;
+    }
+
+    return DecodeInt64Id(str_id);
+  }
+
+  std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
+  std::string GenKey(int64_t id) { return internal_prefix + "_" + EncodeInt64Id(id); }
+
+  pb::common::KeyValue TransformToKvValue(T element) {
+    pb::common::KeyValue kv;
+    kv.set_key(GenKey(element.id()));
+    kv.set_value(element.SerializeAsString());
+    return kv;
+  }
+
+  void TransformToKvValue(T element, pb::common::KeyValue &kv) {
+    kv.set_key(GenKey(element.id()));
+    kv.set_value(element.SerializeAsString());
+  }
+
+  void TransformToKvValues(std::vector<T> elements, std::vector<pb::common::KeyValue> &kvs) {
+    for (auto &element : elements) {
+      pb::common::KeyValue kv;
+      kv.set_key(GenKey(element.id()));
+      kv.set_value(element.SerializeAsString());
+      kvs.push_back(kv);
+    }
+  }
+
+  void TransformFromKvValue(const pb::common::KeyValue &kv, T &element) { element.ParsePartialFromString(kv.value()); };
+
+  void TransformFromKvValues(const std::vector<pb::common::KeyValue> &kvs, std::vector<T> &elements) {
+    for (const auto &kv : kvs) {
+      T element;
+      element.ParsePartialFromString(kv.value());
+      elements.push_back(element);
+    }
+  };
+
+  butil::Status Get(const int64_t &id, T &element) { return Get(EncodeInt64Id(id), element); }
+
+  butil::Status Get(const std::string &id, T &element) {
+    std::string key = GenKey(id);
+    std::string value;
+
+    butil::Status status = raw_engine_->Reader()->KvGet(Constant::kStoreMetaCF, key, value);
+    if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
+      DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    if (!element.ParsePartialFromString(value)) {
+      DINGO_LOG(ERROR) << fmt::format("Meta parse value failed, key: {}", key);
+      return butil::Status(pb::error::EINTERNAL, "Meta parse value failed");
+    }
+
+    return butil::Status::OK();
+  }
+
+  bool Exists(const int64_t &id) { return Exists(EncodeInt64Id(id)); }
+
+  bool Exists(const std::string &id) {
+    std::string key = GenKey(id);
+    std::string value;
+    butil::Status status = raw_engine_->Reader()->KvGet(Constant::kStoreMetaCF, key, value);
+    if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
+      DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
+                                      status.error_str());
+      return false;
+    }
+
+    return !value.empty();
+  }
+
+  butil::Status Put(const int64_t &id, const T &element) {
+    CHECK(id != 0);
+    CHECK(id == element.id());
+
+    pb::common::KeyValue kv;
+    TransformToKvValue(element, kv);
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put id {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status Put(const std::string &id, const T &element) {
+    CHECK(!id.empty());
+    CHECK(id == element.id());
+
+    pb::common::KeyValue kv;
+    TransformToKvValue(element, kv);
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put id {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status MultiPut(const std::vector<int64_t> &ids, const std::vector<T> &elements) {
+    CHECK(ids.size() == elements.size());
+
+    std::vector<std::string> str_ids;
+    str_ids.reserve(ids.size());
+    for (const auto &id : ids) {
+      str_ids.push_back(EncodeInt64Id(id));
+    }
+
+    return MultiPut(str_ids, elements);
+  }
+
+  butil::Status MultiPut(const std::vector<std::string> &ids, const std::vector<T> &elements) {
+    CHECK(ids.size() == elements.size());
+
+    std::vector<pb::common::KeyValue> kvs;
+    TransformToKvValue(elements, kvs);
+    butil::Status status = raw_engine_->Writer()->KvBatchPut(Constant::kStoreMetaCF, kvs);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put keys {} failed, errcode: {} {}", ids.size(), status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status PutIfAbsent(const std::string &id, const T &element) {
+    pb::common::KeyValue kv;
+    TransformToKvValue(element, kv);
+    bool key_is_exists;
+    butil::Status status = raw_engine_->Writer()->KvPutIfAbsent(Constant::kStoreMetaCF, kv, key_is_exists);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status PutIfExists(const std::string &id, const T &value) {
+    pb::common::KeyValue kv;
+    auto is_exists = Exists(id);
+    if (!is_exists) {
+      return butil::Status::OK();
+    }
+
+    TransformToKvValue(value, kv);
+    bool key_is_exists;
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  int64_t Size() { return Count(); }
+
+  int64_t Count() {
+    int64_t count = 0;
+    std::string start_key = GenKey("");
+    std::string end_key = internal_prefix + "~";
+    butil::Status status = raw_engine_->Reader()->KvCount(Constant::kStoreMetaCF, start_key, end_key, count);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta get size failed, errcode: {} {}", status.error_code(), status.error_str());
+      return 0;
+    }
+
+    return count;
+  }
+
+  butil::Status Erase(const int64_t &id) { return Erase(EncodeInt64Id(id)); }
+
+  butil::Status Erase(const std::string &id) {
+    std::string key = GenKey(id);
+    butil::Status status = raw_engine_->Writer()->KvDelete(Constant::kStoreMetaCF, key);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta delete id {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status Clear() {
+    pb::common::Range range;
+    range.set_start_key(GenKey(""));
+    range.set_end_key(internal_prefix + "~");
+
+    butil::Status status = raw_engine_->Writer()->KvDeleteRange(Constant::kStoreMetaCF, range);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta clear failed, errcode: {} {}", status.error_code(), status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllIds(std::vector<int64_t> &ids) {
+    std::vector<std::string> str_ids;
+    auto ret = GetAllIds(str_ids);
+    if (!ret.ok()) {
+      return ret;
+    }
+
+    for (const auto &str_id : str_ids) {
+      ids.push_back(DecodeInt64Id(str_id));
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllIds(std::vector<std::string> &ids) {
+    std::string start_key = GenKey("");
+    std::string end_key = internal_prefix + "~";
+
+    std::vector<pb::common::KeyValue> kvs;
+    butil::Status status = raw_engine_->Reader()->KvScan(Constant::kStoreMetaCF, start_key, end_key, kvs);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta get all keys failed, errcode: {} {}", status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    for (const auto &kv : kvs) {
+      ids.push_back(ParseId(kv.key()));
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllIdElements(std::map<int64_t, T> &id_elements) {
+    std::map<std::string, T> str_id_elements;
+    auto ret = GetAllIdElements(str_id_elements);
+    if (!ret.ok()) {
+      return ret;
+    }
+
+    for (const auto &it : str_id_elements) {
+      id_elements.insert_or_assign(DecodeInt64Id(it.first), it.second);
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllIdElements(std::map<std::string, T> &id_elements) {
+    std::string start_key = GenKey("");
+    std::string end_key = internal_prefix + "~";
+
+    std::vector<pb::common::KeyValue> kvs;
+    butil::Status status = raw_engine_->Reader()->KvScan(Constant::kStoreMetaCF, start_key, end_key, kvs);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta get all keys failed, errcode: {} {}", status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    for (const auto &kv : kvs) {
+      T element;
+      if (!element.ParsePartialFromString(kv.value())) {
+        DINGO_LOG(ERROR) << fmt::format("Meta parse value failed, key: {}", kv.key());
+        return butil::Status(pb::error::EINTERNAL, "Meta parse value failed");
+      }
+
+      id_elements.insert_or_assign(ParseId(kv.key()), element);
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllElements(std::vector<T> &elements) {
+    std::string start_key = GenKey("");
+    std::string end_key = internal_prefix + "~";
+
+    std::vector<pb::common::KeyValue> kvs;
+    butil::Status status = raw_engine_->Reader()->KvScan(Constant::kStoreMetaCF, start_key, end_key, kvs);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta get all keys failed, errcode: {} {}", status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    for (const auto &kv : kvs) {
+      T element;
+      if (!element.ParsePartialFromString(kv.value())) {
+        DINGO_LOG(ERROR) << fmt::format("Meta parse value failed, key: {}", kv.key());
+        return butil::Status(pb::error::EINTERNAL, "Meta parse value failed");
+      }
+
+      elements.push_back(element);
+    }
+
+    return butil::Status::OK();
+  }
+
+  MetaDiskMap(const MetaDiskMap &) = delete;
+  const MetaDiskMap &operator=(const MetaDiskMap &) = delete;
+
+ private:
+  std::shared_ptr<RawEngine> raw_engine_;
+};
+
+// MetaMemMapFlat is a template class for meta storage
+// This is for read/write meta data from/to RocksDB storage
+template <typename T>
+class MetaMemMapFlat {
+ public:
+  const std::string internal_prefix;
+  MetaMemMapFlat(DingoSafeMap<int64_t, T> *elements, const std::string &prefix, std::shared_ptr<RawEngine> raw_engine)
+      : internal_prefix(std::string("METAFLT") + prefix), raw_engine_(raw_engine), elements_(elements){};
+  ~MetaMemMapFlat() = default;
+
+  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
+    elements_->Clear();
+
+    std::vector<int64_t> key_list;
+    std::vector<T> value_list;
+
+    for (const auto &kv : kvs) {
+      int64_t id = ParseIntId(kv.key());
+      T element;
+      element.ParsePartialFromString(kv.value());
+      key_list.push_back(id);
+      value_list.push_back(element);
+    }
+
+    elements_->MultiPut(key_list, value_list);
+
+    return true;
+  }
 
   std::string Prefix() { return internal_prefix; }
 
@@ -576,61 +733,37 @@ class MetaDiskMap {
     }
   };
 
-  butil::Status Get(const int64_t &id, T &element) { return Get(EncodeInt64(id), element); }
+  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
+    butil::FlatMap<int64_t, T> temp_map;
+    temp_map.init(10000);
+    elements_->GetRawMapCopy(temp_map);
 
-  butil::Status Get(const std::string &id, T &element) {
-    std::string key = GenKey(id);
-    std::string value;
-
-    butil::Status status = raw_engine_->Reader()->KvGet(Constant::kStoreMetaCF, key, value);
-    if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
-      DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
-                                      status.error_str());
-      return status;
+    std::vector<pb::common::KeyValue> kvs;
+    for (const auto &it : temp_map) {
+      pb::common::KeyValue kv;
+      kv.set_key(GenKey(it.first));
+      kv.set_value(it.second.SerializeAsString());
+      kvs.push_back(kv);
     }
 
-    if (!element.ParsePartialFromString(value)) {
-      DINGO_LOG(ERROR) << fmt::format("Meta parse value failed, key: {}", key);
-      return butil::Status(pb::error::EINTERNAL, "Meta parse value failed");
-    }
+    return kvs;
+  }
 
+  butil::Status Get(const int64_t &id, T &element) {
+    elements_->Get(id, element);
     return butil::Status::OK();
   }
 
-  bool Exists(const int64_t &id) { return Exists(EncodeInt64(id)); }
-
-  bool Exists(const std::string &id) {
-    std::string key = GenKey(id);
-    std::string value;
-    butil::Status status = raw_engine_->Reader()->KvGet(Constant::kStoreMetaCF, key, value);
-    if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
-      DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
-                                      status.error_str());
-      return false;
-    }
-
-    return !value.empty();
-  }
+  bool Exists(const int64_t &id) { return elements_->Exists(id); }
 
   butil::Status Put(const int64_t &id, const T &element) {
     CHECK(id != 0);
     CHECK(id == element.id());
 
-    pb::common::KeyValue kv;
-    TransformToKvValue(element, kv);
-    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta put id {} failed, errcode: {} {}", id, status.error_code(),
-                                      status.error_str());
-      return status;
+    auto ret = elements_->Put(id, element);
+    if (ret < 0) {
+      return butil::Status(pb::error::EINTERNAL, "Meta put failed");
     }
-
-    return butil::Status::OK();
-  }
-
-  butil::Status Put(const std::string &id, const T &element) {
-    CHECK(!id.empty());
-    CHECK(id == element.id());
 
     pb::common::KeyValue kv;
     TransformToKvValue(element, kv);
@@ -647,6 +780,11 @@ class MetaDiskMap {
   butil::Status MultiPut(const std::vector<int64_t> &ids, const std::vector<T> &elements) {
     CHECK(ids.size() == elements.size());
 
+    auto ret = elements_->MultiPut(ids, elements);
+    if (ret < 0) {
+      return butil::Status(pb::error::EINTERNAL, "Meta multi put failed");
+    }
+
     std::vector<std::string> str_ids;
     str_ids.reserve(ids.size());
     for (const auto &id : ids) {
@@ -656,22 +794,15 @@ class MetaDiskMap {
     return MultiPut(str_ids, elements);
   }
 
-  butil::Status MultiPut(const std::vector<std::string> &ids, const std::vector<T> &elements) {
-    CHECK(ids.size() == elements.size());
+  butil::Status PutIfAbsent(const std::string &id, const T &element) {
+    CHECK(!id.empty());
+    CHECK(id == element.id());
 
-    std::vector<pb::common::KeyValue> kvs;
-    TransformToKvValue(elements, kvs);
-    butil::Status status = raw_engine_->Writer()->KvBatchPut(Constant::kStoreMetaCF, kvs);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta put keys {} failed, errcode: {} {}", ids.size(), status.error_code(),
-                                      status.error_str());
-      return status;
+    auto ret = elements_->PutIfAbsent(id, element);
+    if (ret < 0) {
+      return butil::Status::OK();
     }
 
-    return butil::Status::OK();
-  }
-
-  butil::Status PutIfAbsent(const std::string &id, const T &element) {
     pb::common::KeyValue kv;
     TransformToKvValue(element, kv);
     bool key_is_exists;
@@ -685,12 +816,14 @@ class MetaDiskMap {
     return butil::Status::OK();
   }
 
-  butil::Status PutIfExists(const std::string &id, const T &value) {
+  butil::Status PutIfExists(const int64_t &id, const T &value) {
     pb::common::KeyValue kv;
     auto is_exists = Exists(id);
     if (!is_exists) {
-      return butil::Status(pb::error::EKEY_NOT_FOUND, "key not found");
+      return butil::Status::OK();
     }
+
+    elements_->PutIfExists(id, value);
 
     TransformToKvValue(value, kv);
     bool key_is_exists;
@@ -706,22 +839,11 @@ class MetaDiskMap {
 
   int64_t Size() { return Count(); }
 
-  int64_t Count() {
-    int64_t count = 0;
-    std::string start_key = GenKey("");
-    std::string end_key = internal_prefix + "~";
-    butil::Status status = raw_engine_->Reader()->KvCount(Constant::kStoreMetaCF, start_key, end_key, count);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta get size failed, errcode: {} {}", status.error_code(), status.error_str());
-      return 0;
-    }
+  int64_t Count() { return elements_->Count(); }
 
-    return count;
-  }
+  butil::Status Erase(const int64_t &id) {
+    elements_->Erase(id);
 
-  butil::Status Erase(const int64_t &id) { return Erase(EncodeInt64(id)); }
-
-  butil::Status Erase(const std::string &id) {
     std::string key = GenKey(id);
     butil::Status status = raw_engine_->Writer()->KvDelete(Constant::kStoreMetaCF, key);
     if (!status.ok()) {
@@ -734,6 +856,8 @@ class MetaDiskMap {
   }
 
   butil::Status Clear() {
+    elements_->Clear();
+
     pb::common::Range range;
     range.set_start_key(GenKey(""));
     range.set_end_key(internal_prefix + "~");
@@ -748,107 +872,258 @@ class MetaDiskMap {
   }
 
   butil::Status GetAllIds(std::vector<int64_t> &ids) {
-    std::vector<std::string> str_ids;
-    auto ret = GetAllIds(str_ids);
-    if (!ret.ok()) {
-      return ret;
+    elements_->GetAllKeys(ids);
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllIdElements(std::map<int64_t, T> &id_elements) {
+    elements_->GetAllKeyValues(id_elements);
+    return butil::Status::OK();
+  }
+
+  butil::Status GetAllElements(std::vector<T> &elements) {
+    elements_->GetAllValues(elements);
+    return butil::Status::OK();
+  }
+
+  MetaMemMapFlat(const MetaMemMapFlat &) = delete;
+  const MetaMemMapFlat &operator=(const MetaMemMapFlat &) = delete;
+
+ private:
+  std::shared_ptr<RawEngine> raw_engine_;
+  DingoSafeMap<int64_t, T> *elements_;
+};
+
+// MetaMemMapStd is a template class for meta storage
+// This is for read/write meta data from/to RocksDB storage
+template <typename T>
+class MetaMemMapStd {
+ public:
+  const std::string internal_prefix;
+  MetaMemMapStd(DingoSafeStdMap<std::string, T> *elements, const std::string &prefix,
+                std::shared_ptr<RawEngine> raw_engine)
+      : internal_prefix(std::string("METASFM") + prefix), raw_engine_(raw_engine), elements_(elements){};
+  ~MetaMemMapStd() = default;
+
+  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
+    elements_->Clear();
+
+    std::vector<std::string> key_list;
+    std::vector<T> value_list;
+
+    for (const auto &kv : kvs) {
+      std::string id = ParseId(kv.key());
+      T element;
+      element.ParsePartialFromString(kv.value());
+      key_list.push_back(id);
+      value_list.push_back(element);
     }
 
-    for (const auto &str_id : str_ids) {
-      ids.push_back(DecodeInt64(str_id));
+    elements_->MultiPut(key_list, value_list);
+
+    return true;
+  }
+
+  std::string Prefix() { return internal_prefix; }
+
+  std::string ParseId(const std::string &key) {
+    if (key.size() <= internal_prefix.size()) {
+      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << key;
+      return std::string();
+    }
+
+    return key.substr(internal_prefix.size() + 1);
+  }
+
+  std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
+
+  pb::common::KeyValue TransformToKvValue(T element) {
+    pb::common::KeyValue kv;
+    kv.set_key(GenKey(element.id()));
+    kv.set_value(element.SerializeAsString());
+    return kv;
+  }
+
+  void TransformToKvValue(T element, pb::common::KeyValue &kv) {
+    kv.set_key(GenKey(element.id()));
+    kv.set_value(element.SerializeAsString());
+  }
+
+  void TransformToKvValues(std::vector<T> elements, std::vector<pb::common::KeyValue> &kvs) {
+    for (auto &element : elements) {
+      pb::common::KeyValue kv;
+      kv.set_key(GenKey(element.id()));
+      kv.set_value(element.SerializeAsString());
+      kvs.push_back(kv);
+    }
+  }
+
+  void TransformFromKvValue(const pb::common::KeyValue &kv, T &element) { element.ParsePartialFromString(kv.value()); };
+
+  void TransformFromKvValues(const std::vector<pb::common::KeyValue> &kvs, std::vector<T> &elements) {
+    for (const auto &kv : kvs) {
+      T element;
+      element.ParsePartialFromString(kv.value());
+      elements.push_back(element);
+    }
+  };
+
+  butil::Status Get(const std::string &id, T &element) {
+    elements_->Get(id, element);
+    return butil::Status::OK();
+  }
+
+  bool Exists(const std::string &id) { return elements_->find(id) != elements_->end(); }
+
+  butil::Status Put(const std::string &id, const T &element) {
+    CHECK(!id.empty());
+    CHECK(id == element.id());
+
+    auto ret = elements_->Put(id, element);
+    if (ret < 0) {
+      return butil::Status(pb::error::EINTERNAL, "Meta put failed");
+    }
+
+    pb::common::KeyValue kv;
+    TransformToKvValue(element, kv);
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put id {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status MultiPut(const std::vector<std::string> &ids, const std::vector<T> &elements) {
+    CHECK(ids.size() == elements.size());
+
+    auto ret = elements_->MultiPut(ids, elements);
+    if (ret < 0) {
+      return butil::Status(pb::error::EINTERNAL, "Meta multi put failed");
+    }
+
+    std::vector<pb::common::KeyValue> kvs;
+    TransformToKvValue(elements, kvs);
+    butil::Status status = raw_engine_->Writer()->KvBatchPut(Constant::kStoreMetaCF, kvs);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put keys {} failed, errcode: {} {}", ids.size(), status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status PutIfAbsent(const std::string &id, const T &element) {
+    auto ret = elements_->PutIfAbsent(id, element);
+    if (ret < 0) {
+      return butil::Status::OK();
+    }
+
+    pb::common::KeyValue kv;
+    TransformToKvValue(element, kv);
+    bool key_is_exists;
+    butil::Status status = raw_engine_->Writer()->KvPutIfAbsent(Constant::kStoreMetaCF, kv, key_is_exists);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status PutIfExists(const std::string &id, const T &value) {
+    auto is_exists = Exists(id);
+    if (!is_exists) {
+      return butil::Status::OK();
+    }
+
+    auto ret = elements_->PutIfExists(id, value);
+    if (ret < 0) {
+      return butil::Status(pb::error::EINTERNAL, "Meta put failed");
+    }
+
+    pb::common::KeyValue kv;
+    TransformToKvValue(value, kv);
+    bool key_is_exists;
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  int64_t Size() { return Count(); }
+
+  int64_t Count() { return elements_->Count(); }
+
+  butil::Status Erase(const std::string &id) {
+    elements_->Erase(id);
+
+    std::string key = GenKey(id);
+    butil::Status status = raw_engine_->Writer()->KvDelete(Constant::kStoreMetaCF, key);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta delete id {} failed, errcode: {} {}", id, status.error_code(),
+                                      status.error_str());
+      return status;
+    }
+
+    return butil::Status::OK();
+  }
+
+  butil::Status Clear() {
+    elements_->Clear();
+
+    pb::common::Range range;
+    range.set_start_key(GenKey(""));
+    range.set_end_key(internal_prefix + "~");
+
+    butil::Status status = raw_engine_->Writer()->KvDeleteRange(Constant::kStoreMetaCF, range);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Meta clear failed, errcode: {} {}", status.error_code(), status.error_str());
+      return status;
     }
 
     return butil::Status::OK();
   }
 
   butil::Status GetAllIds(std::vector<std::string> &ids) {
-    std::string start_key = GenKey("");
-    std::string end_key = internal_prefix + "~";
-
-    std::vector<pb::common::KeyValue> kvs;
-    butil::Status status = raw_engine_->Reader()->KvScan(Constant::kStoreMetaCF, start_key, end_key, kvs);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta get all keys failed, errcode: {} {}", status.error_code(),
-                                      status.error_str());
-      return status;
-    }
-
-    for (const auto &kv : kvs) {
-      ids.push_back(ParseId(kv.key()));
-    }
-
-    return butil::Status::OK();
-  }
-
-  butil::Status GetAllIdElements(std::map<int64_t, T> &id_elements) {
-    std::map<std::string, T> str_id_elements;
-    auto ret = GetAllIdElements(str_id_elements);
-    if (!ret.ok()) {
-      return ret;
-    }
-
-    for (const auto &it : str_id_elements) {
-      id_elements.insert_or_assign(DecodeInt64(it.first), it.second);
-    }
-
+    elements_->GetAllKeys(ids);
     return butil::Status::OK();
   }
 
   butil::Status GetAllIdElements(std::map<std::string, T> &id_elements) {
-    std::string start_key = GenKey("");
-    std::string end_key = internal_prefix + "~";
-
-    std::vector<pb::common::KeyValue> kvs;
-    butil::Status status = raw_engine_->Reader()->KvScan(Constant::kStoreMetaCF, start_key, end_key, kvs);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta get all keys failed, errcode: {} {}", status.error_code(),
-                                      status.error_str());
-      return status;
-    }
-
-    for (const auto &kv : kvs) {
-      T element;
-      if (!element.ParsePartialFromString(kv.value())) {
-        DINGO_LOG(ERROR) << fmt::format("Meta parse value failed, key: {}", kv.key());
-        return butil::Status(pb::error::EINTERNAL, "Meta parse value failed");
-      }
-
-      id_elements.insert_or_assign(ParseId(kv.key()), element);
-    }
-
+    elements_->GetAllKeyValues(id_elements);
     return butil::Status::OK();
   }
 
   butil::Status GetAllElements(std::vector<T> &elements) {
-    std::string start_key = GenKey("");
-    std::string end_key = internal_prefix + "~";
-
-    std::vector<pb::common::KeyValue> kvs;
-    butil::Status status = raw_engine_->Reader()->KvScan(Constant::kStoreMetaCF, start_key, end_key, kvs);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta get all keys failed, errcode: {} {}", status.error_code(),
-                                      status.error_str());
-      return status;
-    }
-
-    for (const auto &kv : kvs) {
-      T element;
-      if (!element.ParsePartialFromString(kv.value())) {
-        DINGO_LOG(ERROR) << fmt::format("Meta parse value failed, key: {}", kv.key());
-        return butil::Status(pb::error::EINTERNAL, "Meta parse value failed");
-      }
-
-      elements.push_back(element);
-    }
-
+    elements_->GetAllValues(elements);
     return butil::Status::OK();
   }
 
-  MetaDiskMap(const MetaDiskMap &) = delete;
-  const MetaDiskMap &operator=(const MetaDiskMap &) = delete;
+  butil::Status GetRangeValues(std::vector<T> &values, std::string lower_bound, std::string upper_bound,
+                               std::function<bool(std::string)> key_filter = nullptr,
+                               std::function<bool(T)> value_filter = nullptr) {
+    auto ret = elements_->GetRangeValues(values, lower_bound, upper_bound, key_filter, value_filter);
+    if (ret < 0) {
+      return butil::Status(pb::error::EINTERNAL, "Meta get range values failed");
+    }
+    return butil::Status::OK();
+  }
+
+  MetaMemMapStd(const MetaMemMapStd &) = delete;
+  const MetaMemMapStd &operator=(const MetaMemMapStd &) = delete;
 
  private:
   std::shared_ptr<RawEngine> raw_engine_;
+  DingoSafeStdMap<std::string, T> *elements_;
 };
 
 }  // namespace dingodb

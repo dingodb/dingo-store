@@ -57,37 +57,39 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft
-  coordinator_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_, kPrefixCoordinator);
-  store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_, kPrefixStore);
-  schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_, kPrefixSchema);
-  region_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::RegionInternal>(&region_map_, kPrefixRegion);
+  coordinator_meta_ = new MetaMemMapFlat<pb::coordinator_internal::CoordinatorInternal>(
+      &coordinator_map_, kPrefixCoordinator, raw_engine_of_meta);
+  store_meta_ = new MetaMemMapFlat<pb::common::Store>(&store_map_, kPrefixStore, raw_engine_of_meta);
+  schema_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::SchemaInternal>(&schema_map_, kPrefixSchema, raw_engine_of_meta);
+  region_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::RegionInternal>(&region_map_, kPrefixRegion, raw_engine_of_meta);
   deleted_region_meta_ =
       new MetaDiskMap<pb::coordinator_internal::RegionInternal>(kPrefixDeletedRegion, raw_engine_of_meta);
-  region_metrics_meta_ = new MetaSafeMapStorage<pb::common::RegionMetrics>(&region_metrics_map_, kPrefixRegionMetrics);
-  table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_, kPrefixTable);
+  region_metrics_meta_ =
+      new MetaMemMapFlat<pb::common::RegionMetrics>(&region_metrics_map_, kPrefixRegionMetrics, raw_engine_of_meta);
+  table_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::TableInternal>(&table_map_, kPrefixTable, raw_engine_of_meta);
   deleted_table_meta_ =
       new MetaDiskMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedTable, raw_engine_of_meta);
-  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, kPrefixIdEpoch);
-  executor_meta_ = new MetaSafeStdMapStorage<pb::common::Executor>(&executor_map_, kPrefixExecutor);
-  table_metrics_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_, kPrefixTableMetrics);
-  store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::StoreOperationInternal>(
-      &store_operation_map_, kPrefixStoreOperation);
-  region_cmd_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::RegionCmdInternal>(&region_cmd_map_, kPrefixRegionCmd);
-  executor_user_meta_ = new MetaSafeStdMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_,
-                                                                                                  kPrefixExecutorUser);
-  task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, kPrefixTaskList);
-  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_, kPrefixIndex);
+  id_epoch_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, kPrefixIdEpoch, raw_engine_of_meta);
+  executor_meta_ = new MetaMemMapStd<pb::common::Executor>(&executor_map_, kPrefixExecutor, raw_engine_of_meta);
+  store_operation_meta_ = new MetaMemMapFlat<pb::coordinator_internal::StoreOperationInternal>(
+      &store_operation_map_, kPrefixStoreOperation, raw_engine_of_meta);
+  region_cmd_meta_ = new MetaMemMapFlat<pb::coordinator_internal::RegionCmdInternal>(&region_cmd_map_, kPrefixRegionCmd,
+                                                                                     raw_engine_of_meta);
+  executor_user_meta_ = new MetaMemMapStd<pb::coordinator_internal::ExecutorUserInternal>(
+      &executor_user_map_, kPrefixExecutorUser, raw_engine_of_meta);
+  task_list_meta_ = new MetaMemMapFlat<pb::coordinator::TaskList>(&task_list_map_, kPrefixTaskList, raw_engine_of_meta);
+  index_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::TableInternal>(&index_map_, kPrefixIndex, raw_engine_of_meta);
   deleted_index_meta_ =
       new MetaDiskMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedIndex, raw_engine_of_meta);
-  index_metrics_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_, kPrefixIndexMetrics);
 
   // table index
-  table_index_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, kPrefixTableIndex);
+  table_index_meta_ = new MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal>(
+      &table_index_map_, kPrefixTableIndex, raw_engine_of_meta);
 
   // init FlatMap
   // store_need_push_.init(100, 80);
@@ -127,11 +129,9 @@ CoordinatorControl::~CoordinatorControl() {
   delete table_meta_;
   delete id_epoch_meta_;
   delete executor_meta_;
-  delete table_metrics_meta_;
   delete store_operation_meta_;
   delete executor_user_meta_;
   delete index_meta_;
-  delete index_metrics_meta_;
   delete table_index_meta_;
 }
 
@@ -299,17 +299,6 @@ bool CoordinatorControl::Recover() {
   kvs.clear();
 
   // 8.table_metrics map
-  if (!meta_reader_->Scan(table_metrics_meta_->Prefix(), kvs)) {
-    return false;
-  }
-  {
-    // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
-    if (!table_metrics_meta_->Recover(kvs)) {
-      return false;
-    }
-  }
-  DINGO_LOG(INFO) << "Recover table_metrics_meta, count=" << kvs.size();
-  kvs.clear();
 
   // 9.store_operation map
   if (!meta_reader_->Scan(store_operation_meta_->Prefix(), kvs)) {
@@ -390,17 +379,6 @@ bool CoordinatorControl::Recover() {
   kvs.clear();
 
   // 13.index_metrics map
-  if (!meta_reader_->Scan(index_metrics_meta_->Prefix(), kvs)) {
-    return false;
-  }
-  {
-    // BAIDU_SCOPED_LOCK(index_metrics_map_mutex_);
-    if (!index_metrics_meta_->Recover(kvs)) {
-      return false;
-    }
-  }
-  DINGO_LOG(INFO) << "Recover index_metrics_meta, count=" << kvs.size();
-  kvs.clear();
 
   // 50.table_index map
   if (!meta_reader_->Scan(table_index_meta_->Prefix(), kvs)) {
