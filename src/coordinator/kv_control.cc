@@ -54,11 +54,8 @@ KvControl::KvControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<Me
 
   // version kv
   kv_lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&kv_lease_map_, kPrefixKvLease);
-  kv_index_meta_ =
-      new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, kPrefixKvIndex);
-  // kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_,
-  // kPrefixKvRev);
-  kv_rev_meta_ = new MetaMap<pb::coordinator_internal::KvRevInternal>(kPrefixKvRev, raw_engine_of_meta_);
+  kv_index_meta_ = new MetaSafeStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, kPrefixKvIndex);
+  kv_rev_meta_ = new MetaDiskMap<pb::coordinator_internal::KvRevInternal>(kPrefixKvRev, raw_engine_of_meta_);
 
   // init SafeMap
   id_epoch_map_.Init(100);            // id_epoch_map_ is a small map

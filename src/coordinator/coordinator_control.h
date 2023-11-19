@@ -815,8 +815,8 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
-  DingoSafeMap<std::string, pb::common::Executor> executor_map_;
-  MetaSafeStringMapStorage<pb::common::Executor> *executor_meta_;  // need construct
+  DingoSafeStdMap<std::string, pb::common::Executor> executor_map_;
+  MetaSafeStdMapStorage<pb::common::Executor> *executor_meta_;  // need construct
   butil::FlatMap<std::string, pb::common::Executor>
       executor_need_push_;  // will send push msg to these executors in crontab
   bthread_mutex_t executor_need_push_mutex_;
@@ -833,7 +833,7 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<int64_t, pb::coordinator_internal::RegionInternal> region_map_;
   MetaSafeMapStorage<pb::coordinator_internal::RegionInternal> *region_meta_;
   // 5.1 deleted_regions
-  MetaMap<pb::coordinator_internal::RegionInternal> *deleted_region_meta_;
+  MetaDiskMap<pb::coordinator_internal::RegionInternal> *deleted_region_meta_;
   // 5.2 region_metrics, this map does not need to be persisted
   DingoSafeMap<int64_t, pb::common::RegionMetrics> region_metrics_map_;
   MetaSafeMapStorage<pb::common::RegionMetrics> *region_metrics_meta_;
@@ -844,7 +844,7 @@ class CoordinatorControl : public MetaControl {
   // TableInternal is combination of Table & TableDefinition
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
-  MetaMap<pb::coordinator_internal::TableInternal> *deleted_table_meta_;
+  MetaDiskMap<pb::coordinator_internal::TableInternal> *deleted_table_meta_;
 
   // table map temp, only for leader use, is out of state machine
   // table_name -> table-id
@@ -852,7 +852,6 @@ class CoordinatorControl : public MetaControl {
 
   // 7.store_metrics
   butil::FlatMap<int64_t, pb::common::StoreMetrics> store_metrics_map_;
-  MetaMapStorage<pb::common::StoreMetrics> *store_metrics_meta_;
   bthread_mutex_t store_metrics_map_mutex_;
 
   // 8.table_metrics
@@ -867,9 +866,9 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t store_operation_map_mutex_;  // may need a write lock
 
   // 10.executor_user
-  DingoSafeMap<std::string, pb::coordinator_internal::ExecutorUserInternal>
+  DingoSafeStdMap<std::string, pb::coordinator_internal::ExecutorUserInternal>
       executor_user_map_;  // executor_user -> keyring
-  MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
+  MetaSafeStdMapStorage<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
 
   // 11.task_list
   DingoSafeMap<int64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
@@ -878,7 +877,7 @@ class CoordinatorControl : public MetaControl {
   // 12.indexes
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> index_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *index_meta_;
-  MetaMap<pb::coordinator_internal::TableInternal> *deleted_index_meta_;
+  MetaDiskMap<pb::coordinator_internal::TableInternal> *deleted_index_meta_;
 
   // index map temp, only for leader use, is out of state machine
   // index_name -> index-id

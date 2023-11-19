@@ -58,35 +58,36 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
 
   // the data structure below will write to raft
   coordinator_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_, "coordinator_map_");
-  store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_, "store_map_");
-  schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_, "schema_map_");
-  region_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::RegionInternal>(&region_map_, "region_map_");
+      new MetaSafeMapStorage<pb::coordinator_internal::CoordinatorInternal>(&coordinator_map_, kPrefixCoordinator);
+  store_meta_ = new MetaSafeMapStorage<pb::common::Store>(&store_map_, kPrefixStore);
+  schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_, kPrefixSchema);
+  region_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::RegionInternal>(&region_map_, kPrefixRegion);
   deleted_region_meta_ =
-      new MetaMap<pb::coordinator_internal::RegionInternal>(kPrefixDeletedRegion, raw_engine_of_meta);
-  region_metrics_meta_ = new MetaSafeMapStorage<pb::common::RegionMetrics>(&region_metrics_map_, "region_metrics_map_");
-  table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_, "table_map_");
-  deleted_table_meta_ = new MetaMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedTable, raw_engine_of_meta);
-  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, "id_epoch_map_");
-  executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_, "executor_map_");
-  store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_, "store_metrics_map_");
+      new MetaDiskMap<pb::coordinator_internal::RegionInternal>(kPrefixDeletedRegion, raw_engine_of_meta);
+  region_metrics_meta_ = new MetaSafeMapStorage<pb::common::RegionMetrics>(&region_metrics_map_, kPrefixRegionMetrics);
+  table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_, kPrefixTable);
+  deleted_table_meta_ =
+      new MetaDiskMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedTable, raw_engine_of_meta);
+  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, kPrefixIdEpoch);
+  executor_meta_ = new MetaSafeStdMapStorage<pb::common::Executor>(&executor_map_, kPrefixExecutor);
   table_metrics_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_, "table_metrics_map_");
+      new MetaSafeMapStorage<pb::coordinator_internal::TableMetricsInternal>(&table_metrics_map_, kPrefixTableMetrics);
   store_operation_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::StoreOperationInternal>(
-      &store_operation_map_, "store_operation_map_");
+      &store_operation_map_, kPrefixStoreOperation);
   region_cmd_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::RegionCmdInternal>(&region_cmd_map_, "region_cmd_map_");
-  executor_user_meta_ = new MetaSafeStringMapStorage<pb::coordinator_internal::ExecutorUserInternal>(
-      &executor_user_map_, "executor_user_map_");
-  task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, "task_list_map_");
-  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_, "index_map_");
-  deleted_index_meta_ = new MetaMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedIndex, raw_engine_of_meta);
+      new MetaSafeMapStorage<pb::coordinator_internal::RegionCmdInternal>(&region_cmd_map_, kPrefixRegionCmd);
+  executor_user_meta_ = new MetaSafeStdMapStorage<pb::coordinator_internal::ExecutorUserInternal>(&executor_user_map_,
+                                                                                                  kPrefixExecutorUser);
+  task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, kPrefixTaskList);
+  index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_, kPrefixIndex);
+  deleted_index_meta_ =
+      new MetaDiskMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedIndex, raw_engine_of_meta);
   index_metrics_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_, "index_metrics_map_");
+      new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_, kPrefixIndexMetrics);
 
   // table index
   table_index_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, "table_index_map_");
+      new MetaSafeMapStorage<pb::coordinator_internal::TableIndexInternal>(&table_index_map_, kPrefixTableIndex);
 
   // init FlatMap
   store_need_push_.init(100, 80);
@@ -106,9 +107,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_metrics_map_.Init(30000);        // region_metrics_map_ is a big map
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
   store_map_.Init(100);                   // store_map_ is a small map
-  executor_map_.Init(100);                // executor_map_ is a small map
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
-  executor_user_map_.Init(100);           // executor_user_map_ is a small map
   task_list_map_.Init(100);               // task_list_map_ is a small map
   index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
   index_map_.Init(10000);                 // index_map_ is a big map
@@ -128,7 +127,6 @@ CoordinatorControl::~CoordinatorControl() {
   delete table_meta_;
   delete id_epoch_meta_;
   delete executor_meta_;
-  delete store_metrics_meta_;
   delete table_metrics_meta_;
   delete store_operation_meta_;
   delete executor_user_meta_;

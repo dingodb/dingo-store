@@ -3205,9 +3205,7 @@ void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
   int64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
   {
-    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
-    butil::FlatMap<std::string, pb::common::Executor> executor_map_copy;
-    executor_map_copy.init(100);
+    std::map<std::string, pb::common::Executor> executor_map_copy;
     executor_map_.GetRawMapCopy(executor_map_copy);
     for (auto& element : executor_map_copy) {
       auto* tmp_region = executor_map.add_executors();
@@ -3222,13 +3220,8 @@ butil::Status CoordinatorControl::GetExecutorUserMap(int64_t cluster_id,
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id < 0");
   }
 
-  // int64_t executor_user_map_epoch =
-  // GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR_USER);
-  // executor_user_map.set_epoch(executor_user_map_epoch);
   {
-    // BAIDU_SCOPED_LOCK(executor_user_map_mutex_);
-    butil::FlatMap<std::string, pb::coordinator_internal::ExecutorUserInternal> executor_user_map_copy;
-    executor_user_map_copy.init(100);
+    std::map<std::string, pb::coordinator_internal::ExecutorUserInternal> executor_user_map_copy;
     executor_user_map_.GetRawMapCopy(executor_user_map_copy);
     for (auto& element : executor_user_map_copy) {
       auto* tmp_region = executor_user_map.add_executor_users();
