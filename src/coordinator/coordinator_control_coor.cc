@@ -1065,6 +1065,9 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
       auto* deleted_region = deleted_region_increment->mutable_region();
       deleted_region->set_id(region.second.id());
     }
+
+    // delete region_metrics
+    region_metrics_map_.Erase(region.first);
   }
 
   if (meta_increment.ByteSizeLong() > 0) {
@@ -1130,6 +1133,15 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
 
   if (meta_increment.ByteSizeLong() > 0) {
     SubmitMetaIncrementSync(meta_increment);
+
+    // clear up region_metrics
+    std::vector<int64_t> region_ids_in_metrics;
+    region_metrics_map_.GetAllKeys(region_ids_in_metrics);
+    for (auto region_id : region_ids_in_metrics) {
+      if (!region_map_.Exists(region_id)) {
+        region_metrics_map_.Erase(region_id);
+      }
+    }
   }
 }
 
@@ -2086,36 +2098,6 @@ butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
           store_operations.push_back(store_operation);
         }
 
-        // fix: update table/index in raft apply
-        // need to update table's range distribution if table_id > 0
-        // if (need_update_table_range &&
-        // region_to_delete.definition().table_id() > 0) {
-        //   pb::coordinator_internal::TableInternal table_internal;
-        //   int ret =
-        //   table_map_.Get(region_to_delete.definition().table_id(),
-        //   table_internal); if (ret < 0) {
-        //     DINGO_LOG(WARNING) << "DropRegion table_id not exists,
-        //     region_id=" << region_id
-        //                        << " region_id=" <<
-        //                        region_to_delete.definition().table_id();
-        //     // return pb::error::Errno::ETABLE_NOT_FOUND;
-        //   } else {
-        //     // update table's range distribution
-        //     auto* update_table_internal = meta_increment.add_tables();
-        //     update_table_internal->set_id(region_to_delete.definition().table_id());
-        //     update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-        //     auto* update_table_internal_table =
-        //     update_table_internal->mutable_table();
-        //     update_table_internal_table->set_id(region_to_delete.definition().table_id());
-        //     for (const auto& it : table_internal.partitions()) {
-        //       if (it.region_id() != region_id) {
-        //         *(update_table_internal_table->add_partitions())=it;
-        //       }
-        //     }
-        //   }
-        // }
-
-        // on_apply
         // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
         DINGO_LOG(INFO) << "drop region success, id = " << region_id;
       }
