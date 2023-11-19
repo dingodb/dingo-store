@@ -33,6 +33,7 @@
 #include "common/safe_map.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_meta_storage.h"
+#include "coordinator/coordinator_prefix.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
@@ -49,14 +50,15 @@ KvControl::KvControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<Me
   leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft
-  id_epoch_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, "kv_id_epoch_map_");
+  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, kPrefixKvIdEpoch);
 
   // version kv
-  kv_lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&kv_lease_map_, "kv_lease_map_");
+  kv_lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&kv_lease_map_, kPrefixKvLease);
   kv_index_meta_ =
-      new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, "kv_index_map_");
-  kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_, "kv_rev_map_");
+      new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, kPrefixKvIndex);
+  // kv_rev_meta_ = new MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal>(&kv_rev_map_,
+  // kPrefixKvRev);
+  kv_rev_meta_ = new MetaMap<pb::coordinator_internal::KvRevInternal>(kPrefixKvRev, raw_engine_of_meta_);
 
   // init SafeMap
   id_epoch_map_.Init(100);            // id_epoch_map_ is a small map
@@ -138,11 +140,11 @@ bool KvControl::Recover() {
   if (!meta_reader_->Scan(kv_rev_meta_->Prefix(), kvs)) {
     return false;
   }
-  {
-    if (!kv_rev_meta_->Recover(kvs)) {
-      return false;
-    }
-  }
+  // {
+  //   if (!kv_rev_meta_->Recover(kvs)) {
+  //     return false;
+  //   }
+  // }
   DINGO_LOG(INFO) << "Recover kv_rev_meta, count=" << kvs.size();
   kvs.clear();
 
@@ -154,7 +156,7 @@ bool KvControl::Recover() {
   DINGO_LOG(INFO) << "Recover lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
 
   std::map<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map;
-  kv_rev_map_.GetRawMapCopy(kv_rev_map);
+  kv_rev_meta_->GetAllIdElements(kv_rev_map);
   for (auto& kv : kv_rev_map) {
     DINGO_LOG(INFO) << "kv_rev_map key=" << Helper::StringToHex(kv.first) << " value=" << kv.second.DebugString();
   }
@@ -329,9 +331,8 @@ void KvControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_inf
       memory_info.set_total_size(memory_info.total_size() + memory_info.kv_index_map_size());
     }
     {
-      memory_info.set_kv_rev_map_count(kv_rev_map_.Size());
-      memory_info.set_kv_rev_map_size(kv_rev_map_.MemorySize());
-      memory_info.set_total_size(memory_info.total_size() + memory_info.kv_rev_map_size());
+      int64_t kv_rev_count = kv_rev_meta_->Count();
+      memory_info.set_kv_rev_map_count(kv_rev_count);
     }
   }
 }

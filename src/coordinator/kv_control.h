@@ -198,8 +198,7 @@ class KvControl : public MetaControl {
                             pb::coordinator_internal::KvRevInternal &kv_rev);
   butil::Status PutRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
                             const pb::coordinator_internal::KvRevInternal &kv_rev);
-  butil::Status DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
-                               const pb::coordinator_internal::KvRevInternal &kv_rev);
+  butil::Status DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision);
 
   // kv functions for api
   // KvRange is the get function
@@ -305,8 +304,7 @@ class KvControl : public MetaControl {
   MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal> *kv_index_meta_;
 
   // 16.version kv multi revision
-  DingoSafeStdMap<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map_;
-  MetaSafeStringStdMapStorage<pb::coordinator_internal::KvRevInternal> *kv_rev_meta_;
+  MetaMap<pb::coordinator_internal::KvRevInternal> *kv_rev_meta_;
 
   // one time watch map
   // this map on work on leader, is out of state machine

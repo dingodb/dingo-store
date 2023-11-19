@@ -270,9 +270,9 @@ bool KvControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotF
     kvs.push_back(meta_snapshot_file.kv_rev_map_kvs(i));
   }
   {
-    if (!kv_rev_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!kv_rev_meta_->Recover(kvs)) {
+    //   return false;
+    // }
 
     // remove data in rocksdb
     if (!meta_writer_->DeletePrefix(kv_rev_meta_->internal_prefix)) {
@@ -459,6 +459,43 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
     }
   }
 
+  // 16.kv_rev_map_
+  {
+    if (meta_increment.kv_revs_size() > 0) {
+      DINGO_LOG(INFO) << "ApplyMetaIncrement kv_revs size=" << meta_increment.kv_revs_size();
+    }
+
+    for (int i = 0; i < meta_increment.kv_revs_size(); i++) {
+      const auto& kv_rev = meta_increment.kv_revs(i);
+      if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = kv_rev_meta_->Put(kv_rev.id(), kv_rev.kv_rev());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement kv_rev CREATE, [id=" << kv_rev.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev CREATE, [id=" << kv_rev.id() << "] success";
+        }
+      } else if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto ret = kv_rev_meta_->PutIfExists(kv_rev.id(), kv_rev.kv_rev());
+        if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement kv_rev UPDATE, [id=" << kv_rev.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev UPDATE, [id=" << kv_rev.id() << "] success";
+        }
+
+      } else if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        auto ret = kv_rev_meta_->Erase(kv_rev.id());
+        if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement kv_rev DELETE, [id=" << kv_rev.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev DELETE, [id=" << kv_rev.id() << "] success";
+        }
+      }
+    }
+  }
+
   // 15.kv_index_map_
   {
     if (meta_increment.kv_indexes_size() > 0) {
@@ -513,52 +550,6 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
         pb::coordinator_internal::KvIndexInternal kv_index_internal_to_delete;
         kv_index_internal_to_delete.set_id(kv_index.id());
         meta_delete_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index_internal_to_delete));
-      }
-    }
-  }
-
-  // 16.kv_rev_map_
-  {
-    if (meta_increment.kv_revs_size() > 0) {
-      DINGO_LOG(INFO) << "ApplyMetaIncrement kv_revs size=" << meta_increment.kv_revs_size();
-    }
-
-    // BAIDU_SCOPED_LOCK(kv_rev_map_mutex_);
-    for (int i = 0; i < meta_increment.kv_revs_size(); i++) {
-      const auto& kv_rev = meta_increment.kv_revs(i);
-      if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        // kv_rev_map_[kv_rev.id()] = kv_rev.kv_rev();
-        int ret = kv_rev_map_.PutIfAbsent(kv_rev.id(), kv_rev.kv_rev());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev CREATE, [id=" << kv_rev.id() << "] success";
-        } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_rev CREATE, [id=" << kv_rev.id() << "] failed";
-        }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev.kv_rev()));
-
-      } else if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        int ret = kv_rev_map_.PutIfExists(kv_rev.id(), kv_rev.kv_rev());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev UPDATE, [id=" << kv_rev.id() << "] success";
-        } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_rev UPDATE, [id=" << kv_rev.id() << "] failed";
-        }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev.kv_rev()));
-
-      } else if (kv_rev.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        int ret = kv_rev_map_.Erase(kv_rev.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_rev DELETE, [id=" << kv_rev.id() << "] success";
-        } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_rev DELETE, [id=" << kv_rev.id() << "] failed";
-        }
-
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev.kv_rev()));
       }
     }
   }

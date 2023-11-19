@@ -29,10 +29,12 @@
 #include "butil/compiler_specific.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
+#include "coordinator/coordinator_prefix.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
@@ -61,11 +63,10 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   schema_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::SchemaInternal>(&schema_map_, "schema_map_");
   region_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::RegionInternal>(&region_map_, "region_map_");
   deleted_region_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::RegionInternal>(&deleted_region_map_, "deleted_region_map_");
+      new MetaMap<pb::coordinator_internal::RegionInternal>(kPrefixDeletedRegion, raw_engine_of_meta);
   region_metrics_meta_ = new MetaSafeMapStorage<pb::common::RegionMetrics>(&region_metrics_map_, "region_metrics_map_");
   table_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&table_map_, "table_map_");
-  deleted_table_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&deleted_table_map_, "deleted_table_map_");
+  deleted_table_meta_ = new MetaMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedTable, raw_engine_of_meta);
   id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, "id_epoch_map_");
   executor_meta_ = new MetaSafeStringMapStorage<pb::common::Executor>(&executor_map_, "executor_map_");
   store_metrics_meta_ = new MetaMapStorage<pb::common::StoreMetrics>(&store_metrics_map_, "store_metrics_map_");
@@ -79,8 +80,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
       &executor_user_map_, "executor_user_map_");
   task_list_meta_ = new MetaSafeMapStorage<pb::coordinator::TaskList>(&task_list_map_, "task_list_map_");
   index_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&index_map_, "index_map_");
-  deleted_index_meta_ =
-      new MetaSafeMapStorage<pb::coordinator_internal::TableInternal>(&deleted_index_map_, "deleted_index_map_");
+  deleted_index_meta_ = new MetaMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedIndex, raw_engine_of_meta);
   index_metrics_meta_ =
       new MetaSafeMapStorage<pb::coordinator_internal::IndexMetricsInternal>(&index_metrics_map_, "index_metrics_map_");
 
@@ -102,9 +102,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   region_cmd_map_.Init(2000);             // region_cmd_map_ is a big map
   schema_map_.Init(10000);                // schema_map_ is a big map
   table_map_.Init(10000);                 // table_map_ is a big map
-  deleted_table_map_.Init(10000);         // deleted_table_map_ is a big map
   region_map_.Init(30000);                // region_map_ is a big map
-  deleted_region_map_.Init(30000);        // deleted_region_map_ is a big map
   region_metrics_map_.Init(30000);        // region_metrics_map_ is a big map
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
   store_map_.Init(100);                   // store_map_ is a small map
@@ -114,7 +112,6 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   task_list_map_.Init(100);               // task_list_map_ is a small map
   index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
   index_map_.Init(10000);                 // index_map_ is a big map
-  deleted_index_map_.Init(10000);         // deleted_index_map_ is a big map
   index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
 
   // table index
@@ -270,9 +267,9 @@ bool CoordinatorControl::Recover() {
   }
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    if (!deleted_region_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!deleted_region_meta_->Recover(kvs)) {
+    //   return false;
+    // }
   }
   DINGO_LOG(INFO) << "Recover deleted_region_meta, count=" << kvs.size();
   kvs.clear();
@@ -296,9 +293,9 @@ bool CoordinatorControl::Recover() {
   }
   {
     // BAIDU_SCOPED_LOCK(table_map_mutex_);
-    if (!deleted_table_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!deleted_table_meta_->Recover(kvs)) {
+    //   return false;
+    // }
   }
   DINGO_LOG(INFO) << "Recover deleted_table_meta, count=" << kvs.size();
   kvs.clear();
@@ -387,9 +384,9 @@ bool CoordinatorControl::Recover() {
   }
   {
     // BAIDU_SCOPED_LOCK(index_map_mutex_);
-    if (!deleted_index_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!deleted_index_meta_->Recover(kvs)) {
+    //   return false;
+    // }
   }
   DINGO_LOG(INFO) << "Recover deleted_index_meta, count=" << kvs.size();
   kvs.clear();
