@@ -833,8 +833,7 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<int64_t, pb::coordinator_internal::RegionInternal> region_map_;
   MetaSafeMapStorage<pb::coordinator_internal::RegionInternal> *region_meta_;
   // 5.1 deleted_regions
-  DingoSafeMap<int64_t, pb::coordinator_internal::RegionInternal> deleted_region_map_;  // tombstone for deleted region
-  MetaSafeMapStorage<pb::coordinator_internal::RegionInternal> *deleted_region_meta_;
+  MetaMap<pb::coordinator_internal::RegionInternal> *deleted_region_meta_;
   // 5.2 region_metrics, this map does not need to be persisted
   DingoSafeMap<int64_t, pb::common::RegionMetrics> region_metrics_map_;
   MetaSafeMapStorage<pb::common::RegionMetrics> *region_metrics_meta_;
@@ -845,8 +844,7 @@ class CoordinatorControl : public MetaControl {
   // TableInternal is combination of Table & TableDefinition
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> table_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *table_meta_;
-  DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> deleted_table_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *deleted_table_meta_;
+  MetaMap<pb::coordinator_internal::TableInternal> *deleted_table_meta_;
 
   // table map temp, only for leader use, is out of state machine
   // table_name -> table-id
@@ -880,8 +878,7 @@ class CoordinatorControl : public MetaControl {
   // 12.indexes
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> index_map_;
   MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *index_meta_;
-  DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> deleted_index_map_;
-  MetaSafeMapStorage<pb::coordinator_internal::TableInternal> *deleted_index_meta_;
+  MetaMap<pb::coordinator_internal::TableInternal> *deleted_index_meta_;
 
   // index map temp, only for leader use, is out of state machine
   // index_name -> index-id

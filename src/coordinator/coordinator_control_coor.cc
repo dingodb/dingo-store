@@ -801,13 +801,16 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
 }
 
 void CoordinatorControl::GetDeletedRegionMap(pb::common::RegionMap& region_map) {
-  // BAIDU_SCOPED_LOCK(region_map_mutex_);
-  butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
-  region_internal_map_copy.init(30000);
-  deleted_region_map_.GetRawMapCopy(region_internal_map_copy);
+  std::vector<pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+  auto ret = deleted_region_meta_->GetAllElements(region_internal_map_copy);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetDeletedRegionMap failed, ret: " << ret;
+    return;
+  }
+
   for (auto& element : region_internal_map_copy) {
     auto* tmp_region = region_map.add_regions();
-    GenRegionFull(element.second, *tmp_region);
+    GenRegionFull(element, *tmp_region);
   }
 }
 
@@ -821,7 +824,7 @@ butil::Status CoordinatorControl::AddDeletedRegionMap(int64_t region_id, bool fo
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
-  // add the deleted region to deleted_region_map_
+  // add the deleted region to deleted_region_meta_
   auto* deleted_region_increment = meta_increment.add_deleted_regions();
   deleted_region_increment->set_id(region_id);
   deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -839,24 +842,23 @@ butil::Status CoordinatorControl::AddDeletedRegionMap(int64_t region_id, bool fo
 
 butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
   uint32_t i = 0;
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
   if (region_id == 0) {
-    butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> deleted_regions;
-    deleted_regions.init(30000);
-    auto ret = deleted_region_map_.GetRawMapCopy(deleted_regions);
-    if (ret < 0) {
-      DINGO_LOG(WARNING) << "CleanDeletedRegionMap failed, region_id: " << region_id
-                         << " not exists in deleted_region_map_";
+    std::vector<int64_t> deleted_region_ids;
+    auto ret = deleted_region_meta_->GetAllIds(deleted_region_ids);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id << " GetAllIds failed, ret: " << ret;
+      return ret;
     }
 
-    pb::coordinator_internal::MetaIncrement meta_increment;
-
-    for (const auto& element : deleted_regions) {
+    for (const auto& id : deleted_region_ids) {
       auto* deleted_region_increment = meta_increment.add_deleted_regions();
-      deleted_region_increment->set_id(element.second.id());
+      deleted_region_increment->set_id(id);
       deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
       auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
-      deleted_region_increment_region->set_id(element.second.id());
+      deleted_region_increment_region->set_id(id);
 
       if (i++ > 1000) {
         auto ret1 = SubmitMetaIncrementSync(meta_increment);
@@ -870,48 +872,29 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
       }
     }
 
-    if (meta_increment.ByteSizeLong() > 0) {
-      SubmitMetaIncrementSync(meta_increment);
-    }
-
-    return butil::Status::OK();
   } else {
-    auto ret = deleted_region_map_.Exists(region_id);
+    auto ret = deleted_region_meta_->Exists(region_id);
     if (!ret) {
       DINGO_LOG(WARNING) << "CleanDeletedRegionMap failed, region_id: " << region_id
-                         << " not exists in deleted_region_map_";
-      return butil::Status(pb::error::Errno::EINTERNAL, "region_id not exists in deleted_region_map_");
+                         << " not exists in deleted_region_meta_";
+      return butil::Status(pb::error::Errno::EINTERNAL, "region_id not exists in deleted_region_meta_");
     }
 
-    pb::coordinator_internal::MetaIncrement meta_increment;
     auto* deleted_region_increment = meta_increment.add_deleted_regions();
     deleted_region_increment->set_id(region_id);
     deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
 
     auto* deleted_region_increment_region = deleted_region_increment->mutable_region();
     deleted_region_increment_region->set_id(region_id);
+  }
 
-    if (i++ > 1000) {
-      auto ret1 = SubmitMetaIncrementSync(meta_increment);
-      if (!ret1.ok()) {
-        DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id
-                         << " SubmitMetaIncrementSync failed, ret: " << ret1;
-        return ret1;
-      }
-      i = 0;
-      meta_increment.Clear();
+  if (meta_increment.ByteSizeLong() > 0) {
+    auto ret1 = SubmitMetaIncrementSync(meta_increment);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id
+                       << " SubmitMetaIncrementSync failed, ret: " << ret1;
+      return ret1;
     }
-
-    if (meta_increment.ByteSizeLong() > 0) {
-      auto ret1 = SubmitMetaIncrementSync(meta_increment);
-      if (!ret1.ok()) {
-        DINGO_LOG(ERROR) << "CleanDeletedRegionMap failed, region_id: " << region_id
-                         << " SubmitMetaIncrementSync failed, ret: " << ret1;
-        return ret1;
-      }
-    }
-
-    return butil::Status::OK();
   }
 
   return butil::Status::OK();
@@ -924,44 +907,46 @@ void CoordinatorControl::GetRegionIdsInMap(std::vector<int64_t>& region_ids) { r
 void CoordinatorControl::RecycleDeletedTableAndIndex() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
-  butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_tables;
-  butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_indexes;
+  // butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_tables;
+  // butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_indexes;
 
-  delete_tables.init(3000);
-  delete_indexes.init(3000);
+  // delete_tables.init(3000);
+  // delete_indexes.init(3000);
 
-  deleted_table_map_.GetRawMapCopy(delete_tables);
-  deleted_index_map_.GetRawMapCopy(delete_indexes);
+  std::vector<pb::coordinator_internal::TableInternal> delete_tables;
+  std::vector<pb::coordinator_internal::TableInternal> delete_indexes;
+  deleted_table_meta_->GetAllElements(delete_tables);
+  deleted_index_meta_->GetAllElements(delete_indexes);
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   for (const auto& table : delete_tables) {
-    if (table.second.definition().delete_timestamp() + (FLAGS_table_delete_after_deleted_time * 1000) <
+    if (table.definition().delete_timestamp() + (FLAGS_table_delete_after_deleted_time * 1000) <
         butil::gettimeofday_ms()) {
-      DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex delete obsolete deleted_table table_id:" << table.first
-                      << " deleted_timestamp: " << table.second.definition().delete_timestamp()
+      DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex delete obsolete deleted_table table_id:" << table.id()
+                      << " deleted_timestamp: " << table.definition().delete_timestamp()
                       << " table_delete_after_deleted_time: " << FLAGS_table_delete_after_deleted_time;
 
       auto* deleted_table_increment = meta_increment.add_deleted_tables();
-      deleted_table_increment->set_id(table.second.id());
+      deleted_table_increment->set_id(table.id());
       deleted_table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* deleted_table = deleted_table_increment->mutable_table();
-      deleted_table->set_id(table.second.id());
+      deleted_table->set_id(table.id());
     }
   }
 
   for (const auto& index : delete_indexes) {
-    if (index.second.definition().delete_timestamp() + (FLAGS_index_delete_after_deleted_time * 1000) <
+    if (index.definition().delete_timestamp() + (FLAGS_index_delete_after_deleted_time * 1000) <
         butil::gettimeofday_ms()) {
-      DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex delete obsolete deleted_index index_id:" << index.first
-                      << " deleted_timestamp: " << index.second.definition().delete_timestamp()
+      DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex delete obsolete deleted_index index_id:" << index.id()
+                      << " deleted_timestamp: " << index.definition().delete_timestamp()
                       << " index_delete_after_deleted_time: " << FLAGS_index_delete_after_deleted_time;
 
       auto* deleted_index_increment = meta_increment.add_deleted_indexes();
-      deleted_index_increment->set_id(index.second.id());
+      deleted_index_increment->set_id(index.id());
       deleted_index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* deleted_index = deleted_index_increment->mutable_table();
-      deleted_index->set_id(index.second.id());
+      deleted_index->set_id(index.id());
     }
   }
 
@@ -973,9 +958,12 @@ void CoordinatorControl::RecycleDeletedTableAndIndex() {
 void CoordinatorControl::RecycleOrphanRegionOnStore() {
   DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
 
-  butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> delete_regions;
-  delete_regions.init(3000);
-  deleted_region_map_.GetRawMapCopy(delete_regions);
+  std::map<int64_t, pb::coordinator_internal::RegionInternal> delete_regions;
+  auto ret = deleted_region_meta_->GetAllIdElements(delete_regions);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "RecycleOrphanRegionOnStore failed, ret: " << ret;
+    return;
+  }
 
   if (delete_regions.empty()) {
     DINGO_LOG(DEBUG) << "No region to recycle";
@@ -1007,7 +995,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 
     for (const auto& region_id : ids.second) {
       // if region_id is in delete_region_map, need to delete region on this store
-      if (delete_regions.seek(region_id) != nullptr) {
+      if (delete_regions.find(region_id) != delete_regions.end()) {
         if (!is_store_operation_get) {
           store_operation_map_.Get(ids.first, store_operation);
           is_store_operation_get = true;
@@ -1091,28 +1079,14 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
   for (const auto& it : regions) {
     const auto& region = it.second;
     if (region.definition().table_id() > 0) {
-      bool exists = true;
-      auto ret = deleted_table_map_.SafeExists(region.definition().table_id(), exists);
-      if (ret < 0) {
-        DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, table_id: " << region.definition().table_id()
-                           << " not exists in table_map_";
-        continue;
-      }
-
+      auto exists = deleted_table_meta_->Exists(region.definition().table_id());
       if (exists) {
         DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
                         << " table_id: " << region.definition().table_id() << " is deleted";
         delete_region_ids.push_back(region.id());
       }
     } else if (region.definition().index_id() > 0) {
-      bool exists;
-      auto ret = deleted_index_map_.SafeExists(region.definition().index_id(), exists);
-      if (ret < 0) {
-        DINGO_LOG(WARNING) << "RecycleOrphanRegionOnCoordinator failed, index_id: " << region.definition().index_id()
-                           << " not exists in index_map_";
-        continue;
-      }
-
+      auto exists = deleted_index_meta_->Exists(region.definition().index_id());
       if (exists) {
         DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
                         << " index_id: " << region.definition().index_id() << " is deleted";
@@ -2069,7 +2043,7 @@ butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
         auto* region_increment_region = region_increment->mutable_region();
         region_increment_region->set_id(region_id);
 
-        // 2.add the deleted region to deleted_region_map_
+        // 2.add the deleted region to deleted_region_meta_
         auto* deleted_region_increment = meta_increment.add_deleted_regions();
         deleted_region_increment->set_id(region_id);
         deleted_region_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -4018,21 +3992,6 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.region_map_size());
   }
   {
-    memory_info.set_deleted_region_map_count(deleted_region_map_.Size());
-    memory_info.set_deleted_region_map_size(deleted_region_map_.MemorySize());
-    memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_region_map_size());
-  }
-  {
-    memory_info.set_deleted_table_map_count(deleted_table_map_.Size());
-    memory_info.set_deleted_table_map_size(deleted_table_map_.MemorySize());
-    memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_table_map_size());
-  }
-  {
-    memory_info.set_deleted_index_map_count(deleted_index_map_.Size());
-    memory_info.set_deleted_index_map_size(deleted_index_map_.MemorySize());
-    memory_info.set_total_size(memory_info.total_size() + memory_info.deleted_index_map_size());
-  }
-  {
     memory_info.set_region_metrics_map_count(region_metrics_map_.Size());
     memory_info.set_region_metrics_map_size(region_metrics_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.region_metrics_map_size());
@@ -4087,6 +4046,18 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_index_metrics_map_count(index_metrics_map_.Size());
     memory_info.set_index_metrics_map_size(index_metrics_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.index_metrics_map_size());
+  }
+  {
+    int64_t deleted_table_count = deleted_table_meta_->Count();
+    memory_info.set_deleted_table_map_count(deleted_table_count);
+  }
+  {
+    int64_t deleted_index_count = deleted_index_meta_->Count();
+    memory_info.set_deleted_index_map_count(deleted_index_count);
+  }
+  {
+    int64_t deleted_region_count = deleted_region_meta_->Count();
+    memory_info.set_deleted_region_map_count(deleted_region_count);
   }
 }
 

@@ -32,9 +32,11 @@ class MetaReader {
   const MetaReader& operator=(const MetaReader&) = delete;
 
   std::shared_ptr<pb::common::KeyValue> Get(const std::string& key);
+  butil::Status Get(const std::string& key, pb::common::KeyValue& kv);
   bool Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs);
 
   // with Snapshot
+  butil::Status Get(std::shared_ptr<Snapshot> snapshot, const std::string& key, pb::common::KeyValue& kv);
   std::shared_ptr<pb::common::KeyValue> Get(std::shared_ptr<Snapshot> snapshot, const std::string& key);
   bool Scan(std::shared_ptr<Snapshot>, const std::string& prefix, std::vector<pb::common::KeyValue>& kvs);
 

@@ -2662,24 +2662,25 @@ butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t tab
 butil::Status CoordinatorControl::GetDeletedTable(
     int64_t deleted_table_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   if (deleted_table_id == 0) {
-    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
-    temp_table_map.init(1000);
-    auto ret = deleted_table_map_.GetRawMapCopy(temp_table_map);
-    if (ret < 0) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted table map failed");
+    std::vector<pb::coordinator_internal::TableInternal> temp_table_map;
+    auto ret = deleted_table_meta_->GetAllElements(temp_table_map);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted table map failed, error: " << ret;
+      return ret;
     }
 
     for (const auto& deleted_table : temp_table_map) {
       pb::meta::TableDefinitionWithId table_definition_with_id;
-      table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table.first);
-      *(table_definition_with_id.mutable_table_definition()) = deleted_table.second.definition();
+      table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table.id());
+      *(table_definition_with_id.mutable_table_definition()) = deleted_table.definition();
       table_definition_with_ids.push_back(table_definition_with_id);
     }
   } else {
     pb::coordinator_internal::TableInternal table_internal;
-    auto ret = deleted_table_map_.Get(deleted_table_id, table_internal);
-    if (ret < 0) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted table failed");
+    auto ret = deleted_table_meta_->Get(deleted_table_id, table_internal);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted table failed, error: " << ret;
+      return ret;
     }
 
     pb::meta::TableDefinitionWithId table_definition_with_id;
@@ -2694,24 +2695,25 @@ butil::Status CoordinatorControl::GetDeletedTable(
 butil::Status CoordinatorControl::GetDeletedIndex(
     int64_t deleted_index_id, std::vector<pb::meta::TableDefinitionWithId>& table_definition_with_ids) {
   if (deleted_index_id == 0) {
-    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
-    temp_table_map.init(1000);
-    auto ret = deleted_index_map_.GetRawMapCopy(temp_table_map);
-    if (ret < 0) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted index map failed");
+    std::vector<pb::coordinator_internal::TableInternal> temp_table_map;
+    auto ret = deleted_index_meta_->GetAllElements(temp_table_map);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted index map failed, error: " << ret;
+      return ret;
     }
 
     for (const auto& deleted_table : temp_table_map) {
       pb::meta::TableDefinitionWithId table_definition_with_id;
-      table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table.first);
-      *(table_definition_with_id.mutable_table_definition()) = deleted_table.second.definition();
+      table_definition_with_id.mutable_table_id()->set_entity_id(deleted_table.id());
+      *(table_definition_with_id.mutable_table_definition()) = deleted_table.definition();
       table_definition_with_ids.push_back(table_definition_with_id);
     }
   } else {
     pb::coordinator_internal::TableInternal table_internal;
-    auto ret = deleted_index_map_.Get(deleted_index_id, table_internal);
-    if (ret < 0) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted index failed");
+    auto ret = deleted_index_meta_->Get(deleted_index_id, table_internal);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted index failed, error: " << ret;
+      return ret;
     }
 
     pb::meta::TableDefinitionWithId table_definition_with_id;
@@ -2728,19 +2730,19 @@ butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
 
   uint32_t i = 0;
   if (table_id == 0) {
-    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
-    temp_table_map.init(1000);
-    auto ret = deleted_table_map_.GetRawMapCopy(temp_table_map);
-    if (ret < 0) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted table map failed");
+    std::vector<int64_t> temp_table_ids;
+    auto ret = deleted_table_meta_->GetAllIds(temp_table_ids);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted table ids failed, error: " << ret;
+      return ret;
     }
 
-    for (const auto& deleted_table : temp_table_map) {
+    for (const auto& id : temp_table_ids) {
       auto* delete_table = meta_increment.add_deleted_tables();
-      delete_table->set_id(deleted_table.first);
+      delete_table->set_id(id);
       delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* delete_table_internal = delete_table->mutable_table();
-      delete_table_internal->set_id(deleted_table.first);
+      delete_table_internal->set_id(id);
 
       if (i++ > 1000) {
         auto ret1 = SubmitMetaIncrementSync(meta_increment);
@@ -2754,9 +2756,10 @@ butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
     }
   } else {
     pb::coordinator_internal::TableInternal table_internal;
-    auto ret = deleted_table_map_.Get(table_id, table_internal);
-    if (ret < 0) {
-      return butil::Status::OK();
+    auto ret = deleted_table_meta_->Get(table_id, table_internal);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted table failed, error: " << ret;
+      return ret;
     }
 
     auto* delete_table = meta_increment.add_deleted_tables();
@@ -2764,16 +2767,6 @@ butil::Status CoordinatorControl::CleanDeletedTable(int64_t table_id) {
     delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
     auto* delete_table_internal = delete_table->mutable_table();
     delete_table_internal->set_id(table_id);
-
-    if (i++ > 1000) {
-      auto ret1 = SubmitMetaIncrementSync(meta_increment);
-      if (!ret1.ok()) {
-        DINGO_LOG(ERROR) << "submit meta increment failed, table_id: " << table_id << ", error: " << ret1;
-        return ret1;
-      }
-      i = 0;
-      meta_increment.Clear();
-    }
   }
 
   if (meta_increment.ByteSizeLong() > 0) {
@@ -2788,19 +2781,19 @@ butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
   uint32_t i = 0;
 
   if (index_id == 0) {
-    butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> temp_table_map;
-    temp_table_map.init(1000);
-    auto ret = deleted_index_map_.GetRawMapCopy(temp_table_map);
-    if (ret < 0) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "get deleted index map failed");
+    std::vector<int64_t> temp_table_ids;
+    auto ret = deleted_index_meta_->GetAllIds(temp_table_ids);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted index ids failed, error: " << ret;
+      return ret;
     }
 
-    for (const auto& deleted_table : temp_table_map) {
+    for (const auto& id : temp_table_ids) {
       auto* delete_table = meta_increment.add_deleted_indexes();
-      delete_table->set_id(deleted_table.first);
+      delete_table->set_id(id);
       delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
       auto* delete_table_internal = delete_table->mutable_table();
-      delete_table_internal->set_id(deleted_table.first);
+      delete_table_internal->set_id(id);
 
       if (i++ > 1000) {
         auto ret1 = SubmitMetaIncrementSync(meta_increment);
@@ -2814,9 +2807,10 @@ butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
     }
   } else {
     pb::coordinator_internal::TableInternal table_internal;
-    auto ret = deleted_index_map_.Get(index_id, table_internal);
-    if (ret < 0) {
-      return butil::Status::OK();
+    auto ret = deleted_index_meta_->Get(index_id, table_internal);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "get deleted index failed, error: " << ret;
+      return ret;
     }
 
     auto* delete_table = meta_increment.add_deleted_indexes();
@@ -2824,16 +2818,6 @@ butil::Status CoordinatorControl::CleanDeletedIndex(int64_t index_id) {
     delete_table->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
     auto* delete_table_internal = delete_table->mutable_table();
     delete_table_internal->set_id(index_id);
-
-    if (i++ > 1000) {
-      auto ret1 = SubmitMetaIncrementSync(meta_increment);
-      if (!ret1.ok()) {
-        DINGO_LOG(ERROR) << "submit meta increment failed, index_id: " << index_id << ", error: " << ret1;
-        return ret1;
-      }
-      i = 0;
-      meta_increment.Clear();
-    }
   }
 
   if (meta_increment.ByteSizeLong() > 0) {

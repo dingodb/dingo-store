@@ -44,7 +44,6 @@ DEFINE_int64(max_kv_value_size, 8192, "max kv put count");
 DEFINE_int64(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
 DEFINE_bool(auto_compaction, false, "auto compaction on/off");
 DEFINE_int64(version_kv_max_count, 100000, "max kv count for version kv");
-DEFINE_int64(version_kv_max_rev_count, 500000, "max kv count for version kv");
 
 std::string KvControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
   Buf buf(17);
@@ -153,41 +152,29 @@ butil::Status KvControl::DeleteRawKvIndex(const std::string &key,
 
 butil::Status KvControl::GetRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
                                      pb::coordinator_internal::KvRevInternal &kv_rev) {
-  auto ret = kv_rev_map_.Get(RevisionToString(revision), kv_rev);
-  if (ret < 0) {
+  auto ret = kv_rev_meta_->Get(RevisionToString(revision), kv_rev);
+  if (!ret.ok()) {
     DINGO_LOG(WARNING) << "GetRawKvRev not found, revision:[" << revision.ShortDebugString() << "]";
     return butil::Status(EINVAL, "GetRawKvRev not found");
   }
+
   return butil::Status::OK();
 }
 
 butil::Status KvControl::PutRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
                                      const pb::coordinator_internal::KvRevInternal &kv_rev) {
-  auto ret = kv_rev_map_.Put(RevisionToString(revision), kv_rev);
-  if (ret < 0) {
-    DINGO_LOG(WARNING) << "PutRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
-  }
-
   DINGO_LOG(INFO) << "PutRawKvRev success, revision:[" << revision.ShortDebugString() << "], kv_rev:["
                   << kv_rev.ShortDebugString() << "]"
                   << " kv_rev.id: " << Helper::StringToHex(kv_rev.id())
                   << ", revision_string: " << Helper::StringToHex(RevisionToString(revision));
 
-  std::vector<pb::common::KeyValue> meta_write_to_kv;
-  meta_write_to_kv.push_back(kv_rev_meta_->TransformToKvValue(kv_rev));
-  meta_writer_->Put(meta_write_to_kv);
+  kv_rev_meta_->Put(RevisionToString(revision), kv_rev);
 
   return butil::Status::OK();
 }
 
-butil::Status KvControl::DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision,
-                                        const pb::coordinator_internal::KvRevInternal &kv_rev) {
-  auto ret = kv_rev_map_.Erase(RevisionToString(revision));
-  if (ret < 0) {
-    DINGO_LOG(WARNING) << "DeleteRawKvRev failed, revision:[" << revision.ShortDebugString() << "]";
-  }
-  auto kv_to_delete = kv_rev_meta_->TransformToKvValue(kv_rev);
-  meta_writer_->Delete(kv_to_delete.key());
+butil::Status KvControl::DeleteRawKvRev(const pb::coordinator_internal::RevisionInternal &revision) {
+  kv_rev_meta_->Erase(RevisionToString(revision));
 
   return butil::Status::OK();
 }
@@ -260,7 +247,7 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     pb::coordinator_internal::KvRevInternal kv_rev;
     auto ret = GetRawKvRev(kv_index_value.mod_revision(), kv_rev);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "kv_rev_map_.Get failed, revision: " << kv_index_value.mod_revision().ShortDebugString()
+      DINGO_LOG(ERROR) << "GetRawKvRev failed, revision: " << kv_index_value.mod_revision().ShortDebugString()
                        << ", error: " << ret.error_str();
       continue;
     }
@@ -349,11 +336,6 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   if (kv_index_map_.Size() > FLAGS_version_kv_max_count) {
     DINGO_LOG(ERROR) << "KvPut kv_index_map_ size: " << kv_index_map_.Size() << ", will do compaction";
     return butil::Status(pb::error::Errno::EKV_COUNT_EXCEEDS_LIMIT, "KvPut kv_index_map_ size is too large");
-  }
-
-  if (kv_rev_map_.Size() > FLAGS_version_kv_max_rev_count) {
-    DINGO_LOG(ERROR) << "KvPut kv_rev_map_ size: " << kv_rev_map_.Size() << ", will do compaction";
-    return butil::Status(pb::error::Errno::EKV_REV_COUNT_EXCEEDS_LIMIT, "KvPut kv_rev_map_ size is too large");
   }
 
   // check key
@@ -1034,14 +1016,14 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
     PutRawKvIndex(key, new_kv_index);
   }
 
-  // delete revisions in kv_rev_map_
+  // delete revisions in kv_rev
   for (const auto &kv_revision : revisions_to_delete) {
     pb::coordinator_internal::KvRevInternal kv_rev;
     kv_rev.set_id(RevisionToString(kv_revision));
 
     DINGO_LOG(INFO) << "KvCompactApply delete kv_rev, kv_revision: " << kv_revision.ShortDebugString()
                     << ", kv_rev: " << kv_rev.ShortDebugString();
-    DeleteRawKvRev(kv_revision, kv_rev);
+    DeleteRawKvRev(kv_revision);
   }
 
   return butil::Status::OK();

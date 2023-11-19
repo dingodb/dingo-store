@@ -22,10 +22,13 @@
 #include "common/logging.h"
 #include "engine/snapshot.h"
 #include "fmt/core.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
 std::shared_ptr<pb::common::KeyValue> MetaReader::Get(const std::string& key) { return Get(nullptr, key); }
+
+butil::Status MetaReader::Get(const std::string& key, pb::common::KeyValue& kv) { return Get(nullptr, key, kv); }
 
 bool MetaReader::Scan(const std::string& prefix, std::vector<pb::common::KeyValue>& kvs) {
   return Scan(nullptr, prefix, kvs);
@@ -53,6 +56,28 @@ std::shared_ptr<pb::common::KeyValue> MetaReader::Get(std::shared_ptr<Snapshot> 
   kv->set_value(value);
 
   return kv;
+}
+
+butil::Status MetaReader::Get(std::shared_ptr<Snapshot> snapshot, const std::string& key, pb::common::KeyValue& kv) {
+  auto reader = engine_->Reader();
+  std::string value;
+
+  butil::Status status;
+  if (snapshot) {
+    status = reader->KvGet(Constant::kStoreMetaCF, snapshot, key, value);
+  } else {
+    status = reader->KvGet(Constant::kStoreMetaCF, key, value);
+  }
+  if (!status.ok() && status.error_code() != pb::error::EKEY_NOT_FOUND) {
+    DINGO_LOG(ERROR) << fmt::format("Meta get key {} failed, errcode: {} {}", key, status.error_code(),
+                                    status.error_str());
+    return status;
+  }
+
+  kv.set_key(key);
+  kv.set_value(value);
+
+  return butil::Status::OK();
 }
 
 // Scan with specific snapshot

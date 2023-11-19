@@ -563,9 +563,9 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   }
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    if (!deleted_region_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!deleted_region_meta_->Recover(kvs)) {
+    //   return false;
+    // }
 
     // remove data in rocksdb
     if (!meta_writer_->DeletePrefix(deleted_region_meta_->internal_prefix)) {
@@ -619,9 +619,9 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   }
   {
     // BAIDU_SCOPED_LOCK(deleted_table_map_mutex_);
-    if (!deleted_table_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!deleted_table_meta_->Recover(kvs)) {
+    //   return false;
+    // }
 
     // remove data in rocksdb
     if (!meta_writer_->DeletePrefix(deleted_table_meta_->internal_prefix)) {
@@ -812,10 +812,9 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     kvs.push_back(meta_snapshot_file.deleted_index_map_kvs(i));
   }
   {
-    // BAIDU_SCOPED_LOCK(deleted_index_map_mutex_);
-    if (!deleted_index_meta_->Recover(kvs)) {
-      return false;
-    }
+    // if (!deleted_index_meta_->Recover(kvs)) {
+    //   return false;
+    // }
 
     // remove data in rocksdb
     if (!meta_writer_->DeletePrefix(deleted_index_meta_->internal_prefix)) {
@@ -1448,39 +1447,28 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     for (int i = 0; i < meta_increment.deleted_regions_size(); i++) {
       const auto& region = meta_increment.deleted_regions(i);
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        // add deleted_region to deleted_region_map
-        int ret = deleted_region_map_.Put(region.id(), region.region());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region CREATE, [id=" << region.id() << "] success";
+        auto ret = deleted_region_meta_->Put(region.id(), region.region());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_region CREATE, [id=" << region.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_region CREATE, [id=" << region.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region CREATE, [id=" << region.id() << "] success";
         }
 
-        // meta_write_kv
-        meta_write_to_kv.push_back(deleted_region_meta_->TransformToKvValue(region.region()));
-
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // update region to deleted_region_map
-        int ret = deleted_region_map_.PutIfExists(region.id(), region.region());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region UPDATE, [id=" << region.id() << "] success";
-          // meta_write_kv
-          meta_write_to_kv.push_back(deleted_region_meta_->TransformToKvValue(region.region()));
+        auto ret = deleted_region_meta_->Put(region.id(), region.region());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_region UPDATE, [id=" << region.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_region UPDATE, [id=" << region.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region UPDATE, [id=" << region.id() << "] success";
         }
 
       } else if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        // remove region from deleted_region_map
-        int ret = deleted_region_map_.Erase(region.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region DELETE, [id=" << region.id() << "] success";
+        auto ret = deleted_region_meta_->Erase(region.id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_region DELETE, [id=" << region.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_region DELETE, [id=" << region.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_region DELETE, [id=" << region.id() << "] success";
         }
-
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(deleted_region_meta_->TransformToKvValue(region.region()));
       }
     }
   }
@@ -1607,52 +1595,31 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       DINGO_LOG(INFO) << "6.deleted_tables_size=" << meta_increment.deleted_tables_size();
     }
 
-    // BAIDU_SCOPED_LOCK(deleted_table_map_mutex_);
     for (int i = 0; i < meta_increment.deleted_tables_size(); i++) {
       const auto& deleted_table = meta_increment.deleted_tables(i);
       if (deleted_table.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        // need to update schema, so acquire lock
-        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-
-        // add deleted_table to deleted_table_map
-        // deleted_table_map_[deleted_table.id()] = deleted_table.deleted_table();
-        int ret = deleted_table_map_.Put(deleted_table.id(), deleted_table.table());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table CREATE, [id=" << deleted_table.id() << "] success";
+        auto ret = deleted_table_meta_->Put(deleted_table.id(), deleted_table.table());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_table CREATE, [id=" << deleted_table.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_table CREATE, [id=" << deleted_table.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table CREATE, [id=" << deleted_table.id() << "] success";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(deleted_table_meta_->TransformToKvValue(deleted_table.table()));
 
       } else if (deleted_table.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // update deleted_table to deleted_table_map
-
-        int ret = deleted_table_map_.Put(deleted_table.id(), deleted_table.table());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table UPDATE, [id=" << deleted_table.id() << "] success";
+        auto ret = deleted_table_meta_->Put(deleted_table.id(), deleted_table.table());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_table UPDATE, [id=" << deleted_table.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_table UPDATE, [id=" << deleted_table.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table UPDATE, [id=" << deleted_table.id() << "] success";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(deleted_table_meta_->TransformToKvValue(deleted_table.table()));
 
       } else if (deleted_table.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        // need to update schema, so acquire lock
-        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-
-        // delete deleted_table from deleted_table_map
-        int ret = deleted_table_map_.Erase(deleted_table.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table DELETE, [id=" << deleted_table.id() << "] success";
+        auto ret = deleted_table_meta_->Erase(deleted_table.id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_table DELETE, [id=" << deleted_table.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_table DELETE, [id=" << deleted_table.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_table DELETE, [id=" << deleted_table.id() << "] success";
         }
-
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(deleted_table_meta_->TransformToKvValue(deleted_table.table()));
       }
     }
   }
@@ -2045,51 +2012,31 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       DINGO_LOG(INFO) << "6.deleted_indexes_size=" << meta_increment.deleted_indexes_size();
     }
 
-    // BAIDU_SCOPED_LOCK(deleted_index_map_mutex_);
     for (int i = 0; i < meta_increment.deleted_indexes_size(); i++) {
       const auto& deleted_index = meta_increment.deleted_indexes(i);
       if (deleted_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        // need to update schema, so acquire lock
-        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-
-        // add deleted_index to deleted_index_map
-        int ret = deleted_index_map_.Put(deleted_index.id(), deleted_index.table());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index CREATE, [id=" << deleted_index.id() << "] success";
+        auto ret = deleted_index_meta_->Put(deleted_index.id(), deleted_index.table());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_index CREATE, [id=" << deleted_index.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_index CREATE, [id=" << deleted_index.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index CREATE, [id=" << deleted_index.id() << "] success";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(deleted_index_meta_->TransformToKvValue(deleted_index.table()));
 
       } else if (deleted_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // update deleted_index to deleted_index_map
-
-        int ret = deleted_index_map_.Put(deleted_index.id(), deleted_index.table());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index UPDATE, [id=" << deleted_index.id() << "] success";
+        auto ret = deleted_index_meta_->Put(deleted_index.id(), deleted_index.table());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_index UPDATE, [id=" << deleted_index.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_index UPDATE, [id=" << deleted_index.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index UPDATE, [id=" << deleted_index.id() << "] success";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(deleted_index_meta_->TransformToKvValue(deleted_index.table()));
 
       } else if (deleted_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        // need to update schema, so acquire lock
-        // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-
-        // delete deleted_index from deleted_index_map
-        int ret = deleted_index_map_.Erase(deleted_index.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index DELETE, [id=" << deleted_index.id() << "] success";
+        auto ret = deleted_index_meta_->Erase(deleted_index.id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement deleted_index DELETE, [id=" << deleted_index.id() << "] failed";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement deleted_index DELETE, [id=" << deleted_index.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement deleted_index DELETE, [id=" << deleted_index.id() << "] success";
         }
-
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(deleted_index_meta_->TransformToKvValue(deleted_index.table()));
       }
     }
   }
