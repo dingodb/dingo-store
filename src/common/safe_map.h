@@ -752,8 +752,8 @@ class DingoSafeStdMap {
     if (safe_map.Read(&ptr) != 0) {
       return false;
     }
-    auto *value_ptr = ptr->seek(key);
-    return static_cast<bool>(value_ptr);
+    auto it = ptr->find(key);
+    return static_cast<bool>(it != ptr->end());
   }
 
   // Size

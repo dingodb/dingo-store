@@ -301,10 +301,10 @@ class KvControl : public MetaControl {
 
   // 15.version kv with lease
   DingoSafeStdMap<std::string, pb::coordinator_internal::KvIndexInternal> kv_index_map_;
-  MetaSafeStringStdMapStorage<pb::coordinator_internal::KvIndexInternal> *kv_index_meta_;
+  MetaSafeStdMapStorage<pb::coordinator_internal::KvIndexInternal> *kv_index_meta_;
 
   // 16.version kv multi revision
-  MetaMap<pb::coordinator_internal::KvRevInternal> *kv_rev_meta_;
+  MetaDiskMap<pb::coordinator_internal::KvRevInternal> *kv_rev_meta_;
 
   // one time watch map
   // this map on work on leader, is out of state machine

@@ -238,12 +238,6 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
     }
   }
 
-  // Erase
-  // erase key-value pair from map
-  // int Erase(const int64_t &key) {
-  //   return DingoSafeMap<int64_t, pb::coordinator_internal::IdEpochInternal>::Erase(key);
-  // }
-
  private:
   static size_t InnerGetNextId(TypeFlatMap &map, const int64_t &key, const int64_t &value) {
     // Notice: The brpc's template restrict to return value in Modify process, but we need to do this, so use a
@@ -289,16 +283,14 @@ class DingoSafeSchemaMap : public DingoSafeIdEpochMapBase {
   }
 };
 
-// MetaMapStorage is a template class for meta storage
+// MetaSafeMapStorage is a template class for meta storage
 // This is for read/write meta data from/to RocksDB storage
 template <typename T>
 class MetaSafeMapStorage {
  public:
   const std::string internal_prefix;
-  MetaSafeMapStorage(DingoSafeMap<int64_t, T> *elements_ptr)
-      : internal_prefix(std::string("meta_map_safe") + typeid(T).name()), elements_(elements_ptr){};
   MetaSafeMapStorage(DingoSafeMap<int64_t, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("meta_map_safe") + prefix), elements_(elements_ptr){};
+      : internal_prefix(std::string("METASFM") + prefix), elements_(elements_ptr){};
   ~MetaSafeMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
@@ -315,7 +307,6 @@ class MetaSafeMapStorage {
   }
 
   bool IsExist(int64_t id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = elements_->find(id);
     return static_cast<bool>(it != elements_->end());
   }
@@ -337,11 +328,9 @@ class MetaSafeMapStorage {
     return 0;
   }
 
-  // std::string GenKey(int64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
   std::string GenKey(int64_t id) { return internal_prefix + "_" + std::to_string(id); }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(int64_t id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
     T value;
     if (elements_->Get(id, value) < 0) {
       return nullptr;
@@ -383,16 +372,13 @@ class MetaSafeMapStorage {
   }
 
   void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    // std::unique_lock<std::shared_mutex> lock(mutex_);
     std::vector<int64_t> key_list;
     std::vector<T> value_list;
 
     for (const auto &kv : kvs) {
       int64_t id = ParseId(kv.key());
       T element;
-      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
-      // elements_->insert_or_assign(id, element);
-      // elements_->insert(id, element);
+      element.ParsePartialFromString(kv.value());
       key_list.push_back(id);
       value_list.push_back(element);
     }
@@ -409,17 +395,15 @@ class MetaSafeMapStorage {
   DingoSafeMap<int64_t, T> *elements_;
 };
 
-// MetaSafeStringMapStorage is a template class for meta storage
+// MetaSafeStdMapStorage is a template class for meta storage
 // This is for read/write meta data from/to RocksDB storage
 template <typename T>
-class MetaSafeStringMapStorage {
+class MetaSafeStdMapStorage {
  public:
   const std::string internal_prefix;
-  MetaSafeStringMapStorage(DingoSafeMap<std::string, T> *elements_ptr)
-      : internal_prefix(std::string("meta_map_safe_string") + typeid(T).name()), elements_(elements_ptr){};
-  MetaSafeStringMapStorage(DingoSafeMap<std::string, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("meta_map_safe_string") + prefix), elements_(elements_ptr){};
-  ~MetaSafeStringMapStorage() = default;
+  MetaSafeStdMapStorage(DingoSafeStdMap<std::string, T> *elements_ptr, const std::string &prefix)
+      : internal_prefix(std::string("METASTD") + prefix), elements_(elements_ptr){};
+  ~MetaSafeStdMapStorage() = default;
 
   std::string Prefix() { return internal_prefix; }
 
@@ -435,231 +419,6 @@ class MetaSafeStringMapStorage {
   }
 
   bool IsExist(std::string id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = elements_->find(id);
-    return static_cast<bool>(it != elements_->end());
-  }
-
-  std::string ParseId(const std::string &str) {
-    if (str.size() <= internal_prefix.size()) {
-      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << str;
-      return std::string();
-    }
-
-    // std::string s(str.c_str() + internal_prefix.size() + 1);
-    std::string s = str.substr(internal_prefix.size() + 1);
-    return s;
-  }
-
-  // std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
-  std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-    T value;
-    if (elements_->Get(id, value) < 0) {
-      return nullptr;
-    }
-
-    return TransformToKv(value);
-  };
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(T element) {
-    std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-    kv->set_key(GenKey(element.id()));
-    kv->set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  pb::common::KeyValue TransformToKvValue(T element) {
-    pb::common::KeyValue kv;
-    kv.set_key(GenKey(element.id()));
-    kv.set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    butil::FlatMap<std::string, T> temp_map;
-    temp_map.init(10000);
-    elements_->GetRawMapCopy(temp_map);
-
-    std::vector<pb::common::KeyValue> kvs;
-    for (const auto &it : temp_map) {
-      pb::common::KeyValue kv;
-      kv.set_key(GenKey(it.first));
-      kv.set_value(it.second.SerializeAsString());
-      kvs.push_back(kv);
-    }
-
-    return kvs;
-  }
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    // std::unique_lock<std::shared_mutex> lock(mutex_);
-    std::vector<std::string> key_list;
-    std::vector<T> value_list;
-
-    for (const auto &kv : kvs) {
-      std::string id = ParseId(kv.key());
-      T element;
-      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
-      // elements_->insert_or_assign(id, element);
-      // elements_->insert(id, element);
-      key_list.push_back(id);
-      value_list.push_back(element);
-    }
-
-    elements_->MultiPut(key_list, value_list);
-  };
-
-  MetaSafeStringMapStorage(const MetaSafeStringMapStorage &) = delete;
-  const MetaSafeStringMapStorage &operator=(const MetaSafeStringMapStorage &) = delete;
-
- private:
-  // Coordinator all region meta data in this server.
-  DingoSafeMap<std::string, T> *elements_;
-};
-
-// MetaMapStorage is a meta storage based on map.
-// This is for read/write meta data from/to RocksDB storage
-template <typename T>
-class MetaMapStorage {
- public:
-  const std::string internal_prefix;
-  MetaMapStorage(butil::FlatMap<int64_t, T> *elements_ptr)
-      : internal_prefix(std::string("meta_map_flat") + typeid(T).name()), elements_(elements_ptr){};
-  MetaMapStorage(butil::FlatMap<int64_t, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("meta_map_flat") + prefix), elements_(elements_ptr){};
-  ~MetaMapStorage() = default;
-
-  std::string Prefix() { return internal_prefix; }
-
-  bool Init() {
-    DINGO_LOG(INFO) << "coordinator server meta";
-    return true;
-  }
-
-  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
-    elements_->clear();
-    TransformFromKv(kvs);
-    return true;
-  }
-
-  bool IsExist(int64_t id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = elements_->find(id);
-    return static_cast<bool>(it != elements_->end());
-  }
-
-  int64_t ParseId(const std::string &str) {
-    if (str.size() <= internal_prefix.size()) {
-      DINGO_LOG(ERROR) << "Parse id failed, invalid str " << str;
-      return 0;
-    }
-
-    // std::string s(str.c_str() + internal_prefix.size() + 1);
-    std::string s = str.substr(internal_prefix.size() + 1);
-    try {
-      return std::stoll(s, nullptr, 10);
-    } catch (std::invalid_argument &e) {
-      DINGO_LOG(ERROR) << "string to int64_t failed: " << e.what();
-    }
-
-    return 0;
-  }
-
-  // std::string GenKey(int64_t id) { return fmt::format("{}_{}", internal_prefix, id); }
-  std::string GenKey(int64_t id) { return internal_prefix + "_" + std::to_string(id); }
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(int64_t id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = elements_->find(id);
-    if (it == elements_->end()) {
-      return nullptr;
-    }
-
-    return TransformToKv(it->second);
-  };
-
-  std::shared_ptr<pb::common::KeyValue> TransformToKv(T element) {
-    std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-    kv->set_key(GenKey(element.id()));
-    kv->set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  pb::common::KeyValue TransformToKvValue(T element) {
-    pb::common::KeyValue kv;
-    kv.set_key(GenKey(element.id()));
-    kv.set_value(element.SerializeAsString());
-
-    return kv;
-  }
-
-  std::vector<pb::common::KeyValue> TransformToKvWithAll() {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
-
-    std::vector<pb::common::KeyValue> kvs;
-    for (const auto &it : *elements_) {
-      pb::common::KeyValue kv;
-      kv.set_key(GenKey(it.first));
-      kv.set_value(it.second.SerializeAsString());
-      kvs.push_back(kv);
-    }
-
-    return kvs;
-  }
-
-  void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    // std::unique_lock<std::shared_mutex> lock(mutex_);
-    for (const auto &kv : kvs) {
-      int64_t id = ParseId(kv.key());
-      T element;
-      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
-      // elements_->insert_or_assign(id, element);
-      elements_->insert(id, element);
-    }
-  };
-
-  MetaMapStorage(const MetaMapStorage &) = delete;
-  const MetaMapStorage &operator=(const MetaMapStorage &) = delete;
-
- private:
-  // Coordinator all region meta data in this server.
-  // std::map<int64_t, std::shared_ptr<T>> *elements_;
-  butil::FlatMap<int64_t, T> *elements_;
-};
-
-// MetaSafeStringStdMapStorage is a template class for meta storage
-// This is for read/write meta data from/to RocksDB storage
-template <typename T>
-class MetaSafeStringStdMapStorage {
- public:
-  const std::string internal_prefix;
-  MetaSafeStringStdMapStorage(DingoSafeStdMap<std::string, T> *elements_ptr)
-      : internal_prefix(std::string("meta_stdmap_safe_string") + typeid(T).name()), elements_(elements_ptr){};
-  MetaSafeStringStdMapStorage(DingoSafeStdMap<std::string, T> *elements_ptr, const std::string &prefix)
-      : internal_prefix(std::string("meta_stdmap_safe_string") + prefix), elements_(elements_ptr){};
-  ~MetaSafeStringStdMapStorage() = default;
-
-  std::string Prefix() { return internal_prefix; }
-
-  bool Init() {
-    DINGO_LOG(INFO) << "coordinator server meta";
-    return true;
-  }
-
-  bool Recover(const std::vector<pb::common::KeyValue> &kvs) {
-    elements_->Clear();
-    TransformFromKv(kvs);
-    return true;
-  }
-
-  bool IsExist(std::string id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = elements_->find(id);
     return static_cast<bool>(it != elements_->end());
   }
@@ -671,16 +430,11 @@ class MetaSafeStringStdMapStorage {
     }
 
     return str.substr(internal_prefix.size() + 1);
-
-    // std::string s(str.c_str() + internal_prefix.size() + 1);
-    // return s;
   }
 
-  // std::string GenKey(std::string id) { return fmt::format("{}_{}", internal_prefix, id); }
   std::string GenKey(std::string id) { return internal_prefix + "_" + id; }
 
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::string id) {
-    // std::shared_lock<std::shared_mutex> lock(mutex_);
     T value;
     if (elements_->Get(id, value) < 0) {
       return nullptr;
@@ -722,16 +476,13 @@ class MetaSafeStringStdMapStorage {
   }
 
   void TransformFromKv(const std::vector<pb::common::KeyValue> &kvs) {
-    // std::unique_lock<std::shared_mutex> lock(mutex_);
     std::vector<std::string> key_list;
     std::vector<T> value_list;
 
     for (const auto &kv : kvs) {
       std::string id = ParseId(kv.key());
       T element;
-      element.ParsePartialFromArray(kv.value().data(), kv.value().size());
-      // elements_->insert_or_assign(id, element);
-      // elements_->insert(id, element);
+      element.ParsePartialFromString(kv.value());
       key_list.push_back(id);
       value_list.push_back(element);
     }
@@ -739,23 +490,23 @@ class MetaSafeStringStdMapStorage {
     elements_->MultiPut(key_list, value_list);
   };
 
-  MetaSafeStringStdMapStorage(const MetaSafeStringStdMapStorage &) = delete;
-  const MetaSafeStringStdMapStorage &operator=(const MetaSafeStringStdMapStorage &) = delete;
+  MetaSafeStdMapStorage(const MetaSafeStdMapStorage &) = delete;
+  const MetaSafeStdMapStorage &operator=(const MetaSafeStdMapStorage &) = delete;
 
  private:
   // Coordinator all region meta data in this server.
   DingoSafeStdMap<std::string, T> *elements_;
 };
 
-// MetaMapStr is a template class for meta storage
+// MetaDiskMap is a template class for meta storage
 // This is for read/write meta data from/to RocksDB storage
 template <typename T>
-class MetaMap {
+class MetaDiskMap {
  public:
   const std::string internal_prefix;
-  MetaMap(const std::string &prefix, std::shared_ptr<RawEngine> raw_engine)
-      : internal_prefix(std::string("META_MAP_") + prefix), raw_engine_(raw_engine){};
-  ~MetaMap() = default;
+  MetaDiskMap(const std::string &prefix, std::shared_ptr<RawEngine> raw_engine)
+      : internal_prefix(std::string("METADSK") + prefix), raw_engine_(raw_engine){};
+  ~MetaDiskMap() = default;
 
   std::string Prefix() { return internal_prefix; }
 
@@ -1093,8 +844,8 @@ class MetaMap {
     return butil::Status::OK();
   }
 
-  MetaMap(const MetaMap &) = delete;
-  const MetaMap &operator=(const MetaMap &) = delete;
+  MetaDiskMap(const MetaDiskMap &) = delete;
+  const MetaDiskMap &operator=(const MetaDiskMap &) = delete;
 
  private:
   std::shared_ptr<RawEngine> raw_engine_;

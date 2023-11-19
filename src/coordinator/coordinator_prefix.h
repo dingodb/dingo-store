@@ -19,13 +19,31 @@
 
 namespace dingodb {
 
-inline static const std::string kPrefixKvIdEpoch = "kv_id_epoch_map_";
-inline static const std::string kPrefixKvLease = "kv_lease_map_";
-inline static const std::string kPrefixKvIndex = "kv_index_map_";
-inline static const std::string kPrefixKvRev = "kv_rev_map_";
-inline static const std::string kPrefixDeletedTable = "deleted_table_map_";
-inline static const std::string kPrefixDeletedIndex = "deleted_index_map_";
-inline static const std::string kPrefixDeletedRegion = "deleted_region_map_";
+inline static const std::string kPrefixKvIdEpoch = "KVIDEPO";
+inline static const std::string kPrefixKvLease = "KVLEASE";
+inline static const std::string kPrefixKvIndex = "KVINDEX";
+inline static const std::string kPrefixKvRev = "KVREVIS";
+inline static const std::string kPrefixDeletedTable = "DTABLE_";
+inline static const std::string kPrefixDeletedIndex = "DINDEX_";
+inline static const std::string kPrefixDeletedRegion = "DREGION";
+
+inline static const std::string kPrefixCoordinator = "COORDIN";
+inline static const std::string kPrefixStore = "STORE__";
+inline static const std::string kPrefixSchema = "SCHEMA_";
+inline static const std::string kPrefixRegion = "REGION_";
+inline static const std::string kPrefixRegionMetrics = "REGIONM";
+inline static const std::string kPrefixTable = "TABLE__";
+inline static const std::string kPrefixIdEpoch = "IDEPOCH";
+inline static const std::string kPrefixExecutor = "EXECUTO";
+inline static const std::string kPrefixStoreMetrics = "STOREME";
+inline static const std::string kPrefixTableMetrics = "TABLEME";
+inline static const std::string kPrefixStoreOperation = "STOREOP";
+inline static const std::string kPrefixRegionCmd = "REGICMD";
+inline static const std::string kPrefixExecutorUser = "EXECUSR";
+inline static const std::string kPrefixTaskList = "TASKLST";
+inline static const std::string kPrefixIndex = "INDEX__";
+inline static const std::string kPrefixIndexMetrics = "INDEXME";
+inline static const std::string kPrefixTableIndex = "TBLINDE";
 
 }  // namespace dingodb
 

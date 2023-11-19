@@ -1550,6 +1550,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(WARNING) << "ApplyMetaIncrement table DELETE, [id=" << table.id() << "] failed";
         }
 
+        // meta_delete_kv
+        meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
+
         // delete table_metrics
         table_metrics_map_.Erase(table.id());
 
@@ -1583,8 +1586,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(ERROR) << " DROP TABLE apply illegal schema_id=" << table.table().schema_id()
                            << " table_id=" << table.id() << " table_name=" << table.table().definition().name();
         }
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(table_meta_->TransformToKvValue(table.table()));
       }
     }
   }
