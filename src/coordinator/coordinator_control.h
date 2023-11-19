@@ -506,14 +506,6 @@ class CoordinatorControl : public MetaControl {
   // get executormap
   void GetExecutorMap(pb::common::ExecutorMap &executor_map);
 
-  // get push storemap
-  // this function will use std::swap to empty the class member store_need_push_
-  // void GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store> &store_to_push);
-
-  // get push executormap
-  // this function will use std::swap to empty the class member executor_need_push_
-  void GetPushExecutorMap(butil::FlatMap<std::string, pb::common::Executor> &executor_to_push);
-
   // update region map with new Region info
   // return new epoch
   // int64_t UpdateRegionMap(std::vector<pb::common::Region> &regions,
@@ -811,15 +803,10 @@ class CoordinatorControl : public MetaControl {
   // 2.stores
   DingoSafeMap<int64_t, pb::common::Store> store_map_;
   MetaMemMapFlat<pb::common::Store> *store_meta_;  // need contruct
-  // butil::FlatMap<int64_t, pb::common::Store> store_need_push_;  // will send push msg to these stores in crontab
-  // bthread_mutex_t store_need_push_mutex_;
 
   // 3.executors
   DingoSafeStdMap<std::string, pb::common::Executor> executor_map_;
   MetaMemMapStd<pb::common::Executor> *executor_meta_;  // need construct
-  butil::FlatMap<std::string, pb::common::Executor>
-      executor_need_push_;  // will send push msg to these executors in crontab
-  bthread_mutex_t executor_need_push_mutex_;
 
   // 4.schemas
   DingoSafeMap<int64_t, pb::coordinator_internal::SchemaInternal> schema_map_;

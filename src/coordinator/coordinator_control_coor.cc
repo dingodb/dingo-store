@@ -264,11 +264,6 @@ butil::Status CoordinatorControl::GetOrphanRegion(int64_t store_id,
   return butil::Status::OK();
 }
 
-// void CoordinatorControl::GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store>& store_to_push) {
-//   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
-//   store_to_push.swap(store_need_push_);
-// }
-
 int CoordinatorControl::ValidateStore(int64_t store_id, const std::string& keyring) {
   if (keyring == std::string("TO_BE_CONTINUED")) {
     DINGO_LOG(DEBUG) << "ValidateStore store_id=" << store_id << " debug pass with TO_BE_CONTINUED";
@@ -3232,11 +3227,6 @@ butil::Status CoordinatorControl::GetExecutorUserMap(int64_t cluster_id,
   return butil::Status::OK();
 }
 
-void CoordinatorControl::GetPushExecutorMap(butil::FlatMap<std::string, pb::common::Executor>& executor_to_push) {
-  BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
-  executor_to_push.swap(executor_need_push_);
-}
-
 bool CoordinatorControl::ValidateExecutorUser(const pb::common::ExecutorUser& executor_user) {
   if (executor_user.keyring() == std::string("TO_BE_CONTINUED")) {
     DINGO_LOG(INFO) << "ValidateExecutorUser debug pass with TO_BE_CONTINUED";
@@ -3948,29 +3938,11 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_store_map_size(store_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_map_size());
   }
-  // {
-  //   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
-  //   memory_info.set_store_need_push_count(store_need_push_.size());
-  //   for (auto& it : store_need_push_) {
-  //     memory_info.set_store_need_push_size(memory_info.store_need_push_size() + sizeof(it.first) +
-  //                                          it.second.ByteSizeLong());
-  //   }
-  //   memory_info.set_total_size(memory_info.total_size() + memory_info.store_need_push_size());
-  // }
   {
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     memory_info.set_executor_map_count(executor_map_.Size());
     memory_info.set_executor_map_size(executor_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.executor_map_size());
-  }
-  {
-    BAIDU_SCOPED_LOCK(executor_need_push_mutex_);
-    memory_info.set_executor_need_push_count(executor_need_push_.size());
-    for (auto& it : executor_need_push_) {
-      memory_info.set_executor_need_push_size(memory_info.executor_need_push_size() + it.first.size() +
-                                              it.second.ByteSizeLong());
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.executor_need_push_size());
   }
   {
     // BAIDU_SCOPED_LOCK(schema_map_mutex_);
