@@ -243,6 +243,7 @@ message CoordinatorMemoryInfo {
 
   int64 total_size = 3;
 
+  // common
   int64 id_epoch_safe_map_temp_count = 4;
   int64 id_epoch_safe_map_temp_size = 5;
 
@@ -255,75 +256,74 @@ message CoordinatorMemoryInfo {
   int64 store_map_count = 10;
   int64 store_map_size = 11;
 
-  // DEPRECATED: will be removed in future
-  // int64 store_need_push_count = 12;
-  // int64 store_need_push_size = 13;
+  int64 executor_map_count = 12;
+  int64 executor_map_size = 13;
 
-  int64 executor_map_count = 14;
-  int64 executor_map_size = 15;
+  int64 executor_user_map_count = 14;
+  int64 executor_user_map_size = 15;
 
-  int64 executor_need_push_count = 16;
-  int64 executor_need_push_size = 17;
+  // schema
+  int64 schema_map_count = 21;
+  int64 schema_map_size = 22;
 
-  int64 schema_map_count = 18;
-  int64 schema_map_size = 19;
+  int64 region_map_count = 23;
+  int64 region_map_size = 24;
 
-  int64 region_map_count = 20;
-  int64 region_map_size = 21;
+  int64 range_region_map_count = 25;
+  int64 range_region_map_size = 26;
 
-  int64 table_map_count = 22;
-  int64 table_map_size = 23;
+  int64 table_map_count = 27;
+  int64 table_map_size = 28;
 
-  int64 store_metrics_map_count = 24;
-  int64 store_metrics_map_size = 25;
+  int64 index_map_count = 29;
+  int64 index_map_size = 30;
 
-  int64 table_metrics_map_count = 26;
-  int64 table_metrics_map_size = 27;
+  // metrics
+  int64 store_metrics_map_count = 41;
+  int64 store_metrics_map_size = 42;
 
-  int64 store_operation_map_count = 28;
-  int64 store_operation_map_size = 29;
+  int64 table_metrics_map_count = 43;
+  int64 table_metrics_map_size = 44;
 
-  int64 region_cmd_map_count = 30;
-  int64 region_cmd_map_size = 31;
+  int64 index_metrics_map_count = 48;
+  int64 index_metrics_map_size = 49;
 
-  int64 executor_user_map_count = 32;
-  int64 executor_user_map_size = 33;
+  int64 region_metrics_map_count = 50;
+  int64 region_metrics_map_size = 51;
 
-  int64 task_list_map_count = 34;
-  int64 task_list_map_size = 35;
+  // store operation
+  int64 store_operation_map_count = 61;
+  int64 store_operation_map_size = 62;
 
-  int64 index_map_count = 36;
-  int64 index_map_size = 37;
+  int64 region_cmd_map_count = 63;
+  int64 region_cmd_map_size = 64;
 
-  int64 index_metrics_map_count = 38;
-  int64 index_metrics_map_size = 39;
+  int64 task_list_map_count = 65;
+  int64 task_list_map_size = 66;
 
-  int64 region_metrics_map_count = 40;
-  int64 region_metrics_map_size = 41;
+  // deleted
+  int64 deleted_region_map_count = 71;
+  int64 deleted_region_map_size = 72;
 
-  int64 deleted_region_map_count = 42;
-  int64 deleted_region_map_size = 43;
+  int64 deleted_table_map_count = 73;
+  int64 deleted_table_map_size = 74;
 
-  int64 deleted_table_map_count = 44;
-  int64 deleted_table_map_size = 45;
+  int64 deleted_index_map_count = 75;
+  int64 deleted_index_map_size = 76;
 
-  int64 deleted_index_map_count = 46;
-  int64 deleted_index_map_size = 47;
+  // kv
+  int64 kv_lease_map_count = 81;
+  int64 kv_lease_map_size = 82;
 
-  int64 range_region_map_count = 48;
-  int64 range_region_map_size = 49;
+  int64 kv_index_map_count = 83;
+  int64 kv_index_map_size = 84;
 
-  int64 kv_lease_map_count = 60;
-  int64 kv_lease_map_size = 61;
+  int64 kv_rev_map_count = 85;
+  int64 kv_rev_map_size = 86;
 
-  int64 kv_index_map_count = 62;
-  int64 kv_index_map_size = 63;
-
-  int64 kv_rev_map_count = 64;
-  int64 kv_rev_map_size = 65;
-
-  int64 auto_increment_map_count = 70;
-  int64 auto_increment_map_size = 71;
+  // auto increment
+  int64 auto_increment_map_count = 91;
+  int64 auto_increment_map_size = 92;
 
   repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
 }
