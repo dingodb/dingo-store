@@ -50,11 +50,14 @@ KvControl::KvControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<Me
   leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft
-  id_epoch_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, kPrefixKvIdEpoch);
+  id_epoch_meta_ = new MetaMemMapFlat<pb::coordinator_internal::IdEpochInternal>(&id_epoch_map_, kPrefixKvIdEpoch,
+                                                                                 raw_engine_of_meta);
 
   // version kv
-  kv_lease_meta_ = new MetaSafeMapStorage<pb::coordinator_internal::LeaseInternal>(&kv_lease_map_, kPrefixKvLease);
-  kv_index_meta_ = new MetaSafeStdMapStorage<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, kPrefixKvIndex);
+  kv_lease_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::LeaseInternal>(&kv_lease_map_, kPrefixKvLease, raw_engine_of_meta);
+  kv_index_meta_ =
+      new MetaMemMapStd<pb::coordinator_internal::KvIndexInternal>(&kv_index_map_, kPrefixKvIndex, raw_engine_of_meta);
   kv_rev_meta_ = new MetaDiskMap<pb::coordinator_internal::KvRevInternal>(kPrefixKvRev, raw_engine_of_meta_);
 
   // init SafeMap

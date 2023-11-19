@@ -4723,8 +4723,8 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
         return region.id() > 0 && region.definition().range().end_key() > lower_bound;
       });
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "range_region_map_.GetRangeValues failed";
-    return butil::Status(pb::error::EINTERNAL, "range_region_map_.GetRangeValues failed");
+    DINGO_LOG(ERROR) << "range_region_map_.FindIntervalValues failed";
+    return butil::Status(pb::error::EINTERNAL, "range_region_map_.FindIntervalValues failed");
   }
 
   DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)

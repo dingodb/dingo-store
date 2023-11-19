@@ -180,6 +180,24 @@ class DingoSafeMap {
     return keys.size();
   }
 
+  int GetAllKeyValues(std::map<T_KEY, T_VALUE> &key_value_map, std::function<bool(T_VALUE)> filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (typename TypeRawMap::const_iterator it = ptr->begin(); it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      if (filter == nullptr || filter(it->second)) {
+        key_value_map.insert_or_assign(it->first, it->second);
+      }
+    }
+
+    return key_value_map.size();
+  }
+
   // Exists
   // check if the key exists in the safe map
   bool Exists(const T_KEY &key) {
@@ -611,6 +629,24 @@ class DingoSafeStdMap {
     }
 
     return keys.size();
+  }
+
+  int GetAllKeyValues(std::map<T_KEY, T_VALUE> &key_values, std::function<bool(T_VALUE)> filter = nullptr) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    for (typename TypeRawMap::const_iterator it = ptr->begin(); it != ptr->end(); ++it) {
+      if (it == ptr->end()) {
+        break;
+      }
+      if (filter == nullptr || filter(it->second)) {
+        key_values.insert_or_assign(it->first, it->second);
+      }
+    }
+
+    return key_values.size();
   }
 
   // GetRangeKeys

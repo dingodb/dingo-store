@@ -125,27 +125,23 @@ butil::Status KvControl::RangeRawKvIndex(const std::string &key, const std::stri
 
 butil::Status KvControl::PutRawKvIndex(const std::string &key,
                                        const pb::coordinator_internal::KvIndexInternal &kv_index) {
-  auto ret = kv_index_map_.Put(key, kv_index);
-  if (ret < 0) {
-    DINGO_LOG(WARNING) << "PutRawKvIndex failed, key:[" << key << "]";
+  auto ret = kv_index_meta_->Put(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "PutRawKvIndex failed, key:[" << key << "], errcode" << ret.error_code()
+                     << ", error: " << ret.error_str();
+    return ret;
   }
-
-  std::vector<pb::common::KeyValue> meta_write_to_kv;
-  meta_write_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index));
-  meta_writer_->Put(meta_write_to_kv);
 
   return butil::Status::OK();
 }
 
-butil::Status KvControl::DeleteRawKvIndex(const std::string &key,
-                                          const pb::coordinator_internal::KvIndexInternal &kv_index) {
-  auto ret = kv_index_map_.Erase(key);
-  if (ret < 0) {
-    DINGO_LOG(WARNING) << "DeleteRawKvIndex failed, key:[" << key << "]";
+butil::Status KvControl::DeleteRawKvIndex(const std::string &key) {
+  auto ret = kv_index_meta_->Erase(key);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "DeleteRawKvIndex failed, key:[" << key << "], errcode" << ret.error_code()
+                     << ", error: " << ret.error_str();
+    return ret;
   }
-
-  auto kv_to_delete = kv_index_meta_->TransformToKvValue(kv_index);
-  meta_writer_->Delete(kv_to_delete.key());
 
   return butil::Status::OK();
 }
@@ -1009,7 +1005,7 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
   // else put new_kv_index
   if (new_kv_index.generations_size() == 0) {
     DINGO_LOG(INFO) << "KvCompactApply new_kv_index has no generations, delete it, key: " << key;
-    DeleteRawKvIndex(key, new_kv_index);
+    DeleteRawKvIndex(key);
   } else {
     DINGO_LOG(INFO) << "KvCompactApply new_kv_index has generations, put it, key: " << key
                     << ", new_kv_index: " << new_kv_index.ShortDebugString();

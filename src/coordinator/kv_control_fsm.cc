@@ -423,38 +423,31 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
     for (int i = 0; i < meta_increment.leases_size(); i++) {
       const auto& version_lease = meta_increment.leases(i);
       if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        // lease_map_[version_lease.id()] = version_lease.version_lease();
-        int ret = kv_lease_map_.Put(version_lease.id(), version_lease.lease());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease CREATE, [id=" << version_lease.id() << "] success";
+        auto ret = kv_lease_meta_->Put(version_lease.id(), version_lease.lease());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement version_lease CREATE, [id=" << version_lease.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_lease CREATE, [id=" << version_lease.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease CREATE, [id=" << version_lease.id() << "] success";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(kv_lease_meta_->TransformToKvValue(version_lease.lease()));
 
       } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        int ret = kv_lease_map_.Put(version_lease.id(), version_lease.lease());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id() << "] success";
+        auto ret = kv_lease_meta_->Put(version_lease.id(), version_lease.lease());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease UPDATE, [id=" << version_lease.id() << "] success";
         }
-
-        // meta_write_kv
-        meta_write_to_kv.push_back(kv_lease_meta_->TransformToKvValue(version_lease.lease()));
 
       } else if (version_lease.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        int ret = kv_lease_map_.Erase(version_lease.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease DELETE, [id=" << version_lease.id() << "] success";
+        auto ret = kv_lease_meta_->Erase(version_lease.id());
+        if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement version_lease DELETE, [id=" << version_lease.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement version_lease DELETE, [id=" << version_lease.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement version_lease DELETE, [id=" << version_lease.id() << "] success";
         }
-
-        // meta_delete_kv
-        meta_delete_to_kv.push_back(kv_lease_meta_->TransformToKvValue(version_lease.lease()));
       }
     }
   }
@@ -539,17 +532,13 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
           }
         }
       } else if (kv_index.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        int ret = kv_index_map_.Erase(kv_index.id());
-        if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] success";
+        auto ret = kv_index_meta_->Erase(kv_index.id());
+        if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id()
+                           << "] failed, set errcode=" << ret.error_code() << ", error_str=" << ret.error_str();
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] failed";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement kv_index DELETE, [id=" << kv_index.id() << "] success";
         }
-
-        // meta_delete_kv
-        pb::coordinator_internal::KvIndexInternal kv_index_internal_to_delete;
-        kv_index_internal_to_delete.set_id(kv_index.id());
-        meta_delete_to_kv.push_back(kv_index_meta_->TransformToKvValue(kv_index_internal_to_delete));
       }
     }
   }
