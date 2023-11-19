@@ -255,8 +255,9 @@ message CoordinatorMemoryInfo {
   int64 store_map_count = 10;
   int64 store_map_size = 11;
 
-  int64 store_need_push_count = 12;
-  int64 store_need_push_size = 13;
+  // DEPRECATED: will be removed in future
+  // int64 store_need_push_count = 12;
+  // int64 store_need_push_size = 13;
 
   int64 executor_map_count = 14;
   int64 executor_map_size = 15;

@@ -606,77 +606,78 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
     }
   }
 
-  butil::FlatMap<int64_t, pb::common::Store> store_to_push;
-  store_to_push.init(1000, 80);  // notice: FlagMap must init before use
-  coordinator_control->GetPushStoreMap(store_to_push);
+  // DEPRECATED: will remove in future
+  // butil::FlatMap<int64_t, pb::common::Store> store_to_push;
+  // store_to_push.init(1000, 80);  // notice: FlagMap must init before use
+  // coordinator_control->GetPushStoreMap(store_to_push);
 
-  if (store_to_push.empty()) {
-    // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... No store to push";
-    return;
-  }
+  // if (store_to_push.empty()) {
+  //   // DINGO_LOG(INFO) << "SendCoordinatorPushToStore... No store to push";
+  //   return;
+  // }
 
-  // generate new heartbeat response
-  pb::coordinator::StoreHeartbeatResponse heartbeat_response;
-  {
-    // auto* new_regionmap = heartbeat_response.mutable_regionmap();
-    // coordinator_control->GetRegionMap(*new_regionmap);
+  // // generate new heartbeat response
+  // pb::coordinator::StoreHeartbeatResponse heartbeat_response;
+  // {
+  //   // auto* new_regionmap = heartbeat_response.mutable_regionmap();
+  //   // coordinator_control->GetRegionMap(*new_regionmap);
 
-    auto* new_storemap = heartbeat_response.mutable_storemap();
-    coordinator_control->GetStoreMap(*new_storemap);
+  //   auto* new_storemap = heartbeat_response.mutable_storemap();
+  //   coordinator_control->GetStoreMap(*new_storemap);
 
-    heartbeat_response.set_storemap_epoch(new_storemap->epoch());
-    // heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
+  //   heartbeat_response.set_storemap_epoch(new_storemap->epoch());
+  //   // heartbeat_response.set_regionmap_epoch(new_regionmap->epoch());
 
-    DINGO_LOG(INFO) << "will send to store with response:" << heartbeat_response.ShortDebugString();
-  }
+  //   DINGO_LOG(INFO) << "will send to store with response:" << heartbeat_response.ShortDebugString();
+  // }
 
-  // prepare request and response
-  pb::push::PushHeartbeatRequest request;
-  pb::push::PushHeartbeatResponse response;
+  // // prepare request and response
+  // pb::push::PushHeartbeatRequest request;
+  // pb::push::PushHeartbeatResponse response;
 
-  auto* heart_response_to_send = request.mutable_heartbeat_response();
-  *heart_response_to_send = heartbeat_response;
+  // auto* heart_response_to_send = request.mutable_heartbeat_response();
+  // *heart_response_to_send = heartbeat_response;
 
-  // send heartbeat to all stores need to push
-  for (const auto& store_pair : store_to_push) {
-    const pb::common::Store& store_need_send = store_pair.second;
-    const pb::common::Location& store_server_location = store_need_send.server_location();
+  // // send heartbeat to all stores need to push
+  // for (const auto& store_pair : store_to_push) {
+  //   const pb::common::Store& store_need_send = store_pair.second;
+  //   const pb::common::Location& store_server_location = store_need_send.server_location();
 
-    if (store_server_location.host().length() <= 0 || store_server_location.port() <= 0) {
-      DINGO_LOG(ERROR) << "illegal store_server_location=" << store_server_location.host() << ":"
-                       << store_server_location.port();
-      return;
-    }
+  //   if (store_server_location.host().length() <= 0 || store_server_location.port() <= 0) {
+  //     DINGO_LOG(ERROR) << "illegal store_server_location=" << store_server_location.host() << ":"
+  //                      << store_server_location.port();
+  //     return;
+  //   }
 
-    // build send location string
-    auto store_server_location_string =
-        store_server_location.host() + ":" + std::to_string(store_server_location.port());
+  //   // build send location string
+  //   auto store_server_location_string =
+  //       store_server_location.host() + ":" + std::to_string(store_server_location.port());
 
-    // send rpc
-    braft::PeerId remote_node(store_server_location_string);
+  //   // send rpc
+  //   braft::PeerId remote_node(store_server_location_string);
 
-    // rpc
-    brpc::Channel channel;
-    if (channel.Init(remote_node.addr, nullptr) != 0) {
-      DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
-      return;
-    }
+  //   // rpc
+  //   brpc::Channel channel;
+  //   if (channel.Init(remote_node.addr, nullptr) != 0) {
+  //     DINGO_LOG(ERROR) << "Fail to init channel to " << remote_node;
+  //     return;
+  //   }
 
-    // start rpc
-    pb::push::PushService_Stub stub(&channel);
+  //   // start rpc
+  //   pb::push::PushService_Stub stub(&channel);
 
-    brpc::Controller cntl;
-    cntl.set_timeout_ms(500L);
+  //   brpc::Controller cntl;
+  //   cntl.set_timeout_ms(500L);
 
-    stub.PushHeartbeat(&cntl, &request, &response, nullptr);
-    if (cntl.Failed()) {
-      DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
-      return;
-    }
+  //   stub.PushHeartbeat(&cntl, &request, &response, nullptr);
+  //   if (cntl.Failed()) {
+  //     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
+  //     return;
+  //   }
 
-    DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore to " << store_server_location_string
-                     << " response latency=" << cntl.latency_us() << " msg=" << response.DebugString();
-  }
+  //   DINGO_LOG(DEBUG) << "SendCoordinatorPushToStore to " << store_server_location_string
+  //                    << " response latency=" << cntl.latency_us() << " msg=" << response.DebugString();
+  // }
 }
 
 // this is for coordinator

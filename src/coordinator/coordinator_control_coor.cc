@@ -264,10 +264,10 @@ butil::Status CoordinatorControl::GetOrphanRegion(int64_t store_id,
   return butil::Status::OK();
 }
 
-void CoordinatorControl::GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store>& store_to_push) {
-  BAIDU_SCOPED_LOCK(store_need_push_mutex_);
-  store_to_push.swap(store_need_push_);
-}
+// void CoordinatorControl::GetPushStoreMap(butil::FlatMap<int64_t, pb::common::Store>& store_to_push) {
+//   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
+//   store_to_push.swap(store_need_push_);
+// }
 
 int CoordinatorControl::ValidateStore(int64_t store_id, const std::string& keyring) {
   if (keyring == std::string("TO_BE_CONTINUED")) {
@@ -3948,15 +3948,15 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_store_map_size(store_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_map_size());
   }
-  {
-    BAIDU_SCOPED_LOCK(store_need_push_mutex_);
-    memory_info.set_store_need_push_count(store_need_push_.size());
-    for (auto& it : store_need_push_) {
-      memory_info.set_store_need_push_size(memory_info.store_need_push_size() + sizeof(it.first) +
-                                           it.second.ByteSizeLong());
-    }
-    memory_info.set_total_size(memory_info.total_size() + memory_info.store_need_push_size());
-  }
+  // {
+  //   BAIDU_SCOPED_LOCK(store_need_push_mutex_);
+  //   memory_info.set_store_need_push_count(store_need_push_.size());
+  //   for (auto& it : store_need_push_) {
+  //     memory_info.set_store_need_push_size(memory_info.store_need_push_size() + sizeof(it.first) +
+  //                                          it.second.ByteSizeLong());
+  //   }
+  //   memory_info.set_total_size(memory_info.total_size() + memory_info.store_need_push_size());
+  // }
   {
     // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     memory_info.set_executor_map_count(executor_map_.Size());
