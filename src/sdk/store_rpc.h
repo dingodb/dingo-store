@@ -21,48 +21,32 @@
 namespace dingodb {
 namespace sdk {
 
-using pb::store::KvGetRequest;
-using pb::store::KvGetResponse;
-using pb::store::KvPutRequest;
-using pb::store::KvPutResponse;
 using pb::store::StoreService;
 using pb::store::StoreService_Stub;
 
-class KvGetRpc final : public ClientRpc<KvGetRequest, KvGetResponse, StoreService, StoreService_Stub> {
- public:
-  KvGetRpc(const KvGetRpc &) = delete;
-  const KvGetRpc &operator=(const KvGetRpc &) = delete;
-
-  explicit KvGetRpc();
-
-  explicit KvGetRpc(const std::string &cmd);
-
-  ~KvGetRpc() override;
-
-  std::string Method() const override { return ConstMethod(); }
-
-  void Send(StoreService_Stub &stub, google::protobuf::Closure *done) override;
-
-  static std::string ConstMethod();
+#define DECLARE_STORE_RPC(METHOD) \
+class METHOD##Rpc final : public ClientRpc<pb::store::METHOD##Request, pb::store::METHOD##Response, StoreService, StoreService_Stub> { \
+public: \
+  METHOD##Rpc(const METHOD##Rpc &) = delete;\
+  METHOD##Rpc &operator=(const METHOD##Rpc &) = delete;\
+  explicit METHOD##Rpc(); \
+  explicit METHOD##Rpc(const std::string &cmd); \
+  ~METHOD##Rpc() override; \
+  std::string Method() const override { return ConstMethod(); } \
+  void Send(StoreService_Stub &stub, google::protobuf::Closure *done) override;\
+  static std::string ConstMethod(); \
 };
 
-class KvPutRpc final : public ClientRpc<KvPutRequest, KvPutResponse, StoreService, StoreService_Stub> {
- public:
-  KvPutRpc(const KvPutRpc &) = delete;
-  const KvPutRpc &operator=(const KvPutRpc &) = delete;
-
-  explicit KvPutRpc();
-
-  explicit KvPutRpc(const std::string &cmd);
-
-  ~KvPutRpc() override;
-
-  std::string Method() const override { return ConstMethod(); }
-
-  void Send(StoreService_Stub &stub, google::protobuf::Closure *done) override;
-
-  static std::string ConstMethod();
-};
+DECLARE_STORE_RPC(KvGet);
+DECLARE_STORE_RPC(KvBatchGet);
+DECLARE_STORE_RPC(KvPut);
+DECLARE_STORE_RPC(KvBatchPut);
+DECLARE_STORE_RPC(KvPutIfAbsent);
+DECLARE_STORE_RPC(KvBatchPutIfAbsent);
+DECLARE_STORE_RPC(KvBatchDelete);
+DECLARE_STORE_RPC(KvDeleteRange);
+DECLARE_STORE_RPC(KvCompareAndSet);
+DECLARE_STORE_RPC(KvBatchCompareAndSet);
 
 }  // namespace sdk
 }  // namespace dingodb
