@@ -40,6 +40,7 @@ endif()
 if(BUILD_GOOGLE_SANITIZE)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_definitions(-DUSE_SANITIZE=ON)
     message(STATUS "enable google sanitize")
 endif()
 
@@ -290,6 +291,8 @@ if(WITH_MKL)
     message(STATUS "MKL_LIBRARIES=${MKL_LIBRARIES}")
     # set(MKL_LIBRARIES -Wl,--start-group ${MKL_LIBRARIES} -Wl,--end-group)
     set(DYNAMIC_LIB ${DYNAMIC_LIB} ${MKL_LIBRARIES})
+
+    add_definitions(-DUSE_MKL=ON)
 
 else()
     # find_package(MKL QUIET)
