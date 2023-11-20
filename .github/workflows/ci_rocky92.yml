@@ -1,4 +1,4 @@
-name: CMake_rocky
+name: CMake_rocky92
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
+  BUILD_TYPE: Debug
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
     # You can convert this to a matrix build if you need cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     runs-on: ubuntu-latest
-    container: dingodatabase/dingo-store-rocky-8.8-dev:latest
+    container: dingodatabase/dingo-store-rocky-9.2-dev:latest
 
     steps:
     - uses: actions/checkout@v3
@@ -27,7 +27,8 @@ jobs:
     - name: Clone Submodule
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: git submodule update --init --recursive 
+      run: git submodule sync --recursive && git submodule update --init --recursive 
+      
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -38,15 +39,5 @@ jobs:
       # Build your program with the given configuration
       run: source /opt/intel/oneapi/setvars.sh && cmake --build ./build --config ${{env.BUILD_TYPE}}
 
-
-    - name: Archive the dingo directory
-      run: |
-        tar -czvf dingo-store.tar.gz  scripts build/bin/dingodb* conf/ 
-
-    - name: copy artifactory to another workflow
-      uses: actions/upload-artifact@v2
-      with:
-          name: dingo-store.tar.gz
-          path: ./dingo-store.tar.gz
 
 
