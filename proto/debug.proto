@@ -1,0 +1,222 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "common.proto";
+import "error.proto";
+import "coordinator.proto";
+import "store_internal.proto";
+
+package dingodb.pb.debug;
+
+option java_package = "io.dingodb.debug";
+option cc_generic_services = true;
+
+message AddRegionRequest {
+  dingodb.pb.common.RegionDefinition region = 1;
+}
+
+message AddRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message ChangeRegionRequest {
+  dingodb.pb.common.RegionDefinition region = 1;
+}
+
+message ChangeRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message MergeRegionRequest {
+  int64 source_region_id = 1;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 2;
+  int64 target_region_id = 3;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
+}
+
+message MergeRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message DestroyRegionRequest {
+  int64 region_id = 1;
+}
+
+message DestroyRegionResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message SnapshotRequest {
+  int64 region_id = 1;
+}
+
+message SnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message TransferLeaderRequest {
+  int64 region_id = 1;
+  dingodb.pb.common.Peer peer = 2;
+}
+
+message TransferLeaderResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message SnapshotVectorIndexRequest {
+  int64 vector_index_id = 1;
+}
+
+message SnapshotVectorIndexResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message TriggerVectorIndexSnapshotRequest {
+  int64 vector_index_id = 1;
+  string type = 2;  // install or pull
+  dingodb.pb.common.Location location = 3;
+}
+
+message TriggerVectorIndexSnapshotResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+message CompactRequest {
+  string cf_name = 1;
+}
+
+message CompactResponse {
+  dingodb.pb.error.Error error = 1;
+}
+
+enum DebugType {
+  NONE = 0;
+  STORE_REGION_META_STAT = 1;
+  STORE_REGION_META_DETAILS = 2;
+  STORE_REGION_CONTROL_COMMAND = 3;
+  STORE_RAFT_META = 4;
+  STORE_REGION_EXECUTOR = 5;
+  STORE_REGION_METRICS = 6;
+  STORE_FILE_READER = 7;
+  STORE_REGION_ACTUAL_METRICS = 8;
+  STORE_METRICS = 9;
+  INDEX_VECTOR_INDEX_METRICS = 100;
+}
+
+message DebugRequest {
+  DebugType type = 1;  // debug type
+  repeated int64 region_ids = 2;
+}
+
+message DebugResponse {
+  message RegionMetaStat {
+    map<string, int32> state_counts = 1;
+  }
+
+  message RegionMetaDetails {
+    repeated dingodb.pb.store_internal.Region regions = 1;
+  }
+
+  message RegionControlCommand {
+    repeated dingodb.pb.coordinator.RegionCmd region_cmds = 1;
+  }
+
+  message RaftMeta {
+    repeated dingodb.pb.store_internal.RaftMeta raft_metas = 1;
+  }
+
+  message RegionExecutor {
+    repeated int64 region_ids = 1;
+  }
+
+  message RegionMetrics {
+    repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
+  }
+
+  message FileReader {
+    int32 count = 1;
+    repeated int64 reader_ids = 2;
+  }
+
+  message RegionActualMetrics {
+    repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
+  }
+
+  message StoreMetrics {
+    dingodb.pb.common.StoreMetrics metrics = 1;
+  }
+  
+  message RawVectorIndexState {
+    int64 id = 1;
+    dingodb.pb.common.VectorIndexType type = 2;
+    int64 apply_log_id = 3;
+    int64 snapshot_log_id = 4;
+    dingodb.pb.common.RegionEpoch epoch = 5;
+    string start_key = 6;
+    string end_key = 7;
+    int64 key_count = 8;
+    int64 deleted_key_count = 9;
+    int64 memory_size = 10;
+    dingodb.pb.common.VectorIndexParameter parameter = 11;
+    string comment = 20;
+  }
+
+  message VectorIndexMetricsEntry {
+    int64 id = 1;
+    int64 version = 2;
+    uint32 dimension = 10;
+    int64 apply_log_index = 20;
+    int64 snapshot_log_index = 30;
+    int64 key_count = 40;
+    int64 deleted_key_count = 50;
+    int64 memory_size = 60;
+
+    repeated RawVectorIndexState entries = 70;
+  }
+
+  message VectorIndexMetrics {
+    repeated VectorIndexMetricsEntry entries = 1;
+  }
+
+  RegionMetaStat region_meta_stat = 1;
+  RegionMetaDetails region_meta_details = 2;
+  RegionControlCommand region_control_command = 3;
+  RaftMeta raft_meta = 4;
+  RegionExecutor region_executor = 5;
+  RegionMetrics region_metrics = 6;
+  FileReader file_reader = 7;
+  RegionActualMetrics region_actual_metrics = 8;
+  StoreMetrics store_metrics = 9;
+  VectorIndexMetrics vector_index_metrics = 100;
+}
+
+service DebugService {
+  // region
+  rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
+  rpc ChangeRegion(ChangeRegionRequest) returns (ChangeRegionResponse);
+  rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
+  rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+  rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
+  rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
+
+  rpc TriggerVectorIndexSnapshot(TriggerVectorIndexSnapshotRequest) returns (TriggerVectorIndexSnapshotResponse);
+
+  rpc Compact(CompactRequest) returns (CompactResponse);
+
+  // debug
+  rpc Debug(DebugRequest) returns (DebugResponse);
+}

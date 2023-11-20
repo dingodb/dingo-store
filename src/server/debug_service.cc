@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "server/region_control_service.h"
+#include "server/debug_service.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -32,21 +32,21 @@
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
-#include "proto/region_control.pb.h"
 #include "server/file_service.h"
 #include "server/server.h"
 #include "server/service_helper.h"
+#include "vector/codec.h"
 #include "vector/vector_index_snapshot_manager.h"
 
 using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
-void RegionControlServiceImpl::AddRegion(google::protobuf::RpcController* controller,
-                                         const dingodb::pb::region_control::AddRegionRequest* request,
-                                         dingodb::pb::region_control::AddRegionResponse* response,
-                                         google::protobuf::Closure* done) {
+void DebugServiceImpl::AddRegion(google::protobuf::RpcController* controller,
+                                 const dingodb::pb::debug::AddRegionRequest* request,
+                                 dingodb::pb::debug::AddRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -66,10 +66,9 @@ void RegionControlServiceImpl::AddRegion(google::protobuf::RpcController* contro
   }
 }
 
-void RegionControlServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
-                                            const pb::region_control::ChangeRegionRequest* request,
-                                            pb::region_control::ChangeRegionResponse* response,
-                                            google::protobuf::Closure* done) {
+void DebugServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
+                                    const pb::debug::ChangeRegionRequest* request,
+                                    pb::debug::ChangeRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -89,10 +88,9 @@ void RegionControlServiceImpl::ChangeRegion(google::protobuf::RpcController* con
   }
 }
 
-void RegionControlServiceImpl::MergeRegion(google::protobuf::RpcController* controller,
-                                           const dingodb::pb::region_control::MergeRegionRequest* request,
-                                           dingodb::pb::region_control::MergeRegionResponse* response,
-                                           google::protobuf::Closure* done) {
+void DebugServiceImpl::MergeRegion(google::protobuf::RpcController* controller,
+                                   const dingodb::pb::debug::MergeRegionRequest* request,
+                                   dingodb::pb::debug::MergeRegionResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -125,10 +123,10 @@ void RegionControlServiceImpl::MergeRegion(google::protobuf::RpcController* cont
   }
 }
 
-void RegionControlServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
-                                             const dingodb::pb::region_control::DestroyRegionRequest* request,
-                                             dingodb::pb::region_control::DestroyRegionResponse* response,
-                                             google::protobuf::Closure* done) {
+void DebugServiceImpl::DestroyRegion(google::protobuf::RpcController* controller,
+                                     const dingodb::pb::debug::DestroyRegionRequest* request,
+                                     dingodb::pb::debug::DestroyRegionResponse* response,
+                                     google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -148,10 +146,8 @@ void RegionControlServiceImpl::DestroyRegion(google::protobuf::RpcController* co
   }
 }
 
-void RegionControlServiceImpl::Snapshot(google::protobuf::RpcController* controller,
-                                        const pb::region_control::SnapshotRequest* request,
-                                        pb::region_control::SnapshotResponse* response,
-                                        google::protobuf::Closure* done) {
+void DebugServiceImpl::Snapshot(google::protobuf::RpcController* controller, const pb::debug::SnapshotRequest* request,
+                                pb::debug::SnapshotResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -170,10 +166,9 @@ void RegionControlServiceImpl::Snapshot(google::protobuf::RpcController* control
   }
 }
 
-void RegionControlServiceImpl::TransferLeader(google::protobuf::RpcController* controller,
-                                              const pb::region_control::TransferLeaderRequest* request,
-                                              pb::region_control::TransferLeaderResponse* response,
-                                              google::protobuf::Closure* done) {
+void DebugServiceImpl::TransferLeader(google::protobuf::RpcController* controller,
+                                      const pb::debug::TransferLeaderRequest* request,
+                                      pb::debug::TransferLeaderResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -188,10 +183,10 @@ void RegionControlServiceImpl::TransferLeader(google::protobuf::RpcController* c
   }
 }
 
-void RegionControlServiceImpl::SnapshotVectorIndex(google::protobuf::RpcController* controller,
-                                                   const pb::region_control::SnapshotVectorIndexRequest* request,
-                                                   pb::region_control::SnapshotVectorIndexResponse* response,
-                                                   google::protobuf::Closure* done) {
+void DebugServiceImpl::SnapshotVectorIndex(google::protobuf::RpcController* controller,
+                                           const pb::debug::SnapshotVectorIndexRequest* request,
+                                           pb::debug::SnapshotVectorIndexResponse* response,
+                                           google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -211,9 +206,10 @@ void RegionControlServiceImpl::SnapshotVectorIndex(google::protobuf::RpcControll
   }
 }
 
-void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
-    google::protobuf::RpcController* controller, const pb::region_control::TriggerVectorIndexSnapshotRequest* request,
-    pb::region_control::TriggerVectorIndexSnapshotResponse* response, google::protobuf::Closure* done) {
+void DebugServiceImpl::TriggerVectorIndexSnapshot(google::protobuf::RpcController* controller,
+                                                  const pb::debug::TriggerVectorIndexSnapshotRequest* request,
+                                                  pb::debug::TriggerVectorIndexSnapshotResponse* response,
+                                                  google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -263,9 +259,8 @@ void RegionControlServiceImpl::TriggerVectorIndexSnapshot(
   }
 }
 
-void RegionControlServiceImpl::Compact(google::protobuf::RpcController* controller,
-                                       const pb::region_control::CompactRequest* request,
-                                       pb::region_control::CompactResponse* response, google::protobuf::Closure* done) {
+void DebugServiceImpl::Compact(google::protobuf::RpcController* controller, const pb::debug::CompactRequest* request,
+                               pb::debug::CompactResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
@@ -335,16 +330,15 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   return region_metrics;
 }
 
-void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller,
-                                     const ::dingodb::pb::region_control::DebugRequest* request,
-                                     ::dingodb::pb::region_control::DebugResponse* response,
-                                     ::google::protobuf::Closure* done) {
+void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
+                             const ::dingodb::pb::debug::DebugRequest* request,
+                             ::dingodb::pb::debug::DebugResponse* response, ::google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
   DINGO_LOG(DEBUG) << "Debug request: " << request->ShortDebugString();
 
-  if (request->type() == pb::region_control::DebugType::STORE_REGION_META_STAT) {
+  if (request->type() == pb::debug::DebugType::STORE_REGION_META_STAT) {
     auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     auto regions = store_region_meta->GetAllRegion();
 
@@ -361,7 +355,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       response->mutable_region_meta_stat()->mutable_state_counts()->insert({name, count});
     }
 
-  } else if (request->type() == pb::region_control::DebugType::STORE_REGION_META_DETAILS) {
+  } else if (request->type() == pb::debug::DebugType::STORE_REGION_META_DETAILS) {
     auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     std::vector<store::RegionPtr> regions;
     if (request->region_ids().empty()) {
@@ -379,7 +373,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       *(response->mutable_region_meta_details()->add_regions()) = region->InnerRegion();
     }
 
-  } else if (request->type() == pb::region_control::DebugType::STORE_REGION_CONTROL_COMMAND) {
+  } else if (request->type() == pb::debug::DebugType::STORE_REGION_CONTROL_COMMAND) {
     std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
     if (request->region_ids().empty()) {
       commands = Server::GetInstance().GetRegionCommandManager()->GetAllCommand();
@@ -396,7 +390,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       *(response->mutable_region_control_command()->add_region_cmds()) = (*command);
     }
 
-  } else if (request->type() == pb::region_control::DebugType::STORE_RAFT_META) {
+  } else if (request->type() == pb::debug::DebugType::STORE_RAFT_META) {
     auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
 
     std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
@@ -415,14 +409,14 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       *(response->mutable_raft_meta()->add_raft_metas()) = (*raft_meta);
     }
 
-  } else if (request->type() == pb::region_control::DebugType::STORE_REGION_EXECUTOR) {
+  } else if (request->type() == pb::debug::DebugType::STORE_REGION_EXECUTOR) {
     auto region_ids = Server::GetInstance().GetRegionController()->GetAllRegion();
 
     for (auto region_id : region_ids) {
       response->mutable_region_executor()->add_region_ids(region_id);
     }
 
-  } else if (request->type() == pb::region_control::DebugType::STORE_REGION_METRICS) {
+  } else if (request->type() == pb::debug::DebugType::STORE_REGION_METRICS) {
     auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
 
     std::vector<store::RegionMetricsPtr> region_metricses;
@@ -440,19 +434,19 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     for (auto& region_metrics : region_metricses) {
       *(response->mutable_region_metrics()->add_region_metricses()) = region_metrics->InnerRegionMetrics();
     }
-  } else if (request->type() == pb::region_control::DebugType::STORE_FILE_READER) {
+  } else if (request->type() == pb::debug::DebugType::STORE_FILE_READER) {
     auto reader_ids = FileServiceReaderManager::GetInstance().GetAllReaderId();
 
     response->mutable_file_reader()->set_count(reader_ids.size());
     for (auto reader_id : reader_ids) {
       response->mutable_file_reader()->add_reader_ids(reader_id);
     }
-  } else if (request->type() == pb::region_control::DebugType::STORE_REGION_ACTUAL_METRICS) {
+  } else if (request->type() == pb::debug::DebugType::STORE_REGION_ACTUAL_METRICS) {
     for (auto region_id : request->region_ids()) {
       *(response->mutable_region_actual_metrics()->add_region_metricses()) = GetRegionActualMetrics(region_id);
     }
 
-  } else if (request->type() == pb::region_control::DebugType::STORE_METRICS) {
+  } else if (request->type() == pb::debug::DebugType::STORE_METRICS) {
     auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
     if (store_metrics_manager == nullptr) {
       return;
@@ -463,7 +457,7 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
     }
     *(response->mutable_store_metrics()->mutable_metrics()) = (*store_metrics);
 
-  } else if (request->type() == pb::region_control::DebugType::INDEX_VECTOR_INDEX_METRICS) {
+  } else if (request->type() == pb::debug::DebugType::INDEX_VECTOR_INDEX_METRICS) {
     auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     if (store_region_meta == nullptr) {
       return;
@@ -501,6 +495,91 @@ void RegionControlServiceImpl::Debug(google::protobuf::RpcController* controller
       int64_t memory_size = 0;
       vector_index_wrapper->GetMemorySize(memory_size);
       entry->set_memory_size(memory_size);
+
+      // raw vector index
+      {
+        auto vector_index = vector_index_wrapper->GetOwnVectorIndex();
+        if (vector_index != nullptr) {
+          auto* vector_index_state = entry->add_entries();
+          vector_index_state->set_id(vector_index->Id());
+          vector_index_state->set_type(vector_index->VectorIndexType());
+          vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
+          vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
+          *vector_index_state->mutable_epoch() = vector_index->Epoch();
+          auto range = vector_index->Range();
+          vector_index_state->set_start_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.start_key()),
+                                                        VectorCodec::DecodeVectorId(range.start_key())));
+          vector_index_state->set_end_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.end_key()),
+                                                      VectorCodec::DecodeVectorId(range.end_key())));
+          int64_t key_count = 0;
+          vector_index->GetCount(key_count);
+          vector_index_state->set_key_count(key_count);
+          int64_t deleted_key_count = 0;
+          vector_index->GetDeletedCount(deleted_key_count);
+          vector_index_state->set_deleted_key_count(deleted_key_count);
+          int64_t memory_size = 0;
+          vector_index_wrapper->GetMemorySize(memory_size);
+          vector_index_state->set_memory_size(memory_size);
+          *vector_index_state->mutable_parameter() = vector_index->VectorIndexParameter();
+          vector_index_state->set_comment("own index");
+        }
+      }
+
+      {
+        auto vector_index = vector_index_wrapper->ShareVectorIndex();
+        if (vector_index != nullptr) {
+          auto* vector_index_state = entry->add_entries();
+          vector_index_state->set_id(vector_index->Id());
+          vector_index_state->set_type(vector_index->VectorIndexType());
+          vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
+          vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
+          *vector_index_state->mutable_epoch() = vector_index->Epoch();
+          auto range = vector_index->Range();
+          vector_index_state->set_start_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.start_key()),
+                                                        VectorCodec::DecodeVectorId(range.start_key())));
+          vector_index_state->set_end_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.end_key()),
+                                                      VectorCodec::DecodeVectorId(range.end_key())));
+          int64_t key_count = 0;
+          vector_index->GetCount(key_count);
+          vector_index_state->set_key_count(key_count);
+          int64_t deleted_key_count = 0;
+          vector_index->GetDeletedCount(deleted_key_count);
+          vector_index_state->set_deleted_key_count(deleted_key_count);
+          int64_t memory_size = 0;
+          vector_index_wrapper->GetMemorySize(memory_size);
+          vector_index_state->set_memory_size(memory_size);
+          *vector_index_state->mutable_parameter() = vector_index->VectorIndexParameter();
+          vector_index_state->set_comment("share index");
+        }
+      }
+
+      {
+        auto vector_index = vector_index_wrapper->SiblingVectorIndex();
+        if (vector_index != nullptr) {
+          auto* vector_index_state = entry->add_entries();
+          vector_index_state->set_id(vector_index->Id());
+          vector_index_state->set_type(vector_index->VectorIndexType());
+          vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
+          vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
+          *vector_index_state->mutable_epoch() = vector_index->Epoch();
+          auto range = vector_index->Range();
+          vector_index_state->set_start_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.start_key()),
+                                                        VectorCodec::DecodeVectorId(range.start_key())));
+          vector_index_state->set_end_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.end_key()),
+                                                      VectorCodec::DecodeVectorId(range.end_key())));
+          int64_t key_count = 0;
+          vector_index->GetCount(key_count);
+          vector_index_state->set_key_count(key_count);
+          int64_t deleted_key_count = 0;
+          vector_index->GetDeletedCount(deleted_key_count);
+          vector_index_state->set_deleted_key_count(deleted_key_count);
+          int64_t memory_size = 0;
+          vector_index_wrapper->GetMemorySize(memory_size);
+          vector_index_state->set_memory_size(memory_size);
+          *vector_index_state->mutable_parameter() = vector_index->VectorIndexParameter();
+          vector_index_state->set_comment("sibling index");
+        }
+      }
     }
   }
 }

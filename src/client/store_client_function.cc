@@ -2311,17 +2311,17 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinition(int64_t region_id, c
 }
 
 void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
-  dingodb::pb::region_control::AddRegionRequest request;
+  dingodb::pb::debug::AddRegionRequest request;
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
-  dingodb::pb::region_control::AddRegionResponse response;
+  dingodb::pb::debug::AddRegionResponse response;
 
   InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
                                                                  response);
 }
 
 void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
-  dingodb::pb::region_control::ChangeRegionRequest request;
-  dingodb::pb::region_control::ChangeRegionResponse response;
+  dingodb::pb::debug::ChangeRegionRequest request;
+  dingodb::pb::debug::ChangeRegionResponse response;
 
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
@@ -2335,8 +2335,8 @@ void SendMergeRegion(int64_t source_region_id, int64_t target_region_id) {
     DINGO_LOG(INFO) << "Param source_region_id/target_region_id is error.";
     return;
   }
-  dingodb::pb::region_control::MergeRegionRequest request;
-  dingodb::pb::region_control::MergeRegionResponse response;
+  dingodb::pb::debug::MergeRegionRequest request;
+  dingodb::pb::debug::MergeRegionResponse response;
 
   request.set_source_region_id(source_region_id);
   request.set_target_region_id(target_region_id);
@@ -2345,8 +2345,8 @@ void SendMergeRegion(int64_t source_region_id, int64_t target_region_id) {
 }
 
 void SendDestroyRegion(int64_t region_id) {
-  dingodb::pb::region_control::DestroyRegionRequest request;
-  dingodb::pb::region_control::DestroyRegionResponse response;
+  dingodb::pb::debug::DestroyRegionRequest request;
+  dingodb::pb::debug::DestroyRegionResponse response;
 
   request.set_region_id(region_id);
 
@@ -2355,8 +2355,8 @@ void SendDestroyRegion(int64_t region_id) {
 }
 
 void SendSnapshot(int64_t region_id) {
-  dingodb::pb::region_control::SnapshotRequest request;
-  dingodb::pb::region_control::SnapshotResponse response;
+  dingodb::pb::debug::SnapshotRequest request;
+  dingodb::pb::debug::SnapshotResponse response;
 
   request.set_region_id(region_id);
 
@@ -2364,8 +2364,8 @@ void SendSnapshot(int64_t region_id) {
 }
 
 void SendSnapshotVectorIndex(int64_t vector_index_id) {
-  dingodb::pb::region_control::SnapshotVectorIndexRequest request;
-  dingodb::pb::region_control::SnapshotVectorIndexResponse response;
+  dingodb::pb::debug::SnapshotVectorIndexRequest request;
+  dingodb::pb::debug::SnapshotVectorIndexResponse response;
 
   request.set_vector_index_id(vector_index_id);
 
@@ -2374,8 +2374,8 @@ void SendSnapshotVectorIndex(int64_t vector_index_id) {
 }
 
 void SendCompact(const std::string& cf_name) {
-  dingodb::pb::region_control::CompactRequest request;
-  dingodb::pb::region_control::CompactResponse response;
+  dingodb::pb::debug::CompactRequest request;
+  dingodb::pb::debug::CompactResponse response;
 
   request.set_cf_name(cf_name);
 
@@ -2383,8 +2383,8 @@ void SendCompact(const std::string& cf_name) {
 }
 
 void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer) {
-  dingodb::pb::region_control::TransferLeaderRequest request;
-  dingodb::pb::region_control::TransferLeaderResponse response;
+  dingodb::pb::debug::TransferLeaderRequest request;
+  dingodb::pb::debug::TransferLeaderResponse response;
 
   request.set_region_id(region_id);
   *(request.mutable_peer()) = peer;
@@ -2582,12 +2582,12 @@ struct AddRegionParam {
 void* AdddRegionRoutine(void* arg) {
   std::unique_ptr<AddRegionParam> param(static_cast<AddRegionParam*>(arg));
   for (int i = 0; i < param->region_count; ++i) {
-    dingodb::pb::region_control::AddRegionRequest request;
+    dingodb::pb::debug::AddRegionRequest request;
 
     *(request.mutable_region()) =
         BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
 
-    dingodb::pb::region_control::AddRegionResponse response;
+    dingodb::pb::debug::AddRegionResponse response;
 
     InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
                                                                    response);
@@ -2631,10 +2631,10 @@ void* OperationRegionRoutine(void* arg) {
     // Create region
     {
       DINGO_LOG(INFO) << "======Create region " << region_id;
-      dingodb::pb::region_control::AddRegionRequest request;
+      dingodb::pb::debug::AddRegionRequest request;
       *(request.mutable_region()) =
           BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
-      dingodb::pb::region_control::AddRegionResponse response;
+      dingodb::pb::debug::AddRegionResponse response;
 
       InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
                                                                      response);
@@ -2651,8 +2651,8 @@ void* OperationRegionRoutine(void* arg) {
     {
       bthread_usleep(3 * 1000 * 1000L);
       DINGO_LOG(INFO) << "======Delete region " << region_id;
-      dingodb::pb::region_control::DestroyRegionRequest request;
-      dingodb::pb::region_control::DestroyRegionResponse response;
+      dingodb::pb::debug::DestroyRegionRequest request;
+      dingodb::pb::debug::DestroyRegionResponse response;
 
       request.set_region_id(region_id);
 
