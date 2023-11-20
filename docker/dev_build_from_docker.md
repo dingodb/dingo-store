@@ -7,6 +7,7 @@ We provide docker images of different operating systems to support compilation a
 - centos7
 - centos8
 - rocky8.8
+- rocky9.2
 
 ## Build docker image
 
@@ -24,6 +25,8 @@ docker build docker/centos7/  -t dingo-store-centos-7-dev
 docker build docker/centos8/  -t dingo-store-centos-8-dev
 
 docker build docker/rocky88/  -t dingo-store-rocky-8.8-dev
+
+docker build docker/rocky92/  -t dingo-store-rocky-9.2-dev
 ``````
 
 If you want to start quickly, we can refer to the following commands to pull container
@@ -38,6 +41,8 @@ docker pull dingodatabase/dingo-store-centos-7-dev
 docker pull dingodatabase/dingo-store-centos-8-dev
 
 docker pull dingodatabase/dingo-store-rocky-8.8-dev
+
+docker pull dingodatabase/dingo-store-rocky-9.2-dev
 ``````
 
 ## Use docker container
