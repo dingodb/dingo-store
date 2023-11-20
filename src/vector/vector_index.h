@@ -237,6 +237,8 @@ class VectorIndex {
     return pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
   }
 
+  pb::common::VectorIndexParameter VectorIndexParameter() { return vector_index_parameter; }
+
   int64_t ApplyLogId() const;
   void SetApplyLogId(int64_t apply_log_id);
 
@@ -401,7 +403,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   bool IsExceedsMaxElements();
 
   bool NeedToRebuild();
-  bool NeedToSave(int64_t last_save_log_behind);
+  bool NeedToSave(std::string& reason);
   bool SupportSave();
 
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids);

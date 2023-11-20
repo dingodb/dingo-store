@@ -798,37 +798,21 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
       continue;
     }
 
-    auto last_save_log_behind = vector_index_wrapper->ApplyLogId() - vector_index_wrapper->SnapshotLogId();
-
     bool need_rebuild = vector_index_wrapper->NeedToRebuild();
-    bool need_save = vector_index_wrapper->NeedToSave(last_save_log_behind);
-    if (need_rebuild || need_save) {
-      auto status = ScrubVectorIndex(region, need_rebuild, need_save);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[vector_index.scrub][index_id({})] scrub vector index failed, error: {}",
-                                        vector_index_wrapper->Id(), status.error_str());
-        continue;
-      }
+    if (need_rebuild) {
+      DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need rebuild, do rebuild vector index.",
+                                     vector_index_id);
+      LaunchRebuildVectorIndex(vector_index_wrapper, false);
+      continue;
     }
-  }
 
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexManager::ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save) {
-  assert(region != nullptr);
-
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  int64_t vector_index_id = vector_index_wrapper->Id();
-
-  if (need_rebuild) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need rebuild, do rebuild vector index.",
-                                   vector_index_id);
-    LaunchRebuildVectorIndex(vector_index_wrapper, false);
-  } else if (need_save) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need save, do save vector index.",
-                                   vector_index_id);
-    LaunchSaveVectorIndex(vector_index_wrapper);
+    std::string reason;
+    bool need_save = vector_index_wrapper->NeedToSave(reason);
+    if (need_save) {
+      DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need save, reason: {}.", vector_index_id,
+                                     reason);
+      LaunchSaveVectorIndex(vector_index_wrapper);
+    }
   }
 
   return butil::Status::OK();

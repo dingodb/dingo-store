@@ -731,6 +731,8 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
 
   uint64_t start_time = Helper::TimestampMs();
 
+  FAIL_POINT("apply_prepare_merge");
+
   // Update last_change_cmd_id
   store_region_meta->UpdateLastChangeCmdId(source_region, request.merge_id());
   // Update disable_change
@@ -773,6 +775,8 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   // Set source region state.
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::MERGING);
 
+  FAIL_POINT("before_launch_commit_merge");
+
   // Get source region definition.
   auto source_region_definition = source_region->Definition();
   // Set source region epoch/range.
@@ -780,6 +784,8 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   new_range.set_start_key(Helper::GenMaxStartKey());
   int64_t new_version = source_region_definition.epoch().version() + 1;
   store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, new_range);
+
+  FAIL_POINT("before_launch_commit_merge");
 
   if (target_region != nullptr) {
     // Commit raft command CommitMerge.
@@ -813,6 +819,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
       request.entries().size(), target_region->EpochToString(), target_region->RangeToString());
 
   uint64_t start_time = Helper::TimestampMs();
+
+  FAIL_POINT("apply_commit_merge");
 
   // Update last_change_cmd_id
   store_region_meta->UpdateLastChangeCmdId(target_region, request.merge_id());
@@ -848,6 +856,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
 
   // Set source region TOMBSTONE state
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
+
+  FAIL_POINT("before_commit_merge_modify_epoch");
 
   // Set target region range and epoch
   // range: source range + target range

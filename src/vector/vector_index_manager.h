@@ -133,9 +133,6 @@ class VectorIndexManager {
   static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, int64_t start_log_id,
                                               int64_t end_log_id);
 
-  // Scrub vector index.
-  static butil::Status ScrubVectorIndex(store::RegionPtr region, bool need_rebuild, bool need_save);
-
   static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, std::shared_ptr<Iterator> iter,
                                      const std::string &start_key, [[maybe_unused]] const std::string &end_key);
 

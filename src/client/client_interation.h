@@ -34,10 +34,10 @@
 #include "fmt/core.h"
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/meta.pb.h"
-#include "proto/region_control.pb.h"
 #include "proto/store.pb.h"
 #include "proto/util.pb.h"
 
@@ -100,7 +100,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
   } else if (service_name == "UtilService") {
     method = dingodb::pb::util::UtilService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "RegionControlService") {
-    method = dingodb::pb::region_control::RegionControlService::descriptor()->FindMethodByName(api_name);
+    method = dingodb::pb::debug::DebugService::descriptor()->FindMethodByName(api_name);
   } else {
     DINGO_LOG(FATAL) << "Unknown service name: " << service_name;
   }

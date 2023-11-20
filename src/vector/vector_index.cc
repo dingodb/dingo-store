@@ -455,47 +455,37 @@ bool VectorIndexWrapper::SupportSave() {
   return vector_index->SupportSave();
 }
 
-bool VectorIndexWrapper::NeedToSave(int64_t last_save_log_behind) {
+bool VectorIndexWrapper::NeedToSave(std::string& reason) {
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {
     return false;
   }
 
   if (SnapshotLogId() == 0) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: snapshot_log_id is 0", Id());
+    reason = "no snapshot";
     last_save_write_key_count_ = write_key_count_;
     return true;
   }
 
+  int64_t last_save_log_behind = ApplyLogId() - SnapshotLogId();
   bool ret = vector_index->NeedToSave(last_save_log_behind);
   if (ret) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: last_save_log_behind={} ", Id(),
-        last_save_log_behind);
+    reason = fmt::format("raft log gap({}) exceed threshold", last_save_log_behind);
     last_save_write_key_count_ = write_key_count_;
 
-    return ret;
-  } else {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index need_to_save=false: element count is 0 and deleted count is "
-        "0",
-        Id());
     return ret;
   }
 
   if ((write_key_count_ - last_save_write_key_count_) >= save_snapshot_threshold_write_key_num_) {
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index need_to_save=true: write_key_count {}/{}/{}", Id(),
-        write_key_count_, last_save_write_key_count_, save_snapshot_threshold_write_key_num_);
+    reason = fmt::format("write key gap({}) exceed threshold({})", write_key_count_ - last_save_write_key_count_,
+                         save_snapshot_threshold_write_key_num_);
     last_save_write_key_count_ = write_key_count_;
     return true;
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.wrapper][index_id({})] vector index need_to_save=false: last_save_log_behind={} "
-      "write_key_count={}/{}/{}",
-      Id(), last_save_log_behind, write_key_count_, last_save_write_key_count_, save_snapshot_threshold_write_key_num_);
+      "[vector_index.wrapper][index_id({})] not need save, last_save_log_behind={} write_key_count={}/{}/{}", Id(),
+      last_save_log_behind, write_key_count_, last_save_write_key_count_, save_snapshot_threshold_write_key_num_);
 
   return false;
 }
