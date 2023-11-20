@@ -114,12 +114,9 @@ include(rocksdb)
 include(brpc)
 include(braft)
 include(yaml-cpp)
-include(openblas)
-include(faiss)
 include(fmt)
 include(libunwind)
 include(libbacktrace)
-include(gperftools)
 include(hnswlib)
 include(bdb)
 
@@ -179,8 +176,6 @@ include_directories(${FMT_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
-include_directories(${GPERFTOOLS_INCLUDE_DIR})
-include_directories(${FAISS_INCLUDE_DIR})
 include_directories(${BDB_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
@@ -195,7 +190,6 @@ set(DYNAMIC_LIB
     ${LZ4_LIBRARIES}
     ${ZSTD_LIBRARIES}
     ${YAMLCPP_LIBRARIES}
-    ${FAISS_LIBRARIES}
     ${FMT_LIBRARIES}
     ${ZLIB_LIBRARIES}
     ${OPENSSL_LIBRARIES}
@@ -238,7 +232,12 @@ set(DEPEND_LIBS
 
 if(LINK_TCMALLOC)
     add_definitions(-DLINK_TCMALLOC=ON)
+
     message(STATUS "Build DingoDB with tcmalloc")
+
+    include(gperftools)
+    include_directories(${GPERFTOOLS_INCLUDE_DIR})
+
     if(BRPC_ENABLE_CPU_PROFILER)
         set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
     else()
@@ -253,6 +252,12 @@ if(WITH_MKL)
         message(STATUS "The MKL is found, use intel mkl to replace openblas.")
     else()
         message(FATAL_ERROR "The MKL is not found, please install MKL and enable MKL.")
+    endif()
+
+    if(DEFINED ENV{MKLROOT})
+        message(STATUS "MKLROOT is: $ENV{MKLROOT}")
+    else()
+        message(FATAL_ERROR "NOT DEFINED MKLROOT VARIABLES")
     endif()
 
     message(STATUS "MKL_LIBRARIES=${MKL_LIBRARIES}")
@@ -294,6 +299,8 @@ if(WITH_MKL)
 
     add_definitions(-DUSE_MKL=ON)
 
+    include(faiss-mkl)
+
 else()
     # find_package(MKL QUIET)
     # if(MKL_FOUND)
@@ -301,11 +308,19 @@ else()
     # endif()
 
     message(STATUS "Enable USE_OPENBLAS")
+    include(openblas)
     include_directories(${OPENBLAS_INCLUDE_DIR})
+
     set(DEPEND_LIBS ${DEPEND_LIBS} openblas)
     set(DYNAMIC_LIB ${DYNAMIC_LIB} ${OPENBLAS_LIBRARIES})
+
     add_definitions(-DUSE_OPENBLAS=ON)
+
+    include(faiss-openblas)
 endif()
+
+include_directories(${FAISS_INCLUDE_DIR})
+set(DYNAMIC_LIB ${DYNAMIC_LIB} ${FAISS_LIBRARIES})
 
 if(WITH_DISKANN)
     if(NOT WITH_MKL)
@@ -430,8 +445,6 @@ add_executable(dingodb_client
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client ${DEPEND_LIBS})
-# add_dependencies(dingodb_client_store ${DEPEND_LIBS})
-# add_dependencies(dingodb_client_coordinator ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
     message(STATUS "Build DingoDB with static libraries linking")
