@@ -33,8 +33,6 @@ class TestBase : public ::testing::Test {
     auto coordinator_interaction = std::make_shared<CoordinatorInteraction>();
     meta_cache = std::make_shared<MockMetaCache>(coordinator_interaction);
 
-    PreFillMetaCache();
-
     brpc::ChannelOptions options;
     options.connect_timeout_ms = 3000;
     options.timeout_ms = 5000;
@@ -53,6 +51,10 @@ class TestBase : public ::testing::Test {
     stub.reset();
     store_rpc_interaction.reset();
     meta_cache.reset();
+  }
+
+  void SetUp() override {
+    PreFillMetaCache();
   }
 
   Status NewRawKV(std::shared_ptr<RawKV>& raw_kv) const {

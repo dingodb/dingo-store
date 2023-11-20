@@ -74,9 +74,32 @@ Status RawKV::Put(const std::string& key, const std::string& value) { return imp
 
 Status RawKV::BatchPut(const std::vector<KVPair>& kvs) { return impl_->BatchPut(kvs); }
 
+Status RawKV::PutIfAbsent(const std::string& key, const std::string& value, bool& state) {
+  return impl_->PutIfAbsent(key, value, state);
+}
+
+Status RawKV::BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& states) {
+  return impl_->BatchPutIfAbsent(kvs, states);
+}
+
 Status RawKV::Delete(const std::string& key) { return impl_->Delete(key); }
 
-Status RawKV::PutIfAbsent(const std::string& key, const std::string& value) { return impl_->PutIfAbsent(key, value); }
+Status RawKV::BatchDelete(const std::vector<std::string>& keys) { return impl_->BatchDelete(keys); }
+
+Status RawKV::DeleteRange(const std::string& start, const std::string& end, int64_t& delete_count, bool with_start,
+                          bool with_end) {
+  return impl_->DeleteRange(start, end, with_start, with_end, delete_count);
+}
+
+Status RawKV::CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,
+                            bool& state) {
+  return impl_->CompareAndSet(key, value, expected_value, state);
+}
+
+Status RawKV::BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
+                                 std::vector<KeyOpState>& states) {
+  return impl_->BatchCompareAndSet(kvs, expected_values, states);
+}
 
 }  // namespace sdk
 }  // namespace dingodb

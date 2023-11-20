@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "sdk/status.h"
@@ -53,8 +54,11 @@ class Client : public std::enable_shared_from_this<Client> {
 struct KVPair {
   std::string key;
   std::string value;
+};
 
-  KVPair(std::string&& p_key, std::string&& p_value) : key(std::move(p_key)), value(std::move(p_value)) {}
+struct KeyOpState {
+  std::string key;
+  bool state;
 };
 
 class RawKV : public std::enable_shared_from_this<RawKV> {
@@ -72,11 +76,26 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
 
   Status BatchPut(const std::vector<KVPair>& kvs);
 
-  // TODO scan
+  Status PutIfAbsent(const std::string& key, const std::string& value, bool& state);
+
+  Status BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& states);
 
   Status Delete(const std::string& key);
 
-  Status PutIfAbsent(const std::string& key, const std::string& value);
+  Status BatchDelete(const std::vector<std::string>& keys);
+
+  // NOTE: start must < end
+  // output_param: delete_count
+  Status DeleteRange(const std::string& start, const std::string& end, int64_t& delete_count, bool with_start = true,
+                     bool with_end = false);
+
+  // expected_value: empty means key not exist
+  Status CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,
+                       bool& state);
+
+  // expected_values size must equal kvs size
+  Status BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
+                            std::vector<KeyOpState>& states);
 
  private:
   friend class Client;

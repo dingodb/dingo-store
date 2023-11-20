@@ -19,29 +19,25 @@
 namespace dingodb {
 namespace sdk {
 
-KvGetRpc::KvGetRpc() : KvGetRpc("") {}
+#define DEFINE_STORE_RPC(METHOD)                                                     \
+  METHOD##Rpc::METHOD##Rpc() : METHOD##Rpc("") {}                                    \
+  METHOD##Rpc::METHOD##Rpc(const std::string& cmd) : ClientRpc(cmd) {}               \
+  METHOD##Rpc::~METHOD##Rpc() = default;                                             \
+  void METHOD##Rpc::Send(StoreService_Stub& stub, google::protobuf::Closure* done) { \
+    stub.METHOD(MutableController(), request, response, done);                       \
+  }                                                                                  \
+  std::string METHOD##Rpc::ConstMethod() { return fmt::format("{}.METHOD##Rpc", StoreService::descriptor()->name()); }
 
-KvGetRpc::KvGetRpc(const std::string& cmd) : ClientRpc(cmd) {}
-
-KvGetRpc::~KvGetRpc() = default;
-
-void KvGetRpc::Send(StoreService_Stub& stub, google::protobuf::Closure* done) {
-  stub.KvGet(MutableController(), request, response, done);
-}
-
-std::string KvGetRpc::ConstMethod() { return fmt::format("{}.KvGetRpc", StoreService::descriptor()->name()); }
-
-KvPutRpc::KvPutRpc() : KvPutRpc("") {}
-
-KvPutRpc::KvPutRpc(const std::string& cmd) : ClientRpc(cmd) {}
-
-KvPutRpc::~KvPutRpc() = default;
-
-void KvPutRpc::Send(StoreService_Stub& stub, google::protobuf::Closure* done) {
-  stub.KvPut(MutableController(), request, response, done);
-}
-
-std::string KvPutRpc::ConstMethod() { return fmt::format("{}.KvPutRpc", StoreService::descriptor()->name()); }
+DEFINE_STORE_RPC(KvGet);
+DEFINE_STORE_RPC(KvBatchGet);
+DEFINE_STORE_RPC(KvPut);
+DEFINE_STORE_RPC(KvBatchPut);
+DEFINE_STORE_RPC(KvPutIfAbsent);
+DEFINE_STORE_RPC(KvBatchPutIfAbsent);
+DEFINE_STORE_RPC(KvBatchDelete);
+DEFINE_STORE_RPC(KvDeleteRange);
+DEFINE_STORE_RPC(KvCompareAndSet);
+DEFINE_STORE_RPC(KvBatchCompareAndSet);
 
 }  // namespace sdk
 }  // namespace dingodb
