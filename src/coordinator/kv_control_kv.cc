@@ -647,12 +647,7 @@ butil::Status KvControl::KvPutApply(const std::string &key,
   }
 
   // do real write to state machine
-  ret = PutRawKvIndex(key, kv_index);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
-  }
-  DINGO_LOG(INFO) << "KvPutApply PutRawKvIndex success, key: " << key << ", kv_index: " << kv_index.ShortDebugString();
-
+  // CAUTION: In doing put, we MUST do PutRawKvRev before put RawKvIndex
   ret = PutRawKvRev(op_revision, kv_rev);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvPutApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
@@ -661,6 +656,12 @@ butil::Status KvControl::KvPutApply(const std::string &key,
   }
   DINGO_LOG(INFO) << "KvPutApply PutRawKvRev success, revision: " << op_revision.ShortDebugString()
                   << ", kv_rev: " << kv_rev.ShortDebugString();
+
+  ret = PutRawKvIndex(key, kv_index);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+  }
+  DINGO_LOG(INFO) << "KvPutApply PutRawKvIndex success, key: " << key << ", kv_index: " << kv_index.ShortDebugString();
 
   // trigger watch
   if (!one_time_watch_map_.empty()) {
@@ -775,6 +776,7 @@ butil::Status KvControl::KvDeleteApply(const std::string &key,
   kv->set_is_deleted(true);
 
   // do real write to state machine
+  // CAUTION: When deleting kv, we must do PutRawKvRev before put RawKvIndex
   ret = PutRawKvIndex(key, kv_index);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
