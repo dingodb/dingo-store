@@ -37,11 +37,11 @@ std::string GetBuildFlag() {
 #ifdef USE_MKL
   FLAGS_use_mkl = true;
 #else
-  use_mkl = false;
+  FLAGS_use_mkl = false;
 #endif
 
 #ifdef USE_OPENBLAS
-  use_openblas = true;
+  FLAGS_use_openblas = true;
 #else
   FLAGS_use_openblas = false;
 #endif
@@ -49,17 +49,17 @@ std::string GetBuildFlag() {
 #ifdef LINK_TCMALLOC
   FLAGS_use_tcmalloc = true;
 #else
-  use_tcmalloc = false;
+  FLAGS_use_tcmalloc = false;
 #endif
 
 #ifdef BRPC_ENABLE_CPU_PROFILER
-  use_profiler = true;
+  FLAGS_use_profiler = true;
 #else
   FLAGS_use_profiler = false;
 #endif
 
 #ifdef USE_SANITIZE
-  use_sanitizer = true;
+  FLAGS_use_sanitizer = true;
 #else
   FLAGS_use_sanitizer = false;
 #endif
