@@ -16,18 +16,28 @@
 
 package io.dingodb.sdk.common.cluster;
 
+import io.dingodb.sdk.common.Location;
+
+import java.util.List;
+
 public class InternalRegion implements Region {
     public int regionState;
 
     public int regionType;
     public long createTime;
     public long deleteTime;
+    public List<Location> followers;
 
-    public InternalRegion(int regionState, int regionType, long createTime, long deleteTime) {
+    public InternalRegion(int regionState,
+                          int regionType,
+                          long createTime,
+                          long deleteTime,
+                          List<Location> followers) {
         this.regionState = regionState;
         this.regionType = regionType;
         this.createTime = createTime;
         this.deleteTime = deleteTime;
+        this.followers = followers;
     }
 
     @Override
@@ -48,5 +58,10 @@ public class InternalRegion implements Region {
     @Override
     public long deleteTime() {
         return deleteTime;
+    }
+
+    @Override
+    public List<Location> followers() {
+        return followers;
     }
 }

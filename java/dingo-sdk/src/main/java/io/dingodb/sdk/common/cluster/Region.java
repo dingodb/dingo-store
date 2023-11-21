@@ -16,10 +16,16 @@
 
 package io.dingodb.sdk.common.cluster;
 
+import io.dingodb.sdk.common.Location;
+
+import java.util.List;
+
 public interface Region {
     public int regionState();
     public int regionType();
     public long createTime();
 
     public long deleteTime();
+
+    public List<Location> followers();
 }
