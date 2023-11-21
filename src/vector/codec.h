@@ -16,6 +16,7 @@
 #define DINGODB_VECTOR_CODEC_H_
 
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include "proto/common.pb.h"
@@ -28,6 +29,9 @@ class VectorCodec {
 
   static int64_t DecodeVectorId(const std::string& value);
   static int64_t DecodePartitionId(const std::string& value);
+
+  static std::string DecodeKeyToString(const std::string& key);
+  static std::string DecodeRangeToString(const pb::common::Range& range);
 
   static bool IsValidKey(const std::string& key);
 };

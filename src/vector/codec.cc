@@ -20,6 +20,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "serial/buf.h"
 #include "serial/schema/long_schema.h"
 
@@ -71,6 +72,14 @@ int64_t VectorCodec::DecodePartitionId(const std::string& value) {
   }
 
   return buf.ReadLong();
+}
+
+std::string VectorCodec::DecodeKeyToString(const std::string& key) {
+  return fmt::format("{}_{}", DecodePartitionId(key), DecodeVectorId(key));
+}
+
+std::string VectorCodec::DecodeRangeToString(const pb::common::Range& range) {
+  return fmt::format("[{}, {})", DecodeKeyToString(range.start_key()), DecodeKeyToString(range.end_key()));
 }
 
 bool VectorCodec::IsValidKey(const std::string& key) {

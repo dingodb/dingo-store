@@ -492,6 +492,14 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found target region");
   }
 
+  if (source_region->TemporaryDisableChange()) {
+    return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Temporary disable source region change.");
+  }
+
+  if (target_region->TemporaryDisableChange()) {
+    return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Temporary disable target region change.");
+  }
+
   // Check region adjoin
   if (source_region->Range().end_key() != target_region->Range().start_key() &&
       source_region->Range().start_key() != target_region->Range().end_key()) {
@@ -1187,12 +1195,10 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   }
 
   if (is_hold) {
-    vector_index_wrapper->SetIsTempHoldVectorIndex(true);
     // Load vector index.
-    if (!vector_index_wrapper->IsOwnReady()) {
-      DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
-      VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
-    }
+    DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true);
+
   } else {
     // Delete vector index.
     if (vector_index_wrapper->IsOwnReady()) {

@@ -216,6 +216,10 @@ void LoadOrBuildVectorIndexTask::Run() {
     }
   }
 
+  if (is_temp_hold_vector_index_) {
+    vector_index_wrapper_->SetIsTempHoldVectorIndex(true);
+  }
+
   auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper_, region->Epoch());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.load][index_id({}_v{})] load or build vector index failed, error {}",
@@ -300,8 +304,13 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   return butil::Status();
 }
 
-void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                                      bool is_temp_hold_vector_index) {
   assert(vector_index_wrapper != nullptr);
+
+  if (is_temp_hold_vector_index) {
+    vector_index_wrapper->SetIsTempHoldVectorIndex(true);
+  }
 
   if (vector_index_wrapper->LoadorbuildingNum() > 0) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.launch][index_id({})] Already exist loadorbuild on execute queue.",
@@ -313,7 +322,7 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
       "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
-  auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper);
+  auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index);
   if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch loadorbuild vector index failed",
                                     vector_index_wrapper->Id());
@@ -597,8 +606,11 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.build][index_id({})] Build vector index finish, parallel({}) count({}) elapsed time({}/{}ms)",
-      vector_index_id, vector_index->WriteOpParallelNum(), count, upsert_use_time, Helper::TimestampMs() - start_time);
+      "[vector_index.build][index_id({})] Build vector index finish, parallel({}) count({}) epoch({}) range({}) "
+      "elapsed time({}/{}ms)",
+      vector_index_id, vector_index->WriteOpParallelNum(), count, upsert_use_time,
+      Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()),
+      Helper::TimestampMs() - start_time);
 
   return vector_index;
 }
