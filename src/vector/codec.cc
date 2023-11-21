@@ -15,6 +15,7 @@
 #include "vector/codec.h"
 
 #include <cstdint>
+#include <utility>
 
 #include "butil/compiler_specific.h"
 #include "common/constant.h"
@@ -80,6 +81,19 @@ std::string VectorCodec::DecodeKeyToString(const std::string& key) {
 
 std::string VectorCodec::DecodeRangeToString(const pb::common::Range& range) {
   return fmt::format("[{}, {})", DecodeKeyToString(range.start_key()), DecodeKeyToString(range.end_key()));
+}
+
+void VectorCodec::DecodeRangeToVectorId(const pb::common::Range& range, int64_t& begin_vector_id,
+                                        int64_t& end_vector_id) {
+  begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+  int64_t temp_end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+  if (temp_end_vector_id > 0) {
+    end_vector_id = temp_end_vector_id;
+  } else {
+    if (DecodePartitionId(range.end_key()) > DecodePartitionId(range.start_key())) {
+      end_vector_id = INT64_MAX;
+    }
+  }
 }
 
 bool VectorCodec::IsValidKey(const std::string& key) {

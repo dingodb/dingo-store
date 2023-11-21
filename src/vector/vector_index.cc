@@ -494,8 +494,8 @@ bool VectorIndexWrapper::NeedToSave(std::string& reason) {
 // Filter vector id by range
 static std::vector<int64_t> FilterVectorId(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                            const pb::common::Range& range) {
-  int64_t begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-  int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+  int64_t begin_vector_id = 0, end_vector_id = 0;
+  VectorCodec::DecodeRangeToVectorId(range, begin_vector_id, end_vector_id);
 
   std::vector<int64_t> result;
   for (const auto& vector_with_id : vector_with_ids) {
@@ -509,8 +509,8 @@ static std::vector<int64_t> FilterVectorId(const std::vector<pb::common::VectorW
 
 // Filter vector id by range
 static std::vector<int64_t> FilterVectorId(const std::vector<int64_t>& vector_ids, const pb::common::Range& range) {
-  int64_t begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-  int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+  int64_t begin_vector_id = 0, end_vector_id = 0;
+  VectorCodec::DecodeRangeToVectorId(range, begin_vector_id, end_vector_id);
 
   std::vector<int64_t> result;
   for (const auto vector_id : vector_ids) {
@@ -527,8 +527,8 @@ static std::vector<pb::common::VectorWithId> FilterVectorWithId(
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::Range& range) {
   auto mut_vector_with_ids = const_cast<std::vector<pb::common::VectorWithId>&>(vector_with_ids);
 
-  int64_t begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-  int64_t end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+  int64_t begin_vector_id = 0, end_vector_id = 0;
+  VectorCodec::DecodeRangeToVectorId(range, begin_vector_id, end_vector_id);
 
   std::vector<pb::common::VectorWithId> result;
   for (auto& vector_with_id : mut_vector_with_ids) {
@@ -566,16 +566,16 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
   }
 
   // Exist sibling vector index, so need to separate add vector.
-  auto remaining_vector_index = SiblingVectorIndex();
-  if (remaining_vector_index != nullptr) {
-    auto status = remaining_vector_index->Add(FilterVectorWithId(vector_with_ids, remaining_vector_index->Range()));
+  auto sibling_vector_index = SiblingVectorIndex();
+  if (sibling_vector_index != nullptr) {
+    auto status = sibling_vector_index->Add(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
     status = vector_index->Add(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
-      remaining_vector_index->Delete(FilterVectorId(vector_with_ids, remaining_vector_index->Range()));
+      sibling_vector_index->Delete(FilterVectorId(vector_with_ids, sibling_vector_index->Range()));
       return status;
     }
 
@@ -612,16 +612,16 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
   }
 
   // Exist sibling vector index, so need to separate upsert vector.
-  auto remaining_vector_index = SiblingVectorIndex();
-  if (remaining_vector_index != nullptr) {
-    auto status = remaining_vector_index->Upsert(FilterVectorWithId(vector_with_ids, remaining_vector_index->Range()));
+  auto sibling_vector_index = SiblingVectorIndex();
+  if (sibling_vector_index != nullptr) {
+    auto status = sibling_vector_index->Upsert(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
     status = vector_index->Upsert(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
-      remaining_vector_index->Delete(FilterVectorId(vector_with_ids, remaining_vector_index->Range()));
+      sibling_vector_index->Delete(FilterVectorId(vector_with_ids, sibling_vector_index->Range()));
       return status;
     }
 
@@ -658,15 +658,21 @@ butil::Status VectorIndexWrapper::Delete(const std::vector<int64_t>& delete_ids)
   }
 
   // Exist sibling vector index, so need to separate delete vector.
-  auto remaining_vector_index = SiblingVectorIndex();
-  if (remaining_vector_index != nullptr) {
-    auto status = remaining_vector_index->Delete(FilterVectorId(delete_ids, remaining_vector_index->Range()));
+  auto sibling_vector_index = SiblingVectorIndex();
+  if (sibling_vector_index != nullptr) {
+    auto status = sibling_vector_index->Delete(FilterVectorId(delete_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
+
+    status = vector_index->Delete(FilterVectorId(delete_ids, vector_index->Range()));
+    if (status.ok()) {
+      write_key_count_ += delete_ids.size();
+    }
+    return status;
   }
 
-  auto status = vector_index->Delete(FilterVectorId(delete_ids, vector_index->Range()));
+  auto status = vector_index->Delete(delete_ids);
   if (status.ok()) {
     write_key_count_ += delete_ids.size();
   }
@@ -743,10 +749,10 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   }
 
   // Exist sibling vector index, so need to separate search vector.
-  auto remaining_vector_index = SiblingVectorIndex();
-  if (remaining_vector_index != nullptr) {
+  auto sibling_vector_index = SiblingVectorIndex();
+  if (sibling_vector_index != nullptr) {
     std::vector<pb::index::VectorWithDistanceResult> results_1;
-    auto status = remaining_vector_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_1);
+    auto status = sibling_vector_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_1);
     if (!status.ok()) {
       return status;
     }
@@ -763,9 +769,8 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
 
   const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
-    int64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
-    int64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
-    max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
+    int64_t min_vector_id = 0, max_vector_id = 0;
+    VectorCodec::DecodeRangeToVectorId(region_range, min_vector_id, max_vector_id);
     VectorIndexWrapper::SetVectorIndexFilter(vector_index, filters, min_vector_id, max_vector_id);
   }
 
@@ -799,11 +804,11 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
   }
 
   // Exist sibling vector index, so need to separate search vector.
-  auto remaining_vector_index = SiblingVectorIndex();
-  if (remaining_vector_index != nullptr) {
+  auto sibling_vector_index = SiblingVectorIndex();
+  if (sibling_vector_index != nullptr) {
     std::vector<pb::index::VectorWithDistanceResult> results_1;
     auto status =
-        remaining_vector_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_1);
+        sibling_vector_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_1);
     if (!status.ok()) {
       return status;
     }
@@ -820,9 +825,8 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
 
   const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
-    int64_t min_vector_id = VectorCodec::DecodeVectorId(region_range.start_key());
-    int64_t max_vector_id = VectorCodec::DecodeVectorId(region_range.end_key());
-    max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
+    int64_t min_vector_id = 0, max_vector_id = 0;
+    VectorCodec::DecodeRangeToVectorId(region_range, min_vector_id, max_vector_id);
     VectorIndexWrapper::SetVectorIndexFilter(vector_index, filters, min_vector_id, max_vector_id);
   }
 
