@@ -38,7 +38,7 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "proto/region_control.pb.h"
+#include "proto/debug.pb.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
