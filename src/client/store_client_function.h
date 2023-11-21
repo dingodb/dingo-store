@@ -185,6 +185,7 @@ void TestRegionLifecycle(int64_t region_id, const std::string& raft_group, std::
                          int region_count, int thread_num, int req_num, const std::string& prefix);
 void TestDeleteRangeWhenTransferLeader(int64_t region_id, int req_num, const std::string& prefix);
 void AutoTest(std::shared_ptr<Context> ctx);
+void AutoMergeRegion(std::shared_ptr<Context> ctx);
 
 // Table
 void AutoDropTable(std::shared_ptr<Context> ctx);

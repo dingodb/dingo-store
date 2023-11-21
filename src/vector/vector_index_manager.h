@@ -64,8 +64,8 @@ class SaveVectorIndexTask : public TaskRunnable {
 // Load or build vector index task
 class LoadOrBuildVectorIndexTask : public TaskRunnable {
  public:
-  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper)
-      : vector_index_wrapper_(vector_index_wrapper) {}
+  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index)
+      : vector_index_wrapper_(vector_index_wrapper), is_temp_hold_vector_index_(is_temp_hold_vector_index) {}
   ~LoadOrBuildVectorIndexTask() override = default;
 
   std::string Type() override { return "LOADORBUILD_VECTOR_INDEX"; }
@@ -74,6 +74,7 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
 
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
+  bool is_temp_hold_vector_index_;
 };
 
 // Manage vector index, e.g. build/rebuild/save/load vector index.
@@ -91,7 +92,8 @@ class VectorIndexManager {
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
   static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
                                               const pb::common::RegionEpoch &epoch);
-  static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
+  static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                           bool is_temp_hold_vector_index = false);
   // Parallel load or build vector index at server bootstrap.
   static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);
 

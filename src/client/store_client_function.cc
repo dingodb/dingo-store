@@ -2315,8 +2315,7 @@ void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::debug::AddRegionResponse response;
 
-  InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
-                                                                 response);
+  InteractionManager::GetInstance().AllSendRequestWithoutContext("DebugService", "AddRegion", request, response);
 }
 
 void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs) {
@@ -2326,8 +2325,7 @@ void SendChangeRegion(int64_t region_id, const std::string& raft_group, std::vec
   *(request.mutable_region()) = BuildRegionDefinition(region_id, raft_group, raft_addrs, "a", "z");
   dingodb::pb::common::RegionDefinition* region = request.mutable_region();
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "ChangeRegion", request,
-                                                              response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "ChangeRegion", request, response);
 }
 
 void SendMergeRegion(int64_t source_region_id, int64_t target_region_id) {
@@ -2341,7 +2339,7 @@ void SendMergeRegion(int64_t source_region_id, int64_t target_region_id) {
   request.set_source_region_id(source_region_id);
   request.set_target_region_id(target_region_id);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "MergeRegion", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "MergeRegion", request, response);
 }
 
 void SendDestroyRegion(int64_t region_id) {
@@ -2350,8 +2348,7 @@ void SendDestroyRegion(int64_t region_id) {
 
   request.set_region_id(region_id);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "DestroyRegion", request,
-                                                              response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "DestroyRegion", request, response);
 }
 
 void SendSnapshot(int64_t region_id) {
@@ -2360,7 +2357,7 @@ void SendSnapshot(int64_t region_id) {
 
   request.set_region_id(region_id);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Snapshot", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Snapshot", request, response);
 }
 
 void SendSnapshotVectorIndex(int64_t vector_index_id) {
@@ -2369,8 +2366,7 @@ void SendSnapshotVectorIndex(int64_t vector_index_id) {
 
   request.set_vector_index_id(vector_index_id);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "SnapshotVectorIndex", request,
-                                                              response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "SnapshotVectorIndex", request, response);
 }
 
 void SendCompact(const std::string& cf_name) {
@@ -2379,7 +2375,7 @@ void SendCompact(const std::string& cf_name) {
 
   request.set_cf_name(cf_name);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "Compact", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Compact", request, response);
 }
 
 void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer) {
@@ -2389,8 +2385,7 @@ void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer
   request.set_region_id(region_id);
   *(request.mutable_peer()) = peer;
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("RegionControlService", "TransferLeader", request,
-                                                              response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "TransferLeader", request, response);
 }
 
 void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id) {
@@ -2402,6 +2397,29 @@ void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id)
 
   InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "TransferLeaderRegion", request,
                                                               response);
+}
+
+void SendMergeRegionToCoor(int64_t source_id, int64_t target_id) {
+  dingodb::pb::coordinator::MergeRegionRequest request;
+  dingodb::pb::coordinator::MergeRegionResponse response;
+  if (source_id == 0 || target_id == 0) {
+    DINGO_LOG(INFO) << fmt::format("source_id/target_id is 0");
+    return;
+  }
+
+  request.mutable_merge_request()->set_source_region_id(source_id);
+  request.mutable_merge_request()->set_target_region_id(target_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "MergeRegion", request, response);
+}
+
+uint32_t SendGetTaskList() {
+  dingodb::pb::coordinator::GetTaskListRequest request;
+  dingodb::pb::coordinator::GetTaskListResponse response;
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetTaskList", request, response);
+
+  return response.task_lists().size();
 }
 
 struct BatchPutGetParam {
@@ -2589,8 +2607,7 @@ void* AdddRegionRoutine(void* arg) {
 
     dingodb::pb::debug::AddRegionResponse response;
 
-    InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
-                                                                   response);
+    InteractionManager::GetInstance().AllSendRequestWithoutContext("DebugService", "AddRegion", request, response);
 
     bthread_usleep(3 * 1000 * 1000L);
   }
@@ -2636,8 +2653,7 @@ void* OperationRegionRoutine(void* arg) {
           BuildRegionDefinition(param->start_region_id + i, param->raft_group, param->raft_addrs, "a", "z");
       dingodb::pb::debug::AddRegionResponse response;
 
-      InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "AddRegion", request,
-                                                                     response);
+      InteractionManager::GetInstance().AllSendRequestWithoutContext("DebugService", "AddRegion", request, response);
     }
 
     // Put/Get
@@ -2656,7 +2672,7 @@ void* OperationRegionRoutine(void* arg) {
 
       request.set_region_id(region_id);
 
-      InteractionManager::GetInstance().AllSendRequestWithoutContext("RegionControlService", "DestroyRegion", request,
+      InteractionManager::GetInstance().AllSendRequestWithoutContext("DebugService", "DestroyRegion", request,
                                                                      response);
     }
 
@@ -2963,6 +2979,68 @@ void AutoTest(std::shared_ptr<Context> ctx) {
 
   for (auto& tid : tids) {
     bthread_join(tid, nullptr);
+  }
+}
+
+bool IsSamePartition(dingodb::pb::common::Range source_range, dingodb::pb::common::Range target_range) {
+  return dingodb::VectorCodec::DecodePartitionId(source_range.end_key()) ==
+         dingodb::VectorCodec::DecodePartitionId(target_range.start_key());
+}
+
+void AutoMergeRegion(std::shared_ptr<Context> ctx) {
+  for (;;) {
+    ::google::protobuf::RepeatedPtrField<::dingodb::pb::meta::RangeDistribution> range_dists;
+    if (ctx->table_id > 0) {
+      auto table_range = SendGetTableRange(ctx->table_id);
+      range_dists = table_range.range_distribution();
+    } else {
+      auto index_range = SendGetIndexRange(ctx->index_id);
+      range_dists = index_range.range_distribution();
+    }
+
+    DINGO_LOG(INFO) << fmt::format("Table/index region count {}", range_dists.size());
+
+    for (int i = 0; i < range_dists.size() - 1; ++i) {
+      const auto& source_range_dist = range_dists.at(i);
+      const auto& target_range_dist = range_dists.at(i + 1);
+      int64_t source_region_id = source_range_dist.id().entity_id();
+      if (source_region_id == 0) {
+        DINGO_LOG(INFO) << fmt::format("Get range failed, region_id: {}", source_region_id);
+        continue;
+      }
+      int64_t target_region_id = target_range_dist.id().entity_id();
+      if (source_region_id == 0) {
+        DINGO_LOG(INFO) << fmt::format("Get range failed, region_id: {}", target_region_id);
+        continue;
+      }
+
+      if (source_range_dist.status().state() != dingodb::pb::common::RegionState::REGION_NORMAL ||
+          target_range_dist.status().state() != dingodb::pb::common::RegionState::REGION_NORMAL) {
+        DINGO_LOG(INFO) << fmt::format("Region state is not NORMAL, region state {}/{} {}/{}", source_region_id,
+                                       dingodb::pb::common::RegionState_Name(source_range_dist.status().state()),
+                                       target_region_id,
+                                       dingodb::pb::common::RegionState_Name(target_range_dist.status().state())
+
+        );
+        continue;
+      }
+
+      if (!IsSamePartition(source_range_dist.range(), target_range_dist.range())) {
+        DINGO_LOG(INFO) << fmt::format("Not same partition, region_id: {} {}", source_region_id, target_region_id);
+        continue;
+      }
+
+      auto task_num = SendGetTaskList();
+      if (task_num > 0) {
+        DINGO_LOG(INFO) << fmt::format("Exist task, task num: {}", task_num);
+        continue;
+      }
+
+      DINGO_LOG(INFO) << fmt::format("Launch merge region {} -> {}", source_region_id, target_region_id);
+      SendMergeRegionToCoor(source_region_id, target_region_id);
+    }
+
+    bthread_usleep(1000 * 1000 * 10);
   }
 }
 

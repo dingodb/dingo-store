@@ -225,8 +225,9 @@ void VectorIndexWrapper::SetIsTempHoldVectorIndex(bool need) {
 }
 
 void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& reason) {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] update vector index, reason({}) epoch({})", Id(),
-                                 reason, Helper::RegionEpochToString(vector_index->Epoch()));
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.wrapper][index_id({})] update vector index, reason({}) epoch({}) range({})", Id(), reason,
+      Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()));
   // Check vector index is stop
   if (IsStop()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());

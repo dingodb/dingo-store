@@ -439,6 +439,17 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       AutoTest(ctx);
     }
 
+    else if (method == "AutoMergeRegion") {
+      ctx->table_id = FLAGS_table_id;
+      ctx->index_id = FLAGS_index_id;
+
+      if (ctx->table_id == 0 && ctx->index_id == 0) {
+        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
+        return;
+      }
+      AutoMergeRegion(ctx);
+    }
+
     // Table operation
     else if (method == "AutoDropTable") {
       ctx->req_num = FLAGS_req_num;
