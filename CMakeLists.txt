@@ -46,7 +46,7 @@ endif()
 
 # To avoid rocksdb PROTABLE options on old arch machine when build using docker
 set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
-message("ROCKSDB_PROTABLE_OPTION value is :${ROCKSDB_PROTABLE_OPTION}")
+message(STATUS "ROCKSDB_PROTABLE_OPTION value is ${ROCKSDB_PROTABLE_OPTION}")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
@@ -120,7 +120,7 @@ include(libbacktrace)
 include(hnswlib)
 include(bdb)
 
-message("protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
+message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
 if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/proto" AND IS_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/proto")
         SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
@@ -155,7 +155,7 @@ endforeach()
 set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
 
 add_library(PROTO_OBJS OBJECT ${PROTO_SRCS})
-message("Debug Message protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto srcs : ${PROTO_SRCS}")
+message(STATUS "Debug Message protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto srcs : ${PROTO_SRCS}")
 
 add_custom_target(build_proto ALL
                 DEPENDS ${PROTO_SRCS} ${PROTO_HDRS}

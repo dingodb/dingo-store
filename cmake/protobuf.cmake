@@ -148,7 +148,7 @@ ENDFUNCTION()
 SET(PROTOBUF_VERSION 3.21.12)
 
 IF (NOT PROTOBUF_FOUND)
-    message("build protobuf")
+    message(STATUS "build protobuf")
 
     build_protobuf(extern_protobuf)
 
