@@ -36,7 +36,7 @@
 
 namespace dingodb {
 
-// DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
+// DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 void VectorIndex::SetSnapshotLogId(int64_t snapshot_log_id) {
   this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);

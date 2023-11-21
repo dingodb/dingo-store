@@ -30,17 +30,17 @@
 
 DECLARE_string(key);
 DECLARE_bool(key_is_hex);
-DECLARE_uint64(revision);
-DECLARE_uint64(sub_revision);
+DECLARE_int64(revision);
+DECLARE_int64(sub_revision);
 DECLARE_string(range_end);
-DECLARE_uint64(limit);
+DECLARE_int64(limit);
 DECLARE_string(value);
 DECLARE_bool(count_only);
 DECLARE_bool(keys_only);
 DECLARE_bool(need_prev_kv);
 DECLARE_bool(ignore_value);
 DECLARE_bool(ignore_lease);
-DECLARE_uint64(lease);
+DECLARE_int64(lease);
 
 // kv hello
 void SendKvHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

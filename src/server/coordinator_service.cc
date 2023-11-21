@@ -45,10 +45,10 @@
 
 namespace dingodb {
 
-DEFINE_uint32(max_create_id_count, 2048, "max create id count");
+DEFINE_int32(max_create_id_count, 2048, "max create id count");
 DEFINE_bool(force_cluster_read_only, false, "force cluster read only");
 DEFINE_bool(async_hello, true, "async hello");
-DEFINE_uint32(hello_latency_ms, 0, "hello latency seconds");
+DEFINE_int32(hello_latency_ms, 0, "hello latency seconds");
 
 void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
              pb::coordinator::HelloResponse *response, google::protobuf::Closure *done,

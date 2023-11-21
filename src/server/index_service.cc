@@ -42,8 +42,8 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
-DEFINE_uint64(vector_max_batch_count, 1024, "vector max batch count in one request");
-DEFINE_uint64(vector_max_request_size, 8388608, "vector max batch count in one request");
+DEFINE_int64(vector_max_batch_count, 1024, "vector max batch count in one request");
+DEFINE_int64(vector_max_request_size, 8388608, "vector max batch count in one request");
 DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
 DEFINE_bool(enable_async_vector_add, true, "enable async vector add");
 DEFINE_bool(enable_async_vector_delete, true, "enable async vector delete");
@@ -1394,12 +1394,16 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
     return status;
   }
 
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  if (!vector_index_wrapper->IsReady()) {
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
+  auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper->IsExceedsMaxElements()) {
     return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
@@ -1451,7 +1455,7 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
 
   std::vector<int64_t> vector_ids;
   for (const auto& mutation : request->mutations()) {
-    int64_t vector_id = Helper::DecodeVectorId(mutation.key());
+    int64_t vector_id = VectorCodec::DecodeVectorId(mutation.key());
     if (vector_id == 0) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
     }
@@ -1483,11 +1487,13 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
   ctx->SetIsolationLevel(request->context().isolation_level());
 
   std::vector<pb::store::Mutation> mutations;
+  mutations.reserve(request->mutations_size());
   for (const auto& mutation : request->mutations()) {
     pb::store::Mutation store_mutation;
     store_mutation.set_op(mutation.op());
     store_mutation.set_key(mutation.key());
     store_mutation.set_value(mutation.vector().SerializeAsString());
+    mutations.push_back(store_mutation);
   }
 
   std::map<int64_t, int64_t> for_update_ts_checks;
@@ -1554,6 +1560,60 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "keys is empty");
   }
 
+  // Validate region exist.
+  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto region = store_region_meta->GetRegion(request->context().region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+
+  if (request->keys_size() > FLAGS_vector_max_batch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param vectors size {} is exceed max batch count {}", request->keys_size(),
+                                     FLAGS_vector_max_batch_count));
+  }
+
+  if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
+                         fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
+                                     FLAGS_vector_max_request_size));
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->IsExceedsMaxElements()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
+                         fmt::format("Vector index {} exceeds max elements.", region->Id()));
+  }
+
+  auto status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  std::vector<int64_t> vector_ids;
+  for (const auto& key : request->keys()) {
+    int64_t vector_id = VectorCodec::DecodeVectorId(key);
+    if (vector_id == 0) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
+    }
+    vector_ids.push_back(vector_id);
+  }
+
+  auto ret1 = ServiceHelper::ValidateIndexRegion(region, vector_ids);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "ValidateIndexRegion faild, ret: " << ret1.error_str()
+                     << ", request: " << request->ShortDebugString() << ", region: " << region->Id();
+    return ret1;
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& key : request->keys()) {
     if (key.empty()) {
@@ -1561,12 +1621,14 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
     }
     keys.push_back(key);
   }
-  auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << "ValidateRegion faild, ret: " << status.error_str()
+                     << ", request: " << request->ShortDebugString() << ", region: " << region->Id();
     return status;
   }
 
-  return butil::Status();
+  return butil::Status::OK();
 }
 
 void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -1589,13 +1651,12 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnCheckTxnStatusRequest(const pb::store::TxnCheckTxnStatusRequest* request) {
+static butil::Status VectorValidateTxnCheckTxnStatusRequest(const pb::store::TxnCheckTxnStatusRequest* request) {
   // check if region_epoch is match
-  auto epoch_ret =
-      ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
-  if (!epoch_ret.ok()) {
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
-    return epoch_ret;
+    return status;
   }
 
   if (request->primary_key().empty()) {
@@ -1614,11 +1675,30 @@ static butil::Status ValidateTxnCheckTxnStatusRequest(const pb::store::TxnCheckT
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "current_ts is 0");
   }
 
-  std::vector<std::string_view> keys;
-  keys.push_back(request->primary_key());
-  auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
+  }
+
+  std::vector<std::string_view> keys;
+  keys.push_back(request->primary_key());
+  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto region =
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
   return butil::Status();
@@ -1632,6 +1712,12 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          const pb::store::TxnCheckTxnStatusRequest* request,
                                          pb::store::TxnCheckTxnStatusResponse* response,
                                          google::protobuf::Closure* done) {
+  auto status = VectorValidateTxnCheckTxnStatusRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
@@ -1645,7 +1731,7 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   }
 }
 
-static butil::Status ValidateTxnResolveLockRequest(const pb::store::TxnResolveLockRequest* request) {
+static butil::Status VectorValidateTxnResolveLockRequest(const pb::store::TxnResolveLockRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1676,6 +1762,25 @@ static butil::Status ValidateTxnResolveLockRequest(const pb::store::TxnResolveLo
     }
   }
 
+  auto region =
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  auto status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
   return butil::Status();
 }
 
@@ -1686,6 +1791,12 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
 void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controller,
                                       const pb::store::TxnResolveLockRequest* request,
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
+  auto status = VectorValidateTxnResolveLockRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
@@ -1834,6 +1945,11 @@ static butil::Status ValidateTxnBatchRollbackRequest(const pb::store::TxnBatchRo
     return status;
   }
 
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
   return butil::Status();
 }
 
@@ -1974,7 +2090,7 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnGcRequest(const pb::store::TxnGcRequest* request) {
+static butil::Status VectorValidateTxnGcRequest(const pb::store::TxnGcRequest* request) {
   // check if region_epoch is match
   auto epoch_ret =
       ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
@@ -1987,6 +2103,20 @@ static butil::Status ValidateTxnGcRequest(const pb::store::TxnGcRequest* request
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "safe_point_ts is 0");
   }
 
+  auto region =
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
+  }
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
   return butil::Status();
 }
 
@@ -1995,8 +2125,13 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, co
 
 void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto status = VectorValidateTxnGcRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
 
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoTxnGc(storage, controller, request, response, svr_done, true); });

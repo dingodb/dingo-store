@@ -141,9 +141,9 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
                        << ", new vector add handler failed, vector add count: " << vector_add.vectors_size();
     }
     auto add_ctx = std::make_shared<Context>();
-    add_ctx->SetRegionId(ctx->RegionId()).SetCfName(Constant::kStoreDataCF);
-    add_ctx->SetRegionEpoch(ctx->RegionEpoch());
-    add_ctx->SetIsolationLevel(ctx->IsolationLevel());
+    add_ctx->SetRegionId(region->Id());
+    add_ctx->SetCfName(Constant::kVectorDataCF);
+    add_ctx->SetRegionEpoch(region->Definition().epoch());
 
     pb::raft::Request raft_request_for_vector_add;
     for (const auto &vector : vector_add.vectors()) {
@@ -151,7 +151,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       *new_vector = vector;
     }
     handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
-    if (!add_ctx->Status().ok()) {
+    if (!add_ctx->Status().ok() && ctx != nullptr) {
       ctx->SetStatus(add_ctx->Status());
     }
   }
@@ -170,16 +170,16 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     }
 
     auto del_ctx = std::make_shared<Context>();
-    del_ctx->SetRegionId(ctx->RegionId()).SetCfName(Constant::kStoreDataCF);
-    del_ctx->SetRegionEpoch(ctx->RegionEpoch());
-    del_ctx->SetIsolationLevel(ctx->IsolationLevel());
+    del_ctx->SetRegionId(region->Id());
+    del_ctx->SetCfName(Constant::kVectorDataCF);
+    del_ctx->SetRegionEpoch(region->Definition().epoch());
 
     pb::raft::Request raft_request_for_vector_del;
     for (const auto &id : vector_del.ids()) {
       raft_request_for_vector_del.mutable_vector_delete()->add_ids(id);
     }
     handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id, log_id);
-    if (!del_ctx->Status().ok()) {
+    if (!del_ctx->Status().ok() && ctx != nullptr) {
       ctx->SetStatus(del_ctx->Status());
     }
   }

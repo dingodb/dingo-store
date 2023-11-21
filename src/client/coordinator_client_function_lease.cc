@@ -28,7 +28,7 @@
 #include "proto/version.pb.h"
 
 DECLARE_string(id);
-DECLARE_uint64(ttl);
+DECLARE_int64(ttl);
 
 void SendLeaseGrant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::version::LeaseGrantRequest request;

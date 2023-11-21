@@ -39,8 +39,8 @@
 
 namespace dingodb {
 
-DECLARE_uint64(vector_max_batch_count);
-DECLARE_uint64(vector_max_request_size);
+DECLARE_int64(vector_max_batch_count);
+DECLARE_int64(vector_max_request_size);
 DECLARE_bool(enable_async_vector_operation);
 
 static butil::Status ValidateVectorCalcDistance(const pb::index::VectorCalcDistanceRequest* request) {

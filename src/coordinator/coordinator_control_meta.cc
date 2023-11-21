@@ -43,9 +43,9 @@
 
 namespace dingodb {
 
-DEFINE_uint64(max_partition_num_of_table, 1024, "max partition num of table");
-DEFINE_uint64(max_table_count, 10000, "max table num of dingo");
-DEFINE_uint64(max_index_count, 10000, "max index num of dingo");
+DEFINE_int64(max_partition_num_of_table, 1024, "max partition num of table");
+DEFINE_int64(max_table_count, 10000, "max table num of dingo");
+DEFINE_int64(max_index_count, 10000, "max index num of dingo");
 
 void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                    pb::meta::EntityType entity_type,

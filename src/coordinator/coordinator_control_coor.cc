@@ -54,8 +54,8 @@ DECLARE_int32(region_delete_after_deleted_time);
 
 DECLARE_bool(ip2hostname);
 
-DEFINE_uint32(table_delete_after_deleted_time, 86400, "delete table after deleted time in seconds");
-DEFINE_uint32(index_delete_after_deleted_time, 86400, "delete index after deleted time in seconds");
+DEFINE_int32(table_delete_after_deleted_time, 86400, "delete table after deleted time in seconds");
+DEFINE_int32(index_delete_after_deleted_time, 86400, "delete index after deleted time in seconds");
 
 DEFINE_int32(
     region_update_timeout, 25,
@@ -67,13 +67,13 @@ DEFINE_int32(
     "region down after secondes, will not update region info if no state change and (now - last_update_time) > "
     "region_down_after_secondes");
 
-DEFINE_uint64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
+DEFINE_int64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
 
-DEFINE_uint32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
+DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 
-DEFINE_uint32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
+DEFINE_int32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
 
-DEFINE_uint64(max_region_count, 40000, "max region of dingo");
+DEFINE_int64(max_region_count, 40000, "max region of dingo");
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,

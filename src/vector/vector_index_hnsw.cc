@@ -42,8 +42,8 @@
 
 namespace dingodb {
 
-DEFINE_uint32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
-DEFINE_uint64(hnsw_need_save_count, 10000, "hnsw need save count");
+DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
+DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {

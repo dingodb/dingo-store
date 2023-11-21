@@ -32,12 +32,12 @@
 #include "proto/version.pb.h"
 
 DECLARE_string(key);
-DECLARE_uint64(revision);
+DECLARE_int64(revision);
 DECLARE_bool(need_prev_kv);
 DECLARE_bool(no_put);
 DECLARE_bool(no_delete);
 DECLARE_bool(wait_on_not_exist_key);
-DECLARE_uint32(max_watch_count);
+DECLARE_int32(max_watch_count);
 DECLARE_string(lock_name);
 DECLARE_string(client_uuid);
 

@@ -202,9 +202,9 @@ int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr 
   return 0;
 }
 
-int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
-                               int64_t /*term_id*/, int64_t /*log_id*/) {
+int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr /*region*/,
+                               std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                               store::RegionMetricsPtr region_metrics, int64_t /*term_id*/, int64_t /*log_id*/) {
   butil::Status status;
   const auto &request = req.delete_range();
 
@@ -716,8 +716,8 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
 }
 
 int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr source_region, std::shared_ptr<RawEngine>,
-                                const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
-                                int64_t log_id) {
+                                const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
+                                int64_t /*term_id*/, int64_t log_id) {
   const auto &request = req.prepare_merge();
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto target_region = store_region_meta->GetRegion(request.target_region_id());
@@ -804,7 +804,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
 }
 
 int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target_region, std::shared_ptr<RawEngine>,
-                               const pb::raft::Request &req, store::RegionMetricsPtr, int64_t, int64_t log_id) {
+                               const pb::raft::Request &req, store::RegionMetricsPtr, int64_t, int64_t /*log_id*/) {
   assert(target_region != nullptr);
   const auto &request = req.commit_merge();
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
@@ -910,9 +910,9 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   return 0;
 }
 
-int RollbackMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr source_region, std::shared_ptr<RawEngine>,
-                                 const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
-                                 int64_t log_id) {
+int RollbackMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr /*source_region*/,
+                                 std::shared_ptr<RawEngine>, const pb::raft::Request &req,
+                                 store::RegionMetricsPtr /*region_metrics*/, int64_t /*term_id*/, int64_t /*log_id*/) {
   const auto &request = req.rollback_merge();
 
   return 0;

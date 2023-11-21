@@ -42,7 +42,7 @@
 #include "proto/util.pb.h"
 
 DECLARE_bool(log_each_request);
-DECLARE_uint64(timeout_ms);
+DECLARE_int64(timeout_ms);
 
 namespace client {
 

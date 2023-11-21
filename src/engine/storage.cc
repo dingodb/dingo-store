@@ -789,8 +789,11 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnDump start_key : " << start_key << " end_key : " << end_key << ", start_ts: " << start_ts
+  DINGO_LOG(INFO) << "TxnDump start_key : " << Helper::StringToHex(start_key)
+                  << " end_key : " << Helper::StringToHex(end_key) << ", start_ts: " << start_ts
                   << ", end_ts: " << end_ts;
+  DINGO_LOG(INFO) << "TxnDump data start_key: " << Helper::StringToHex(Helper::EncodeTxnKey(start_key, end_ts))
+                  << " end_key: " << Helper::StringToHex(Helper::EncodeTxnKey(end_key, start_ts));
 
   auto data_reader = engine_->NewReader();
   auto lock_reader = engine_->NewReader();
@@ -855,7 +858,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     txn_lock_value.mutable_lock_info()->ParseFromString(kv.value());
     txn_lock_values.push_back(txn_lock_value);
 
-    DINGO_LOG(INFO) << fmt::format("TxnDump lock key : {} value : {}", txn_lock_key.ShortDebugString(),
+    DINGO_LOG(INFO) << fmt::format("TxnDump lock key : {} value : {}", Helper::StringToHex(txn_lock_key.key()),
                                    txn_lock_value.ShortDebugString());
   }
 

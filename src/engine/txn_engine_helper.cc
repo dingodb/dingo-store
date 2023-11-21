@@ -31,6 +31,7 @@
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
 #include "server/server.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -1545,7 +1546,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     // 3.do Put/Delete/PutIfAbsent
     if (mutation.op() == pb::store::Op::Put) {
       // put data
-      if (mutation.value().length() >= FLAGS_max_short_value_in_write_cf) {
+      if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
         pb::common::KeyValue kv;
         std::string data_key = Helper::EncodeTxnKey(mutation.key(), start_ts);
         kv.set_key(data_key);
@@ -1566,7 +1567,12 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         lock_info.set_lock_ttl(lock_ttl);
         lock_info.set_txn_size(txn_size);
         lock_info.set_lock_type(pb::store::Op::Put);
-        if (mutation.value().length() < FLAGS_max_short_value_in_write_cf) {
+        if (BAIDU_UNLIKELY(mutation.value().empty())) {
+          error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
+          error->set_errmsg("value is empty");
+          return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
+        }
+        if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
           lock_info.set_short_value(mutation.value());
         }
         if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
@@ -1612,7 +1618,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
       } else {
         // put data
-        if (mutation.value().length() >= FLAGS_max_short_value_in_write_cf) {
+        if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
           pb::common::KeyValue kv;
           std::string data_key = Helper::EncodeTxnKey(mutation.key(), start_ts);
           kv.set_key(data_key);
@@ -1633,7 +1639,12 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
           lock_info.set_lock_ttl(lock_ttl);
           lock_info.set_txn_size(txn_size);
           lock_info.set_lock_type(pb::store::Op::Put);
-          if (mutation.value().length() < FLAGS_max_short_value_in_write_cf) {
+          if (BAIDU_UNLIKELY(mutation.value().empty())) {
+            error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
+            error->set_errmsg("value is empty");
+            return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
+          }
+          if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
             lock_info.set_short_value(mutation.value());
           }
           if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
@@ -1981,7 +1992,7 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
 
           *(vector_add->add_vectors()) = vector_with_id;
         } else if (lock_info.lock_type() == pb::store::Op::Delete) {
-          auto vector_id = Helper::DecodeVectorId(lock_info.key());
+          auto vector_id = VectorCodec::DecodeVectorId(lock_info.key());
           if (vector_id == 0) {
             DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
                                             start_ts, commit_ts)
