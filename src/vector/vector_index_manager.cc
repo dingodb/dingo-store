@@ -193,7 +193,8 @@ void LoadOrBuildVectorIndexTask::Run() {
   auto region =
       Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(vector_index_wrapper_->Id());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.loadorbuild][region({})] not found region.", vector_index_wrapper_->Id());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][region({})] not found region.",
+                                    vector_index_wrapper_->Id());
     return;
   }
 
@@ -202,7 +203,7 @@ void LoadOrBuildVectorIndexTask::Run() {
   auto raft_meta =
       Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(vector_index_wrapper_->Id());
   if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
-    DINGO_LOG(INFO) << fmt::format("[raft.loadorbuild][region({})] pull last snapshot from peers.",
+    DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][region({})] pull last snapshot from peers.",
                                    vector_index_wrapper_->Id());
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
@@ -210,7 +211,7 @@ void LoadOrBuildVectorIndexTask::Run() {
       if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
           status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
         DINGO_LOG(ERROR) << fmt::format(
-            "[raft.loadorbuild][region({})] pull vector index last snapshot failed, error: {}",
+            "[vector_index.loadorbuild][region({})] pull vector index last snapshot failed, error: {}",
             vector_index_wrapper_->Id(), status.error_str());
       }
     }
@@ -411,9 +412,8 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
 
-  int64_t min_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().start_key());
-  int64_t max_vector_id = VectorCodec::DecodeVectorId(vector_index->Range().end_key());
-  max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
+  int64_t min_vector_id = 0, max_vector_id = 0;
+  VectorCodec::DecodeRangeToVectorId(vector_index->Range(), min_vector_id, max_vector_id);
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
   std::vector<int64_t> ids;
@@ -534,7 +534,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   options.upper_bound = end_key;
 
   auto raw_engine = Server::GetInstance().GetRawEngine();
-  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
+  auto iter = raw_engine->Reader()->NewIterator(Constant::kVectorDataCF, options);
 
   // Note: This is iterated 2 times for the following reasons:
   // ivf_flat must train first before adding data
@@ -608,9 +608,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.build][index_id({})] Build vector index finish, parallel({}) count({}) epoch({}) range({}) "
       "elapsed time({}/{}ms)",
-      vector_index_id, vector_index->WriteOpParallelNum(), count, upsert_use_time,
-      Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()),
-      Helper::TimestampMs() - start_time);
+      vector_index_id, vector_index->WriteOpParallelNum(), count, Helper::RegionEpochToString(vector_index->Epoch()),
+      VectorCodec::DecodeRangeToString(vector_index->Range()), upsert_use_time, Helper::TimestampMs() - start_time);
 
   return vector_index;
 }

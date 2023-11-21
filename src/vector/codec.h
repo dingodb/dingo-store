@@ -33,6 +33,8 @@ class VectorCodec {
   static std::string DecodeKeyToString(const std::string& key);
   static std::string DecodeRangeToString(const pb::common::Range& range);
 
+  static void DecodeRangeToVectorId(const pb::common::Range& range, int64_t& begin_vector_id, int64_t& end_vector_id);
+
   static bool IsValidKey(const std::string& key);
 };
 

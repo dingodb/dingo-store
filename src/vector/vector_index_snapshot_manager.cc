@@ -346,6 +346,10 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
     pb::node::GetVectorIndexSnapshotResponse response;
     auto status = ServiceAccess::GetVectorIndexSnapshot(request, peer.addr, response);
     if (!status.ok()) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[vector_index.snapshot][index({})] get peer vector index snapshot meta failed, peer({}) error: {}.",
+          vector_index_id, Helper::EndPointToStr(peer.addr), pb::error::Errno_Name(status.error_code()),
+          status.error_str());
       continue;
     }
 
