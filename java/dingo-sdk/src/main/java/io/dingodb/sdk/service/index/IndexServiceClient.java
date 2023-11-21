@@ -25,6 +25,7 @@ import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
+import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.common.vector.Search;
@@ -46,6 +47,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
+import static io.dingodb.sdk.common.utils.StackTraces.CURRENT_STACK;
+import static io.dingodb.sdk.common.utils.StackTraces.stack;
 
 @Slf4j
 public class IndexServiceClient {
@@ -148,7 +151,7 @@ public class IndexServiceClient {
         if (search.getIvfFlatParam() != null) {
             builder.setIvfFlat(Common.SearchIvfFlatParam.newBuilder()
                     .setNprobe(search.getIvfFlatParam().getNprobe())
-                    .setParallelOnQueries(search.getIvfPqParam().getParallelOnQueries())
+                    .setParallelOnQueries(search.getIvfFlatParam().getParallelOnQueries())
                     .build());
         }
         if (search.getIvfPqParam() != null) {
@@ -265,6 +268,8 @@ public class IndexServiceClient {
             int retryTimes,
             DingoCommonId indexId,
             DingoCommonId regionId) {
-        return getIndexStoreConnector(indexId, regionId).exec(function, retryTimes);
+        return getIndexStoreConnector(indexId, regionId).exec(
+            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.defaultCodeChecker
+        );
     }
 }

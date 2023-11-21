@@ -28,6 +28,7 @@ import io.dingodb.sdk.common.RangeWithOptions;
 import io.dingodb.sdk.common.SDKCommonId;
 import io.dingodb.sdk.common.table.RangeDistribution;
 import io.dingodb.sdk.common.utils.EntityConversion;
+import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.service.connector.StoreServiceConnector;
 import io.dingodb.sdk.service.meta.MetaServiceClient;
 import io.dingodb.store.Store;
@@ -44,6 +45,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
+import static io.dingodb.sdk.common.utils.StackTraces.CURRENT_STACK;
+import static io.dingodb.sdk.common.utils.StackTraces.stack;
 
 @Slf4j
 public class StoreServiceClient {
@@ -306,6 +309,8 @@ public class StoreServiceClient {
             DingoCommonId tableId,
             DingoCommonId regionId
     ) {
-        return getStoreConnector(tableId, regionId).exec(function, retryTimes);
+        return getStoreConnector(tableId, regionId).exec(
+            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.defaultCodeChecker
+        );
     }
 }

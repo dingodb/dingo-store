@@ -503,6 +503,7 @@ public class EntityConversion {
                             .setBucketInitSize(ivfPqParam.getBucketInitSize())
                             .setBucketMaxSize(ivfPqParam.getBucketMaxSize())
                             .setNbitsPerIdx(ivfPqParam.getNbitsPerIdx())
+                            .setNsubvector(ivfPqParam.getNsubvector())
                             .build());
                     break;
                 case VECTOR_INDEX_TYPE_HNSW:

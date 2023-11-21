@@ -28,8 +28,14 @@ public class IndexServiceConnector extends ServiceConnector<IndexServiceGrpc.Ind
 
     private final Supplier<Location> leaderSupplier;
 
+    @Deprecated
     public IndexServiceConnector(Supplier<Location> leaderSupplier) {
         super(Collections.emptySet());
+        this.leaderSupplier = leaderSupplier;
+    }
+
+    public IndexServiceConnector(Supplier<Location> leaderSupplier, int retryTimes) {
+        super(Collections.emptySet(), retryTimes);
         this.leaderSupplier = leaderSupplier;
     }
 

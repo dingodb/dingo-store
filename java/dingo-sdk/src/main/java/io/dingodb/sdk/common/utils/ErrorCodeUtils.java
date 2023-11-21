@@ -39,7 +39,7 @@ import static io.dingodb.error.ErrorOuterClass.Errno.EVECTOR_INDEX_NOT_READY_VAL
 
 public class ErrorCodeUtils {
 
-    public enum InternalCode {
+    public enum Strategy {
         FAILED,
         RETRY,
         REFRESH,
@@ -72,16 +72,16 @@ public class ErrorCodeUtils {
         ESCHEMA_NOT_FOUND_VALUE
     );
 
-    public static final Function<Integer, InternalCode> defaultCodeChecker = code -> {
+    public static final Function<Integer, Strategy> defaultCodeChecker = code -> {
         if (ignoreCode.contains(code)) {
-            return InternalCode.IGNORE;
+            return Strategy.IGNORE;
         }
         if (refreshCode.contains(code)) {
-            return InternalCode.REFRESH;
+            return Strategy.REFRESH;
         }
         if (retryCode.contains(code)) {
-            return InternalCode.RETRY;
+            return Strategy.RETRY;
         }
-        return InternalCode.FAILED;
+        return Strategy.FAILED;
     };
 }

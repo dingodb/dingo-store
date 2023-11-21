@@ -1,9 +1,25 @@
-package io.dingodb.sdk.service.connector;
+/*
+ * Copyright 2021 DataCanvas
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import io.dingodb.sdk.common.Location;
+package io.dingodb.sdk.service.rpc;
+
 import io.dingodb.sdk.common.utils.Optional;
-import io.grpc.ManagedChannel;
+import io.dingodb.sdk.service.rpc.message.common.Location;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.ManagedChannel;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,14 +40,24 @@ public final class ChannelManager {
     private static final Map<Location, ManagedChannel> channels = new ConcurrentHashMap<>();
 
     public static ManagedChannel getChannel(String host, int port) {
-        return getChannel(new Location(host, port));
+        return getChannel(new Location().host(host).port(port));
+    }
+
+    public static ManagedChannel getChannel(io.dingodb.sdk.common.Location location) {
+        return Optional.ofNullable(location)
+            .filter(__ -> !__.getHost().isEmpty())
+            .ifAbsent(() -> log.warn("Cannot connect empty host."))
+            .map(__ -> channels.computeIfAbsent(
+                new Location().host(location.getHost()).port(location.getPort()),
+                k -> newChannel(k.host(), k.port())
+            )).orNull();
     }
 
     public static ManagedChannel getChannel(Location location) {
         return Optional.ofNullable(location)
-            .filter(__ -> !__.getHost().isEmpty())
+            .filter(__ -> !__.host().isEmpty())
             .ifAbsent(() -> log.warn("Cannot connect empty host."))
-            .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.getHost(), k.getPort())))
+            .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.host(), k.port())))
             .orNull();
     }
 
