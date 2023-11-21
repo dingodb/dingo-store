@@ -76,4 +76,4 @@ if (WIN32)
     endif (HAVE_SHLWAPI)
 endif (WIN32)
 
-message(gflag: ${GFLAGS_INCLUDE_DIR}, ${GFLAGS_LIBRARIES})
+message(STATUS gflag: ${GFLAGS_INCLUDE_DIR}, ${GFLAGS_LIBRARIES})
