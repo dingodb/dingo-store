@@ -36,7 +36,7 @@
 #include "raft/store_state_machine.h"
 #include "server/server.h"
 
-DEFINE_uint32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
+DEFINE_int32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
 
 namespace dingodb {
 

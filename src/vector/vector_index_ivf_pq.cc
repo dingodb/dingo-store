@@ -37,9 +37,9 @@
 #include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "proto/debug.pb.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {

@@ -25,11 +25,12 @@
 #include "serial/schema/string_schema.h"
 
 #define BDB_BUILD_USE_SNAPSHOT
+#define BDB_FAST_GET_APROX_SIZE
 
 namespace dingodb {
 
-DEFINE_uint32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
-DEFINE_uint32(bdb_page_size, 32 * 1024, "bdb page size");
+DEFINE_int32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
+DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
 DEFINE_int32(bdb_max_retries, 20, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 
@@ -49,7 +50,7 @@ std::string BdbHelper::EncodeKey(const std::string& cf_name, const std::string& 
 // #define BDB_BUILD_USE_SNAPSHOT
 std::string BdbHelper::EncodeCfName(const std::string& cf_name) { return BdbHelper::EncodeKey(cf_name, std::string()); }
 
-int BdbHelper::DecodeKey(const std::string& cf_name, const Dbt& bdb_key, std::string& key) { return -1; }
+int BdbHelper::DecodeKey(const std::string& /*cf_name*/, const Dbt& /*bdb_key*/, std::string& /*key*/) { return -1; }
 
 void BdbHelper::DbtToBinary(const Dbt& dbt, std::string& binary) {
   binary.assign((const char*)dbt.get_data(), dbt.get_size());
@@ -382,10 +383,10 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
     return butil::Status(pb::error::EINTERNAL, "Internal get error.");
   } catch (DbException& db_exception) {
     DINGO_LOG(ERROR) << "[bdb] db exception: " << db_exception.what();
-    return butil::Status(pb::error::EBDB_EXCEPTION, db_exception.what());
+    return butil::Status(pb::error::EBDB_EXCEPTION, "%s", db_exception.what());
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << "[bdb] std exception: " << std_exception.what();
-    return butil::Status(pb::error::ESTD_EXCEPTION, std_exception.what());
+    return butil::Status(pb::error::ESTD_EXCEPTION, "%s", std_exception.what());
   }
 
   return butil::Status(pb::error::EBDB_UNKNOW, "unknow error.");
@@ -1806,7 +1807,7 @@ butil::Status Writer::KvBatchDeleteRange(const std::vector<std::string>& cf_name
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
 
-      for (auto& name : cf_names) {
+      for (const auto& name : cf_names) {
         for (const auto& range : ranges) {
           butil::Status status = DeleteRangeByCursor(name, range, txn);
           if (!status.ok()) {
@@ -2125,7 +2126,7 @@ butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const
       }
     }
 
-    if (kvs.size() > 0) {
+    if (!kvs.empty()) {
       butil::Status s = writer_->KvBatchPut(cf_name, kvs);
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format(
@@ -2190,7 +2191,7 @@ std::vector<int64_t> RawBdbEngine::GetApproximateSizes(const std::string& cf_nam
                                                        std::vector<pb::common::Range>& ranges) {
   std::vector<int64_t> result_counts;
 
-#if 0
+#ifndef BDB_FAST_GET_APROX_SIZE
   std::shared_ptr<bdb::Reader> bdb_reader = std::dynamic_pointer_cast<bdb::Reader>(reader_);
   if (bdb_reader == nullptr) {
     DINGO_LOG(ERROR) << "[bdb] reader pointer cast error.";

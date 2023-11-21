@@ -28,27 +28,27 @@
 #include "proto/meta.pb.h"
 
 DECLARE_bool(log_each_request);
-DECLARE_uint64(timeout_ms);
+DECLARE_int64(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
-DECLARE_uint64(schema_id);
-DECLARE_uint64(table_id);
-DECLARE_uint64(index_id);
-DECLARE_uint64(replica);
-DECLARE_uint32(max_elements);
-DECLARE_uint32(dimension);
-DECLARE_uint32(efconstruction);
-DECLARE_uint32(nlinks);
+DECLARE_int64(schema_id);
+DECLARE_int64(table_id);
+DECLARE_int64(index_id);
+DECLARE_int64(replica);
+DECLARE_int32(max_elements);
+DECLARE_int32(dimension);
+DECLARE_int32(efconstruction);
+DECLARE_int32(nlinks);
 DECLARE_bool(with_auto_increment);
 DECLARE_string(vector_index_type);
 DECLARE_bool(auto_split);
-DECLARE_uint32(part_count);
-DECLARE_uint32(ncentroids);
+DECLARE_int32(part_count);
+DECLARE_int32(ncentroids);
 DECLARE_string(metrics_type);
 DECLARE_int64(def_version);
 DECLARE_int32(nsubvector);
 DECLARE_int32(nbits_per_idx);
-DECLARE_uint64(count);
+DECLARE_int64(count);
 
 DECLARE_int64(tso_save_physical);
 DECLARE_int64(tso_new_physical);

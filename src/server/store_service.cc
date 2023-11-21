@@ -1698,6 +1698,11 @@ static butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::store::
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "current_ts is 0");
   }
 
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
   std::vector<std::string_view> keys;
   keys.push_back(request->primary_key());
   status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
@@ -1784,6 +1789,11 @@ static butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::Txn
         return status;
       }
     }
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
   }
 
   return butil::Status();
@@ -1956,6 +1966,11 @@ static butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::store::T
     keys.push_back(key);
   }
   status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
   if (!status.ok()) {
     return status;
   }
@@ -2246,6 +2261,12 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
 
 void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
+  auto status = ValidateTxnGcRequest(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.

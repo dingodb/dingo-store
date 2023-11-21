@@ -36,13 +36,13 @@
 #include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "proto/debug.pb.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
-DEFINE_uint64(flat_need_save_count, 10000, "flat need save count");
+DEFINE_int64(flat_need_save_count, 10000, "flat need save count");
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range)

@@ -73,16 +73,16 @@ DEFINE_uint32(h2_server_connection_window_size, 1024 * 1024 * 1024, "connection 
 DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
 DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
 
-DEFINE_uint32(omp_num_threads, 1, "omp num threads");
-DEFINE_uint32(service_worker_num, 10, "service worker num");
-DEFINE_uint64(service_worker_max_pending_num, 0, "service worker num");
+DEFINE_int32(omp_num_threads, 1, "omp num threads");
+DEFINE_int32(service_worker_num, 10, "service worker num");
+DEFINE_int64(service_worker_max_pending_num, 0, "service worker num");
 
-DEFINE_uint32(coordinator_service_worker_num, 10, "service worker num");
-DEFINE_uint64(coordinator_service_worker_max_pending_num, 0, "service worker num");
-DEFINE_uint32(meta_service_worker_num, 10, "service worker num");
-DEFINE_uint64(meta_service_worker_max_pending_num, 0, "service worker num");
-DEFINE_uint32(version_service_worker_num, 10, "service worker num");
-DEFINE_uint64(version_service_worker_max_pending_num, 0, "service worker num");
+DEFINE_int32(coordinator_service_worker_num, 10, "service worker num");
+DEFINE_int64(coordinator_service_worker_max_pending_num, 0, "service worker num");
+DEFINE_int32(meta_service_worker_num, 10, "service worker num");
+DEFINE_int64(meta_service_worker_max_pending_num, 0, "service worker num");
+DEFINE_int32(version_service_worker_num, 10, "service worker num");
+DEFINE_int64(version_service_worker_max_pending_num, 0, "service worker num");
 
 extern "C" {
 extern void omp_set_dynamic(int dynamic_threads) noexcept;  // NOLINT
@@ -653,8 +653,9 @@ int main(int argc, char *argv[]) {
   const char *omp_num_threads_value = std::getenv(omp_num_threads);
   if (omp_num_threads_value == nullptr) {
     DINGO_LOG(INFO) << "Environment variable " << omp_num_threads << " is not set";
+  } else {
+    DINGO_LOG(INFO) << "Environment variable " << omp_num_threads << " is set to " << omp_num_threads_value;
   }
-  DINGO_LOG(INFO) << "Environment variable " << omp_num_threads << " is set to " << omp_num_threads_value;
 
   // setup omp_num_threads
   if (FLAGS_omp_num_threads > 0) {

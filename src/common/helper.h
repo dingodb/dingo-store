@@ -291,9 +291,6 @@ class Helper {
   static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id);
   static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id, const std::string& user_key);
 
-  // for index region transaction, decode vector_id from key
-  static int64_t DecodeVectorId(const std::string& value);
-
   // for txn, encode start_ts/commit_ts to std::string
   static std::string EncodeTso(int64_t ts);
   // for txn, padding user key

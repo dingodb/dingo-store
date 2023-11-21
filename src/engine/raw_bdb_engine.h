@@ -47,7 +47,7 @@ class BdbHelper {
 
   static std::string GetEncodedCfNameUpperBound(const std::string& cf_name);
 
-  inline static int kCommitException = -60000;
+  static const int kCommitException = -60000;
 };
 
 class Iterator : public dingodb::Iterator {
@@ -138,7 +138,7 @@ class Reader : public RawEngine::Reader {
                                    IteratorOptions options) override;
 
   butil::Status GetRangeCountByCursor(const std::string& cf_name, DbTxn* txn, const std::string& start_key,
-                                      const std::string& end_key, const int32_t isolation_flag, int64_t& count);
+                                      const std::string& end_key, int32_t isolation_flag, int64_t& count);
 
  private:
   std::shared_ptr<RawBdbEngine> GetRawEngine();
@@ -210,7 +210,7 @@ class RawBdbEngine : public RawEngine {
   RawBdbEngine& operator=(RawBdbEngine&& rhs) = delete;
 
   // Open a DB database
-  int32_t OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, u_int32_t extra_flags);
+  static int32_t OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, u_int32_t extra_flags);
   std::shared_ptr<Db> GetDb() { return db_; }
   std::shared_ptr<RawBdbEngine> GetSelfPtr() { return std::dynamic_pointer_cast<RawBdbEngine>(shared_from_this()); }
 

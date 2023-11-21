@@ -37,12 +37,12 @@
 
 namespace dingodb {
 
-DECLARE_uint64(max_hnsw_memory_size_of_region);
-DECLARE_uint32(max_hnsw_nlinks_of_region);
-DECLARE_uint64(max_partition_num_of_table);
+DECLARE_int64(max_hnsw_memory_size_of_region);
+DECLARE_int32(max_hnsw_nlinks_of_region);
+DECLARE_int64(max_partition_num_of_table);
 
-DEFINE_uint32(max_check_region_state_count, 600, "max check region state count");
-DEFINE_uint32(max_table_definition_count_in_create_tables, 100, "max table definition count in create tables");
+DEFINE_int32(max_check_region_state_count, 600, "max check region state count");
+DEFINE_int32(max_table_definition_count_in_create_tables, 100, "max table definition count in create tables");
 DEFINE_bool(async_create_table, false, "async create table");
 
 static void MetaServiceDone(std::atomic<bool> *done) { done->store(true, std::memory_order_release); }

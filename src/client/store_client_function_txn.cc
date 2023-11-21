@@ -45,27 +45,27 @@ const int kBatchSize = 1000;
 
 DECLARE_string(key);
 DECLARE_string(value);
-DECLARE_uint64(limit);
+DECLARE_int64(limit);
 DECLARE_bool(is_reverse);
 DECLARE_string(start_key);
 DECLARE_string(end_key);
-DECLARE_uint64(vector_id);
-DEFINE_uint64(start_ts, 0, "start_ts");
-DEFINE_uint64(end_ts, 0, "end_ts");
-DEFINE_uint64(commit_ts, 0, "start_ts");
-DEFINE_uint64(lock_ts, 0, "start_ts");
-DEFINE_uint64(lock_ttl, 0, "lock_ttl");
-DEFINE_uint64(for_update_ts, 0, "for_update_ts");
-DEFINE_uint64(safe_point_ts, 0, "safe_point_ts");
-DEFINE_uint64(txn_size, 0, "txn_size");
+DECLARE_int64(vector_id);
+DEFINE_int64(start_ts, 0, "start_ts");
+DEFINE_int64(end_ts, 0, "end_ts");
+DEFINE_int64(commit_ts, 0, "start_ts");
+DEFINE_int64(lock_ts, 0, "start_ts");
+DEFINE_int64(lock_ttl, 0, "lock_ttl");
+DEFINE_int64(for_update_ts, 0, "for_update_ts");
+DEFINE_int64(safe_point_ts, 0, "safe_point_ts");
+DEFINE_int64(txn_size, 0, "txn_size");
 DEFINE_string(primary_lock, "", "primary_lock");
 DEFINE_string(primary_key, "", "primary_key");
-DEFINE_uint64(advise_lock_ttl, 0, "advise_lock_ttl");
-DEFINE_uint64(max_ts, 0, "max_ts");
-DEFINE_uint64(caller_start_ts, 0, "caller_start_ts");
-DEFINE_uint64(current_ts, 0, "current_ts");
+DEFINE_int64(advise_lock_ttl, 0, "advise_lock_ttl");
+DEFINE_int64(max_ts, 0, "max_ts");
+DEFINE_int64(caller_start_ts, 0, "caller_start_ts");
+DEFINE_int64(current_ts, 0, "current_ts");
 DEFINE_bool(try_one_pc, false, "try_one_pc");
-DEFINE_uint64(max_commit_ts, 0, "max_commit_ts");
+DEFINE_int64(max_commit_ts, 0, "max_commit_ts");
 DEFINE_bool(key_only, false, "key_only");
 DEFINE_bool(with_start, true, "with_start");
 DEFINE_bool(with_end, false, "with_end");
@@ -101,12 +101,12 @@ std::string StringToHex(const std::string& key) { return dingodb::Helper::String
 
 std::string HexToString(const std::string& hex) { return dingodb::Helper::HexToString(hex); }
 
-std::string VectorPrefixToHex(char prefix, uint64_t part_id) {
+std::string VectorPrefixToHex(char prefix, int64_t part_id) {
   std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(prefix, part_id);
   return dingodb::Helper::StringToHex(key);
 }
 
-std::string VectorPrefixToHex(char prefix, uint64_t part_id, uint64_t vector_id) {
+std::string VectorPrefixToHex(char prefix, int64_t part_id, int64_t vector_id) {
   std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(prefix, part_id, vector_id);
   return dingodb::Helper::StringToHex(key);
 }
@@ -116,12 +116,12 @@ std::string TablePrefixToHex(char prefix, const std::string& user_key) {
   return dingodb::Helper::StringToHex(key);
 }
 
-std::string TablePrefixToHex(char prefix, uint64_t part_id) {
+std::string TablePrefixToHex(char prefix, int64_t part_id) {
   std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, part_id);
   return dingodb::Helper::StringToHex(key);
 }
 
-std::string TablePrefixToHex(char prefix, uint64_t part_id, const std::string& user_key) {
+std::string TablePrefixToHex(char prefix, int64_t part_id, const std::string& user_key) {
   std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, part_id, user_key);
   return dingodb::Helper::StringToHex(key);
 }
@@ -130,7 +130,7 @@ std::string HexToTablePrefix(const std::string& hex, bool has_part_id) {
   std::string key = dingodb::Helper::HexToString(hex);
   dingodb::Buf buf(key);
   char prefix = buf.Read();
-  uint64_t part_id = 0;
+  int64_t part_id = 0;
   if (has_part_id) {
     part_id = buf.ReadLong();
   }
@@ -153,13 +153,13 @@ std::string HexToVectorPrefix(const std::string& hex) {
   std::string key = dingodb::Helper::HexToString(hex);
   dingodb::Buf buf(key);
   char prefix = buf.Read();
-  uint64_t part_id = buf.ReadLong();
-  uint64_t vector_id = buf.ReadLong();
+  int64_t part_id = buf.ReadLong();
+  int64_t vector_id = buf.ReadLong();
 
   return std::string(1, prefix) + "_" + std::to_string(part_id) + "_" + std::to_string(vector_id);
 }
 
-bool TxnGetRegion(uint64_t region_id, dingodb::pb::common::Region& region) {
+bool TxnGetRegion(int64_t region_id, dingodb::pb::common::Region& region) {
   // query region
   dingodb::pb::coordinator::QueryRegionRequest query_request;
   dingodb::pb::coordinator::QueryRegionResponse query_response;
@@ -197,7 +197,7 @@ std::string GetServiceName(const dingodb::pb::common::Region& region) {
 
 // store
 
-void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
+void StoreSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
@@ -352,7 +352,7 @@ void StoreSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
 }
 
 // index
-void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region& region) {
+void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
@@ -401,9 +401,9 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
     return;
   }
 
-  uint64_t part_id = region.definition().part_id();
-  uint64_t vector_id = FLAGS_vector_id;
-  uint64_t dimension = 0;
+  int64_t part_id = region.definition().part_id();
+  int64_t vector_id = FLAGS_vector_id;
+  int64_t dimension = 0;
 
   const auto& para = region.definition().index_parameter().vector_index_parameter();
   if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT) {
@@ -498,7 +498,7 @@ void IndexSendTxnPrewrite(uint64_t region_id, const dingodb::pb::common::Region&
 
 // unified
 
-void SendTxnGet(uint64_t region_id) {
+void SendTxnGet(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -541,7 +541,7 @@ void SendTxnGet(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnScan(uint64_t region_id) {
+void SendTxnScan(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -598,7 +598,7 @@ void SendTxnScan(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnPessimisticLock(uint64_t region_id) {
+void SendTxnPessimisticLock(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -683,7 +683,7 @@ void SendTxnPessimisticLock(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnPessimisticRollback(uint64_t region_id) {
+void SendTxnPessimisticRollback(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -741,7 +741,7 @@ void SendTxnPessimisticRollback(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnPrewrite(uint64_t region_id) {
+void SendTxnPrewrite(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -758,7 +758,7 @@ void SendTxnPrewrite(uint64_t region_id) {
   }
 }
 
-void SendTxnCommit(uint64_t region_id) {
+void SendTxnCommit(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -817,7 +817,7 @@ void SendTxnCommit(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnCheckTxnStatus(uint64_t region_id) {
+void SendTxnCheckTxnStatus(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -868,7 +868,7 @@ void SendTxnCheckTxnStatus(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnResolveLock(uint64_t region_id) {
+void SendTxnResolveLock(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -920,7 +920,7 @@ void SendTxnResolveLock(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnBatchGet(uint64_t region_id) {
+void SendTxnBatchGet(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -972,7 +972,7 @@ void SendTxnBatchGet(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnBatchRollback(uint64_t region_id) {
+void SendTxnBatchRollback(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -1019,7 +1019,7 @@ void SendTxnBatchRollback(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnScanLock(uint64_t region_id) {
+void SendTxnScanLock(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -1070,7 +1070,7 @@ void SendTxnScanLock(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnHeartBeat(uint64_t region_id) {
+void SendTxnHeartBeat(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -1115,7 +1115,7 @@ void SendTxnHeartBeat(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnGc(uint64_t region_id) {
+void SendTxnGc(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -1148,7 +1148,7 @@ void SendTxnGc(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnDeleteRange(uint64_t region_id) {
+void SendTxnDeleteRange(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";
@@ -1187,7 +1187,7 @@ void SendTxnDeleteRange(uint64_t region_id) {
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
-void SendTxnDump(uint64_t region_id) {
+void SendTxnDump(int64_t region_id) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(region_id, region)) {
     DINGO_LOG(ERROR) << "TxnGetRegion failed";

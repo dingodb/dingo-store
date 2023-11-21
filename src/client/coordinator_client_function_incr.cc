@@ -18,11 +18,11 @@
 #include "coordinator/coordinator_interaction.h"
 #include "coordinator_client_function.h"
 
-DEFINE_uint64(incr_start_id, 1, "Start id of auto_increment.");
+DEFINE_int64(incr_start_id, 1, "Start id of auto_increment.");
 DEFINE_bool(force, true, "Force set auto increment.");
-DEFINE_uint32(generate_count, 10000, "Generate auto increment id count.");
-DEFINE_uint32(auto_increment_increment, 1, "SQL var auto_increment_increment.");
-DEFINE_uint32(auto_increment_offset, 1, "SQL var auto_increment_offset.");
+DEFINE_int32(generate_count, 10000, "Generate auto increment id count.");
+DEFINE_int32(auto_increment_increment, 1, "SQL var auto_increment_increment.");
+DEFINE_int32(auto_increment_offset, 1, "SQL var auto_increment_offset.");
 
 DECLARE_bool(log_each_request);
 DECLARE_string(id);
