@@ -27,6 +27,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -34,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class LockService {
@@ -42,7 +44,9 @@ public class LockService {
 
     public final String resource;
 
-    public final String resourcePrefix;
+    public final String resourcePrefixBegin;
+    public final String resourcePrefixEnd;
+
 
     private final VersionServiceConnector connector;
 
@@ -53,7 +57,6 @@ public class LockService {
     public LockService(String resource, String servers) {
         this(resource, servers, 30);
     }
-
     public LockService(String servers, int leaseTtl) {
         this(UUID.randomUUID().toString(), servers, leaseTtl);
     }
@@ -65,22 +68,45 @@ public class LockService {
     private LockService(String resource, VersionServiceConnector connector) {
         this.resource = resource;
         this.connector = connector;
-        this.resourcePrefix = resource + "|0|";
+        this.resourcePrefixBegin = (resource + '|' + lease() + "|0|");
+        this.resourcePrefixEnd = (resource + '|' + lease() + "|1|");
         this.resourceSepIndex = resource.length() + 1;
+    }
+
+    public long lease() {
+        int times = 30;
+        while (connector.getLease() == -1 && times-- > 0) {
+            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+        }
+        if (connector.getLease() == -1) {
+            throw new RuntimeException("Can not get lease, please retry.");
+        }
+        return connector.getLease();
+    }
+
+    public List<LockInfo> listLock() {
+        return connector.exec(stub -> stub.kvRange(rangeRequest())).getKvsList().stream()
+            .map(kv -> new LockInfo(
+                kv.getKv().getKey().toStringUtf8(), kv.getKv().getValue().toStringUtf8(), kv.getModRevision()
+            )).collect(Collectors.toList());
     }
 
     public void close() {
         try {
-            connector.exec(stub -> stub.kvDeleteRange(deleteAllRangeRequest(resourcePrefix)));
+            connector.exec(stub -> stub.kvDeleteRange(deleteAllRangeRequest()));
         } catch (Exception ignore) {
         }
-        connector.close();
     }
 
     public Lock newLock() {
-        return new Lock(null);
+        return new Lock("");
     }
 
+    public Lock newLock(String values) {
+        return new Lock("");
+    }
+
+    @Deprecated
     public Lock newLock(Consumer<Lock> onReset) {
         return new Lock(onReset);
     }
@@ -88,52 +114,80 @@ public class LockService {
     public class Lock implements java.util.concurrent.locks.Lock {
 
         public final String lockId = UUID.randomUUID().toString();
-        public final String resourceKey = resource + "|0|" + lockId;
+        public final String resourceKey = resourcePrefixBegin + lockId;
+        public final String resourceValue;
 
         private final Consumer<Lock> onReset;
+        private final CompletableFuture<Void> destroyFuture = new CompletableFuture<>();
 
         @Getter
         private int locked = 0;
         @Getter
         private long revision;
 
+        @Deprecated
         public Lock(Consumer<Lock> onReset) {
             this.onReset = onReset;
+            this.resourceValue = "";
         }
 
-        private synchronized void reset() {
+        public Lock(String value) {
+            this.onReset = null;
+            this.resourceValue = value;
+        }
+
+        private synchronized void destroy() {
             if (locked == 0) {
                 return;
             }
+            if (destroyFuture.isDone()) {
+                destroyFuture.complete(null);
+            }
             CompletableFuture
-                .runAsync(this::unlock)
-                .whenComplete((r, e) -> {
+                .runAsync(() ->
+                    connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)))
+                ).whenComplete((r, e) -> {
                     if (onReset != null) {
                         onReset.accept(this);
                     }
                     if (e != null) {
                         log.error("Delete {} error when reset.", resourceKey, e);
+                        destroy();
                     }
                 });
         }
 
-        private boolean checkLock() {
+        private boolean locked() {
             if (locked > 0) {
+                if (destroyFuture.isDone()) {
+                    throw new RuntimeException("The lock destroyed.");
+                }
                 locked++;
                 return true;
             }
             return false;
         }
 
+        public synchronized CompletableFuture<Void> watch() {
+            if (locked > 0) {
+                return destroyFuture;
+            }
+            throw new RuntimeException("Cannot watch, not lock.");
+        }
+
         @Override
         public synchronized void lock() {
-            if (checkLock()) {
+            if (locked()) {
                 return;
             }
-            try {
-                Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
-                long revision = response.getHeader().getRevision();
-                while (true) {
+            while (true) {
+                try {
+                    if (connector.getLease() == -1) {
+                        LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+                        continue;
+                    }
+                    Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
+                    long revision = response.getHeader().getRevision();
                     Version.RangeResponse rangeResponse = connector.exec(stub -> stub.kvRange(rangeRequest()));
                     if (rangeResponse.getKvsList().isEmpty()) {
                         throw new RuntimeException("Put " + resourceKey + " success, but range is empty.");
@@ -160,15 +214,16 @@ public class LockService {
                     if (log.isDebugEnabled()) {
                         log.debug("Lock {} wait...", resourceKey);
                     }
-                    connector.exec(
-                        stub -> stub.watch(watchRequest(previous.getKv().getKey(), previous.getModRevision())),
-                        __ -> ErrorCodeUtils.InternalCode.IGNORE
-                    );
+                    try {
+                        connector.exec(
+                            stub -> stub.watch(watchRequest(previous.getKv().getKey(), previous.getModRevision())),
+                            __ -> ErrorCodeUtils.Strategy.IGNORE
+                        );                    } catch (Exception ignored) {
+                    }
+                } catch (Exception e) {
+                    log.error("Lock {} error, id: {}", resourceKey, lockId, e);
                 }
-            } catch (Exception e) {
-                log.error("Lock {} error, id: {}", resourceKey, lockId, e);
             }
-            connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)));
         }
 
         @Override
@@ -178,12 +233,15 @@ public class LockService {
 
         @Override
         public synchronized boolean tryLock() {
-            if (checkLock()) {
+            if (locked()) {
                 return true;
             }
-            Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
-            long revision = response.getHeader().getRevision();
+            if (connector.getLease() == -1) {
+                return false;
+            }
             try {
+                Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
+                long revision = response.getHeader().getRevision();
                 Optional<Version.Kv> current = connector.exec(stub -> stub.kvRange(rangeRequest()))
                     .getKvsList().stream()
                     .min(Comparator.comparingLong(Version.Kv::getModRevision));
@@ -202,13 +260,16 @@ public class LockService {
 
         @Override
         public synchronized boolean tryLock(long time, @NonNull TimeUnit unit) throws InterruptedException {
-            if (checkLock()) {
+            if (locked()) {
                 return true;
             }
-            Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
-            long revision = response.getHeader().getRevision();
             try {
+                Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
+                long revision = response.getHeader().getRevision();
                 while (time-- > 0) {
+                    if (connector.getLease() == -1) {
+                        LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+                    }
                     Version.RangeResponse rangeResponse = connector.exec(stub -> stub.kvRange(rangeRequest()));
                     Version.Kv current = rangeResponse.getKvsList().stream()
                         .min(Comparator.comparingLong(Version.Kv::getModRevision))
@@ -230,7 +291,7 @@ public class LockService {
                 connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)));
                 throw interruptedException;
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("Try lock error.", e);
             }
 
             connector.exec(stub -> stub.kvDeleteRange(deleteRangeRequest(resourceKey)));
@@ -239,17 +300,17 @@ public class LockService {
 
 
         private void watchLock(Version.Kv kv) {
-            CompletableFuture.runAsync(() -> {
-                connector.exec(
-                    stub -> stub.watch(watchRequest(kv.getKv().getKey(), kv.getModRevision())),
-                    connector.leaseTtl,
-                    __ -> ErrorCodeUtils.InternalCode.RETRY
-                );
-            }).whenComplete((r, e) -> {
+            CompletableFuture.supplyAsync(() ->
+                connector.exec(stub -> stub.watch(watchRequest(kv.getKv().getKey(), kv.getModRevision())),
+                connector.leaseTtl,
+                __ -> ErrorCodeUtils.Strategy.RETRY
+            )).whenComplete((r, e) -> {
                 if (e != null) {
                     log.error("Watch locked error, or watch retry time great than lease ttl.", e);
                 }
-                this.reset();
+                if (r.getEventsList().stream().anyMatch(event -> event.getType() == Version.Event.EventType.DELETE)) {
+                    this.destroy();
+                }
             });
         }
 
@@ -274,18 +335,16 @@ public class LockService {
                 .setLease(connector.getLease())
             .setIgnoreValue(true)
                 .setKeyValue(Common.KeyValue.newBuilder()
-                        .setKey(ByteString.copyFrom(resourceKey.getBytes(StandardCharsets.UTF_8)))
+                        .setKey(ByteString.copyFromUtf8(resourceKey))
                         .build())
                 .setNeedPrevKv(true)
                 .build();
     }
 
     private Version.RangeRequest rangeRequest() {
-        byte[] end = resourcePrefix.getBytes(StandardCharsets.UTF_8);
-        end[resourceSepIndex]++;
         return Version.RangeRequest.newBuilder()
-            .setKey(ByteString.copyFrom(resourcePrefix.getBytes(StandardCharsets.UTF_8)))
-            .setRangeEnd(ByteString.copyFrom(end))
+            .setKey(ByteString.copyFromUtf8(resourcePrefixBegin))
+            .setRangeEnd(ByteString.copyFromUtf8(resourcePrefixEnd))
             .build();
     }
 
@@ -295,12 +354,10 @@ public class LockService {
             .build();
     }
 
-    private Version.DeleteRangeRequest deleteAllRangeRequest(String resourcePrefix) {
-        byte[] end = resourcePrefix.getBytes(StandardCharsets.UTF_8);
-        end[resourceSepIndex]++;
+    private Version.DeleteRangeRequest deleteAllRangeRequest() {
         return Version.DeleteRangeRequest.newBuilder()
-            .setKey(ByteString.copyFrom(resourcePrefix.getBytes(StandardCharsets.UTF_8)))
-            .setRangeEnd(ByteString.copyFrom(end))
+            .setKey(ByteString.copyFromUtf8(resourcePrefixBegin))
+            .setRangeEnd(ByteString.copyFromUtf8(resourcePrefixEnd))
             .build();
     }
 

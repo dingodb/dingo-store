@@ -16,19 +16,21 @@
 
 package io.dingodb.sdk.service.connector;
 
-import io.dingodb.error.ErrorOuterClass;
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
 import io.dingodb.sdk.common.DingoClientException.RetryException;
 import io.dingodb.sdk.common.Location;
-import io.dingodb.sdk.common.utils.ErrorCodeUtils;
+import io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy;
 import io.dingodb.sdk.common.utils.NoBreakFunctions;
 import io.dingodb.sdk.common.utils.Optional;
+import io.dingodb.sdk.service.rpc.ChannelManager;
 import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.AbstractBlockingStub;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Method;
@@ -46,8 +48,15 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static io.dingodb.error.ErrorOuterClass.Error;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.FAILED;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.IGNORE;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.REFRESH;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.RETRY;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.defaultCodeChecker;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
+import static io.dingodb.sdk.common.utils.StackTraces.CURRENT_STACK;
+import static io.dingodb.sdk.common.utils.StackTraces.stack;
 
 @Slf4j
 public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
@@ -59,8 +68,8 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     @Getter
     @AllArgsConstructor
     public static class Response<R> {
-        private final ErrorOuterClass.Error error;
-        private final R response;
+        public final Error error;
+        public final R response;
     }
 
     @AllArgsConstructor
@@ -69,20 +78,32 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
         public Response<R> build(R response) {
             try {
-                return new Response<>((ErrorOuterClass.Error) errorGetter.invoke(response), response);
+                return new Response<>((Error) errorGetter.invoke(response), response);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         }
     }
 
+    protected final AtomicReference<S> stubRef = new AtomicReference<>();
+    protected final Set<Location> locations = new CopyOnWriteArraySet<>();
+    protected final int retryTimes;
 
     private final AtomicBoolean refresh = new AtomicBoolean();
+    private boolean closed = false;
 
-    protected final AtomicReference<S> stubRef = new AtomicReference<>();
-    protected Set<Location> locations = new CopyOnWriteArraySet<>();
-
+    @Deprecated
     public ServiceConnector(String locations) {
+        this(locations, RETRY_TIMES);
+    }
+
+    @Deprecated
+    public ServiceConnector(Set<Location> locations) {
+        this.locations.addAll(locations);
+        this.retryTimes = RETRY_TIMES;
+    }
+
+    public ServiceConnector(String locations, int retryTimes) {
         this(Optional.ofNullable(locations)
             .map(__ -> __.split(","))
             .map(Arrays::stream)
@@ -90,108 +111,111 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 .map(s -> s.split(":"))
                 .map(__ -> new Location(__[0], Integer.parseInt(__[1])))
                 .collect(Collectors.toSet()))
-            .orElseGet(Collections::emptySet));
+            .orElseGet(Collections::emptySet), retryTimes);
     }
 
-    public ServiceConnector(Set<Location> locations) {
+    public ServiceConnector(Set<Location> locations, int retryTimes) {
         this.locations.addAll(locations);
+        this.retryTimes = retryTimes;
+    }
+
+    public void close() {
+        closed = true;
     }
 
     public S getStub() {
         return stubRef.get();
     }
 
-    private <R> Response<R> toResponse(Object res) {
+    <R> Response<R> toResponse(Object res) {
         return responseBuilders.computeIfAbsent(res.getClass(), NoBreakFunctions.<Class, ResponseBuilder>wrap(
             cls -> new ResponseBuilder<>(cls.getDeclaredMethod("getError")))
         ).build(res);
     }
 
-    private <R> R cleanResponse(Response<R> response) {
+    protected <R> R cleanResponse(Response<R> response) {
         return Optional.mapOrNull(response, Response::getResponse);
     }
 
     public <R> R exec(Function<S, R> function) {
-        return cleanResponse(this.exec(function, RETRY_TIMES, defaultCodeChecker, this::toResponse));
+        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, RETRY_TIMES, defaultCodeChecker, this::toResponse));
     }
 
     public <R> R exec(Function<S, R> function, int retryTimes) {
-        return cleanResponse(this.exec(function, retryTimes, defaultCodeChecker, this::toResponse));
+        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, retryTimes, defaultCodeChecker, this::toResponse));
     }
 
-    public <R> R exec(Function<S, R> function, Function<Integer, ErrorCodeUtils.InternalCode> errChecker) {
-        return cleanResponse(exec(function, RETRY_TIMES, errChecker, this::toResponse));
+    public <R> R exec(Function<S, R> function, Function<Integer, Strategy> errChecker) {
+        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, RETRY_TIMES, errChecker, this::toResponse));
     }
 
     public <R> R exec(
-        Function<S, R> function, int retryTimes, Function<Integer, ErrorCodeUtils.InternalCode> errChecker
+        Function<S, R> function, int retryTimes, Function<Integer, Strategy> errChecker
     ) {
-        return cleanResponse(exec(function, retryTimes, errChecker, this::toResponse));
+        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, retryTimes, errChecker, this::toResponse));
     }
 
     public <R> Response<R> exec(
-            Function<S, R> function,
-            int retryTimes,
-            Function<Integer, ErrorCodeUtils.InternalCode> errChecker,
-            Function<R, Response<R>> toResponse
+        Function<S, R> function, int retryTimes, Function<Integer, Strategy> errChecker, Function<R, Response<R>> toResponse
     ) {
+        return exec(stack(CURRENT_STACK + 1), function, retryTimes, errChecker, toResponse);
+    }
+
+    public <R> R exec(
+        String name,
+        Function<S, R> task,
+        int retryTimes,
+        Function<Integer, Strategy> errChecker
+    ) {
+        return cleanResponse(exec(name, task, retryTimes, errChecker, this::toResponse));
+    }
+
+    public <R> Response<R> exec(
+        String name,
+        Function<S, R> task,
+        int retryTimes,
+        Function<Integer, Strategy> errChecker,
+        Function<R, Response<R>> toResponse
+    ) {
+        if (closed) {
+            throw new DingoClientException(-1, "The connector is closed, please check status.");
+        }
+
         S stub = null;
         boolean connected = false;
-        Map<String, Integer> errMsgs = ERR_MSGS.get();
-        errMsgs.clear();
+        ERR_MSGS.get().clear();
 
         while (retryTimes-- > 0) {
             try {
                 if ((stub = getStub()) == null) {
-                    if (log.isDebugEnabled()) {
-                        log.warn("Get connection stub failed, will retry...");
-                    }
                     LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                     refresh(stub);
                     continue;
                 }
 
                 connected = true;
-                Response<R> response = toResponse.apply(function.apply(stub));
-                ErrorOuterClass.Error error = response.getError();
+                Response<R> response = toResponse.apply(task.apply(stub));
+                Error error = response.getError();
                 int errCode = error.getErrcodeValue();
                 if (errCode != 0) {
                     String authority = Optional.mapOrGet(stub.getChannel(), Channel::authority, () -> "");
-                    errMsgs.compute(authority + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1);
+                    ERR_MSGS.get().compute(authority + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1);
                     switch (errChecker.apply(errCode)) {
                         case RETRY:
-                            if (log.isDebugEnabled()) {
-                                log.warn(
-                                    "Exec {} failed, store: [{}], code: [{}], message: {}, will retry...",
-                                    function.getClass(), authority, error.getErrcode(), error.getErrmsg()
-                                );
-                            }
+                            errorLog(name, authority, error, RETRY);
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
                             continue;
                         case FAILED:
-                            log.error(
-                                    "Exec {} error, store: [{}], code: [{}], message: {}.",
-                                    function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
-                            );
+                            errorLog(name, authority, error, FAILED);
                             throw new RequestErrorException(errCode, error.getErrmsg());
                         case REFRESH:
-                            if (log.isDebugEnabled()) {
-                                log.warn(
-                                    "Exec {} failed, store: [{}], code: [{}], message: {}, will refresh...",
-                                    function.getClass(), authority, error.getErrcode(), error.getErrmsg()
-                                );
-                            }
+                            errorLog(name, authority, error, REFRESH);
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                             refresh(stub);
                             throw new InvalidRouteTableException(response.error.getErrmsg());
                         case IGNORE:
-                            if (log.isDebugEnabled()) {
-                                log.warn(
-                                    "Exec {} failed, store: [{}], code: [{}], message: {}, ignore it.",
-                                    function.getClass(), authority, response.error.getErrcode(), response.error.getErrmsg()
-                                );
-                            }
+                            errorLog(name, authority, error, IGNORE);
                             return null;
                         default:
                             throw new IllegalStateException("Unexpected value: " + errChecker.apply(errCode));
@@ -203,26 +227,41 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                     throw e;
                 }
                 if (log.isDebugEnabled()) {
-                    log.warn("Exec {} failed: {}.", function.getClass(), e.getMessage());
+                    log.warn("Exec {} failed: {}.", name, e.getMessage());
                 }
-                errMsgs.compute(e.getMessage(), (k, v) -> v == null ? 1 : v + 1);
+                ERR_MSGS.get().compute(e.getMessage(), (k, v) -> v == null ? 1 : v + 1);
                 LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                 refresh(stub);
             }
         }
 
+        throw generateException(name, connected);
+    }
+
+    private <R> RuntimeException generateException(String name, boolean connected) {
         // if connected is false, means can not get leader connection
         if (connected) {
             StringBuilder errMsgBuilder = new StringBuilder();
-            errMsgBuilder.append("function: ").append(function.getClass()).append("==>>");
-            errMsgs.forEach((k, v) -> errMsgBuilder
+            errMsgBuilder.append("task: ").append(name).append("==>>");
+            ERR_MSGS.get().forEach((k, v) -> errMsgBuilder
                 .append('[').append(v).append("] times [").append(k).append(']').append(", ")
             );
             throw new RetryException(
-                "Exec attempts exhausted, failed to exec operation, " + errMsgBuilder
+                "Exec attempts exhausted, failed to exec " + name + ", " + errMsgBuilder
             );
         } else {
-            throw new RetryException("Transform leader attempts exhausted, cannot get leader connection.");
+            throw new RetryException(
+                "Exec " + name + " error, " + "transform leader attempts exhausted."
+            );
+        }
+    }
+
+    private void errorLog(String name, String remote, Error error, Strategy strategy) {
+        if (log.isDebugEnabled()) {
+            log.warn(
+                "Exec {} failed, remote: [{}], code: [{}], message: {}, strategy: {}.",
+                name, remote, error.getErrcode(), error.getErrmsg(), strategy
+            );
         }
     }
 
@@ -235,7 +274,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 return;
             }
 
-            if (locations == null || locations.isEmpty()) {
+            if (locations.isEmpty()) {
                 Optional.ofNullable(this.transformToLeaderChannel(null))
                     .map(this::newStub)
                     .ifPresent(stubRef::set);
@@ -252,6 +291,10 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 ) {
                     return;
                 }
+            }
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.warn("Get connection stub failed, will retry...");
             }
         } finally {
             refresh.set(false);
@@ -274,9 +317,5 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     protected abstract ManagedChannel transformToLeaderChannel(ManagedChannel channel);
 
     protected abstract S newStub(ManagedChannel channel);
-
-    public Set<Location> getLocations() {
-        return locations;
-    }
 
 }

@@ -66,6 +66,12 @@
             <artifactId>jmh-generator-annprocess</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.dingodb</groupId>
+            <artifactId>dingo-grpc-tools</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>
@@ -100,6 +106,7 @@
                 <configuration>
                     <source>${target.java.version}</source>
                     <target>${target.java.version}</target>
+                    <generatedSourcesDirectory>${project.build.directory}/generated-sources/</generatedSourcesDirectory>
                 </configuration>
             </plugin>
             <plugin>

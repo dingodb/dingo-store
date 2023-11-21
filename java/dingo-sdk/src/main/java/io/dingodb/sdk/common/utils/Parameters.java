@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.utils;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.util.Collection;
 import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -39,6 +40,18 @@ public final class Parameters {
      */
     public static <T> @NonNull T nonNull(T input, String message) {
         return check(input, Objects::nonNull, () -> new NullPointerException(message));
+    }
+
+    /**
+     * If input is null, throw {@link NullPointerException}, else return input.
+     *
+     * @param <C> input collection type
+     * @param input check object
+     * @param message exception message if input is null
+     * @return input
+     */
+    public static <E, C extends Collection<E>> @NonNull C notEmpty(C input, String message) {
+        return check(input, in -> in != null && !in.isEmpty(), () -> new NullPointerException(message));
     }
 
     /**
