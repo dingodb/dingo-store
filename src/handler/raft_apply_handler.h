@@ -34,24 +34,6 @@ class PutHandler : public BaseHandler {
              int64_t log_id) override;
 };
 
-// PutIfAbsentRequest
-class PutIfAbsentHandler : public BaseHandler {
- public:
-  HandlerType GetType() override { return HandlerType::kPutIfabsent; }
-  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
-             int64_t log_id) override;
-};
-
-// CompareAndSetRequest
-class CompareAndSetHandler : public BaseHandler {
- public:
-  HandlerType GetType() override { return HandlerType::kCompareAndSet; }
-  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
-             int64_t log_id) override;
-};
-
 // DeleteRangeRequest
 class DeleteRangeHandler : public BaseHandler {
  public:

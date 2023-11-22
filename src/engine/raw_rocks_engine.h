@@ -232,16 +232,6 @@ class Writer : public RawEngine::Writer {
   butil::Status KvBatchPutAndDelete(const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
                                     const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) override;
 
-  butil::Status KvPutIfAbsent(const std::string& cf_name, const pb::common::KeyValue& kv, bool& key_state) override;
-  butil::Status KvBatchPutIfAbsent(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                   std::vector<bool>& key_states, bool is_atomic) override;
-
-  butil::Status KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv, const std::string& value,
-                                bool& key_state) override;
-  butil::Status KvBatchCompareAndSet(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                     const std::vector<std::string>& expect_values, std::vector<bool>& key_states,
-                                     bool is_atomic) override;
-
   butil::Status KvDelete(const std::string& cf_name, const std::string& key) override;
   butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) override;
 
@@ -250,8 +240,6 @@ class Writer : public RawEngine::Writer {
   butil::Status KvBatchDeleteRange(const std::string& cf_name, const std::vector<pb::common::Range>& ranges) override;
   butil::Status KvBatchDeleteRange(
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
-
-  butil::Status KvDeleteIfEqual(const std::string& cf_name, const pb::common::KeyValue& kv) override;
 
  private:
   std::shared_ptr<RawRocksEngine> GetRawEngine();
@@ -262,18 +250,10 @@ class Writer : public RawEngine::Writer {
   butil::Status KvPut(ColumnFamilyPtr column_family, const pb::common::KeyValue& kv);
   butil::Status KvBatchPutAndDelete(ColumnFamilyPtr column_family, const std::vector<pb::common::KeyValue>& kv_puts,
                                     const std::vector<pb::common::KeyValue>& kv_deletes);
-  butil::Status KvBatchPutIfAbsent(ColumnFamilyPtr column_family, const std::vector<pb::common::KeyValue>& kvs,
-                                   std::vector<bool>& key_states, bool is_atomic);
-  butil::Status KvBatchCompareAndSet(ColumnFamilyPtr column_family, const std::vector<pb::common::KeyValue>& kvs,
-                                     const std::vector<std::string>& expect_values, std::vector<bool>& key_states,
-                                     bool is_atomic);
-  butil::Status KvCompareAndSet(ColumnFamilyPtr column_family, const pb::common::KeyValue& kv, const std::string& value,
-                                bool is_key_exist, bool& key_state);
 
   butil::Status KvDelete(ColumnFamilyPtr column_family, const std::string& key);
   butil::Status KvBatchDeleteRange(std::vector<ColumnFamilyPtr> column_families,
                                    const std::vector<pb::common::Range>& ranges);
-  butil::Status KvDeleteIfEqual(ColumnFamilyPtr column_family, const pb::common::KeyValue& kv);
 
   std::weak_ptr<RawRocksEngine> raw_engine_;
 };

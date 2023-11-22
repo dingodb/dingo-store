@@ -155,7 +155,7 @@ TEST_F(RawBdbEngineTest, KvPut) {
   auto writer = RawBdbEngineTest::engine->Writer();
 
   if (writer == nullptr) {
-    std::cout << "writer is null ptr." << std::endl;
+    std::cout << "writer is null ptr." << '\n';
     EXPECT_EQ(111, pb::error::Errno::EKEY_EMPTY);
     return;
   }
@@ -530,7 +530,7 @@ TEST_F(RawBdbEngineTest, KvGet) {
     butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, "value3");
-    std::cout << key << " | " << value << std::endl;
+    std::cout << key << " | " << value << '\n';
   }
 
   {
@@ -540,7 +540,7 @@ TEST_F(RawBdbEngineTest, KvGet) {
     butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, "value2");
-    std::cout << key << " | " << value << std::endl;
+    std::cout << key << " | " << value << '\n';
   }
 
   {
@@ -549,877 +549,7 @@ TEST_F(RawBdbEngineTest, KvGet) {
 
     butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-    std::cout << key << " | " << value << std::endl;
-  }
-}
-
-TEST_F(RawBdbEngineTest, KvCompareAndSet) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = RawBdbEngineTest::engine->Writer();
-
-  // key empty
-  {
-    pb::common::KeyValue kv;
-    std::string value = "value123456";
-    bool key_state;
-
-    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // value empty . key not exist failed
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key");
-    std::string value = "value";
-    bool key_state;
-
-    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-  }
-
-  // value empty . key exist current value not empty. failed
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key1");
-    std::string value = "value123456";
-    bool key_state;
-
-    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key1");
-    kv.set_value("value1");
-    const std::string &value = "value1_modify";
-    bool key_state;
-
-    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
-
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-    std::string key = kv.key();
-    std::string value_another;
-    ok = reader->KvGet(cf_name, key, value_another);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(value, value_another);
-  }
-
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key1");
-    kv.set_value("value1_modify");
-    const std::string &value = "";
-    bool key_state;
-
-    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
-
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-    std::string key = kv.key();
-    std::string value_another;
-    ok = reader->KvGet(cf_name, key, value_another);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(value, value_another);
-  }
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key1");
-    kv.set_value("");
-    const std::string &value = "value1";
-    bool key_state;
-
-    butil::Status ok = writer->KvCompareAndSet(cf_name, kv, value, key_state);
-
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-    std::string key = kv.key();
-    std::string value_another;
-    ok = reader->KvGet(cf_name, key, value_another);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(value, value_another);
-  }
-}
-
-// Batch implementation comparisons and settings.
-// There are three layers of semantics:
-// 1. If the key does not exist, set kv
-// 2. The key exists and can be deleted
-// 3. The key exists to update the value
-// Not available internally, only for RPC use
-TEST_F(RawBdbEngineTest, KvBatchCompareAndSet) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = RawBdbEngineTest::engine->Writer();
-
-  // keys empty expect_values emtpy
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // keys and expect_values size not equal
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kvs.emplace_back(kv);
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // keys key emtpy
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kvs.emplace_back(kv);
-
-    expect_values.resize(1);
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // key not exist in bdb
-  // key not empty . expect_value empty. value empty
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kv.set_key("KeyBatchCompareAndSet");
-    kvs.emplace_back(kv);
-
-    expect_values.resize(1);
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string key = "KeyBatchCompareAndSet";
-    std::string value;
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-  }
-
-  // key exist in bdb
-  // key not empty . expect_value empty. value empty
-  {
-    butil::Status ok;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kv.set_key("KeyBatchCompareAndSet");
-    kvs.emplace_back(kv);
-
-    expect_values.resize(1);
-
-    ok = writer->KvPut(cf_name, kv);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string key = "KeyBatchCompareAndSet";
-    std::string value;
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-  }
-
-  // key exist value not empty in bdb
-  // key not empty . expect_value empty. value empty
-  {
-    butil::Status ok;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kv.set_key("KeyBatchCompareAndSet");
-    kvs.emplace_back(kv);
-
-    expect_values.resize(1);
-
-    kv.set_value("KeyBatchCompareAndSetValue");
-    ok = writer->KvPut(cf_name, kv);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string key = "KeyBatchCompareAndSet";
-    std::string value;
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = writer->KvDelete(cf_name, kv.key());
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // keys not exist atomic ok
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    for (size_t i = 0; i < 3; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
-      kvs.emplace_back(kv);
-    }
-
-    expect_values.resize(3);
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    for (size_t i = 0; i < 3; i++) {
-      std::string key = "KeyBatchCompareAndSet" + std::to_string(i);
-      std::string value;
-      ok = reader->KvGet(cf_name, key, value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-      EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(i), value);
-      EXPECT_EQ(key_states[i], true);
-    }
-  }
-
-  // keys exist delete . add keys not exist. update keys  atomic ok
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    // delete key
-    for (size_t i = 0; i < 1; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("");
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
-    }
-
-    // update key
-    for (size_t i = 1; i < 2; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet------" + std::to_string(i));
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
-    }
-
-    // add key
-    for (size_t i = 3; i < 4; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("");
-    }
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string key = "KeyBatchCompareAndSet" + std::to_string(0);
-    std::string value;
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-
-    key = "KeyBatchCompareAndSet" + std::to_string(1);
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ("ValueBatchCompareAndSet------" + std::to_string(1), value);
-
-    key = "KeyBatchCompareAndSet" + std::to_string(2);
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(2), value);
-
-    key = "KeyBatchCompareAndSet" + std::to_string(3);
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(3), value);
-
-    for (size_t i = 0; i < 3; i++) {
-      EXPECT_EQ(key_states[i], true);
-    }
-  }
-
-  // add keys again  atomic failed
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-    key_states.clear();
-
-    for (size_t i = 0; i < 4; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("");
-    }
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    for (size_t i = 0; i < 4; i++) {
-      EXPECT_EQ(key_states[i], false);
-    }
-
-    pb::common::Range range;
-    range.set_start_key("KeyBatchCompareAndSet");
-    range.set_end_key("KeyBatchCompareAndSeu");
-
-    ok = writer->KvDeleteRange(cf_name, range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // keys not exist not atomic ok
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    for (size_t i = 0; i < 4; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
-      kvs.emplace_back(kv);
-    }
-
-    expect_values.resize(4);
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    for (size_t i = 0; i < 4; i++) {
-      std::string key = "KeyBatchCompareAndSet" + std::to_string(i);
-      std::string value;
-      ok = reader->KvGet(cf_name, key, value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-      EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(i), value);
-    }
-  }
-
-  // keys exist delete . add keys not exist. update keys  not atomic ok
-  {
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<std::string> expect_values;
-    std::vector<bool> key_states;
-
-    // delete key
-    for (size_t i = 0; i < 1; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("");
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
-    }
-
-    // update key
-    for (size_t i = 1; i < 2; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet------" + std::to_string(i));
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("ValueBatchCompareAndSet" + std::to_string(i));
-    }
-
-    // add key
-    for (size_t i = 3; i < 4; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("KeyBatchCompareAndSet" + std::to_string(i));
-      kv.set_value("ValueBatchCompareAndSet" + std::to_string(i));
-      kvs.emplace_back(kv);
-      expect_values.emplace_back("");
-    }
-
-    butil::Status ok = writer->KvBatchCompareAndSet(cf_name, kvs, expect_values, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string key = "KeyBatchCompareAndSet" + std::to_string(0);
-    std::string value;
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-
-    key = "KeyBatchCompareAndSet" + std::to_string(1);
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ("ValueBatchCompareAndSet------" + std::to_string(1), value);
-
-    key = "KeyBatchCompareAndSet" + std::to_string(2);
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(2), value);
-
-    key = "KeyBatchCompareAndSet" + std::to_string(3);
-    ok = reader->KvGet(cf_name, key, value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ("ValueBatchCompareAndSet" + std::to_string(3), value);
-
-    for (size_t i = 0; i < 2; i++) {
-      EXPECT_EQ(key_states[i], true);
-    }
-
-    EXPECT_EQ(key_states[2], false);
-
-    pb::common::Range range;
-    range.set_start_key("KeyBatchCompareAndSet");
-    range.set_end_key("KeyBatchCompareAndSeu");
-
-    ok = writer->KvDeleteRange(cf_name, range);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-}
-
-TEST_F(RawBdbEngineTest, KvPutIfAbsent) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = RawBdbEngineTest::engine->Writer();
-
-  // key empty
-  {
-    pb::common::KeyValue kv;
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // key exist value empty failed
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // value empty . key exist failed
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key1");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key10");
-    kv.set_value("value10");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // key value already exist failed
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key10");
-    kv.set_value("value10");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // key value already exist failed
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key10");
-    kv.set_value("");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key11");
-    kv.set_value("");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key11");
-    kv.set_value("value11");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key11");
-    kv.set_value("");
-
-    bool key_state;
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-}
-
-TEST_F(RawBdbEngineTest, KvBatchPutIfAbsentAtomic) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = RawBdbEngineTest::engine->Writer();
-
-  // key all empty
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // some key not exist
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kv.set_key("key10086");
-    kv.set_value("value10086");
-    // kv.set_key("key1");
-    // kv.set_value("value1");
-    kvs.push_back(kv);
-
-    kv.set_key("");
-    kv.set_value("value2");
-    kvs.push_back(kv);
-
-    butil::Status status = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
-    EXPECT_TRUE((status.error_code() == pb::error::Errno::EKEY_EMPTY) ||
-                (status.error_code() == pb::error::Errno::EINTERNAL));
-  }
-
-  // some key exist failed
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-
-    kv.set_key("key111");
-    kv.set_value("value111");
-    kvs.push_back(kv);
-
-    kv.set_key("key1");
-    kv.set_value("value1");
-    kvs.push_back(kv);
-
-    kv.set_key("key2");
-    kv.set_value("value2");
-    kvs.push_back(kv);
-
-    kv.set_key("key");
-    kv.set_value("value");
-    kvs.push_back(kv);
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
-    EXPECT_EQ(kvs.size(), key_states.size());
-
-    std::string value;
-    auto reader = RawBdbEngineTest::engine->Reader();
-    ok = reader->KvGet(cf_name, "key111", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-  }
-
-  // normal key all not exist
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-
-    kv.set_key("key101");
-    kv.set_value("value101");
-    kvs.push_back(kv);
-
-    kv.set_key("key102");
-    kv.set_value("value102");
-    kvs.push_back(kv);
-
-    kv.set_key("key103");
-    kv.set_value("value103");
-    kvs.push_back(kv);
-
-    kv.set_key("key104");
-    kv.set_value("value104");
-    kvs.push_back(kv);
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, true);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(kvs.size(), key_states.size());
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string value;
-    ok = reader->KvGet(cf_name, "key101", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key102", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key103", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key104", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-}
-
-TEST_F(RawBdbEngineTest, KvBatchPutIfAbsentNonAtomic) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = RawBdbEngineTest::engine->Writer();
-
-  // key all empty
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // some key not exist
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-    kv.set_key("key1");
-    kv.set_value("value1");
-    kvs.push_back(kv);
-
-    kv.set_key("");
-    kv.set_value("value2");
-    kvs.push_back(kv);
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // some key exist ok
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-
-    kv.set_key("key1111");
-    kv.set_value("value111");
-    kvs.push_back(kv);
-
-    kv.set_key("key1");
-    kv.set_value("value1");
-    kvs.push_back(kv);
-
-    kv.set_key("key2");
-    kv.set_value("value2");
-    kvs.push_back(kv);
-
-    kv.set_key("key");
-    kv.set_value("value");
-    kvs.push_back(kv);
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(kvs.size(), key_states.size());
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string value;
-    ok = reader->KvGet(cf_name, "key1111", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key1", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key2", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal key all not exist
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-
-    kv.set_key("key201");
-    kv.set_value("value201");
-    kvs.push_back(kv);
-
-    kv.set_key("key202");
-    kv.set_value("value202");
-    kvs.push_back(kv);
-
-    kv.set_key("key203");
-    kv.set_value("value203");
-    kvs.push_back(kv);
-
-    kv.set_key("key204");
-    kv.set_value("value204");
-    kvs.push_back(kv);
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(kvs.size(), key_states.size());
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string value;
-    ok = reader->KvGet(cf_name, "key201", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key202", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key203", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key204", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
-
-  // normal key all  exist
-  {
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    pb::common::KeyValue kv;
-
-    kv.set_key("key201");
-    kv.set_value("value201");
-    kvs.push_back(kv);
-
-    kv.set_key("key202");
-    kv.set_value("value202");
-    kvs.push_back(kv);
-
-    kv.set_key("key203");
-    kv.set_value("value203");
-    kvs.push_back(kv);
-
-    kv.set_key("key204");
-    kv.set_value("value204");
-    kvs.push_back(kv);
-
-    butil::Status ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(kvs.size(), key_states.size());
-  }
-
-  // KvPutIfAbsent one data and KvBatchPutIfAbsent put two data
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key205");
-    kv.set_value("value205");
-    bool key_state = false;
-
-    butil::Status ok = writer->KvPutIfAbsent(cf_name, kv, key_state);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    std::vector<std::string> keys;
-    std::vector<pb::common::KeyValue> kvs;
-    std::vector<bool> key_states;
-
-    kv.set_key("key205");
-    kv.set_value("value205");
-    kvs.push_back(kv);
-
-    kv.set_key("key206");
-    kv.set_value("value206");
-    kvs.push_back(kv);
-
-    kv.set_key("key207");
-    kv.set_value("value207");
-    kvs.push_back(kv);
-
-    kv.set_key("key208");
-    kv.set_value("value208");
-    kvs.push_back(kv);
-
-    ok = writer->KvBatchPutIfAbsent(cf_name, kvs, key_states, false);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(kvs.size(), key_states.size());
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string value;
-    ok = reader->KvGet(cf_name, "key205", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key206", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key207", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    ok = reader->KvGet(cf_name, "key208", value);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    std::cout << key << " | " << value << '\n';
   }
 }
 
@@ -1763,92 +893,6 @@ TEST_F(RawBdbEngineTest, KvBatchDelete) {
   }
 }
 
-TEST_F(RawBdbEngineTest, KvDeleteIfEqual) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = RawBdbEngineTest::engine->Writer();
-
-  // key  empty failed
-  {
-    pb::common::KeyValue kv;
-
-    butil::Status ok = writer->KvDeleteIfEqual(cf_name, kv);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
-  }
-
-  // key not exist
-  {
-    pb::common::KeyValue kv;
-    kv.set_key("key598");
-    kv.set_value("value598");
-
-    butil::Status ok = writer->KvDeleteIfEqual(cf_name, kv);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-  }
-
-  // key exist value exist but value unequal
-  {
-    std::vector<pb::common::KeyValue> kvs;
-
-    for (int i = 0; i < 1; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("myequalkey" + std::to_string(i));
-      kv.set_value("myequalvalue" + std::to_string(i));
-      kvs.emplace_back(std::move(kv));
-    }
-
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-    std::string value;
-    for (int i = 0; i < 1; i++) {
-      ok = reader->KvGet(cf_name, kvs[i].key(), value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-      EXPECT_EQ(value, kvs[i].value());
-    }
-
-    for (auto &kv : kvs) {
-      kv.set_value("243fgdfgd");
-      ok = writer->KvDeleteIfEqual(cf_name, kv);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
-    }
-  }
-
-  // ok
-  {
-    std::vector<pb::common::KeyValue> kvs;
-
-    for (int i = 0; i < 10; i++) {
-      pb::common::KeyValue kv;
-      kv.set_key("myequalkey" + std::to_string(i));
-      kv.set_value("myequalvalue" + std::to_string(i));
-      kvs.emplace_back(std::move(kv));
-    }
-
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-
-    auto reader = RawBdbEngineTest::engine->Reader();
-
-    std::string value;
-    for (int i = 0; i < 10; i++) {
-      ok = reader->KvGet(cf_name, kvs[i].key(), value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-      EXPECT_EQ(value, kvs[i].value());
-    }
-
-    for (const auto &kv : kvs) {
-      ok = writer->KvDeleteIfEqual(cf_name, kv);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    }
-
-    for (int i = 0; i < 10; i++) {
-      ok = reader->KvGet(cf_name, kvs[i].key(), value);
-      EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-    }
-  }
-}  // KvDeleteIfEqual
-
 TEST_F(RawBdbEngineTest, KvDeleteRange) {
   const std::string &cf_name = kDefaultCf;
   auto writer = RawBdbEngineTest::engine->Writer();
@@ -2025,23 +1069,23 @@ TEST_F(RawBdbEngineTest, Iterator) {
     count = 0;
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->Seek("aaaaaaaaaa"); iter->Valid(); iter->Next()) {
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << std::endl;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
       ++count;
     }
 
     EXPECT_EQ(count, 2);
 
-    std::cout << "--------- iter reuse ---------" << std::endl;
+    std::cout << "--------- iter reuse ---------" << '\n';
 
     count = 0;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << std::endl;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
       ++count;
     }
     EXPECT_EQ(count, 2);
   }
 
-  std::cout << "------------------" << std::endl;
+  std::cout << "------------------" << '\n';
 
   {
     pb::common::KeyValue kv;
@@ -2062,7 +1106,7 @@ TEST_F(RawBdbEngineTest, Iterator) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << std::endl;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
     }
 
     EXPECT_EQ(count, 4);
@@ -2073,7 +1117,7 @@ TEST_F(RawBdbEngineTest, Iterator) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->SeekToLast(); iter->Valid(); iter->Prev()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << std::endl;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
     }
 
     EXPECT_EQ(count, 4);
@@ -2117,11 +1161,11 @@ TEST_F(RawBdbEngineTest, GetApproximateSizes) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << std::endl;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
     }
   }
 
-  std::cout << "-----------------------------------" << std::endl;
+  std::cout << "-----------------------------------" << '\n';
   {
     int count = 0;
 
@@ -2130,7 +1174,7 @@ TEST_F(RawBdbEngineTest, GetApproximateSizes) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->Seek("00"); iter->Valid(); iter->Next()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << std::endl;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
     }
   }
 
@@ -2145,10 +1189,10 @@ TEST_F(RawBdbEngineTest, GetApproximateSizes) {
     std::vector<int64_t> count_vec = RawBdbEngineTest::engine->GetApproximateSizes(kDefaultCf, ranges);
 
     EXPECT_EQ(count_vec.size(), 1);
-    if (count_vec.size() >= 1) {
+    if (!count_vec.empty()) {
       // EXPECT_EQ(count_vec[0], 4);
       // it is an estimated count
-      std::cout << "GetApproximateSizes, cout: " << count_vec[0] << std::endl;
+      std::cout << "GetApproximateSizes, cout: " << count_vec[0] << '\n';
     }
   }
 }
@@ -2172,7 +1216,7 @@ TEST_F(RawBdbEngineTest, IngestExternalFile) {
 
   std::string sst_file_name = "/tmp/sst_file.sst";
   if (Helper::IsExistPath(sst_file_name)) {
-    std::cout << "find sst file: " << sst_file_name << std::endl;
+    std::cout << "find sst file: " << sst_file_name << '\n';
     std::vector<std::string> sst_files;
     sst_files.push_back(sst_file_name);
     butil::Status status = RawBdbEngineTest::engine->IngestExternalFile(cf_name, sst_files);
@@ -2186,9 +1230,8 @@ TEST_F(RawBdbEngineTest, IngestExternalFile) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value_099", value);
   } else {
-    std::cout << "Warning: cannot find sst file: " << sst_file_name << ", skip IngestExternalFile test!" << std::endl;
+    std::cout << "Warning: cannot find sst file: " << sst_file_name << ", skip IngestExternalFile test!" << '\n';
   }
 }
 
 }  // namespace dingodb
-

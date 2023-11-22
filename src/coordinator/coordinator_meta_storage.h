@@ -30,6 +30,7 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/error.pb.h"
 #include "raft/raft_node.h"
 #include "serial/buf.h"
 #include "serial/schema/dingo_schema.h"
@@ -459,12 +460,24 @@ class MetaDiskMap {
   butil::Status PutIfAbsent(const std::string &id, const T &element) {
     pb::common::KeyValue kv;
     TransformToKvValue(element, kv);
-    bool key_is_exists;
-    butil::Status status = raw_engine_->Writer()->KvPutIfAbsent(Constant::kStoreMetaCF, kv, key_is_exists);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
-                                      status.error_str());
-      return status;
+
+    std::string tmp_value;
+
+    auto ret1 = raw_engine_->Reader()->KvGet(Constant::kStoreMetaCF, kv.key(), *kv.mutable_value());
+    if (ret1.ok()) {
+      return butil::Status::OK();
+    } else if (ret1.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+      // do put
+      butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
+                                        status.error_str());
+        return status;
+      }
+
+      return butil::Status::OK();
+    } else {
+      return ret1;
     }
 
     return butil::Status::OK();
@@ -805,8 +818,8 @@ class MetaMemMapFlat {
 
     pb::common::KeyValue kv;
     TransformToKvValue(element, kv);
-    bool key_is_exists;
-    butil::Status status = raw_engine_->Writer()->KvPutIfAbsent(Constant::kStoreMetaCF, kv, key_is_exists);
+
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
                                       status.error_str());
@@ -1024,8 +1037,7 @@ class MetaMemMapStd {
 
     pb::common::KeyValue kv;
     TransformToKvValue(element, kv);
-    bool key_is_exists;
-    butil::Status status = raw_engine_->Writer()->KvPutIfAbsent(Constant::kStoreMetaCF, kv, key_is_exists);
+    butil::Status status = raw_engine_->Writer()->KvPut(Constant::kStoreMetaCF, kv);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Meta put key {} failed, errcode: {} {}", id, status.error_code(),
                                       status.error_str());

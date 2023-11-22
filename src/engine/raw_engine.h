@@ -74,17 +74,6 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
                                               const std::vector<pb::common::KeyValue>& kv_puts,
                                               const std::vector<pb::common::KeyValue>& kv_deletes) = 0;
 
-    virtual butil::Status KvPutIfAbsent(const std::string& cf_name, const pb::common::KeyValue& kv,
-                                        bool& key_state) = 0;
-    virtual butil::Status KvBatchPutIfAbsent(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                             std::vector<bool>& key_states, bool is_atomic) = 0;
-
-    virtual butil::Status KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv,
-                                          const std::string& value, bool& key_state) = 0;
-    virtual butil::Status KvBatchCompareAndSet(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                               const std::vector<std::string>& expect_values,
-                                               std::vector<bool>& key_states, bool is_atomic) = 0;
-
     virtual butil::Status KvDelete(const std::string& cf_name, const std::string& key) = 0;
     virtual butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) = 0;
 
@@ -94,8 +83,6 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
                                              const std::vector<pb::common::Range>& ranges) = 0;
     virtual butil::Status KvBatchDeleteRange(
         const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) = 0;
-
-    virtual butil::Status KvDeleteIfEqual(const std::string& cf_name, const pb::common::KeyValue& kv) = 0;
 
     virtual butil::Status KvBatchPutAndDelete(
         const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_put_with_cfs,

@@ -75,133 +75,6 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   return 0;
 }
 
-int PutIfAbsentHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics,
-                               int64_t /*term_id*/, int64_t /*log_id*/) {
-  butil::Status status;
-  const auto &request = req.put_if_absent();
-
-  std::vector<bool> key_states;  // NOLINT
-  bool key_state;
-  auto writer = engine->Writer();
-  if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
-  }
-  bool const is_write_batch = (request.kvs().size() != 1);
-  if (!is_write_batch) {
-    status = writer->KvPutIfAbsent(request.cf_name(), request.kvs().Get(0), key_state);
-  } else {
-    status = writer->KvBatchPutIfAbsent(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()), key_states,
-                                        request.is_atomic());
-  }
-
-  if (status.error_code() == pb::error::Errno::EINTERNAL) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] put_if_absent failed, error: {}", region->Id(),
-                                    status.error_str());
-  }
-
-  if (ctx) {
-    ctx->SetStatus(status);
-    if (is_write_batch) {
-      auto *response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
-      // std::vector<bool> must do not use foreach
-      for (auto &&key_state : key_states) {
-        response->add_key_states(key_state);
-      }
-    } else {  // only one key
-      pb::store::KvPutIfAbsentResponse *response = dynamic_cast<pb::store::KvPutIfAbsentResponse *>(ctx->Response());
-      if (response) {
-        response->set_key_state(key_state);
-      } else {
-        pb::store::KvBatchPutIfAbsentResponse *response =
-            dynamic_cast<pb::store::KvBatchPutIfAbsentResponse *>(ctx->Response());
-        if (response) {
-          response->add_key_states(key_state);
-        }
-      }
-    }
-  }
-
-  // Update region metrics min/max key
-  if (region_metrics != nullptr) {
-    region_metrics->UpdateMaxAndMinKey(request.kvs());
-  }
-
-  return 0;
-}
-
-int CompareAndSetHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                 std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
-                                 store::RegionMetricsPtr region_metrics, int64_t /*term_id*/, int64_t /*log_id*/) {
-  butil::Status status;
-  const auto &request = req.compare_and_set();
-
-  std::vector<bool> key_states;  // NOLINT
-
-  auto writer = engine->Writer();
-  if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
-  }
-  bool const is_write_batch = (request.kvs().size() != 1);
-  status = writer->KvBatchCompareAndSet(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()),
-                                        Helper::PbRepeatedToVector(request.expect_values()), key_states,
-                                        request.is_atomic());
-
-  if (status.error_code() == pb::error::Errno::EINTERNAL) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] compare_and_set failed, error: {}", region->Id(),
-                                    status.error_str());
-  }
-
-  if (ctx) {
-    ctx->SetStatus(status);
-    if (is_write_batch) {
-      auto *response = dynamic_cast<pb::store::KvBatchCompareAndSetResponse *>(ctx->Response());
-      // std::vector<bool> must do not use foreach
-      for (auto &&key_state : key_states) {
-        response->add_key_states(key_state);
-      }
-    } else {  // only one key
-      pb::store::KvCompareAndSetResponse *response =
-          dynamic_cast<pb::store::KvCompareAndSetResponse *>(ctx->Response());
-      if (response) {
-        response->set_key_state(key_states[0]);
-      } else {
-        pb::store::KvBatchCompareAndSetResponse *response =
-            dynamic_cast<pb::store::KvBatchCompareAndSetResponse *>(ctx->Response());
-        if (response) {
-          response->add_key_states(key_states[0]);
-        }
-      }
-    }
-  }
-
-  // Update region metrics min/max key
-  if (region_metrics != nullptr) {
-    size_t i = 0;
-    store::RegionMetrics::PbKeyValues new_kvs;
-    store::RegionMetrics::PbKeys delete_keys;
-    for (const auto &key_state : key_states) {
-      const auto &kv = request.kvs().at(i);
-      if (key_state) {
-        if (!request.expect_values(i).empty() && kv.value().empty()) {
-          delete_keys.Add(std::string(kv.key()));
-        }
-
-        if (request.expect_values(i).empty() && !kv.value().empty()) {
-          new_kvs.Add(pb::common::KeyValue(kv));
-        }
-      }
-    }
-
-    // add
-    region_metrics->UpdateMaxAndMinKey(new_kvs);
-    // delete key
-    region_metrics->UpdateMaxAndMinKeyPolicy(delete_keys);
-  }
-
-  return 0;
-}
-
 int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr /*region*/,
                                std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
                                store::RegionMetricsPtr region_metrics, int64_t /*term_id*/, int64_t /*log_id*/) {
@@ -1241,14 +1114,12 @@ int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   handler_collection->Register(std::make_shared<PutHandler>());
-  handler_collection->Register(std::make_shared<PutIfAbsentHandler>());
   handler_collection->Register(std::make_shared<DeleteRangeHandler>());
   handler_collection->Register(std::make_shared<DeleteBatchHandler>());
   handler_collection->Register(std::make_shared<SplitHandler>());
   handler_collection->Register(std::make_shared<PrepareMergeHandler>());
   handler_collection->Register(std::make_shared<CommitMergeHandler>());
   handler_collection->Register(std::make_shared<RollbackMergeHandler>());
-  handler_collection->Register(std::make_shared<CompareAndSetHandler>());
   handler_collection->Register(std::make_shared<VectorAddHandler>());
   handler_collection->Register(std::make_shared<VectorDeleteHandler>());
   handler_collection->Register(std::make_shared<RebuildVectorIndexHandler>());

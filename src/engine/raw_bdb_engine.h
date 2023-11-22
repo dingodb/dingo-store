@@ -161,16 +161,6 @@ class Writer : public RawEngine::Writer {
   butil::Status KvBatchPutAndDelete(const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
                                     const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) override;
 
-  butil::Status KvPutIfAbsent(const std::string& cf_name, const pb::common::KeyValue& kv, bool& key_state) override;
-  butil::Status KvBatchPutIfAbsent(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                   std::vector<bool>& key_states, bool is_atomic) override;
-
-  butil::Status KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv, const std::string& value,
-                                bool& key_state) override;
-  butil::Status KvBatchCompareAndSet(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                     const std::vector<std::string>& expect_values, std::vector<bool>& key_states,
-                                     bool is_atomic) override;
-
   butil::Status KvDelete(const std::string& cf_name, const std::string& key) override;
   butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) override;
 
@@ -180,12 +170,7 @@ class Writer : public RawEngine::Writer {
   butil::Status KvBatchDeleteRange(
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
 
-  butil::Status KvDeleteIfEqual(const std::string& cf_name, const pb::common::KeyValue& kv) override;
-
  private:
-  butil::Status KvCompareAndSet(const std::string& cf_name, const pb::common::KeyValue& kv, const std::string& value,
-                                bool is_key_exist, bool& key_state);
-
   butil::Status KvBatchDeleteRange(const std::vector<std::string>& cf_names,
                                    const std::vector<pb::common::Range>& ranges);
 
@@ -197,6 +182,7 @@ class Writer : public RawEngine::Writer {
   std::weak_ptr<RawBdbEngine> raw_engine_;
   std::shared_ptr<Db> db_;
 };
+
 }  // namespace bdb
 
 class RawBdbEngine : public RawEngine {
