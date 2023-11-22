@@ -41,7 +41,7 @@ bool MetaWriter::Put(const std::shared_ptr<pb::common::KeyValue> kv) {
 bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
   DINGO_LOG(DEBUG) << "Put meta data, key nums: " << kvs.size();
   if (kvs.empty()) return true;
-  auto status = engine_->Writer()->KvBatchPut(Constant::kStoreMetaCF, kvs);
+  auto status = engine_->Writer()->KvBatchPutAndDelete(Constant::kStoreMetaCF, kvs, {});
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
     DINGO_LOG(FATAL) << "KvBatchPut failed, errcode: " << status.error_code() << " " << status.error_str();
   }
@@ -53,14 +53,14 @@ bool MetaWriter::Put(const std::vector<pb::common::KeyValue> kvs) {
   return true;
 }
 
-bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_put, std::vector<pb::common::KeyValue> kvs_delete) {
-  DINGO_LOG(DEBUG) << "PutAndDelete meta data, key_put nums: " << kvs_put.size()
-                   << " key_delete nums:" << kvs_delete.size();
-  auto status = engine_->Writer()->KvBatchPutAndDelete(Constant::kStoreMetaCF, kvs_put, kvs_delete);
+bool MetaWriter::PutAndDelete(std::vector<pb::common::KeyValue> kvs_to_put, std::vector<std::string> keys_to_delete) {
+  DINGO_LOG(DEBUG) << "PutAndDelete meta data, key_put nums: " << kvs_to_put.size()
+                   << " key_delete nums:" << keys_to_delete.size();
+  auto status = engine_->Writer()->KvBatchPutAndDelete(Constant::kStoreMetaCF, kvs_to_put, keys_to_delete);
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
     DINGO_LOG(FATAL) << "KvBatchPutAndDelete failed, errcode: " << status.error_code() << " " << status.error_str()
-                     << ", put_count: " << kvs_put.size() << ", delete_count: " << kvs_delete.size()
-                     << ", delete_count: " << kvs_delete.size();
+                     << ", put_count: " << kvs_to_put.size() << ", delete_count: " << keys_to_delete.size()
+                     << ", delete_count: " << keys_to_delete.size();
   }
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "Meta batch write and delete failed, errcode: " << status.error_code() << " "

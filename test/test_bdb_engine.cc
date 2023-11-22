@@ -212,7 +212,7 @@ TEST_F(RawBdbEngineTest, KvBatchPut) {
   {
     std::vector<pb::common::KeyValue> kvs;
 
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -224,7 +224,7 @@ TEST_F(RawBdbEngineTest, KvBatchPut) {
     kv.set_value("value1");
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -245,7 +245,7 @@ TEST_F(RawBdbEngineTest, KvBatchPut) {
     kv.set_value("value3");
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -265,7 +265,7 @@ TEST_F(RawBdbEngineTest, KvBatchPut) {
     kv.set_value("value3");
     kvs.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value1;
@@ -293,9 +293,9 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   // key empty failed
   {
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -303,12 +303,12 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
     kv.set_key("");
     kv.set_value("value1");
     kv_puts.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -316,16 +316,14 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
     kv.set_key("key1");
     kv.set_value("value1");
     kv_puts.emplace_back(kv);
 
-    kv.set_key("");
-    kv.set_value("value1");
-    kv_deletes.emplace_back(kv);
+    key_deletes.emplace_back("");
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -333,7 +331,7 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
 
     kv.set_key("key1");
     kv.set_value("value1");
@@ -347,7 +345,7 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value3");
     kv_puts.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -355,7 +353,7 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
 
     kv.set_key("key1");
     kv.set_value("value1");
@@ -365,11 +363,9 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value2");
     kv_puts.emplace_back(kv);
 
-    kv.set_key("");
-    kv.set_value("value3");
-    kv_deletes.emplace_back(kv);
+    key_deletes.emplace_back("");
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -377,25 +373,14 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> keys_deletes;
 
-    kv.set_key("not_found_key");
-    kv.set_value("value_not_found_key");
-    kv_deletes.emplace_back(kv);
+    keys_deletes.emplace_back("not_found_key");
+    keys_deletes.emplace_back("key1");
+    keys_deletes.emplace_back("key2");
+    keys_deletes.emplace_back("key3");
 
-    kv.set_key("key1");
-    kv.set_value("value1");
-    kv_deletes.emplace_back(kv);
-
-    kv.set_key("key2");
-    kv.set_value("value2");
-    kv_deletes.emplace_back(kv);
-
-    kv.set_key("key3");
-    kv.set_value("value3");
-    kv_deletes.emplace_back(kv);
-
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, keys_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value0;
@@ -421,7 +406,7 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
     kv.set_key("key1");
     kv.set_value("value1");
     kv_puts.emplace_back(kv);
@@ -439,16 +424,13 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
     kv_puts.emplace_back(kv);
 
     ///////////////////////////////////////
-    kv.set_key("key1");
-    kv_deletes.emplace_back(kv);
+    key_deletes.emplace_back("key1");
 
-    kv.set_key("key2");
-    kv_deletes.emplace_back(kv);
+    key_deletes.emplace_back("key2");
 
-    kv.set_key("key3");
-    kv_deletes.emplace_back(kv);
+    key_deletes.emplace_back("key3");
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value0;
@@ -476,7 +458,7 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
   {
     pb::common::KeyValue kv;
     std::vector<pb::common::KeyValue> kv_puts;
-    std::vector<pb::common::KeyValue> kv_deletes;
+    std::vector<std::string> key_deletes;
     kv.set_key("key1");
     kv.set_value("value1");
     kv_puts.emplace_back(kv);
@@ -489,7 +471,7 @@ TEST_F(RawBdbEngineTest, KvBatchPutAndDelete) {
     kv.set_value("value3");
     kv_puts.emplace_back(kv);
 
-    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, kv_deletes);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     std::string value1;
@@ -840,7 +822,7 @@ TEST_F(RawBdbEngineTest, KvBatchDelete) {
   {
     std::vector<std::string> keys;
 
-    butil::Status ok = writer->KvBatchDelete(cf_name, keys);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, {}, keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -850,7 +832,7 @@ TEST_F(RawBdbEngineTest, KvBatchDelete) {
     keys.emplace_back("key");
     keys.emplace_back("");
 
-    butil::Status ok = writer->KvBatchDelete(cf_name, keys);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, {}, keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_EMPTY);
   }
 
@@ -865,7 +847,7 @@ TEST_F(RawBdbEngineTest, KvBatchDelete) {
       kvs.emplace_back(std::move(kv));
     }
 
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     auto reader = RawBdbEngineTest::engine->Reader();
@@ -883,7 +865,7 @@ TEST_F(RawBdbEngineTest, KvBatchDelete) {
       keys.emplace_back(kv.key());
     }
 
-    ok = writer->KvBatchDelete(cf_name, keys);
+    ok = writer->KvBatchPutAndDelete(cf_name, {}, keys);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (int i = 0; i < 10; i++) {
@@ -909,7 +891,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange) {
       kvs.push_back(kv);
     }
 
-    butil::Status ok = writer->KvBatchPut(cf_name, kvs);
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 

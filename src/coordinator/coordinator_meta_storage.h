@@ -447,7 +447,7 @@ class MetaDiskMap {
 
     std::vector<pb::common::KeyValue> kvs;
     TransformToKvValue(elements, kvs);
-    butil::Status status = raw_engine_->Writer()->KvBatchPut(Constant::kStoreMetaCF, kvs);
+    butil::Status status = raw_engine_->Writer()->KvBatchPutAndDelete(Constant::kStoreMetaCF, kvs, {});
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Meta put keys {} failed, errcode: {} {}", ids.size(), status.error_code(),
                                       status.error_str());
@@ -1019,7 +1019,7 @@ class MetaMemMapStd {
 
     std::vector<pb::common::KeyValue> kvs;
     TransformToKvValue(elements, kvs);
-    butil::Status status = raw_engine_->Writer()->KvBatchPut(Constant::kStoreMetaCF, kvs);
+    butil::Status status = raw_engine_->Writer()->KvBatchPutAndDelete(Constant::kStoreMetaCF, kvs, {});
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Meta put keys {} failed, errcode: {} {}", ids.size(), status.error_code(),
                                       status.error_str());
