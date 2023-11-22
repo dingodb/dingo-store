@@ -15,11 +15,14 @@
 
 #include <gflags/gflags.h>
 
+#include <vector>
+
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "fmt/core.h"
+#include "proto/common.pb.h"
 #include "rocksdb/sst_file_reader.h"
 #include "serial/buf.h"
 #include "serial/schema/string_schema.h"
@@ -1131,7 +1134,10 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
 }
 
 butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) {
-  return KvBatchDeleteRange(std::vector<std::string>{cf_name}, std::vector<pb::common::Range>{range});
+  std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+  range_with_cfs[cf_name] = {range};
+
+  return KvBatchDeleteRange(range_with_cfs);
 }
 
 butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
@@ -1158,87 +1164,6 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
       for (const auto& [cf_name, ranges] : range_with_cfs) {
         for (const auto& range : ranges) {
           butil::Status status = DeleteRangeByCursor(cf_name, range, txn);
-          if (!status.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("[bdb] delete range by cursor: {}.", status.error_cstr());
-            return status;
-          }
-        }
-      }
-
-      // commit
-      try {
-        ret = txn->commit(0);
-        if (ret == 0) {
-          txn = nullptr;
-          return butil::Status();
-        }
-      } catch (DbException& db_exception) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
-        ret = BdbHelper::kCommitException;
-      }
-
-      if (BAIDU_UNLIKELY(ret != 0)) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
-        return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
-      }
-
-    } catch (DbDeadlockException&) {
-      // Now we decide if we want to retry the operation.
-      // If we have retried less than FLAGS_bdb_max_retries,
-      // increment the retry count and goto retry.
-      if (retry_count < FLAGS_bdb_max_retries) {
-        // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          txn = nullptr;
-        };
-        DINGO_LOG(WARNING) << fmt::format(
-            "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
-        retry_count++;
-        retry = true;
-      } else {
-        // Otherwise, just give up.
-        DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException and out of retries: {}. giving up.",
-                                        retry_count);
-        return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
-      }
-    } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {}.", db_exception.what());
-      return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
-    } catch (std::exception& std_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
-      return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
-    }
-  }
-
-  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
-}
-
-butil::Status Writer::KvBatchDeleteRange(const std::vector<std::string>& cf_names,
-                                         const std::vector<pb::common::Range>& ranges) {
-  DbEnv* envp = GetDb()->get_env();
-  DbTxn* txn = nullptr;
-  // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        txn = nullptr;
-      });
-
-  bool retry = true;
-  int32_t retry_count = 0;
-
-  while (retry) {
-    try {
-      int ret = envp->txn_begin(nullptr, &txn, 0);
-      if (ret != 0) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
-        return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
-      }
-
-      for (const auto& name : cf_names) {
-        for (const auto& range : ranges) {
-          butil::Status status = DeleteRangeByCursor(name, range, txn);
           if (!status.ok()) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] delete range by cursor: {}.", status.error_cstr());
             return status;

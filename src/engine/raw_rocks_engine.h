@@ -250,8 +250,6 @@ class Writer : public RawEngine::Writer {
                                     const std::vector<pb::common::KeyValue>& kv_deletes);
 
   butil::Status KvDelete(ColumnFamilyPtr column_family, const std::string& key);
-  butil::Status KvBatchDeleteRange(std::vector<ColumnFamilyPtr> column_families,
-                                   const std::vector<pb::common::Range>& ranges);
 
   std::weak_ptr<RawRocksEngine> raw_engine_;
 };
