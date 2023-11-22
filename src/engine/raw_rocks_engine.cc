@@ -661,18 +661,6 @@ butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common
   return KvBatchDeleteRange({GetColumnFamily(cf_name)}, {range});
 }
 
-butil::Status Writer::KvDeleteRange(const std::vector<std::string>& cf_names, const pb::common::Range& range) {
-  std::vector<ColumnFamilyPtr> column_families;
-  column_families.reserve(cf_names.size());
-  for (const auto& cf_name : cf_names) {
-    column_families.push_back(GetColumnFamily(cf_name));
-  }
-  return KvBatchDeleteRange(column_families, {range});
-}
-butil::Status Writer::KvBatchDeleteRange(const std::string& cf_name, const std::vector<pb::common::Range>& ranges) {
-  return KvBatchDeleteRange({GetColumnFamily(cf_name)}, ranges);
-}
-
 butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
   rocksdb::WriteBatch batch;
   for (const auto& [cf_name, ranges] : range_with_cfs) {

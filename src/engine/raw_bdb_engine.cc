@@ -1134,14 +1134,6 @@ butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common
   return KvBatchDeleteRange(std::vector<std::string>{cf_name}, std::vector<pb::common::Range>{range});
 }
 
-butil::Status Writer::KvDeleteRange(const std::vector<std::string>& cf_names, const pb::common::Range& range) {
-  return KvBatchDeleteRange(cf_names, std::vector<pb::common::Range>{range});
-}
-
-butil::Status Writer::KvBatchDeleteRange(const std::string& cf_name, const std::vector<pb::common::Range>& ranges) {
-  return KvBatchDeleteRange(std::vector<std::string>{cf_name}, ranges);
-}
-
 butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
   DbEnv* envp = GetDb()->get_env();
   DbTxn* txn = nullptr;

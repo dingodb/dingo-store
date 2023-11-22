@@ -256,7 +256,8 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   }
 
   // Delete old region datas
-  status = engine_->Writer()->KvDeleteRange(Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range());
+  status = engine_->Writer()->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(
+      Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range()));
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data failed, error: {}",
                                     region->Id(), status.error_str());

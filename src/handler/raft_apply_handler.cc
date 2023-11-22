@@ -105,7 +105,9 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr /*
     }
 
     if (status.ok() && 0 != delete_count) {
-      status = writer->KvBatchDeleteRange(request.cf_name(), Helper::PbRepeatedToVector(request.ranges()));
+      std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+      range_with_cfs[request.cf_name()] = Helper::PbRepeatedToVector(request.ranges());
+      status = writer->KvBatchDeleteRange(range_with_cfs);
     }
   }
 
