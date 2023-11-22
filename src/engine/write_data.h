@@ -60,8 +60,8 @@ struct PutDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::PUT);
     pb::raft::PutRequest* put_request = request->mutable_put();
+    put_request->set_cf_name(cf_name);
     for (auto& kv : kvs) {
-      put_request->set_cf_name(cf_name);
       put_request->add_kvs()->Swap(&kv);
     }
 
@@ -102,8 +102,8 @@ struct VectorAddDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::VECTOR_ADD);
     pb::raft::VectorAddRequest* vector_add_request = request->mutable_vector_add();
+    vector_add_request->set_cf_name(cf_name);
     for (auto& vector : vectors) {
-      vector_add_request->set_cf_name(cf_name);
       vector_add_request->add_vectors()->Swap(&vector);
     }
 
@@ -156,61 +156,6 @@ struct TxnDatum : public DatumAble {
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
   pb::raft::TxnRaftRequest txn_request_to_raft;
-};
-
-struct PutIfAbsentDatum : public DatumAble {
-  DatumType GetType() override { return DatumType::kPutIfabsent; }
-
-  pb::raft::Request* TransformToRaft() override {
-    auto* request = new pb::raft::Request();
-
-    request->set_cmd_type(pb::raft::CmdType::PUTIFABSENT);
-    pb::raft::PutIfAbsentRequest* put_if_absent_request = request->mutable_put_if_absent();
-    put_if_absent_request->set_cf_name(cf_name);
-    put_if_absent_request->set_is_atomic(is_atomic);
-    for (auto& kv : kvs) {
-      put_if_absent_request->add_kvs()->Swap(&kv);
-    }
-
-    return request;
-  }
-
-  void TransformFromRaft(pb::raft::Response& resonse) override {}
-
-  std::string cf_name;
-  std::vector<pb::common::KeyValue> kvs;
-  bool is_atomic;
-};
-
-struct CompareAndSetDatum : public DatumAble {
-  DatumType GetType() override { return DatumType::kCompareAndSet; }
-
-  pb::raft::Request* TransformToRaft() override {
-    auto* request = new pb::raft::Request();
-
-    request->set_cmd_type(pb::raft::CmdType::COMPAREANDSET);
-    pb::raft::CompareAndSetRequest* compare_and_set_request = request->mutable_compare_and_set();
-    compare_and_set_request->set_cf_name(cf_name);
-
-    for (auto& kv : kvs) {
-      *(compare_and_set_request->add_kvs()) = kv;
-    }
-
-    for (auto& expect_value : expect_values) {
-      compare_and_set_request->add_expect_values(expect_value);
-    }
-
-    compare_and_set_request->set_is_atomic(is_atomic);
-
-    return request;
-  }
-
-  void TransformFromRaft(pb::raft::Response& resonse) override {}
-
-  std::string cf_name;
-  std::vector<pb::common::KeyValue> kvs;
-  std::vector<std::string> expect_values;
-  bool is_atomic;
 };
 
 struct DeleteBatchDatum : public DatumAble {
@@ -456,20 +401,6 @@ class WriteDataBuilder {
     return write_data;
   }
 
-  // PutIfAbsentDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                               bool is_atomic) {
-    auto datum = std::make_shared<PutIfAbsentDatum>();
-    datum->cf_name = cf_name;
-    datum->kvs = kvs;
-    datum->is_atomic = is_atomic;
-
-    auto write_data = std::make_shared<WriteData>();
-    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-    return write_data;
-  }
-
   // DeleteBatchDatum
   static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<std::string>& keys) {
     auto datum = std::make_shared<DeleteBatchDatum>();
@@ -487,21 +418,6 @@ class WriteDataBuilder {
     auto datum = std::make_shared<DeleteRangeDatum>();
     datum->cf_name = cf_name;
     datum->ranges.emplace_back(std::move(const_cast<pb::common::Range&>(range)));
-
-    auto write_data = std::make_shared<WriteData>();
-    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
-
-    return write_data;
-  }
-
-  // CompareAndSetDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs,
-                                               const std::vector<std::string>& expect_values, bool is_atomic) {
-    auto datum = std::make_shared<CompareAndSetDatum>();
-    datum->cf_name = cf_name;
-    datum->kvs = kvs;
-    datum->expect_values = expect_values;
-    datum->is_atomic = is_atomic;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

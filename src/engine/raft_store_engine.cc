@@ -566,6 +566,11 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
+  DINGO_LOG(INFO) << "kvs.size = " << kvs.size() << ", is_atomic: " << is_atomic;
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv is: " << kv.ShortDebugString();
+  }
+
   // Warning : be careful with vector<bool>
   key_states.clear();
   key_states.resize(kvs.size(), false);
@@ -583,7 +588,7 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
 
     std::string value_old;
     auto status = raw_engine_->Reader()->KvGet(ctx->CfName(), kv.key(), value_old);
-    if (!status.ok()) {
+    if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       DINGO_LOG(ERROR) << fmt::format("[raft_engine] get failed, errcode: {}, errmsg: {}", status.error_code(),
                                       status.error_str());
       key_states.clear();
@@ -595,8 +600,9 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
       if (status.ok()) {
         key_states.clear();
         key_states.resize(kvs.size(), false);
-        DINGO_LOG(INFO) << fmt::format("[raft_engine] key exists, key: {}.", kv.key());
-        return butil::Status::OK();
+        std::string error = fmt::format("[raft_engine] key exists, key: {}.", kv.key());
+        DINGO_LOG(INFO) << error;
+        return butil::Status(pb::error::EKEY_EXIST, error);
       } else if (status.error_code() != pb::error::EKEY_NOT_FOUND) {
         key_states.clear();
         key_states.resize(kvs.size(), false);
@@ -624,6 +630,12 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     key_states[key_index] = true;
     key_index++;
   }
+
+  if (kvs_to_put.empty()) {
+    return butil::Status::OK();
+  }
+
+  DINGO_LOG(INFO) << "kvs_to_put size: " << kvs_to_put.size() << ", first is: " << kvs_to_put[0].ShortDebugString();
 
   auto ret = raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs_to_put));
   if (!ret.ok()) {
@@ -668,13 +680,14 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
 
     std::string value_old;
     auto status = raw_engine_->Reader()->KvGet(ctx->CfName(), kv.key(), value_old);
-    if (!status.ok()) {
+    if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       DINGO_LOG(ERROR) << fmt::format("[raft_engine] get failed, errcode: {}, errmsg: {}", status.error_code(),
                                       status.error_str());
       key_states.clear();
       key_states.resize(kvs.size(), false);
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
+
     if (is_atomic) {
       if (status.ok()) {
         if (value_old != expect_values[key_index]) {
@@ -729,6 +742,10 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
     key_index++;
   }
 
+  if (kvs_to_put.empty() && keys_to_delete.empty()) {
+    return butil::Status();
+  }
+
   pb::raft::TxnRaftRequest txn_raft_request;
   auto* cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
 
@@ -745,7 +762,7 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
 
   if (!keys_to_delete.empty()) {
     auto* default_dels = cf_put_delete->add_deletes_with_cf();
-    default_dels->set_cf_name(Constant::kStoreDataCF);
+    default_dels->set_cf_name(ctx->CfName());
     for (auto& key_del : keys_to_delete) {
       default_dels->add_keys(key_del);
     }
