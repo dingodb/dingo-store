@@ -250,7 +250,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
   kvs.emplace_back(std::move(*mut_request->release_kv()));
-  status = storage->KvPut(ctx, is_sync, kvs);
+  status = storage->KvPut(ctx, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -263,14 +263,10 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvPutResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvPut(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoKvPut(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -328,7 +324,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
-  status = storage->KvPut(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
+  status = storage->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -345,15 +341,11 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvBatchPut(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvBatchPut(storage, controller, request, response, svr_done, true); });
-  auto ret = worker_set_->ExecuteRR(task);
+  auto ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -406,14 +398,19 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
 
+  std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
-  status = storage->KvPutIfAbsent(ctx, is_sync, kvs, true);
+  status = storage->KvPutIfAbsent(ctx, kvs, true, key_states);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+  }
+
+  if (!key_states.empty()) {
+    response->set_key_state(key_states[0]);
   }
 }
 
@@ -422,15 +419,11 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
                                      pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvPutIfAbsent(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvPutIfAbsent(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -488,13 +481,18 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
 
+  std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
-  status = storage->KvPutIfAbsent(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_kvs()),
-                                  request->is_atomic());
+  status = storage->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()), request->is_atomic(),
+                                  key_states);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+  }
+
+  for (const auto& key_state : key_states) {
+    response->add_key_states(key_state);
   }
 }
 
@@ -508,15 +506,11 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     return;
   }
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvBatchPutIfAbsent(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
       [=]() { DoKvBatchPutIfAbsent(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -570,7 +564,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
-  status = storage->KvDelete(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
+  status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -587,15 +581,11 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     return;
   }
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvBatchDelete(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvBatchDelete(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -657,7 +647,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
-  status = storage->KvDeleteRange(ctx, is_sync, correction_range);
+  status = storage->KvDeleteRange(ctx, correction_range);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -670,15 +660,11 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
                                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvDeleteRange(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvDeleteRange(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -727,11 +713,16 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
 
-  status = storage->KvCompareAndSet(ctx, is_sync, {request->kv()}, {request->expect_value()}, true);
+  std::vector<bool> key_states;
+  status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+  }
+
+  if (!key_states.empty()) {
+    response->set_key_state(key_states[0]);
   }
 }
 
@@ -740,15 +731,11 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
                                        pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvCompareAndSet(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
       [=]() { DoKvCompareAndSet(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -809,12 +796,18 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
 
-  status = storage->KvCompareAndSet(ctx, is_sync, Helper::PbRepeatedToVector(mut_request->kvs()),
-                                    Helper::PbRepeatedToVector(mut_request->expect_values()), request->is_atomic());
+  std::vector<bool> key_states;
+  status = storage->KvCompareAndSet(ctx, Helper::PbRepeatedToVector(mut_request->kvs()),
+                                    Helper::PbRepeatedToVector(mut_request->expect_values()), request->is_atomic(),
+                                    key_states);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+  }
+
+  for (const auto& key_state : key_states) {
+    response->add_key_states(key_state);
   }
 }
 
@@ -828,15 +821,11 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     return;
   }
 
-  if (!FLAGS_enable_async_store_operation) {
-    return DoKvBatchCompareAndSet(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
       [=]() { DoKvBatchCompareAndSet(storage, controller, request, response, svr_done, true); });
-  bool ret = worker_set_->ExecuteRR(task);
+  bool ret = worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");

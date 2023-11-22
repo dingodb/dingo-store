@@ -105,94 +105,82 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
   return butil::Status();
 }
 
-butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<pb::common::KeyValue>& kvs) {
-  if (is_sync) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs));
+butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
+  // auto status = ValidateLeader(ctx->RegionId());
+  // if (!status.ok()) {
+  //   return status;
+  // }
+
+  auto writer = engine_->NewWriter(engine_);
+  auto status = writer->KvPut(ctx, kvs);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(
-      ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs), [](std::shared_ptr<Context> ctx, butil::Status status) {
-        if (!status.ok()) {
-          Helper::SetPbMessageError(status, ctx->Response());
-          if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-            LOG(ERROR) << fmt::format("KvPut request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                      ctx->Response()->ShortDebugString());
-          }
-        }
-      });
+  return butil::Status();
 }
 
-butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, bool is_sync,
-                                     const std::vector<pb::common::KeyValue>& kvs, bool is_atomic) {
-  if (is_sync) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic));
+butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                     bool is_atomic, std::vector<bool>& key_states) {
+  // auto status = ValidateLeader(ctx->RegionId());
+  // if (!status.ok()) {
+  //   return status;
+  // }
+
+  auto writer = engine_->NewWriter(engine_);
+  auto status = writer->KvPutIfAbsent(ctx, kvs, is_atomic, key_states);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, is_atomic),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                                 if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-                                   LOG(ERROR) << fmt::format("KvPutIfAbsent request: {} response: {}",
-                                                             ctx->Request()->ShortDebugString(),
-                                                             ctx->Response()->ShortDebugString());
-                                 }
-                               }
-                             });
+  return butil::Status();
 }
 
-butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<std::string>& keys) {
-  if (is_sync) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys));
+butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
+  // auto status = ValidateLeader(ctx->RegionId());
+  // if (!status.ok()) {
+  //   return status;
+  // }
+
+  auto writer = engine_->NewWriter(engine_);
+  auto status = writer->KvDelete(ctx, keys);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(
-      ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys), [](std::shared_ptr<Context> ctx, butil::Status status) {
-        if (!status.ok()) {
-          Helper::SetPbMessageError(status, ctx->Response());
-          if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-            LOG(ERROR) << fmt::format("KvDelete request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                      ctx->Response()->ShortDebugString());
-          }
-        }
-      });
+  return butil::Status();
 }
 
-butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, bool is_sync, const pb::common::Range& range) {
-  if (is_sync) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
+butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
+  // auto status = ValidateLeader(ctx->RegionId());
+  // if (!status.ok()) {
+  //   return status;
+  // }
+
+  auto writer = engine_->NewWriter(engine_);
+  auto status = writer->KvDeleteRange(ctx, range);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(
-      ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range), [](std::shared_ptr<Context> ctx, butil::Status status) {
-        if (!status.ok()) {
-          Helper::SetPbMessageError(status, ctx->Response());
-          if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-            LOG(ERROR) << fmt::format("KvDeleteRange request: {} response: {}", ctx->Request()->ShortDebugString(),
-                                      ctx->Response()->ShortDebugString());
-          }
-        }
-      });
+  return butil::Status();
 }
 
-butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, bool is_sync,
-                                       const std::vector<pb::common::KeyValue>& kvs,
-                                       const std::vector<std::string>& expect_values, bool is_atomic) {
-  if (is_sync) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, expect_values, is_atomic));
+butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                       const std::vector<std::string>& expect_values, bool is_atomic,
+                                       std::vector<bool>& key_states) {
+  // auto status = ValidateLeader(ctx->RegionId());
+  // if (!status.ok()) {
+  //   return status;
+  // }
+
+  auto writer = engine_->NewWriter(engine_);
+  auto status = writer->KvCompareAndSet(ctx, kvs, expect_values, is_atomic, key_states);
+  if (!status.ok()) {
+    return status;
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs, expect_values, is_atomic),
-                             [](std::shared_ptr<Context> ctx, butil::Status status) {
-                               if (!status.ok()) {
-                                 Helper::SetPbMessageError(status, ctx->Response());
-                                 if (ctx->Request() != nullptr && ctx->Response() != nullptr) {
-                                   LOG(ERROR) << fmt::format("KvCompareAndSet request: {} response: {}",
-                                                             ctx->Request()->ShortDebugString(),
-                                                             ctx->Response()->ShortDebugString());
-                                 }
-                               }
-                             });
+  return butil::Status();
 }
 
 butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::string& cf_name, int64_t region_id,

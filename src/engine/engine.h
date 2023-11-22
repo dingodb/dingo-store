@@ -62,7 +62,7 @@ class Engine {
   virtual butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                                    WriteCbFunc cb) = 0;
 
-  // KV reader
+  // raw kv reader
   class Reader {
    public:
     Reader() = default;
@@ -75,6 +75,22 @@ class Engine {
 
     virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                   const std::string& end_key, int64_t& count) = 0;
+  };
+
+  // raw kv writer
+  class Writer {
+   public:
+    Writer() = default;
+    virtual ~Writer() = default;
+
+    virtual butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) = 0;
+    virtual butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) = 0;
+    virtual butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) = 0;
+    virtual butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                        bool is_atomic, std::vector<bool>& key_states) = 0;
+    virtual butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                          const std::vector<std::string>& expect_values, bool is_atomic,
+                                          std::vector<bool>& key_states) = 0;
   };
 
   // Vector reader
@@ -181,6 +197,7 @@ class Engine {
   };
 
   virtual std::shared_ptr<Reader> NewReader() = 0;
+  virtual std::shared_ptr<Writer> NewWriter(std::shared_ptr<Engine> engine) = 0;
   virtual std::shared_ptr<VectorReader> NewVectorReader() {
     DINGO_LOG(FATAL) << "Not support NewVectorReader.";
     return nullptr;

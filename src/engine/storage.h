@@ -58,18 +58,18 @@ class Storage {
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
 
   // kv write
-  butil::Status KvPut(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<pb::common::KeyValue>& kvs);
+  butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs);
 
-  butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<pb::common::KeyValue>& kvs,
-                              bool is_atomic);
+  butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                              bool is_atomic, std::vector<bool>& key_states);
 
-  butil::Status KvDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<std::string>& keys);
+  butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys);
 
-  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, bool is_sync, const pb::common::Range& range);
+  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range);
 
-  butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, bool is_sync,
-                                const std::vector<pb::common::KeyValue>& kvs,
-                                const std::vector<std::string>& expect_values, bool is_atomic);
+  butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                const std::vector<std::string>& expect_values, bool is_atomic,
+                                std::vector<bool>& key_states);
 
   // txn reader
   butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,

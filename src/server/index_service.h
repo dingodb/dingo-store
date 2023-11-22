@@ -29,15 +29,11 @@ class IndexServiceImpl : public pb::index::IndexService {
   void Hello(google::protobuf::RpcController* controller, const pb::index::HelloRequest* request,
              pb::index::HelloResponse* response, google::protobuf::Closure* done) override;
 
-  // vector
+  // vector read
   void VectorBatchQuery(google::protobuf::RpcController* controller, const pb::index::VectorBatchQueryRequest* request,
                         pb::index::VectorBatchQueryResponse* response, google::protobuf::Closure* done) override;
   void VectorSearch(google::protobuf::RpcController* controller, const pb::index::VectorSearchRequest* request,
                     pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) override;
-  void VectorAdd(google::protobuf::RpcController* controller, const pb::index::VectorAddRequest* request,
-                 pb::index::VectorAddResponse* response, google::protobuf::Closure* done) override;
-  void VectorDelete(google::protobuf::RpcController* controller, const pb::index::VectorDeleteRequest* request,
-                    pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) override;
   void VectorGetBorderId(google::protobuf::RpcController* controller,
                          const pb::index::VectorGetBorderIdRequest* request,
                          pb::index::VectorGetBorderIdResponse* response, google::protobuf::Closure* done) override;
@@ -47,14 +43,18 @@ class IndexServiceImpl : public pb::index::IndexService {
                               const pb::index::VectorGetRegionMetricsRequest* request,
                               pb::index::VectorGetRegionMetricsResponse* response,
                               google::protobuf::Closure* done) override;
-
   void VectorCount(google::protobuf::RpcController* controller, const pb::index::VectorCountRequest* request,
                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) override;
-
   // for debug
   void VectorSearchDebug(google::protobuf::RpcController* controller,
                          const pb::index::VectorSearchDebugRequest* request,
                          pb::index::VectorSearchDebugResponse* response, google::protobuf::Closure* done) override;
+
+  // vector write
+  void VectorAdd(google::protobuf::RpcController* controller, const pb::index::VectorAddRequest* request,
+                 pb::index::VectorAddResponse* response, google::protobuf::Closure* done) override;
+  void VectorDelete(google::protobuf::RpcController* controller, const pb::index::VectorDeleteRequest* request,
+                    pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) override;
 
   // txn read
   void TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
