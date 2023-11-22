@@ -460,15 +460,15 @@ ColumnFamilyPtr Writer::GetColumnFamily(const std::string& cf_name) { return Get
 
 ColumnFamilyPtr Writer::GetDefaultColumnFamily() { return GetRawEngine()->GetDefaultColumnFamily(); }
 
-butil::Status Writer::KvPut(ColumnFamilyPtr column_family, const pb::common::KeyValue& kv) {
+butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) {
   if (BAIDU_UNLIKELY(kv.key().empty())) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   rocksdb::WriteOptions write_options;
-  rocksdb::Status s =
-      GetDB()->Put(write_options, column_family->GetHandle(), rocksdb::Slice(kv.key()), rocksdb::Slice(kv.value()));
+  rocksdb::Status s = GetDB()->Put(write_options, GetColumnFamily(cf_name)->GetHandle(), rocksdb::Slice(kv.key()),
+                                   rocksdb::Slice(kv.value()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal put error");
@@ -477,29 +477,18 @@ butil::Status Writer::KvPut(ColumnFamilyPtr column_family, const pb::common::Key
   return butil::Status();
 }
 
-butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) {
-  return KvPut(GetColumnFamily(cf_name), kv);
-}
-
-butil::Status Writer::KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) {
-  return KvBatchPutAndDelete(GetColumnFamily(cf_name), kvs, {});
-}
-
-butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kv_puts,
-                                          const std::vector<pb::common::KeyValue>& kv_deletes) {
-  return KvBatchPutAndDelete(GetColumnFamily(cf_name), kv_puts, kv_deletes);
-}
-
-butil::Status Writer::KvBatchPutAndDelete(ColumnFamilyPtr column_family,
-                                          const std::vector<pb::common::KeyValue>& kv_puts,
-                                          const std::vector<pb::common::KeyValue>& kv_deletes) {
-  if (BAIDU_UNLIKELY(kv_puts.empty() && kv_deletes.empty())) {
+butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
+                                          const std::vector<pb::common::KeyValue>& kvs_to_put,
+                                          const std::vector<std::string>& keys_to_delete) {
+  if (BAIDU_UNLIKELY(kvs_to_put.empty() && keys_to_delete.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty keys.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
+  auto column_family = GetColumnFamily(cf_name);
+
   rocksdb::WriteBatch batch;
-  for (const auto& kv : kv_puts) {
+  for (const auto& kv : kvs_to_put) {
     if (BAIDU_UNLIKELY(kv.key().empty())) {
       DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -512,12 +501,12 @@ butil::Status Writer::KvBatchPutAndDelete(ColumnFamilyPtr column_family,
     }
   }
 
-  for (const auto& kv : kv_deletes) {
-    if (BAIDU_UNLIKELY(kv.key().empty())) {
+  for (const auto& key : keys_to_delete) {
+    if (BAIDU_UNLIKELY(key.empty())) {
       DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     } else {
-      rocksdb::Status s = batch.Delete(column_family->GetHandle(), kv.key());
+      rocksdb::Status s = batch.Delete(column_family->GetHandle(), key);
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format("[rocksdb] batch delete failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete error");
@@ -593,7 +582,7 @@ butil::Status Writer::KvBatchPutAndDelete(
   return butil::Status::OK();
 }
 
-butil::Status Writer::KvDelete(ColumnFamilyPtr column_family, const std::string& key) {
+butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& key) {
   if (BAIDU_UNLIKELY(key.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -601,7 +590,7 @@ butil::Status Writer::KvDelete(ColumnFamilyPtr column_family, const std::string&
 
   rocksdb::WriteOptions const write_options;
   rocksdb::Status const s =
-      GetDB()->Delete(write_options, column_family->GetHandle(), rocksdb::Slice(key.data(), key.size()));
+      GetDB()->Delete(write_options, GetColumnFamily(cf_name)->GetHandle(), rocksdb::Slice(key.data(), key.size()));
   if (!s.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal delete error");
@@ -610,23 +599,14 @@ butil::Status Writer::KvDelete(ColumnFamilyPtr column_family, const std::string&
   return butil::Status();
 }
 
-butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& key) {
-  return KvDelete(GetColumnFamily(cf_name), key);
-}
-
-butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) {
-  std::vector<pb::common::KeyValue> kvs;
-  for (const auto& key : keys) {
-    pb::common::KeyValue kv;
-    kv.set_key(key);
-
-    kvs.emplace_back(std::move(kv));
+butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) {
+  if (range.start_key().empty() || range.end_key().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+  }
+  if (range.start_key() >= range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
   }
 
-  return KvBatchPutAndDelete(GetColumnFamily(cf_name), {}, kvs);
-}
-
-butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) {
   rocksdb::WriteBatch batch;
   rocksdb::Status s = batch.DeleteRange(GetColumnFamily(cf_name)->GetHandle(), range.start_key(), range.end_key());
   if (!s.ok()) {

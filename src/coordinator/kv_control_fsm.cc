@@ -329,7 +329,7 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
                                    int64_t term, int64_t index, google::protobuf::Message* response) {
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
-  std::vector<pb::common::KeyValue> meta_delete_to_kv;
+  std::vector<std::string> meta_delete_to_kv;
 
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
@@ -408,7 +408,7 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
         } else {
           DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch DELETE, but Erase failed, [id=" << idepoch.id() << "]";
         }
-        meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+        meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()).key());
       }
     }
   }

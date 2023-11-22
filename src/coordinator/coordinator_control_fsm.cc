@@ -894,7 +894,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                                             int64_t term, int64_t index, google::protobuf::Message* /*response*/) {
   // prepare data to write to kv engine
   std::vector<pb::common::KeyValue> meta_write_to_kv;
-  std::vector<pb::common::KeyValue> meta_delete_to_kv;
+  std::vector<std::string> meta_delete_to_kv;
 
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
@@ -973,7 +973,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         } else {
           DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch DELETE, but Erase failed, [id=" << idepoch.id() << "]";
         }
-        meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
+        meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()).key());
       }
     }
   }
@@ -1243,7 +1243,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         DINGO_LOG(INFO) << "ApplyMetaIncrement region DELETE, [id=" << region.id() << "] will be deleted";
 
         // meta_delete_kv
-        meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()));
+        meta_delete_to_kv.push_back(region_meta_->TransformToKvValue(region.region()).key());
 
         // remove region from region_metrics_map
         region_metrics_map_.Erase(region.id());

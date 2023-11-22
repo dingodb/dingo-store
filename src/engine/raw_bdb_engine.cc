@@ -800,13 +800,10 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
   return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
 }
 
-butil::Status Writer::KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) {
-  return KvBatchPutAndDelete(cf_name, kvs, {});
-}
-
-butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kv_puts,
-                                          const std::vector<pb::common::KeyValue>& kv_deletes) {
-  if (BAIDU_UNLIKELY(kv_puts.empty() && kv_deletes.empty())) {
+butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
+                                          const std::vector<pb::common::KeyValue>& kvs_to_put,
+                                          const std::vector<std::string>& keys_to_delete) {
+  if (BAIDU_UNLIKELY(kvs_to_put.empty() && keys_to_delete.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty keys.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -831,7 +828,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name, const std:
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
 
-      for (const auto& kv : kv_puts) {
+      for (const auto& kv : kvs_to_put) {
         if (BAIDU_UNLIKELY(kv.key().empty())) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
           return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
@@ -849,13 +846,13 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name, const std:
         }
       }
 
-      for (const auto& kv : kv_deletes) {
-        if (BAIDU_UNLIKELY(kv.key().empty())) {
+      for (const auto& key : keys_to_delete) {
+        if (BAIDU_UNLIKELY(key.empty())) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty key.");
           return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
         }
 
-        std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
+        std::string store_key = BdbHelper::EncodeKey(cf_name, key);
         Dbt bdb_key;
         BdbHelper::BinaryToDbt(store_key, bdb_key);
         GetDb()->del(txn, &bdb_key, 0);
@@ -1121,19 +1118,14 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
   return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
 }
 
-butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) {
-  std::vector<pb::common::KeyValue> kvs;
-  for (const auto& key : keys) {
-    pb::common::KeyValue kv;
-    kv.set_key(key);
-
-    kvs.emplace_back(std::move(kv));
+butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) {
+  if (range.start_key().empty() || range.end_key().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+  }
+  if (range.start_key() >= range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
   }
 
-  return KvBatchPutAndDelete(cf_name, {}, kvs);
-}
-
-butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) {
   std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
   range_with_cfs[cf_name] = {range};
 
@@ -1163,6 +1155,13 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
 
       for (const auto& [cf_name, ranges] : range_with_cfs) {
         for (const auto& range : ranges) {
+          if (range.start_key().empty() || range.end_key().empty()) {
+            return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is empty");
+          }
+          if (range.start_key() >= range.end_key()) {
+            return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+          }
+
           butil::Status status = DeleteRangeByCursor(cf_name, range, txn);
           if (!status.ok()) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] delete range by cursor: {}.", status.error_cstr());
@@ -1468,7 +1467,7 @@ butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const
       kvs.emplace_back(kv);
 
       if (kvs.size() >= FLAGS_bdb_ingest_external_file_batch_put_count) {
-        butil::Status s = writer_->KvBatchPut(cf_name, kvs);
+        butil::Status s = writer_->KvBatchPutAndDelete(cf_name, kvs, {});
         if (BAIDU_UNLIKELY(!s.ok())) {
           DINGO_LOG(ERROR) << fmt::format(
               "[bdb] batch put failed, cf_name: {}, sst file name: {}, status code: {}, message: {}", cf_name,
@@ -1481,7 +1480,7 @@ butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const
     }
 
     if (!kvs.empty()) {
-      butil::Status s = writer_->KvBatchPut(cf_name, kvs);
+      butil::Status s = writer_->KvBatchPutAndDelete(cf_name, kvs, {});
       if (BAIDU_UNLIKELY(!s.ok())) {
         DINGO_LOG(ERROR) << fmt::format(
             "[bdb] batch put failed, cf_name: {}, sst file name: {}, status code: {}, message: {}", cf_name, file_name,

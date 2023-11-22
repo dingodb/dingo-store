@@ -155,14 +155,12 @@ class Writer : public RawEngine::Writer {
   ~Writer() override = default;
 
   butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) override;
-  butil::Status KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) override;
-  butil::Status KvBatchPutAndDelete(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kv_puts,
-                                    const std::vector<pb::common::KeyValue>& kv_deletes) override;
+  butil::Status KvDelete(const std::string& cf_name, const std::string& key) override;
+
+  butil::Status KvBatchPutAndDelete(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs_to_put,
+                                    const std::vector<std::string>& keys_to_delete) override;
   butil::Status KvBatchPutAndDelete(const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
                                     const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) override;
-
-  butil::Status KvDelete(const std::string& cf_name, const std::string& key) override;
-  butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) override;
 
   butil::Status KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) override;
   butil::Status KvBatchDeleteRange(

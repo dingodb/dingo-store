@@ -56,7 +56,7 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   if (request.kvs().size() == 1) {
     status = writer->KvPut(request.cf_name(), request.kvs().Get(0));
   } else {
-    status = writer->KvBatchPut(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()));
+    status = writer->KvBatchPutAndDelete(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()), {});
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -153,7 +153,7 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   if (request.keys().size() == 1) {
     status = writer->KvDelete(request.cf_name(), request.keys().Get(0));
   } else {
-    status = writer->KvBatchDelete(request.cf_name(), Helper::PbRepeatedToVector(request.keys()));
+    status = writer->KvBatchPutAndDelete(request.cf_name(), {}, Helper::PbRepeatedToVector(request.keys()));
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {

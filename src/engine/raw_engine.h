@@ -69,14 +69,11 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
     virtual ~Writer() = default;
 
     virtual butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) = 0;
-    virtual butil::Status KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) = 0;
-
     virtual butil::Status KvDelete(const std::string& cf_name, const std::string& key) = 0;
-    virtual butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) = 0;
 
     virtual butil::Status KvBatchPutAndDelete(const std::string& cf_name,
-                                              const std::vector<pb::common::KeyValue>& kv_puts,
-                                              const std::vector<pb::common::KeyValue>& kv_deletes) = 0;
+                                              const std::vector<pb::common::KeyValue>& kvs_to_put,
+                                              const std::vector<std::string>& keys_to_deletes) = 0;
     virtual butil::Status KvBatchPutAndDelete(
         const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_put_with_cfs,
         const std::map<std::string, std::vector<std::string>>& kv_delete_with_cfs) = 0;
