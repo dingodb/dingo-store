@@ -180,9 +180,10 @@ enum RegionCmdStatus {
 // RegionCmd
 message RegionCmd {
   int64 id = 1;                       // this is a global nonrepetitive ID for cmd
-  int64 region_id = 2;                // this is region id
-  RegionCmdType region_cmd_type = 3;  // the cmd want to be executed
-  int64 create_timestamp = 4;         // the timestamp when this cmd is created
+  int64 job_id = 2;                   // task list id
+  int64 region_id = 3;                // this is region id
+  RegionCmdType region_cmd_type = 4;  // the cmd want to be executed
+  int64 create_timestamp = 5;         // the timestamp when this cmd is created
   oneof Request {
     CreateRequest create_request = 11;           // create parameters
     DeleteRequest delete_request = 12;           // delete parameters

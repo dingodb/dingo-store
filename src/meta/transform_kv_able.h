@@ -16,6 +16,7 @@
 #define DINGODB_TRANSFORM_KV_ABLE_H_
 
 #include <any>
+#include <cstdint>
 #include <memory>
 #include <shared_mutex>
 #include <vector>
@@ -35,6 +36,7 @@ class TransformKvAble {
 
   std::string Prefix() { return prefix_; }
   virtual std::string GenKey(int64_t id) { return fmt::format("{}_{}", prefix_, id); }
+  virtual std::string GenKey(int64_t id, int64_t job_id) { return fmt::format("{}_{}_{}", prefix_, id, job_id); }
 
   virtual int64_t ParseRegionId(const std::string& str) {
     if (str.size() <= prefix_.size()) {

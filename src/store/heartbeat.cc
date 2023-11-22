@@ -121,7 +121,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       vector_index_status->set_is_build_error(vector_index_wrapper->IsBuildError());
       vector_index_status->set_is_rebuild_error(vector_index_wrapper->IsRebuildError());
       vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
-      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsTempHoldVectorIndex());
+      vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsOwnReady());
       vector_index_status->set_apply_log_id(vector_index_wrapper->ApplyLogId());
       vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
     }
@@ -547,7 +547,7 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
               break;
             }
 
-            auto ret = coordinator_control->AddRegionCmd(it_cmd.error().store_id(), region_cmd, meta_increment);
+            auto ret = coordinator_control->AddRegionCmd(it_cmd.error().store_id(), 0, region_cmd, meta_increment);
             if (!ret.ok()) {
               DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << it.id()
                                << " region_cmd_id=" << region_cmd.id();

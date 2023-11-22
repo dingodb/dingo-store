@@ -457,6 +457,21 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
     }
     *(response->mutable_store_metrics()->mutable_metrics()) = (*store_metrics);
 
+  } else if (request->type() == pb::debug::DebugType::STORE_REGION_CHANGE_RECORD) {
+    std::vector<pb::store_internal::RegionChangeRecord> records;
+    if (request->region_ids().empty()) {
+      records = GET_REGION_CHANGE_RECORDER->GetAllChangeRecord();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        auto temp_records = GET_REGION_CHANGE_RECORDER->GetChangeRecord(region_id);
+        if (!temp_records.empty()) {
+          records.insert(records.end(), temp_records.begin(), temp_records.end());
+        }
+      }
+    }
+
+    Helper::VectorToPbRepeated(records, response->mutable_region_change_record()->mutable_records());
+
   } else if (request->type() == pb::debug::DebugType::INDEX_VECTOR_INDEX_METRICS) {
     auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
     if (store_region_meta == nullptr) {

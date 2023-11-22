@@ -44,6 +44,8 @@ class MetaReader {
   std::shared_ptr<RawEngine> engine_;
 };
 
+using MetaReaderPtr = std::shared_ptr<MetaReader>;
+
 }  // namespace dingodb
 
 #endif  // DINGODB_META_META_READER_H_

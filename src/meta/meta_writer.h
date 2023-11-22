@@ -42,6 +42,8 @@ class MetaWriter {
   std::shared_ptr<RawEngine> engine_;
 };
 
+using MetaWriterPtr = std::shared_ptr<MetaWriter>;
+
 }  // namespace dingodb
 
 #endif  // DINGODB_META_META_WRITER_H_

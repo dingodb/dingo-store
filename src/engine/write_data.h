@@ -221,7 +221,7 @@ struct SplitDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::SPLIT);
     pb::raft::SplitRequest* split_request = request->mutable_split();
-    split_request->set_split_id(split_id);
+    split_request->set_job_id(job_id);
     split_request->set_from_region_id(from_region_id);
     split_request->set_to_region_id(to_region_id);
     split_request->set_split_key(split_key);
@@ -233,7 +233,7 @@ struct SplitDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
-  int64_t split_id;
+  int64_t job_id;
   int64_t from_region_id;
   int64_t to_region_id;
   std::string split_key;
@@ -249,7 +249,7 @@ struct PrepareMergeDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::PREPARE_MERGE);
     auto* merge_request = request->mutable_prepare_merge();
-    merge_request->set_merge_id(merge_id);
+    merge_request->set_job_id(job_id);
     merge_request->set_min_applied_log_id(min_applied_log_id);
     merge_request->set_target_region_id(target_region_id);
     *(merge_request->mutable_target_region_epoch()) = target_region_epoch;
@@ -260,7 +260,7 @@ struct PrepareMergeDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
-  int64_t merge_id;
+  int64_t job_id;
   int64_t min_applied_log_id;
   int64_t target_region_id;
   pb::common::RegionEpoch target_region_epoch;
@@ -275,7 +275,7 @@ struct CommitMergeDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::COMMIT_MERGE);
     auto* merge_request = request->mutable_commit_merge();
-    merge_request->set_merge_id(merge_id);
+    merge_request->set_job_id(job_id);
     merge_request->set_source_region_id(source_region_id);
     *(merge_request->mutable_source_region_epoch()) = source_region_epoch;
     *(merge_request->mutable_source_region_range()) = source_region_range;
@@ -287,7 +287,7 @@ struct CommitMergeDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
-  int64_t merge_id;
+  int64_t job_id;
   int64_t source_region_id;
   pb::common::RegionEpoch source_region_epoch;
   pb::common::Range source_region_range;
@@ -303,7 +303,7 @@ struct RollbackMergeDatum : public DatumAble {
 
     request->set_cmd_type(pb::raft::CmdType::ROLLBACK_MERGE);
     auto* merge_request = request->mutable_rollback_merge();
-    merge_request->set_merge_id(merge_id);
+    merge_request->set_job_id(job_id);
     merge_request->set_min_applied_log_id(min_applied_log_id);
     merge_request->set_target_region_id(target_region_id);
     *(merge_request->mutable_target_region_epoch()) = target_region_epoch;
@@ -313,7 +313,7 @@ struct RollbackMergeDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
-  int64_t merge_id;
+  int64_t job_id;
   int64_t min_applied_log_id;
   int64_t target_region_id;
   pb::common::RegionEpoch target_region_epoch;
@@ -450,10 +450,10 @@ class WriteDataBuilder {
   }
 
   // SplitDatum
-  static std::shared_ptr<WriteData> BuildWrite(int64_t split_id, const pb::coordinator::SplitRequest& split_request,
+  static std::shared_ptr<WriteData> BuildWrite(int64_t job_id, const pb::coordinator::SplitRequest& split_request,
                                                const pb::common::RegionEpoch& epoch) {
     auto datum = std::make_shared<SplitDatum>();
-    datum->split_id = split_id;
+    datum->job_id = job_id;
     datum->from_region_id = split_request.split_from_region_id();
     datum->to_region_id = split_request.split_to_region_id();
     datum->split_key = split_request.split_watershed_key();
@@ -471,10 +471,10 @@ class WriteDataBuilder {
   }
 
   // PrepareMergeDatum
-  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, const pb::common::RegionDefinition& region_definition,
+  static std::shared_ptr<WriteData> BuildWrite(int64_t job_id, const pb::common::RegionDefinition& region_definition,
                                                int64_t min_applied_log_id) {
     auto datum = std::make_shared<PrepareMergeDatum>();
-    datum->merge_id = merge_id;
+    datum->job_id = job_id;
     datum->min_applied_log_id = min_applied_log_id;
     datum->target_region_id = region_definition.id();
     datum->target_region_epoch = region_definition.epoch();
@@ -487,11 +487,11 @@ class WriteDataBuilder {
   }
 
   // CommitMergeDatum
-  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, const pb::common::RegionDefinition& region_definition,
+  static std::shared_ptr<WriteData> BuildWrite(int64_t job_id, const pb::common::RegionDefinition& region_definition,
                                                int64_t prepare_merge_log_id,
                                                const std::vector<pb::raft::LogEntry>& entries) {
     auto datum = std::make_shared<CommitMergeDatum>();
-    datum->merge_id = merge_id;
+    datum->job_id = job_id;
     datum->source_region_id = region_definition.id();
     datum->source_region_epoch = region_definition.epoch();
     datum->source_region_range = region_definition.range();
@@ -505,10 +505,10 @@ class WriteDataBuilder {
   }
 
   // RollbackMergeDatum
-  static std::shared_ptr<WriteData> BuildWrite(int64_t merge_id, const pb::common::RegionEpoch& epoch,
+  static std::shared_ptr<WriteData> BuildWrite(int64_t job_id, const pb::common::RegionEpoch& epoch,
                                                int64_t target_region_id, int64_t min_applied_log_id) {
     auto datum = std::make_shared<RollbackMergeDatum>();
-    datum->merge_id = merge_id;
+    datum->job_id = job_id;
     datum->min_applied_log_id = min_applied_log_id;
     datum->target_region_id = target_region_id;
     datum->target_region_epoch = epoch;

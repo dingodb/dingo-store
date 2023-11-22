@@ -604,8 +604,8 @@ int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
   return 0;
 }
 
-int RaftLoadSnapshotHanler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
-                                   braft::SnapshotReader* reader) {
+int RaftLoadSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                                    braft::SnapshotReader* reader) {
   auto raft_snapshot = std::make_unique<RaftSnapshot>(engine);
   if (FLAGS_raft_snapshot_policy == "dingo") {
     if (!raft_snapshot->LoadSnapshotDingo(reader, region)) {

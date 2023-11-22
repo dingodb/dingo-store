@@ -889,16 +889,16 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   return butil::Status::OK();
 }
 
-butil::Status Storage::PrepareMerge(std::shared_ptr<Context> ctx, int64_t merge_id,
+butil::Status Storage::PrepareMerge(std::shared_ptr<Context> ctx, int64_t job_id,
                                     const pb::common::RegionDefinition& region_definition, int64_t min_applied_log_id) {
-  return engine_->Write(ctx, WriteDataBuilder::BuildWrite(merge_id, region_definition, min_applied_log_id));
+  return engine_->Write(ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, min_applied_log_id));
 }
 
-butil::Status Storage::CommitMerge(std::shared_ptr<Context> ctx, int64_t merge_id,
+butil::Status Storage::CommitMerge(std::shared_ptr<Context> ctx, int64_t job_id,
                                    const pb::common::RegionDefinition& region_definition, int64_t prepare_merge_log_id,
                                    const std::vector<pb::raft::LogEntry>& entries) {
   return engine_->AsyncWrite(ctx,
-                             WriteDataBuilder::BuildWrite(merge_id, region_definition, prepare_merge_log_id, entries));
+                             WriteDataBuilder::BuildWrite(job_id, region_definition, prepare_merge_log_id, entries));
 }
 
 }  // namespace dingodb

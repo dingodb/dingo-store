@@ -68,6 +68,8 @@ class Constant {
 
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
+  // Define region change record.
+  inline static const std::string kStoreRegionChangeRecordPrefix = "META_CHANGE";
   // Define store raft prefix.
   inline static const std::string kStoreRaftMetaPrefix = "META_RAFT";
   // Define store region metrics prefix.

@@ -1958,7 +1958,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   // add store operations to meta_increment
   for (const auto& store_operation : store_operations) {
     for (const auto& region_cmd : store_operation.region_cmds()) {
-      auto ret = AddRegionCmd(store_operation.id(), region_cmd, meta_increment);
+      auto ret = AddRegionCmd(store_operation.id(), 0, region_cmd, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateRegion AddRegionCmd failed, store_id=" << store_operation.id()
                          << ", region_cmd=" << region_cmd.ShortDebugString();
@@ -2245,7 +2245,7 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
                          "SplitRegion split_from_region_id's leader_store_id is 0");
   }
 
-  return AddRegionCmd(leader_store_id, region_cmd, meta_increment);
+  return AddRegionCmd(leader_store_id, 0, region_cmd, meta_increment);
 }
 
 butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_region_id, int64_t split_to_region_id,
@@ -3002,7 +3002,8 @@ butil::Status CoordinatorControl::CleanStoreOperation(int64_t store_id,
 }
 
 // AddRegionCmd
-butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd& region_cmd,
+butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, int64_t job_id,
+                                               const pb::coordinator::RegionCmd& region_cmd,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate store id
   int ret = store_map_.Exists(store_id);
@@ -3031,6 +3032,7 @@ butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, const pb::coord
   auto* cmd_tmp = region_cmd_increment->mutable_region_cmd()->mutable_region_cmd();
   *cmd_tmp = region_cmd;
   cmd_tmp->set_id(region_cmd_id);
+  cmd_tmp->set_job_id(job_id);
 
   return butil::Status::OK();
 }
@@ -3187,7 +3189,7 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
 
   // add store operation
   for (const auto& region_cmd : store_operation.region_cmds()) {
-    auto ret = AddRegionCmd(store_id, region_cmd, meta_increment);
+    auto ret = AddRegionCmd(store_id, 0, region_cmd, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "AddStoreOperation AddRegionCmd failed, store_id = " << store_id;
       return ret;
@@ -4554,7 +4556,8 @@ butil::Status CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::T
   // do task, send all store_operations
   for (const auto& it : task.store_operations()) {
     for (const auto& region_cmd : it.region_cmds()) {
-      auto ret = AddRegionCmd(it.id(), region_cmd, meta_increment);
+      DINGO_LOG(INFO) << "====task_list_id: " << task_list.id();
+      auto ret = AddRegionCmd(it.id(), task_list.id(), region_cmd, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "AddRegionCmd failed, store_id=" << it.id()
                          << " region_cmd=" << region_cmd.ShortDebugString();

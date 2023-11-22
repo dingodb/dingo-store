@@ -138,6 +138,8 @@ void CreateRegionTask::Run() {
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] create region failed, error: {}",
                                     region_definition.id(), status.error_str());
+  } else {
+    ADD_REGION_CHANGE_RECORD(*region_cmd_);
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -388,11 +390,13 @@ butil::Status SplitRegionTask::SplitRegion() {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
   }
 
+  ADD_REGION_CHANGE_RECORD(*region_cmd_);
+
   // Commit raft log
   ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
   ctx_->SetRegionEpoch(parent_region->Epoch());
   return Server::GetInstance().GetEngine()->AsyncWrite(
-      ctx_, WriteDataBuilder::BuildWrite(region_cmd_->id(), region_cmd_->split_request(), parent_region->Epoch()),
+      ctx_, WriteDataBuilder::BuildWrite(region_cmd_->job_id(), region_cmd_->split_request(), parent_region->Epoch()),
       [](std::shared_ptr<Context>, butil::Status status) {
         if (!status.ok()) {
           LOG(ERROR) << fmt::format("[control.region][region()] write split failed, error: {}", status.error_str());
@@ -432,8 +436,8 @@ butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::Reg
   int64_t min_applied_log_id = 0;
   auto status = ValidateMergeRegion(store_region_meta, merge_request, min_applied_log_id);
   if (!status.ok()) {
-    DINGO_LOG(INFO) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Merge failed, error: {} {}",
-                                   command.id(), merge_request.source_region_id(), merge_request.target_region_id(),
+    DINGO_LOG(INFO) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}", command.id(),
+                                   merge_request.source_region_id(), merge_request.target_region_id(),
                                    status.error_code(), status.error_str());
   }
 
@@ -646,12 +650,14 @@ butil::Status MergeRegionTask::MergeRegion() {
     return status;
   }
 
+  ADD_REGION_CHANGE_RECORD(*region_cmd_);
+
   // Commit raft cmd
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(source_region->Id());
   ctx->SetRegionEpoch(source_region->Epoch());
 
-  status = Server::GetInstance().GetStorage()->PrepareMerge(ctx, region_cmd_->id(), target_region->Definition(),
+  status = Server::GetInstance().GetStorage()->PrepareMerge(ctx, region_cmd_->job_id(), target_region->Definition(),
                                                             min_applied_log_id);
   if (!status.ok()) {
     return status;
@@ -665,14 +671,14 @@ butil::Status MergeRegionTask::MergeRegion() {
 }
 
 void MergeRegionTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Run merge region, details: {}",
-                                 region_cmd_->id(), region_cmd_->merge_request().source_region_id(),
+  DINGO_LOG(INFO) << fmt::format("[merge.merging][job_id({}).region({}/{})] Run merge region, details: {}",
+                                 region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
                                  region_cmd_->merge_request().target_region_id(), region_cmd_->ShortDebugString());
 
   auto status = MergeRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Merge failed, error: {} {}",
-                                    region_cmd_->id(), region_cmd_->merge_request().source_region_id(),
+    DINGO_LOG(ERROR) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}",
+                                    region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
                                     region_cmd_->merge_request().target_region_id(),
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
   }
@@ -1178,7 +1184,11 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
   return butil::Status();
 }
 
-butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/, int64_t region_id, bool is_hold) {
+butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/,
+                                                   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd) {
+  int64_t region_id = region_cmd->hold_vector_index_request().region_id();
+  bool is_hold = region_cmd->hold_vector_index_request().is_hold();
+
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
@@ -1196,9 +1206,10 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   }
 
   if (is_hold) {
+    ADD_REGION_CHANGE_RECORD(*region_cmd);
     // Load vector index.
     DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true);
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, region_cmd->job_id());
 
   } else {
     // Delete vector index.
@@ -1212,8 +1223,7 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
 }
 
 void HoldVectorIndexTask::Run() {
-  auto status = HoldVectorIndex(ctx_, region_cmd_->hold_vector_index_request().region_id(),
-                                region_cmd_->hold_vector_index_request().is_hold());
+  auto status = HoldVectorIndex(ctx_, region_cmd_);
   if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] hold vector index  failed, {}",
                                       region_cmd_->switch_split_request().region_id(), status.error_str());

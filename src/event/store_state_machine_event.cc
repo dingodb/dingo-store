@@ -263,7 +263,7 @@ std::shared_ptr<EventListenerCollection> StoreSmEventListenerFactory::Build() {
   listener_collection->Register(
       std::make_shared<SmSnapshotSaveEventListener>(std::make_shared<RaftSaveSnapshotHandler>()));
   listener_collection->Register(
-      std::make_shared<SmSnapshotLoadEventListener>(std::make_shared<RaftLoadSnapshotHanler>()));
+      std::make_shared<SmSnapshotLoadEventListener>(std::make_shared<RaftLoadSnapshotHandler>()));
 
   handler_factory = std::make_shared<LeaderStartHandlerFactory>();
   listener_collection->Register(std::make_shared<SmLeaderStartEventListener>(handler_factory->Build()));

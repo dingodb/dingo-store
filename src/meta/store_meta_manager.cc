@@ -20,6 +20,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "bthread/mutex.h"
 #include "bthread/types.h"
@@ -28,6 +30,7 @@
 #include "common/role.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
@@ -106,7 +109,7 @@ void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& r
 
 void Region::SetEpochConfVersion(int64_t version) {
   BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.set_last_change_cmd_id(inner_region_.last_change_cmd_id() + 1);
+  inner_region_.set_last_change_job_id(inner_region_.last_change_job_id() + 1);
   inner_region_.mutable_definition()->mutable_epoch()->set_conf_version(version);
 }
 
@@ -232,15 +235,6 @@ void Region::SetParentId(int64_t region_id) {
   inner_region_.set_parent_id(region_id);
 }
 
-std::vector<pb::store_internal::RegionSplitRecord> Region::Childs() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return Helper::PbRepeatedToVector(inner_region_.childs());
-}
-void Region::AddChild(pb::store_internal::RegionSplitRecord& record) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.add_childs()->Swap(&record);
-}
-
 int64_t Region::PartitionId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition().part_id();
@@ -266,17 +260,257 @@ pb::common::RawEngine Region::GetRawEngineType() {
   return inner_region_.definition().raw_engine();
 }
 
-void Region::SetLastChangeCmdId(int64_t cmd_id) {
+void Region::SetLastChangeJobId(int64_t job_id) {
   BAIDU_SCOPED_LOCK(mutex_);
-  inner_region_.set_last_change_cmd_id(cmd_id);
+  inner_region_.set_last_change_job_id(job_id);
 }
 
-int64_t Region::LastChangeCmdId() {
+int64_t Region::LastChangeJobId() {
   BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.last_change_cmd_id();
+  return inner_region_.last_change_job_id();
 }
 
 }  // namespace store
+
+RegionChangeRecorder::RegionChangeRecorder(MetaReaderPtr meta_reader, MetaWriterPtr meta_writer)
+    : TransformKvAble(Constant::kStoreRegionChangeRecordPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
+  bthread_mutex_init(&mutex_, nullptr);
+};
+
+RegionChangeRecorder::~RegionChangeRecorder() { bthread_mutex_destroy(&mutex_); }
+
+bool RegionChangeRecorder::Init() {
+  std::vector<pb::common::KeyValue> kvs;
+  if (!meta_reader_->Scan(Prefix(), kvs)) {
+    DINGO_LOG(ERROR) << "Scan region change record failed!";
+    return false;
+  }
+  DINGO_LOG(INFO) << "Init region change record num: " << kvs.size();
+
+  if (!kvs.empty()) {
+    TransformFromKv(kvs);
+  }
+
+  return true;
+}
+
+void RegionChangeRecorder::AddChangeRecord(const pb::coordinator::RegionCmd& cmd) {
+  if (cmd.job_id() == 0) return;
+
+  pb::store_internal::RegionChangeRecord record;
+  record.set_region_id(cmd.region_id());
+  record.set_job_type(cmd.region_cmd_type());
+  record.set_job_id(cmd.job_id());
+  record.set_begin_time(Helper::NowTime());
+
+  std::string event;
+  switch (cmd.region_cmd_type()) {
+    case pb::coordinator::CMD_CREATE: {
+      const auto& request = cmd.create_request();
+      const auto& region_definition = request.region_definition();
+      event = fmt::format("Pre create region, region({}) for region({})", region_definition.id(),
+                          request.split_from_region_id());
+      record.set_job_content(event);
+      break;
+    }
+    case pb::coordinator::CMD_HOLD_VECTOR_INDEX: {
+      const auto& request = cmd.hold_vector_index_request();
+      event = fmt::format("Hold vector index, region({}) is_hold({})", request.region_id(), request.is_hold());
+      record.set_job_content(event);
+      break;
+    }
+    case pb::coordinator::CMD_SPLIT: {
+      const auto& request = cmd.split_request();
+      event = fmt::format("Split region, {} -> {} split_key({}) post_create_region({})", request.split_from_region_id(),
+                          request.split_to_region_id(), Helper::StringToHex(request.split_watershed_key()),
+                          request.store_create_region());
+      record.set_job_content(event);
+      break;
+    }
+    case pb::coordinator::CMD_MERGE: {
+      const auto& request = cmd.merge_request();
+      event = fmt::format("Merge region, {} -> {}", request.source_region_id(), request.target_region_id());
+      record.set_job_content(event);
+      break;
+    }
+    case pb::coordinator::CMD_CHANGE_PEER: {
+      const auto& request = cmd.change_peer_request();
+      event = fmt::format("Change peer, {}",
+                          Helper::PeersToString(Helper::PbRepeatedToVector(request.region_definition().peers())));
+      record.set_job_content(event);
+      break;
+    }
+    default:
+      return;
+  }
+
+  Upsert(record, event);
+}
+
+void RegionChangeRecorder::AddChangeRecord(const pb::raft::SplitRequest& request) {
+  if (request.job_id() == 0) return;
+
+  pb::store_internal::RegionChangeRecord record;
+  record.set_region_id(request.from_region_id());
+  record.set_begin_time(Helper::NowTime());
+  record.set_job_type(pb::coordinator::CMD_SPLIT);
+  record.set_job_id(request.job_id());
+
+  record.set_job_content(
+      fmt::format("Split region, {} -> {} epoch({}) split_key({}) strategy({})", request.from_region_id(),
+                  request.to_region_id(), Helper::RegionEpochToString(request.epoch()),
+                  Helper::StringToHex(request.split_key()), pb::raft::SplitStrategy_Name(request.split_strategy())));
+
+  Upsert(record, record.job_content());
+}
+
+void RegionChangeRecorder::AddChangeRecord(const pb::raft::PrepareMergeRequest& request, int64_t source_id) {
+  if (request.job_id() == 0) return;
+
+  pb::store_internal::RegionChangeRecord record;
+  record.set_region_id(source_id);
+  record.set_begin_time(Helper::NowTime());
+  record.set_job_type(pb::coordinator::CMD_MERGE);
+  record.set_job_id(request.job_id());
+  record.set_job_content(fmt::format("Merge region, {} -> {} target_region_epoch({}) ", source_id,
+                                     request.target_region_id(),
+                                     Helper::RegionEpochToString(request.target_region_epoch())));
+
+  Upsert(record, record.job_content());
+}
+
+void RegionChangeRecorder::AddChangeRecord(const pb::raft::CommitMergeRequest& request, int64_t target_id) {
+  if (request.job_id() == 0) return;
+
+  pb::store_internal::RegionChangeRecord record;
+  record.set_begin_time(Helper::NowTime());
+  record.set_region_id(request.source_region_id());
+  record.set_job_type(pb::coordinator::CMD_MERGE);
+  record.set_job_id(request.job_id());
+  record.set_job_content(
+      fmt::format("Merge region, {} -> {} source_region_epoch({}) prepare_merge_log_id({}) entries_size({})",
+                  request.source_region_id(), target_id, Helper::RegionEpochToString(request.source_region_epoch()),
+                  request.prepare_merge_log_id(), request.entries_size()));
+
+  Upsert(record, record.job_content());
+}
+
+void RegionChangeRecorder::AddChangeRecordTimePoint(int64_t job_id, const std::string& event) {
+  if (job_id == 0) return;
+
+  pb::store_internal::RegionChangeRecord record_for_save;
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+
+    auto it = records_.find(job_id);
+    if (it == records_.end()) {
+      return;
+    }
+
+    auto* time_point = it->second.add_timeline();
+    time_point->set_time(Helper::NowTime());
+    time_point->set_event(event);
+    record_for_save = it->second;
+  }
+
+  Save(record_for_save);
+}
+
+pb::store_internal::RegionChangeRecord RegionChangeRecorder::ChangeRecord(int64_t job_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  auto it = records_.find(job_id);
+  if (it != records_.end()) {
+    return it->second;
+  }
+
+  return {};
+}
+
+std::vector<pb::store_internal::RegionChangeRecord> RegionChangeRecorder::GetChangeRecord(int64_t region_id) {
+  std::vector<pb::common::KeyValue> kvs;
+  if (!meta_reader_->Scan(GenKey(region_id), kvs)) {
+    return {};
+  }
+
+  std::vector<pb::store_internal::RegionChangeRecord> records;
+  records.reserve(kvs.size());
+  for (const auto& kv : kvs) {
+    pb::store_internal::RegionChangeRecord record;
+    record.ParseFromString(kv.value());
+    records.push_back(record);
+  }
+
+  return records;
+}
+
+std::vector<pb::store_internal::RegionChangeRecord> RegionChangeRecorder::GetAllChangeRecord() {
+  std::vector<pb::common::KeyValue> kvs;
+  if (!meta_reader_->Scan(Prefix(), kvs)) {
+    return {};
+  }
+
+  std::vector<pb::store_internal::RegionChangeRecord> records;
+  records.reserve(kvs.size());
+  for (const auto& kv : kvs) {
+    pb::store_internal::RegionChangeRecord record;
+    record.ParseFromString(kv.value());
+    records.push_back(record);
+  }
+
+  return records;
+}
+
+bool RegionChangeRecorder::IsExist(int64_t job_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return records_.find(job_id) != records_.end();
+}
+
+void RegionChangeRecorder::Upsert(const pb::store_internal::RegionChangeRecord& record, const std::string& event) {
+  pb::store_internal::RegionChangeRecord record_for_save;
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+
+    auto it = records_.find(record.job_id());
+    if (it == records_.end()) {
+      records_.insert(std::make_pair(record.job_id(), record));
+      record_for_save = record;
+    } else {
+      auto* time_point = it->second.add_timeline();
+      time_point->set_time(Helper::NowTime());
+      time_point->set_event(event);
+      record_for_save = it->second;
+    }
+  }
+
+  Save(record_for_save);
+}
+
+void RegionChangeRecorder::Save(const pb::store_internal::RegionChangeRecord& record) {
+  if (record.job_id() > 0) {
+    meta_writer_->Put({TransformToKv(record)});
+  }
+}
+
+std::shared_ptr<pb::common::KeyValue> RegionChangeRecorder::TransformToKv(std::any obj) {
+  auto& record = std::any_cast<pb::store_internal::RegionChangeRecord&>(obj);
+
+  auto kv = std::make_shared<pb::common::KeyValue>();
+  kv->set_key(GenKey(record.region_id(), record.job_id()));
+  kv->set_value(record.SerializeAsString());
+
+  return kv;
+}
+
+void RegionChangeRecorder::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  for (const auto& kv : kvs) {
+    pb::store_internal::RegionChangeRecord record;
+    record.ParseFromString(kv.value());
+
+    records_.insert_or_assign(record.job_id(), record);
+  }
+}
 
 bool StoreServerMeta::Init() {
   auto& server = Server::GetInstance();
@@ -604,10 +838,10 @@ void StoreRegionMeta::UpdateTemporaryDisableChange(store::RegionPtr region, bool
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateLastChangeCmdId(store::RegionPtr region, int64_t cmd_id) {
+void StoreRegionMeta::UpdateLastChangeJobId(store::RegionPtr region, int64_t job_id) {
   assert(region != nullptr);
 
-  region->SetLastChangeCmdId(cmd_id);
+  region->SetLastChangeJobId(job_id);
   meta_writer_->Put(TransformToKv(region));
 }
 
@@ -812,6 +1046,11 @@ bool StoreMetaManager::Init() {
 
   if (!region_meta_->Init()) {
     DINGO_LOG(ERROR) << "Init store region meta failed!";
+    return false;
+  }
+
+  if (!region_change_recorder_->Init()) {
+    DINGO_LOG(ERROR) << "Init region change recorder failed!";
     return false;
   }
 
