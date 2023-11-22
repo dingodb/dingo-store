@@ -283,6 +283,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
         pending_task_num_(0),
         loadorbuilding_num_(0),
         rebuilding_num_(0),
+        saving_num_(0),
         save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
     snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
     bthread_mutex_init(&vector_index_mutex_, nullptr);
@@ -384,17 +385,21 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   bool ExecuteTask(TaskRunnablePtr task);
 
-  int PendingTaskNum();
+  int32_t PendingTaskNum();
   void IncPendingTaskNum();
   void DecPendingTaskNum();
 
-  uint32_t LoadorbuildingNum();
+  int32_t LoadorbuildingNum();
   void IncLoadoruildingNum();
   void DecLoadoruildingNum();
 
-  bool RebuildingNum();
+  int32_t RebuildingNum();
   void IncRebuildingNum();
   void DecRebuildingNum();
+
+  int32_t SavingNum();
+  void IncSavingNum();
+  void DecSavingNum();
 
   int32_t GetDimension();
   butil::Status GetCount(int64_t& count);
@@ -468,11 +473,13 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // Snapshot set
   vector_index::SnapshotMetaSetPtr snapshot_set_;
 
-  std::atomic<int> pending_task_num_;
+  std::atomic<int32_t> pending_task_num_;
   // vector index loadorbuilding num
-  std::atomic<uint32_t> loadorbuilding_num_;
+  std::atomic<int32_t> loadorbuilding_num_;
   // vector index rebuilding num
-  std::atomic<uint32_t> rebuilding_num_;
+  std::atomic<int32_t> rebuilding_num_;
+  // vector index saving num
+  std::atomic<int32_t> saving_num_;
 
   // write(add/update/delete) key count
   int64_t write_key_count_{0};

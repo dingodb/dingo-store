@@ -321,21 +321,24 @@ VectorIndexPtr VectorIndexWrapper::SiblingVectorIndex() {
 
 void VectorIndexWrapper::SetSiblingVectorIndex(VectorIndexPtr vector_index) {
   BAIDU_SCOPED_LOCK(vector_index_mutex_);
-
   sibling_vector_index_ = vector_index;
 }
 
-int VectorIndexWrapper::PendingTaskNum() { return pending_task_num_.load(std::memory_order_relaxed); }
+int32_t VectorIndexWrapper::PendingTaskNum() { return pending_task_num_.load(std::memory_order_relaxed); }
 void VectorIndexWrapper::IncPendingTaskNum() { pending_task_num_.fetch_add(1, std::memory_order_relaxed); }
 void VectorIndexWrapper::DecPendingTaskNum() { pending_task_num_.fetch_sub(1, std::memory_order_relaxed); }
 
-uint32_t VectorIndexWrapper::LoadorbuildingNum() { return loadorbuilding_num_.load(std::memory_order_relaxed); }
+int32_t VectorIndexWrapper::LoadorbuildingNum() { return loadorbuilding_num_.load(std::memory_order_relaxed); }
 void VectorIndexWrapper::IncLoadoruildingNum() { loadorbuilding_num_.fetch_add(1, std::memory_order_relaxed); }
 void VectorIndexWrapper::DecLoadoruildingNum() { loadorbuilding_num_.fetch_sub(1, std::memory_order_relaxed); }
 
-bool VectorIndexWrapper::RebuildingNum() { return rebuilding_num_.load(std::memory_order_relaxed); }
+int32_t VectorIndexWrapper::RebuildingNum() { return rebuilding_num_.load(std::memory_order_relaxed); }
 void VectorIndexWrapper::IncRebuildingNum() { rebuilding_num_.fetch_add(1, std::memory_order_relaxed); }
 void VectorIndexWrapper::DecRebuildingNum() { rebuilding_num_.fetch_sub(1, std::memory_order_relaxed); }
+
+int32_t VectorIndexWrapper::SavingNum() { return saving_num_.load(std::memory_order_relaxed); }
+void VectorIndexWrapper::IncSavingNum() { saving_num_.fetch_add(1, std::memory_order_relaxed); }
+void VectorIndexWrapper::DecSavingNum() { saving_num_.fetch_sub(1, std::memory_order_relaxed); }
 
 int32_t VectorIndexWrapper::GetDimension() {
   auto vector_index = GetVectorIndex();
