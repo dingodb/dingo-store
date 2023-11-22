@@ -123,6 +123,26 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
   std::shared_ptr<Engine::Reader> NewReader() override;
 
+  class Writer : public Engine::Writer {
+   public:
+    Writer(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RaftStoreEngine> raft_engine)
+        : raw_engine_(raw_engine), raft_engine_(raft_engine) {}
+    butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
+    butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) override;
+    butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
+    butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                bool is_atomic, std::vector<bool>& key_states) override;
+    butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
+                                  const std::vector<std::string>& expect_values, bool is_atomic,
+                                  std::vector<bool>& key_states) override;
+
+   private:
+    std::shared_ptr<RawEngine> raw_engine_;
+    std::shared_ptr<RaftStoreEngine> raft_engine_;
+  };
+
+  std::shared_ptr<Engine::Writer> NewWriter(std::shared_ptr<Engine> engine) override;
+
   // Vector reader
   class VectorReader : public Engine::VectorReader {
    public:

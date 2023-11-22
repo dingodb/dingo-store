@@ -26,41 +26,16 @@ class StoreServiceImpl : public pb::store::StoreService {
  public:
   StoreServiceImpl();
 
+  // debug
   void Hello(google::protobuf::RpcController* controller, const pb::store::HelloRequest* request,
              pb::store::HelloResponse* response, google::protobuf::Closure* done) override;
 
+  // rawkv read
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
              pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 
   void KvBatchGet(google::protobuf::RpcController* controller, const pb::store::KvBatchGetRequest* request,
                   pb::store::KvBatchGetResponse* response, google::protobuf::Closure* done) override;
-
-  void KvPut(google::protobuf::RpcController* controller, const pb::store::KvPutRequest* request,
-             pb::store::KvPutResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchPut(google::protobuf::RpcController* controller, const pb::store::KvBatchPutRequest* request,
-                  pb::store::KvBatchPutResponse* response, google::protobuf::Closure* done) override;
-
-  void KvPutIfAbsent(google::protobuf::RpcController* controller, const pb::store::KvPutIfAbsentRequest* request,
-                     pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
-                          const pb::store::KvBatchPutIfAbsentRequest* request,
-                          pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchDelete(google::protobuf::RpcController* controller, const pb::store::KvBatchDeleteRequest* request,
-                     pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) override;
-
-  void KvDeleteRange(google::protobuf::RpcController* controller, const pb::store::KvDeleteRangeRequest* request,
-                     pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) override;
-
-  void KvCompareAndSet(google::protobuf::RpcController* controller, const pb::store::KvCompareAndSetRequest* request,
-                       pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) override;
-
-  void KvBatchCompareAndSet(google::protobuf::RpcController* controller,
-                            const pb::store::KvBatchCompareAndSetRequest* request,
-                            pb::store::KvBatchCompareAndSetResponse* response,
-                            google::protobuf::Closure* done) override;
 
   void KvScanBegin(google::protobuf::RpcController* controller, const ::dingodb::pb::store::KvScanBeginRequest* request,
                    ::dingodb::pb::store::KvScanBeginResponse* response, ::google::protobuf::Closure* done) override;
@@ -73,6 +48,34 @@ class StoreServiceImpl : public pb::store::StoreService {
   void KvScanRelease(google::protobuf::RpcController* controller,
                      const ::dingodb::pb::store::KvScanReleaseRequest* request,
                      ::dingodb::pb::store::KvScanReleaseResponse* response, ::google::protobuf::Closure* done) override;
+
+  // rawkv write
+  void KvPut(google::protobuf::RpcController* controller, const pb::store::KvPutRequest* request,
+             pb::store::KvPutResponse* response, google::protobuf::Closure* done) override;
+
+  void KvBatchPut(google::protobuf::RpcController* controller, const pb::store::KvBatchPutRequest* request,
+                  pb::store::KvBatchPutResponse* response, google::protobuf::Closure* done) override;
+
+  void KvBatchDelete(google::protobuf::RpcController* controller, const pb::store::KvBatchDeleteRequest* request,
+                     pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) override;
+
+  void KvDeleteRange(google::protobuf::RpcController* controller, const pb::store::KvDeleteRangeRequest* request,
+                     pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) override;
+
+  void KvPutIfAbsent(google::protobuf::RpcController* controller, const pb::store::KvPutIfAbsentRequest* request,
+                     pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
+
+  void KvBatchPutIfAbsent(google::protobuf::RpcController* controller,
+                          const pb::store::KvBatchPutIfAbsentRequest* request,
+                          pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done) override;
+
+  void KvCompareAndSet(google::protobuf::RpcController* controller, const pb::store::KvCompareAndSetRequest* request,
+                       pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) override;
+
+  void KvBatchCompareAndSet(google::protobuf::RpcController* controller,
+                            const pb::store::KvBatchCompareAndSetRequest* request,
+                            pb::store::KvBatchCompareAndSetResponse* response,
+                            google::protobuf::Closure* done) override;
 
   // txn read
   void TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,

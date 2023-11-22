@@ -45,8 +45,6 @@ namespace dingodb {
 DEFINE_int64(vector_max_batch_count, 1024, "vector max batch count in one request");
 DEFINE_int64(vector_max_request_size, 8388608, "vector max batch count in one request");
 DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
-DEFINE_bool(enable_async_vector_add, true, "enable async vector add");
-DEFINE_bool(enable_async_vector_delete, true, "enable async vector delete");
 DEFINE_bool(enable_async_vector_count, true, "enable async vector count");
 DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation");
 
@@ -420,10 +418,6 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (!FLAGS_enable_async_vector_add) {
-    return DoVectorAdd(storage_, controller, request, response, svr_done, false);
-  }
-
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -513,10 +507,6 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
                                     const pb::index::VectorDeleteRequest* request,
                                     pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (!FLAGS_enable_async_vector_delete) {
-    return DoVectorDelete(storage_, controller, request, response, svr_done, false);
-  }
 
   // Run in queue.
   StoragePtr storage = storage_;
