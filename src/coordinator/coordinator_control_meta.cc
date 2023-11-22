@@ -2649,7 +2649,7 @@ butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t tab
     region_cmd.mutable_switch_split_request()->set_region_id(region_id);
     region_cmd.mutable_switch_split_request()->set_disable_split(!auto_split);
 
-    auto status = AddRegionCmd(leader_store_id, region_cmd, meta_increment);
+    auto status = AddRegionCmd(leader_store_id, 0, region_cmd, meta_increment);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "ERRROR: AddRegionCmd failed, table_id=" << table_id << " region_id=" << region_id;
       return status;

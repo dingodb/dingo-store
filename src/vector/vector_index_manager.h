@@ -34,8 +34,8 @@ namespace dingodb {
 // Rebuild vector index task
 class RebuildVectorIndexTask : public TaskRunnable {
  public:
-  RebuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool force)
-      : vector_index_wrapper_(vector_index_wrapper), force_(force) {}
+  RebuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id)
+      : vector_index_wrapper_(vector_index_wrapper), force_(job_id > 0), job_id_(job_id) {}
   ~RebuildVectorIndexTask() override = default;
 
   std::string Type() override { return "REBUILD_VECTOR_INDEX"; }
@@ -45,6 +45,7 @@ class RebuildVectorIndexTask : public TaskRunnable {
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
   bool force_;
+  int64_t job_id_{0};
 };
 
 // Save vector index task
@@ -64,8 +65,10 @@ class SaveVectorIndexTask : public TaskRunnable {
 // Load or build vector index task
 class LoadOrBuildVectorIndexTask : public TaskRunnable {
  public:
-  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index)
-      : vector_index_wrapper_(vector_index_wrapper), is_temp_hold_vector_index_(is_temp_hold_vector_index) {}
+  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index, int64_t job_id)
+      : vector_index_wrapper_(vector_index_wrapper),
+        is_temp_hold_vector_index_(is_temp_hold_vector_index),
+        job_id_(job_id) {}
   ~LoadOrBuildVectorIndexTask() override = default;
 
   std::string Type() override { return "LOADORBUILD_VECTOR_INDEX"; }
@@ -75,6 +78,7 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
   bool is_temp_hold_vector_index_;
+  int64_t job_id_;
 };
 
 // Manage vector index, e.g. build/rebuild/save/load vector index.
@@ -93,7 +97,7 @@ class VectorIndexManager {
   static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
                                               const pb::common::RegionEpoch &epoch);
   static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                           bool is_temp_hold_vector_index = false);
+                                           bool is_temp_hold_vector_index = false, int64_t job_id = 0);
   // Parallel load or build vector index at server bootstrap.
   static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency);
 
@@ -105,7 +109,7 @@ class VectorIndexManager {
   // Invoke when server running.
   static butil::Status RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper);
   // Launch rebuild vector index at execute queue.
-  static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool force);
+  static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id);
 
   static butil::Status ScrubVectorIndex();
 

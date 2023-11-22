@@ -529,7 +529,7 @@ void NodeServiceImpl::CommitMerge(google::protobuf::RpcController* /*controller*
   *region_definition.mutable_epoch() = request->source_region_epoch();
   *region_definition.mutable_range() = request->source_region_range();
 
-  status = storage->CommitMerge(ctx, request->merge_id(), region_definition, request->prepare_merge_log_id(),
+  status = storage->CommitMerge(ctx, request->job_id(), region_definition, request->prepare_merge_log_id(),
                                 Helper::PbRepeatedToVector(request->entries()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

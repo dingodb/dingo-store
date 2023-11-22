@@ -73,7 +73,7 @@ class RaftSaveSnapshotHandler : public BaseHandler {
              braft::SnapshotWriter* writer, braft::Closure* done) override;
 };
 
-class RaftLoadSnapshotHanler : public BaseHandler {
+class RaftLoadSnapshotHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kLoadSnapshot; }
   int Handle(store::RegionPtr region, std::shared_ptr<RawEngine> engine, braft::SnapshotReader* reader) override;

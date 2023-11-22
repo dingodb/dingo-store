@@ -294,6 +294,11 @@ class Server {
   bool is_read_only_ = false;
 };
 
+// Shortcut
+#define GET_REGION_CHANGE_RECORDER Server::GetInstance().GetStoreMetaManager()->GetRegionChangeRecorder()
+#define ADD_REGION_CHANGE_RECORD GET_REGION_CHANGE_RECORDER->AddChangeRecord
+#define ADD_REGION_CHANGE_RECORD_TIMEPOINT GET_REGION_CHANGE_RECORDER->AddChangeRecordTimePoint
+
 }  // namespace dingodb
 
 #endif  // DINGODB_STORE_SERVER_H_

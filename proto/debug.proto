@@ -113,6 +113,7 @@ enum DebugType {
   STORE_FILE_READER = 7;
   STORE_REGION_ACTUAL_METRICS = 8;
   STORE_METRICS = 9;
+  STORE_REGION_CHANGE_RECORD = 10;
   INDEX_VECTOR_INDEX_METRICS = 100;
 }
 
@@ -158,6 +159,10 @@ message DebugResponse {
   message StoreMetrics {
     dingodb.pb.common.StoreMetrics metrics = 1;
   }
+
+  message RegionChange {
+    repeated dingodb.pb.store_internal.RegionChangeRecord records = 1;
+  }
   
   message RawVectorIndexState {
     int64 id = 1;
@@ -200,6 +205,7 @@ message DebugResponse {
   FileReader file_reader = 7;
   RegionActualMetrics region_actual_metrics = 8;
   StoreMetrics store_metrics = 9;
+  RegionChange region_change_record = 10;
   VectorIndexMetrics vector_index_metrics = 100;
 }
 

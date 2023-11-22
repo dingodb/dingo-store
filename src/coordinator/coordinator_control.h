@@ -487,7 +487,7 @@ class CoordinatorControl : public MetaControl {
 
   butil::Status AddStoreOperation(const pb::coordinator::StoreOperation &store_operation, bool check_conflict,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status AddRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
+  butil::Status AddRegionCmd(int64_t store_id, int64_t job_id, const pb::coordinator::RegionCmd &region_cmd,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status UpdateRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
                                 const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);

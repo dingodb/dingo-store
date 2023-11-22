@@ -313,7 +313,8 @@ class HoldVectorIndexTask : public TaskRunnable {
   static butil::Status PreValidateHoldVectorIndex(const pb::coordinator::RegionCmd& command);
 
  private:
-  static butil::Status HoldVectorIndex(std::shared_ptr<Context> ctx, int64_t region_id, bool is_hold);
+  static butil::Status HoldVectorIndex(std::shared_ptr<Context> ctx,
+                                       std::shared_ptr<pb::coordinator::RegionCmd> region_cmd);
   static butil::Status ValidateHoldVectorIndex(int64_t region_id);
 
   std::shared_ptr<Context> ctx_;

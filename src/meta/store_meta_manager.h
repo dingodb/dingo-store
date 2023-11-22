@@ -22,6 +22,7 @@
 #include <memory>
 #include <shared_mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "braft/file_system_adaptor.h"
@@ -107,9 +108,6 @@ class Region {
   int64_t ParentId();
   void SetParentId(int64_t region_id);
 
-  std::vector<pb::store_internal::RegionSplitRecord> Childs();
-  void AddChild(pb::store_internal::RegionSplitRecord& record);
-
   int64_t PartitionId();
 
   int64_t SnapshotEpochVersion();
@@ -123,8 +121,8 @@ class Region {
 
   scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor = nullptr;
 
-  void SetLastChangeCmdId(int64_t cmd_id);
-  int64_t LastChangeCmdId();
+  void SetLastChangeJobId(int64_t job_id);
+  int64_t LastChangeJobId();
 
  private:
   bthread_mutex_t mutex_;
@@ -139,6 +137,44 @@ class Region {
 using RegionPtr = std::shared_ptr<Region>;
 
 }  // namespace store
+
+class RegionChangeRecorder : public TransformKvAble {
+ public:
+  RegionChangeRecorder(MetaReaderPtr meta_reader, MetaWriterPtr meta_writer);
+  ~RegionChangeRecorder() override;
+
+  bool Init();
+
+  void AddChangeRecord(const pb::coordinator::RegionCmd& cmd);
+  void AddChangeRecord(const pb::raft::SplitRequest& request);
+  void AddChangeRecord(const pb::raft::PrepareMergeRequest& request, int64_t source_id);
+  void AddChangeRecord(const pb::raft::CommitMergeRequest& request, int64_t target_id);
+
+  void AddChangeRecordTimePoint(int64_t job_id, const std::string& event);
+
+  pb::store_internal::RegionChangeRecord ChangeRecord(int64_t job_id);
+
+  std::vector<pb::store_internal::RegionChangeRecord> GetChangeRecord(int64_t region_id);
+  std::vector<pb::store_internal::RegionChangeRecord> GetAllChangeRecord();
+
+ private:
+  std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
+  void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
+
+  bool IsExist(int64_t job_id);
+  void Upsert(const pb::store_internal::RegionChangeRecord& record, const std::string& event);
+
+  void Save(const pb::store_internal::RegionChangeRecord& record);
+
+  // key: job_id
+  std::unordered_map<int64_t, pb::store_internal::RegionChangeRecord> records_;
+  bthread_mutex_t mutex_;
+
+  // Read meta data from persistence storage.
+  MetaReaderPtr meta_reader_;
+  // Write meta data to persistence storage.
+  MetaWriterPtr meta_writer_;
+};
 
 // Manage store server store data
 class StoreServerMeta {
@@ -210,7 +246,7 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdateDisableChange(store::RegionPtr region, bool disable_change);
   void UpdateTemporaryDisableChange(store::RegionPtr region, bool disable_change);
 
-  void UpdateLastChangeCmdId(store::RegionPtr region, int64_t cmd_id);
+  void UpdateLastChangeJobId(store::RegionPtr region, int64_t job_id);
 
   bool IsExistRegion(int64_t region_id);
   store::RegionPtr GetRegion(int64_t region_id);
@@ -279,7 +315,8 @@ class StoreMetaManager {
   StoreMetaManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
       : server_meta_(std::make_shared<StoreServerMeta>()),
         region_meta_(std::make_shared<StoreRegionMeta>(meta_reader, meta_writer)),
-        raft_meta_(std::make_shared<StoreRaftMeta>(meta_reader, meta_writer)) {}
+        raft_meta_(std::make_shared<StoreRaftMeta>(meta_reader, meta_writer)),
+        region_change_recorder_(std::make_shared<RegionChangeRecorder>(meta_reader, meta_writer)) {}
   ~StoreMetaManager() = default;
 
   StoreMetaManager(const StoreMetaManager&) = delete;
@@ -290,6 +327,7 @@ class StoreMetaManager {
   std::shared_ptr<StoreServerMeta> GetStoreServerMeta() { return server_meta_; }
   std::shared_ptr<StoreRegionMeta> GetStoreRegionMeta() { return region_meta_; }
   std::shared_ptr<StoreRaftMeta> GetStoreRaftMeta() { return raft_meta_; }
+  std::shared_ptr<RegionChangeRecorder> GetRegionChangeRecorder() { return region_change_recorder_; }
 
  private:
   // Store server meta data, like id/state/endpoint etc.
@@ -298,6 +336,8 @@ class StoreMetaManager {
   std::shared_ptr<StoreRegionMeta> region_meta_;
   // Store raft meta.
   std::shared_ptr<StoreRaftMeta> raft_meta_;
+  // Region change recorder
+  std::shared_ptr<RegionChangeRecorder> region_change_recorder_;
 };
 
 }  // namespace dingodb

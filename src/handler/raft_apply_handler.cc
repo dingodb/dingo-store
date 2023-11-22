@@ -231,8 +231,11 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                 int64_t log_id) {
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
+  ADD_REGION_CHANGE_RECORD(request);
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Appling SplitRequest");
+
   // Update last_change_cmd_id
-  store_region_meta->UpdateLastChangeCmdId(from_region, request.split_id());
+  store_region_meta->UpdateLastChangeJobId(from_region, request.job_id());
 
   if (request.epoch().version() != from_region->Epoch().version()) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -295,13 +298,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       to_region->Id(), Helper::StringToHex(from_range.start_key()), Helper::StringToHex(from_range.end_key()),
       Helper::StringToHex(to_range.start_key()), Helper::StringToHex(to_range.end_key()));
 
-  // Set split record
   to_region->SetParentId(from_region->Id());
-  from_region->UpdateLastSplitTimestamp();
-  pb::store_internal::RegionSplitRecord record;
-  record.set_region_id(to_region->Id());
-  record.set_split_time(Helper::NowTime());
-  from_region->AddChild(record);
 
   // set child region version/range/state
   store_region_meta->UpdateEpochVersionAndRange(to_region, to_region->Epoch().version() + 1, to_range);
@@ -311,6 +308,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateEpochVersionAndRange(from_region, from_region->Epoch().version() + 1, from_range);
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Doing raft snapshot");
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
                                  to_region->Id());
 
@@ -332,15 +330,18 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                         from_region->Id(), to_region->Id());
     }
 
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), true);
-    VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), true);
+    VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id());
+    VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id());
   }
 
   // update StoreRegionState to NORMAL
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
+
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Applied SplitRequest");
 
   return true;
 }
@@ -458,6 +459,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     return false;
   }
 
+  child_region->SetParentId(parent_region->Id());
+
   // Set parent range
   pb::common::Range parent_range;
   parent_range.set_start_key(request.split_key());
@@ -470,13 +473,6 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   // Set region state spliting
   store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::SPLITTING);
   store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::SPLITTING);
-
-  // Set split record
-  parent_region->UpdateLastSplitTimestamp();
-  pb::store_internal::RegionSplitRecord record;
-  record.set_region_id(child_region_id);
-  record.set_split_time(Helper::NowTime());
-  parent_region->AddChild(record);
 
   // Increase region version
   store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range);
@@ -565,7 +561,7 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
   int retry_count = 0;
   for (;;) {
     // CommitMerge command already commit success
-    if (target_region->LastChangeCmdId() >= request.merge_id()) {
+    if (target_region->LastChangeJobId() >= request.job_id()) {
       break;
     }
 
@@ -575,18 +571,18 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
 
     // Try to commit local target region raft.
     auto status =
-        storage->CommitMerge(ctx, request.merge_id(), source_region_definition, prepare_merge_log_id, log_entries);
+        storage->CommitMerge(ctx, request.job_id(), source_region_definition, prepare_merge_log_id, log_entries);
     DINGO_LOG(INFO) << fmt::format(
-        "[merge.merging][merge_id({}).region({}/{})] Commit CommitMerge failed, times({}) error: {} {}",
-        request.merge_id(), source_region_definition.id(), request.target_region_id(), ++retry_count,
+        "[merge.merging][job_id({}).region({}/{})] Commit CommitMerge failed, times({}) error: {} {}", request.job_id(),
+        source_region_definition.id(), request.target_region_id(), ++retry_count,
         pb::error::Errno_Name(status.error_code()), status.error_str());
 
     bthread_usleep(500000);  // 500ms
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][merge_id({}).region({}/{})] Commit CommitMerge finish, log_entries({}) elapsed time({}ms)",
-      request.merge_id(), source_region_definition.id(), request.target_region_id(), log_entries.size(),
+      "[merge.merging][job_id({}).region({}/{})] Commit CommitMerge finish, log_entries({}) elapsed time({}ms)",
+      request.job_id(), source_region_definition.id(), request.target_region_id(), log_entries.size(),
       Helper::TimestampMs() - start_time);
 }
 
@@ -598,18 +594,22 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   auto target_region = store_region_meta->GetRegion(request.target_region_id());
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][merge_id({}).region({}/{})] Apply PrepareMerge, source_region({}/{}/log[{},{})) "
+      "[merge.merging][job_id({}).region({}/{})] Apply PrepareMerge, source_region({}/{}/log[{},{})) "
       "target_region({}/{})",
-      request.merge_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
+      request.job_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
       source_region->RangeToString(), request.min_applied_log_id(), log_id,
       Helper::RegionEpochToString(request.target_region_epoch()), Helper::RangeToString(request.target_region_range()));
+
+  // Set change record.
+  ADD_REGION_CHANGE_RECORD(request, source_region->Id());
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply PrepareMerge");
 
   uint64_t start_time = Helper::TimestampMs();
 
   FAIL_POINT("apply_prepare_merge");
 
   // Update last_change_cmd_id
-  store_region_meta->UpdateLastChangeCmdId(source_region, request.merge_id());
+  store_region_meta->UpdateLastChangeJobId(source_region, request.job_id());
   // Update disable_change
   store_region_meta->UpdateTemporaryDisableChange(source_region, true);
 
@@ -623,19 +623,19 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
 
       } else if (comparison < 0) {
         DINGO_LOG(WARNING) << fmt::format(
-            "[merge.merging][merge_id({}).region({}/{})] waiting({}), target region epoch({}) less the special "
+            "[merge.merging][job_id({}).region({}/{})] waiting({}), target region epoch({}) less the special "
             "epoch({})",
-            request.merge_id(), source_region->Id(), target_region->Id(), ++retry_count,
-            target_region->Epoch().version(), request.target_region_epoch().version());
+            request.job_id(), source_region->Id(), target_region->Id(), ++retry_count, target_region->Epoch().version(),
+            request.target_region_epoch().version());
         bthread_usleep(100000);  // 100ms
         target_region = store_region_meta->GetRegion(request.target_region_id());
 
       } else if (comparison > 0) {
         // Todo
         DINGO_LOG(FATAL) << fmt::format(
-            "[merge.merging][merge_id({}).region({}/{})] epoch not match, source_region({}/{}) "
+            "[merge.merging][job_id({}).region({}/{})] epoch not match, source_region({}/{}) "
             "target_region({}/{}/{}) ",
-            request.merge_id(), source_region->Id(), target_region->Id(), source_region->EpochToString(),
+            request.job_id(), source_region->Id(), target_region->Id(), source_region->EpochToString(),
             source_region->RangeToString(), Helper::RegionEpochToString(request.target_region_epoch()),
             target_region->EpochToString(), target_region->RangeToString());
         return 0;
@@ -643,7 +643,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
     }
   } else {
     DINGO_LOG(INFO) << fmt::format(
-        "[merge.merging][merge_id({}).region({}/{})] Apply PrepareMerge, target region is nullptr.", request.merge_id(),
+        "[merge.merging][job_id({}).region({}/{})] Apply PrepareMerge, target region is nullptr.", request.job_id(),
         source_region->Id(), request.target_region_id());
   }
 
@@ -662,15 +662,19 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
 
   FAIL_POINT("before_launch_commit_merge");
 
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch CommitMerge");
+
   if (target_region != nullptr) {
     // Commit raft command CommitMerge.
     LaunchCommitMergeCommand(request, source_region_definition, target_region, log_id);
   }
 
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch CommitMerge finish");
+
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][merge_id({}).region({}/{})] Apply PrepareMerge finish, source_region({}/{}/log[{},{})) "
+      "[merge.merging][job_id({}).region({}/{})] Apply PrepareMerge finish, source_region({}/{}/log[{},{})) "
       "target_region({}/{}) elapsed_time({})",
-      request.merge_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
+      request.job_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
       source_region->RangeToString(), request.min_applied_log_id(), log_id,
       Helper::RegionEpochToString(request.target_region_epoch()), Helper::RangeToString(request.target_region_range()),
       Helper::TimestampMs() - start_time);
@@ -688,39 +692,44 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   assert(raft_store_engine != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][merge_id({}).region({}/{})] Apply CommitMerge, source_region({}/{}/{}) target_region({}/{}).",
-      request.merge_id(), request.source_region_id(), target_region->Id(),
+      "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge, source_region({}/{}/{}) target_region({}/{}).",
+      request.job_id(), request.source_region_id(), target_region->Id(),
       Helper::RegionEpochToString(request.source_region_epoch()), Helper::RangeToString(request.source_region_range()),
       request.entries().size(), target_region->EpochToString(), target_region->RangeToString());
+
+  // Set change record.
+  ADD_REGION_CHANGE_RECORD(request, target_region->Id());
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply CommitMerge");
 
   uint64_t start_time = Helper::TimestampMs();
 
   FAIL_POINT("apply_commit_merge");
 
   // Update last_change_cmd_id
-  store_region_meta->UpdateLastChangeCmdId(target_region, request.merge_id());
+  store_region_meta->UpdateLastChangeJobId(target_region, request.job_id());
   // Disable temporary change
   store_region_meta->UpdateTemporaryDisableChange(target_region, true);
 
   auto source_region = store_region_meta->GetRegion(request.source_region_id());
   if (source_region == nullptr) {
     DINGO_LOG(FATAL) << fmt::format(
-        "[merge.merging][merge_id({}).region({}/{})] Apply CommitMerge, source region is nullptr.", request.merge_id(),
+        "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge, source region is nullptr.", request.job_id(),
         request.source_region_id(), target_region->Id());
     return 0;
   }
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply target region CommitMerge");
 
   // Catch up apply source region raft log.
   auto node = raft_store_engine->GetNode(source_region->Id());
   if (node == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Not found source node.",
-                                    request.merge_id(), request.source_region_id(), target_region->Id());
+    DINGO_LOG(FATAL) << fmt::format("[merge.merging][job_id({}).region({}/{})] Not found source node.",
+                                    request.job_id(), request.source_region_id(), target_region->Id());
     return 0;
   }
   auto state_machine = std::dynamic_pointer_cast<StoreStateMachine>(node->GetStateMachine());
   if (state_machine == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[merge.merging][merge_id({}).region({}/{})] Not found source state machine.",
-                                    request.merge_id(), request.source_region_id(), target_region->Id());
+    DINGO_LOG(FATAL) << fmt::format("[merge.merging][job_id({}).region({}/{})] Not found source state machine.",
+                                    request.job_id(), request.source_region_id(), target_region->Id());
     return 0;
   }
 
@@ -754,6 +763,9 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   // Do snapshot
   LaunchDoSnapshot(target_region);
 
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save target region snapshot finish");
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save snapshot finish");
+
   if (target_region->Type() == pb::common::INDEX_REGION) {
     // Set child share vector index
     auto vector_index = source_region->VectorIndexWrapper()->GetOwnVectorIndex();
@@ -761,23 +773,27 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
       target_region->VectorIndexWrapper()->SetSiblingVectorIndex(vector_index);
     } else {
       DINGO_LOG(WARNING) << fmt::format(
-          "[merge.merging][merge_id({}).region({}/{})] merge region get vector index failed.", source_region->Id(),
-          target_region->Id());
+          "[merge.merging][job_id({}).region({}/{})] merge region get vector index failed.", request.job_id(),
+          source_region->Id(), target_region->Id());
     }
 
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch target region rebuild vector index");
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), true);
+    VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), request.job_id());
   } else {
     store_region_meta->UpdateTemporaryDisableChange(target_region, false);
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply target region CommitMerge finish");
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply CommitMerge finish");
   }
 
   // Notify coordinator
   Heartbeat::TriggerStoreHeartbeat({request.source_region_id(), target_region->Id()}, true);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][merge_id({}).region({}/{})] Apply CommitMerge finish, source_region({}/{}/{}/{}) "
+      "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge finish, source_region({}/{}/{}/{}) "
       "target_region({}/{}) elapsed_time({}).",
-      request.merge_id(), request.source_region_id(), target_region->Id(),
+      request.job_id(), request.source_region_id(), target_region->Id(),
       Helper::RegionEpochToString(request.source_region_epoch()), Helper::RangeToString(request.source_region_range()),
       request.entries().size(), actual_apply_log_count, target_region->EpochToString(), target_region->RangeToString(),
       Helper::TimestampMs() - start_time);
@@ -1103,11 +1119,12 @@ int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr
                                       int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({})] Handle rebuild vector index, apply_log_id: {}",
                                  region->Id(), log_id);
+  const auto &request = req.rebuild_vector_index();
   auto vector_index_wrapper = region->VectorIndexWrapper();
   if (vector_index_wrapper != nullptr) {
     vector_index_wrapper->SaveApplyLogId(log_id);
 
-    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, true);
+    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, request.cmd_id());
   }
 
   return 0;
