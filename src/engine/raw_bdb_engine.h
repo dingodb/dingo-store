@@ -169,9 +169,6 @@ class Writer : public RawEngine::Writer {
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
 
  private:
-  butil::Status KvBatchDeleteRange(const std::vector<std::string>& cf_names,
-                                   const std::vector<pb::common::Range>& ranges);
-
   butil::Status DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn);
 
   std::shared_ptr<RawBdbEngine> GetRawEngine();
