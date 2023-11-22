@@ -124,6 +124,11 @@ class VectorIndexManager {
   static void IncVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_add(1); }
   static void DecVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_sub(1); }
 
+  static std::atomic<int> vector_index_loadorbuild_task_running_num;
+  static int GetVectorIndexLoadorbuildTaskRunningNum() { return vector_index_loadorbuild_task_running_num.load(); }
+  static void IncVectorIndexLoadorbuildTaskRunningNum() { vector_index_loadorbuild_task_running_num.fetch_add(1); }
+  static void DecVectorIndexLoadorbuildTaskRunningNum() { vector_index_loadorbuild_task_running_num.fetch_sub(1); }
+
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
 
  private:
