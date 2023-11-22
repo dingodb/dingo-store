@@ -111,13 +111,13 @@ class SplitCheckerTest : public testing::Test {
 
     std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << std::endl;
+      std::cout << "Load config failed" << '\n';
       return;
     }
 
     engine = std::make_shared<RawRocksEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << std::endl;
+      std::cout << "RawRocksEngine init failed" << '\n';
     }
   }
 
@@ -172,7 +172,7 @@ TEST_F(SplitCheckerTest, MergedIterator) {  // NOLINT
   }
 
   // Clean
-  writer->KvDeleteRange(kAllCFs, range);
+  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
 }
 
 TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
@@ -203,7 +203,7 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
   auto split_key = split_checker->SplitKey(region, kAllCFs, count);
-  std::cout << "split_key: " << split_key << std::endl;
+  std::cout << "split_key: " << split_key << '\n';
 
   auto reader = SplitCheckerTest::engine->Reader();
 
@@ -215,11 +215,11 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
 
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} right_count: {}",
                            range.start_key(), range.end_key(), split_key, count, left_count, right_count)
-            << std::endl;
+            << '\n';
   EXPECT_EQ(true, abs(static_cast<int>(left_count - right_count)) < 10000);
 
   // Clean
-  writer->KvDeleteRange(kAllCFs, range);
+  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
 }
 
 TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
@@ -247,7 +247,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
   auto split_key = split_checker->SplitKey(region, kAllCFs, count);
-  std::cout << "split_key: " << split_key << std::endl;
+  std::cout << "split_key: " << split_key << '\n';
 
   EXPECT_EQ(false, split_key.empty());
 
@@ -259,11 +259,11 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} left_size: {}",
                            range.start_key(), range.end_key(), split_key, count, left_count,
                            left_count * single_key_size)
-            << std::endl;
+            << '\n';
   EXPECT_EQ(true, abs(split_threshold_size * split_ratio - left_count * single_key_size) < 1000);
 
   // Clean
-  writer->KvDeleteRange(kAllCFs, range);
+  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
 }
 
 TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
@@ -292,7 +292,7 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
   auto split_key = split_checker->SplitKey(region, kAllCFs, count);
-  std::cout << "split_key: " << split_key << std::endl;
+  std::cout << "split_key: " << split_key << '\n';
   EXPECT_EQ(true, !split_key.empty());
 
   auto reader = SplitCheckerTest::engine->Reader();
@@ -301,11 +301,11 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   reader->KvCount(kDefaultCf, range.start_key(), split_key, left_count);
   std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {}", range.start_key(),
                            range.end_key(), split_key, count, left_count)
-            << std::endl;
+            << '\n';
   EXPECT_EQ(true, abs(left_count - split_key_number * split_key_ratio) < 10);
 
   // Clean
-  writer->KvDeleteRange(kAllCFs, range);
+  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
 }
 
 }  // namespace dingodb

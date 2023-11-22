@@ -1397,7 +1397,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
   // key empty failed
   {
     pb::common::Range range;
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
@@ -1407,7 +1409,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
 
     range.set_start_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -1418,7 +1422,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
 
     range.set_end_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -1430,7 +1436,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("Key");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -1442,7 +1450,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -1454,7 +1464,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("key");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
@@ -1478,7 +1490,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
       ranges.emplace_back(range);
     }
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, ranges);
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = ranges;
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
@@ -1551,7 +1565,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("KEY");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
@@ -1562,7 +1578,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key("KEX");
     range.set_end_key("KEZ");
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
@@ -1592,7 +1610,9 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     range.set_start_key(std::string(array, std::size(array)));
     range.set_end_key(std::string(array, std::size(array)));
 
-    butil::Status ok = writer->KvBatchDeleteRange(cf_name, {range});
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[cf_name] = {range};
+    butil::Status ok = writer->KvBatchDeleteRange(range_with_cfs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }

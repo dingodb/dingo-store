@@ -236,8 +236,6 @@ class Writer : public RawEngine::Writer {
   butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) override;
 
   butil::Status KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) override;
-  butil::Status KvDeleteRange(const std::vector<std::string>& cf_names, const pb::common::Range& range) override;
-  butil::Status KvBatchDeleteRange(const std::string& cf_name, const std::vector<pb::common::Range>& ranges) override;
   butil::Status KvBatchDeleteRange(
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
 
