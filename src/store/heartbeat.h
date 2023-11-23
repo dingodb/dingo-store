@@ -28,7 +28,6 @@
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
-#include "proto/push.pb.h"
 #include "store/region_controller.h"
 
 namespace dingodb {
@@ -233,10 +232,6 @@ class Heartbeat {
   static void TriggerScrubVectorIndex(void*);
   static void TriggerLeaseTask(void*);
   static void TriggerCompactionTask(void*);
-
-  static butil::Status RpcSendPushStoreOperation(const pb::common::Location& location,
-                                                 pb::push::PushStoreOperationRequest& request,
-                                                 pb::push::PushStoreOperationResponse& response);
 
  private:
   bool Execute(TaskRunnablePtr task);
