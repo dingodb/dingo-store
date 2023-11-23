@@ -8,10 +8,12 @@ server:
   heartbeat_interval_s: 10
   metrics_collect_interval_s: 300
   scrub_vector_index_interval_s: 60
-  worker_thread_num: 64 # must >4, worker_thread_num priority worker_thread_ratio
+  worker_thread_num: 96 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 2 # cpu core * ratio
-  service_worker_num: 32 # must < server.worker_thread_num
-  service_worker_max_pending_num: 1024 # 0 is unlimited
+  read_worker_num: 48 # read_worker_num + write_worker_num must < server.worker_thread_num
+  read_worker_max_pending_num: 1024 # 0 is unlimited
+  write_worker_num: 32 # read_worker_num + write_worker_num must < server.worker_thwrite_num
+  write_worker_max_pending_num: 1024 # 0 is unlimited
 region:
   region_max_size: 536870912 # 512MB
   enable_auto_split: true
