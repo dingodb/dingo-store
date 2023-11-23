@@ -40,6 +40,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/push.pb.h"
 #include "proto/version.pb.h"
 #include "raft/raft_node.h"
 
@@ -459,6 +460,8 @@ class CoordinatorControl : public MetaControl {
   // return bool
   bool TrySetStoreToOffline(int64_t store_id);
 
+  static std::mt19937 GetUrbg();
+
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);
 
@@ -476,9 +479,18 @@ class CoordinatorControl : public MetaControl {
   // get orphan region
   butil::Status GetOrphanRegion(int64_t store_id, std::map<int64_t, pb::common::RegionMetrics> &orphan_regions);
 
+  static bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::error::Errno errcode);
+  void SendStoreOperation(const pb::common::Store &store, const pb::coordinator::StoreOperation &store_operation,
+                          pb::coordinator_internal::MetaIncrement &meta_increment);
+  void TryToSendStoreOperations();
+  static butil::Status RpcSendPushStoreOperation(const pb::common::Location &location,
+                                                 pb::push::PushStoreOperationRequest &request,
+                                                 pb::push::PushStoreOperationResponse &response);
+
   // get store operation
   int GetStoreOperation(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
-  int GetStoreOperationForSend(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
+  int GetStoreOperationOfNotCreateForSend(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
+  int GetStoreOperationOfCreateForSend(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
 
   // CleanStoreOperation
   // in:  store_id

@@ -120,6 +120,13 @@ void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, p
   GetServerLocation(leader_raft_location, leader_location);
 }
 
+std::mt19937 CoordinatorControl::GetUrbg() {
+  std::random_device rd;
+  std::mt19937 g(rd());
+
+  return g;
+}
+
 void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
   store_map.set_epoch(store_map_epoch);
@@ -4058,7 +4065,8 @@ int CoordinatorControl::GetStoreOperation(int64_t store_id, pb::coordinator::Sto
   return 0;
 }
 
-int CoordinatorControl::GetStoreOperationForSend(int64_t store_id, pb::coordinator::StoreOperation& store_operation) {
+int CoordinatorControl::GetStoreOperationOfNotCreateForSend(int64_t store_id,
+                                                            pb::coordinator::StoreOperation& store_operation) {
   pb::coordinator_internal::StoreOperationInternal store_operation_internal;
   int ret = store_operation_map_.Get(store_id, store_operation_internal);
   if (ret < 0) {
@@ -4080,6 +4088,10 @@ int CoordinatorControl::GetStoreOperationForSend(int64_t store_id, pb::coordinat
                        << " region_id = " << region_cmd.region_cmd().region_id() << " store_id = " << store_id
                        << " region_cmd_type = "
                        << pb::coordinator::RegionCmdType_Name(region_cmd.region_cmd().region_cmd_type());
+      continue;
+    }
+
+    if (region_cmd.region_cmd().region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
       continue;
     }
 
@@ -4107,12 +4119,54 @@ int CoordinatorControl::GetStoreOperationForSend(int64_t store_id, pb::coordinat
       continue;
     }
 
+    if (region_cmd.region_cmd().region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
+      continue;
+    }
+
     *(store_operation.add_region_cmds()) = region_cmd.region_cmd();
 
     region_cmd_count++;
 
     if (region_cmd_count > FLAGS_max_send_region_cmd_per_store) {
       DINGO_LOG(WARNING) << "GetStoreOperationForSend second round region_cmd_count > "
+                            "FLAGS_max_send_region_cmd_per_store, store_id = "
+                         << store_id << " send_region_cmd_count = " << region_cmd_count
+                         << ", real_region_cmd_count = " << store_operation_internal.region_cmd_ids_size();
+      return 0;
+    }
+  }
+
+  return 0;
+}
+
+int CoordinatorControl::GetStoreOperationOfCreateForSend(int64_t store_id,
+                                                         pb::coordinator::StoreOperation& store_operation) {
+  pb::coordinator_internal::StoreOperationInternal store_operation_internal;
+  int ret = store_operation_map_.Get(store_id, store_operation_internal);
+  if (ret < 0) {
+    return ret;
+  }
+
+  store_operation.set_id(store_operation_internal.id());
+
+  uint32_t region_cmd_count = 0;
+  for (auto region_cmd_id : store_operation_internal.region_cmd_ids()) {
+    pb::coordinator_internal::RegionCmdInternal region_cmd;
+    ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+    if (ret < 0) {
+      continue;
+    }
+
+    if (region_cmd.region_cmd().region_cmd_type() != pb::coordinator::RegionCmdType::CMD_CREATE) {
+      continue;
+    }
+
+    *(store_operation.add_region_cmds()) = region_cmd.region_cmd();
+
+    region_cmd_count++;
+
+    if (region_cmd_count > FLAGS_max_send_region_cmd_per_store) {
+      DINGO_LOG(WARNING) << "GetStoreOperationForSend first_round region_cmd_count > "
                             "FLAGS_max_send_region_cmd_per_store, store_id = "
                          << store_id << " send_region_cmd_count = " << region_cmd_count
                          << ", real_region_cmd_count = " << store_operation_internal.region_cmd_ids_size();
@@ -4791,6 +4845,485 @@ butil::Status CoordinatorControl::AddCoordinatorOperation(
     return butil::Status(pb::error::EINTERNAL, "coordinator_operation.coordinator_op_type() not support");
   }
   return butil::Status::OK();
+}
+
+/**
+ * The `CheckStoreOperationResult` function checks the result of a store operation.
+ * It takes as input a command type and an error code.
+ * If the error code is `OK` or `EREGION_REPEAT_COMMAND`, the function returns true, indicating that the operation was
+ * successful. If the error code is `ERAFT_NOTLEADER`, the function returns false, indicating that the operation failed
+ * because the current node is not the leader. For other command types, the function checks the error code and logs an
+ * error message if the operation failed. In some cases, even if the operation failed, the function returns true to
+ * indicate that the failure is expected or recoverable. For example, if a `CMD_CREATE` operation fails with an
+ * `EREGION_EXIST` error code, the function returns true because the region already exists.
+ *
+ * @param cmd_type The type of the command that was executed.
+ * @param errcode The error code returned by the command execution.
+ * @return A boolean indicating whether the operation was successful or if the failure is expected or recoverable.
+ */
+bool CoordinatorControl::CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::error::Errno errcode) {
+  using pb::coordinator::RegionCmdType;
+  using pb::error::Errno;
+
+  if (errcode == Errno::OK || errcode == Errno::EREGION_REPEAT_COMMAND) {
+    return true;
+  }
+
+  if (errcode == Errno::ERAFT_NOTLEADER) {
+    return false;
+  }
+
+  switch (cmd_type) {
+    case RegionCmdType::CMD_CREATE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... create region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_EXIST) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_DELETE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... delete region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_DELETING || errcode == Errno::EREGION_NOT_FOUND) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_SPLIT:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... split region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_SPLITING) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_MERGE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... merge region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_MERGEING) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_CHANGE_PEER:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... change peer region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_PEER_CHANGEING) {
+        return true;
+      }
+      break;
+    case RegionCmdType::CMD_PURGE:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... purge region failed, errcode=" << errcode;
+      if (errcode == Errno::EREGION_NOT_FOUND) {
+        return true;
+      }
+      break;
+    default:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... unknown region cmd type " << cmd_type
+                       << ", errcode=" << errcode;
+      break;
+  }
+
+  return false;
+}
+
+/**
+ * The `SendStoreOperation` function is responsible for sending a store operation to a specific store in the system.
+ * It first checks the state of the store. If the store is in a normal state and its last seen timestamp is within the
+ * heartbeat timeout, it proceeds with sending the operation. If the store is not in a normal state or its last seen
+ * timestamp is beyond the heartbeat timeout, it logs a warning message and returns without sending the operation. If
+ * the store is offline, it attempts to set the store to offline and returns. It then checks if the store operation has
+ * any region commands. If not, it logs a debug message and returns without sending the operation. Note: The actual
+ * sending of the store operation is not implemented in this function.
+ *
+ * @param store The store to which the operation is to be sent.
+ * @param store_operation The operation to be sent to the store.
+ * @param meta_increment A reference to a MetaIncrement object.
+ */
+void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
+                                            const pb::coordinator::StoreOperation& store_operation,
+                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (store.state() == pb::common::StoreState::STORE_NORMAL) {
+    if (store.last_seen_timestamp() + (FLAGS_store_heartbeat_timeout * 1000) < butil::gettimeofday_ms()) {
+      DINGO_LOG(INFO) << "... update store " << store.id() << " state to offline";
+      TrySetStoreToOffline(store.id());
+      return;
+    }
+  } else {
+    DINGO_LOG(WARNING) << "... store " << store.id() << " state is not STORE_NORMAL, will not send store_operation";
+    return;
+  }
+
+  // send store_operation
+  if (store_operation.region_cmds_size() <= 0) {
+    DINGO_LOG(DEBUG) << "... store_operation.region_cmds_size() <= 0, store_id=" << store.id()
+                     << " region_cmds_size=" << store_operation.region_cmds_size();
+    return;
+  }
+
+  DINGO_LOG(INFO) << "... send store_operation to store " << store.id();
+
+  // send store_operation to store
+  // prepare request and response
+  pb::push::PushStoreOperationRequest request;
+  pb::push::PushStoreOperationResponse response;
+
+  *(request.mutable_store_operation()) = store_operation;
+
+  // send rpcs
+  if (!store.has_server_location()) {
+    DINGO_LOG(ERROR) << "... store " << store.id() << " has no server_location";
+    return;
+  }
+  if (store.server_location().port() <= 0 || store.server_location().port() > 65535) {
+    DINGO_LOG(ERROR) << "... store " << store.id() << " has invalid server_location.port "
+                     << store.server_location().port();
+    return;
+  }
+
+  auto status = RpcSendPushStoreOperation(store.server_location(), request, response);
+  if (status.error_code() == pb::error::Errno::ESEND_STORE_OPERATION_FAIL) {
+    DINGO_LOG(WARNING) << "... send store_operation to store " << store.id()
+                       << " failed ESEND_STORE_OPERATION_FAIL, will try this store future";
+    return;
+  }
+
+  // check response
+  if (status.ok()) {
+    DINGO_LOG(INFO) << "... send store_operation to store " << store.id()
+                    << " all success, will delete these region_cmds, count: " << store_operation.region_cmds_size();
+    // delete region_cmd
+    for (const auto& region_cmd : store_operation.region_cmds()) {
+      auto ret = RemoveRegionCmd(store_operation.id(), region_cmd.id(), meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "... remove region_cmd failed, store_id=" << store.id()
+                         << " region_cmd_id=" << region_cmd.id();
+      }
+    }
+
+    // if (meta_increment.ByteSizeLong() > 0) {
+    //   SubmitMetaIncrementSync(meta_increment);
+    // }
+
+    return;
+  }
+
+  if (response.region_cmd_results_size() <= 0) {
+    DINGO_LOG(WARNING) << "... send store_operation to store " << store.id()
+                       << " failed, but no region_cmd result, will try this store future, region_cmd_count: "
+                       << store_operation.region_cmds_size();
+    return;
+  }
+
+  DINGO_LOG(WARNING) << "... send store_operation to store " << store.id()
+                     << " failed, will check each region_cmd result, region_cmd_count: "
+                     << store_operation.region_cmds_size()
+                     << ", region_cmd_result_count: " << response.region_cmd_results_size();
+
+  for (const auto& it_cmd : response.region_cmd_results()) {
+    auto errcode = it_cmd.error().errcode();
+    auto cmd_type = it_cmd.region_cmd_type();
+
+    // if a region_cmd response as NOT_LEADER, we need to add this region_cmd to store_operation of new store_id
+    // again
+    if (errcode == pb::error::Errno::ERAFT_NOTLEADER) {
+      DINGO_LOG(INFO) << "... send store_operation to store_id=" << store.id()
+                      << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode() << "]["
+                      << pb::error::Errno_descriptor()->FindValueByNumber(it_cmd.error().errcode())->name()
+                      << " failed, will add this region_cmd to new store_operation, store_id: "
+                      << it_cmd.error().store_id()
+                      << ", leader_locaton: " << it_cmd.error().leader_location().ShortDebugString();
+
+      // add region_cmd to new store_operation
+      for (const auto& region_cmd : store_operation.region_cmds()) {
+        if (region_cmd.id() == it_cmd.region_cmd_id()) {
+          DINGO_LOG(INFO) << "... region_cmd_id=" << region_cmd.id()
+                          << " is meet ERAFT_NOTLEADER, will add to new store_id: " << it_cmd.error().store_id()
+                          << ", region_cmd: " << region_cmd.ShortDebugString();
+
+          if (it_cmd.error().store_id() == 0) {
+            DINGO_LOG(ERROR) << "... region_cmd_id=" << region_cmd.id()
+                             << " is meet ERAFT_NOTLEADER, but new store_id is 0, will not add to new store_id";
+            break;
+          } else if (it_cmd.error().store_id() == store.id()) {
+            DINGO_LOG(ERROR) << "... region_cmd_id=" << region_cmd.id()
+                             << " is meet ERAFT_NOTLEADER, but new store_id is same as old store_id, will not add "
+                                "to new store_id";
+            break;
+          }
+
+          auto ret = AddRegionCmd(it_cmd.error().store_id(), 0, region_cmd, meta_increment);
+          if (!ret.ok()) {
+            DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << store.id()
+                             << " region_cmd_id=" << region_cmd.id();
+          } else {
+            // delete store_operation
+            auto ret = RemoveRegionCmd(store.id(), it_cmd.region_cmd_id(), meta_increment);
+            if (!ret.ok()) {
+              DINGO_LOG(ERROR) << "... remove store_operation failed for NOTLEADER re-routing, store_id=" << store.id()
+                               << " region_cmd_id=" << it_cmd.region_cmd_id();
+            } else {
+              DINGO_LOG(INFO) << "... remove store_operation success for NOTLEADER re-routing, store_id=" << store.id()
+                              << " region_cmd_id=" << it_cmd.region_cmd_id();
+            }
+          }
+          break;
+        }
+      }
+
+      continue;
+    }
+
+    auto need_delete = CheckStoreOperationResult(cmd_type, errcode);
+    if (!need_delete) {
+      DINGO_LOG(INFO) << "... send store_operation to store_id=" << store.id()
+                      << " region_cmd_id=" << it_cmd.region_cmd_id() << "] errcode=["
+                      << pb::error::Errno_Name(it_cmd.error().errcode()) << "] failed, will try this region_cmd future";
+      // update region_cmd error
+      for (const auto& region_cmd : store_operation.region_cmds()) {
+        if (region_cmd.id() == it_cmd.region_cmd_id()) {
+          auto ret = UpdateRegionCmd(store.id(), region_cmd, it_cmd.error(), meta_increment);
+          if (!ret.ok()) {
+            DINGO_LOG(ERROR) << "... update region_cmd failed, store_id=" << store.id()
+                             << " region_cmd_id=" << region_cmd.id();
+          }
+          break;
+        }
+      }
+    } else {
+      DINGO_LOG(INFO) << "... send store_operation to store_id=" << store.id()
+                      << " region_cmd_id=" << it_cmd.region_cmd_id() << " result=[" << it_cmd.error().errcode() << "]["
+                      << pb::error::Errno_Name(it_cmd.error().errcode()) << " success, will delete this region_cmd";
+
+      // delete store_operation
+      auto ret = RemoveRegionCmd(store.id(), it_cmd.region_cmd_id(), meta_increment);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "... remove store_operation failed, store_id=" << store.id()
+                         << " region_cmd_id=" << it_cmd.region_cmd_id();
+      }
+    }
+  }
+
+  // if (meta_increment.ByteSizeLong() > 0) {
+  //   SubmitMetaIncrementSync(meta_increment);
+  // }
+}
+
+/**
+ * The `TryToSendStoreOperations` function is responsible for preparing and sending store operations to stores in a
+ * distributed system. It first updates the store state based on the last seen timestamp and prepares to send store
+ * operations. The function does not update the store state to online, this is done in the `on_apply` of
+ * `store_heartbeat`. It then retrieves the current state of the stores and shuffles them to ensure load distribution.
+ * The function then prepares to send two types of store operations to the shuffled stores:
+ * 1. `create_region` store operations.
+ * 2. Other store operations.
+ * Note: The actual sending of the operations is not implemented in this function.
+ */
+void CoordinatorControl::TryToSendStoreOperations() {
+  // update store_state by last_seen_timestamp and send store operation to store
+  // here we only update store_state to offline if last_seen_timestamp is too old
+  // we will not update store_state to online here
+  // in on_apply of store_heartbeat, we will update store_state to online
+  pb::common::StoreMap store_map_temp;
+  GetStoreMap(store_map_temp);
+  std::vector<pb::common::Store> shuff_store_map;
+  for (const auto& store : store_map_temp.stores()) {
+    if (store.has_server_location() && store.has_raft_location()) {
+      shuff_store_map.push_back(store);
+    } else {
+      DINGO_LOG(ERROR) << "... store " << store.id()
+                       << " has no server_location or raft_location, store: " << store.ShortDebugString();
+    }
+  }
+  std::shuffle(shuff_store_map.begin(), shuff_store_map.end(), CoordinatorControl::GetUrbg());
+
+  // 1.send store_operation of create_region
+  {
+    pb::coordinator_internal::MetaIncrement meta_increment;
+
+    std::map<int64_t, pb::common::Store> tmp_store_map;
+    for (const auto& store : shuff_store_map) {
+      tmp_store_map[store.id()] = store;
+    }
+
+    std::map<int64_t, std::vector<pb::coordinator::RegionCmd>> tmp_create_operation;
+
+    for (const auto& store : shuff_store_map) {
+      pb::coordinator::StoreOperation create_store_operation;
+      int ret = GetStoreOperationOfCreateForSend(store.id(), create_store_operation);
+      if (ret < 0) {
+        DINGO_LOG(DEBUG) << "... no store_operation for store " << store.id();
+        continue;
+      }
+
+      if (create_store_operation.region_cmds_size() <= 0) {
+        DINGO_LOG(DEBUG) << "... store_operation.region_cmds_size() <= 0, store_id=" << store.id()
+                         << " region_cmds_size=" << create_store_operation.region_cmds_size();
+        continue;
+      }
+
+      std::vector<pb::coordinator::RegionCmd> region_cmds =
+          Helper::PbRepeatedToVector(create_store_operation.region_cmds());
+
+      std::shuffle(region_cmds.begin(), region_cmds.end(), CoordinatorControl::GetUrbg());
+
+      tmp_create_operation[store.id()] = region_cmds;
+    }
+
+    for (int32_t i = 0; i < 1000; i++) {
+      DINGO_LOG(INFO) << "... send store_operation of create_region, loop: " << i++;
+
+      if (tmp_create_operation.empty()) {
+        break;
+      }
+
+      for (auto& it : tmp_create_operation) {
+        auto store_id = it.first;
+        auto& region_cmds = it.second;
+
+        if (region_cmds.empty()) {
+          tmp_create_operation.erase(store_id);
+          break;
+        }
+
+        auto region_cmd = region_cmds.back();
+        region_cmds.pop_back();
+
+        auto store_it = tmp_store_map.find(store_id);
+        if (store_it == tmp_store_map.end()) {
+          DINGO_LOG(ERROR) << "... store " << store_id << " not found";
+          continue;
+        }
+        auto store = store_it->second;
+
+        // send store_operation to store
+        // prepare request and response
+        pb::push::PushStoreOperationRequest request;
+        pb::push::PushStoreOperationResponse response;
+
+        pb::coordinator::StoreOperation store_operation;
+        store_operation.set_id(store.id());
+        *(store_operation.add_region_cmds()) = region_cmd;
+        *(request.mutable_store_operation()) = store_operation;
+
+        // send rpcs
+        SendStoreOperation(store, store_operation, meta_increment);
+      }
+    }
+
+    if (meta_increment.ByteSizeLong() > 0) {
+      SubmitMetaIncrementSync(meta_increment);
+    }
+  }
+
+  // 2.send other store_operation
+  {
+    pb::coordinator_internal::MetaIncrement meta_increment;
+
+    for (const auto& store : shuff_store_map) {
+      if (store.state() == pb::common::StoreState::STORE_NORMAL) {
+        if (store.last_seen_timestamp() + (FLAGS_store_heartbeat_timeout * 1000) < butil::gettimeofday_ms()) {
+          DINGO_LOG(INFO) << "... update store " << store.id() << " state to offline";
+          TrySetStoreToOffline(store.id());
+          continue;
+        }
+      } else {
+        continue;
+      }
+
+      // send store_operation
+      pb::coordinator::StoreOperation store_operation;
+      int ret = GetStoreOperationOfNotCreateForSend(store.id(), store_operation);
+      if (ret < 0) {
+        DINGO_LOG(DEBUG) << "... no store_operation for store " << store.id();
+        continue;
+      }
+
+      if (store_operation.region_cmds_size() <= 0) {
+        DINGO_LOG(DEBUG) << "... store_operation.region_cmds_size() <= 0, store_id=" << store.id()
+                         << " region_cmds_size=" << store_operation.region_cmds_size();
+        continue;
+      }
+
+      DINGO_LOG(INFO) << "... send store_operation to store " << store.id();
+
+      // send store_operation to store
+      // prepare request and response
+      pb::push::PushStoreOperationRequest request;
+      pb::push::PushStoreOperationResponse response;
+
+      *(request.mutable_store_operation()) = store_operation;
+
+      // send rpcs
+      SendStoreOperation(store, store_operation, meta_increment);
+    }
+
+    if (meta_increment.ByteSizeLong() > 0) {
+      SubmitMetaIncrementSync(meta_increment);
+    }
+  }
+}
+
+/**
+ * The `RpcSendPushStoreOperation` function is responsible for sending a `PushStoreOperation` request to a remote store
+ * server. It first builds the remote server location string from the provided location. It then initializes a BRPC
+ * channel to the remote server and sets a timeout for the RPC. The function sends a `PushStoreOperation` request to the
+ * remote server and waits for a response. If the RPC fails, it logs an error message and retries the operation up to a
+ * maximum number of times. If the RPC succeeds, it logs a success message and returns a success status. If the RPC
+ * response indicates an error, it logs detailed error information including the error code and message, the store ID,
+ * the number of region commands in the request, and the number of region command results in the response.
+ *
+ * @param location The location of the remote store server.
+ * @param request The `PushStoreOperationRequest` to be sent to the remote store server.
+ * @param response The `PushStoreOperationResponse` received from the remote store server.
+ * @return A `butil::Status` indicating the result of the operation. If the operation was successful, the status is OK.
+ *         If the operation failed, the status indicates the error.
+ */
+butil::Status CoordinatorControl::RpcSendPushStoreOperation(const pb::common::Location& location,
+                                                            pb::push::PushStoreOperationRequest& request,
+                                                            pb::push::PushStoreOperationResponse& response) {
+  // build send location string
+  auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
+
+  int retry_times = 0;
+  int max_retry_times = 3;
+
+  do {
+    braft::PeerId remote_node(store_server_location_string);
+
+    // rpc
+    brpc::Channel channel;
+    if (channel.Init(remote_node.addr, nullptr) != 0) {
+      DINGO_LOG(ERROR) << "... channel init failed";
+      return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
+    }
+
+    brpc::Controller cntl;
+    cntl.set_timeout_ms(30000L);
+
+    pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+      DINGO_LOG(ERROR) << "... rpc failed, will retry, error code: " << cntl.ErrorCode()
+                       << ", error message: " << cntl.ErrorText();
+      continue;
+    }
+
+    auto errcode = response.error().errcode();
+    if (errcode == pb::error::Errno::OK) {
+      DINGO_LOG(INFO) << "... rpc success, will not retry, store_id: " << request.store_operation().id()
+                      << ", region_cmd_count: " << request.store_operation().region_cmds_size();
+      return butil::Status::OK();
+    } else {
+      DINGO_LOG(ERROR) << "... rpc failed, error code: " << response.error().errcode()
+                       << ", error message: " << response.error().errmsg()
+                       << ", store_id: " << request.store_operation().id()
+                       << ", region_cmd_count: " << request.store_operation().region_cmds_size()
+                       << ", region_cmd_result_count: " << response.region_cmd_results_size();
+      for (const auto& it : response.region_cmd_results()) {
+        DINGO_LOG(ERROR) << "... rpc failed, region_cmd_id: " << it.region_cmd_id()
+                         << ", region_cmd_type: " << it.region_cmd_type() << ", error code: " << it.error().errcode()
+                         << ", error message: " << it.error().errmsg();
+      }
+      return butil::Status(response.error().errcode(), response.error().errmsg());
+    }
+  } while (++retry_times < max_retry_times);
+
+  return butil::Status(pb::error::Errno::ESEND_STORE_OPERATION_FAIL,
+                       "connect with store server fail, no leader found or connect timeout, retry count: %d",
+                       retry_times);
 }
 
 }  // namespace dingodb
