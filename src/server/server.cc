@@ -36,6 +36,7 @@
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
 #include "engine/raft_store_engine.h"
+#include "engine/raw_bdb_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
 #include "gflags/gflags.h"
@@ -192,6 +193,12 @@ bool Server::InitRawEngine() {
   meta_reader_ = std::make_shared<MetaReader>(raw_engine_);
   meta_writer_ = std::make_shared<MetaWriter>(raw_engine_);
 
+  // raw_bdb_engine_ = std::make_shared<RawBdbEngine>();
+  // if (!raw_bdb_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  //   DINGO_LOG(ERROR) << "Init RawBdbEngine Failed with Config[" << config->ToString();
+  //   return false;
+  // }
+
   return true;
 }
 
@@ -214,7 +221,7 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
+    raft_engine_ = std::make_shared<RaftStoreEngine>(std::vector<std::shared_ptr<RawEngine>>{raw_engine_});
 
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(raft_engine_);
@@ -264,7 +271,14 @@ bool Server::InitEngine() {
     tso_control_->SetKvEngine(raft_engine_);
 
   } else {
-    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_engine_);
+    raw_bdb_engine_ = std::make_shared<RawBdbEngine>();
+    if (!raw_bdb_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+      DINGO_LOG(ERROR) << "Init RawBdbEngine Failed with Config[" << config->ToString();
+      return false;
+    }
+
+    raft_engine_ =
+        std::make_shared<RaftStoreEngine>(std::vector<std::shared_ptr<RawEngine>>{raw_engine_, raw_bdb_engine_});
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
       return false;

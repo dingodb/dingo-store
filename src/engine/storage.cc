@@ -30,6 +30,7 @@
 #include "engine/write_data.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -84,7 +85,11 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
   if (!status.ok()) {
     return status;
   }
-  auto reader = engine_->NewReader();
+
+  store::RegionPtr region =
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(ctx->RegionId());
+  assert(region != nullptr);
+  auto reader = engine_->NewReader(region->GetRawEngineType());
   for (const auto& key : keys) {
     std::string value;
     auto status = reader->KvGet(ctx, key, value);
@@ -792,9 +797,12 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   DINGO_LOG(INFO) << "TxnDump start_key : " << start_key << " end_key : " << end_key << ", start_ts: " << start_ts
                   << ", end_ts: " << end_ts;
 
-  auto data_reader = engine_->NewReader();
-  auto lock_reader = engine_->NewReader();
-  auto write_reader = engine_->NewReader();
+  store::RegionPtr region =
+      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(ctx->RegionId());
+  assert(region != nullptr);
+  auto data_reader = engine_->NewReader(region->GetRawEngineType());
+  auto lock_reader = engine_->NewReader(region->GetRawEngineType());
+  auto write_reader = engine_->NewReader(region->GetRawEngineType());
 
   // scan [start_key, end_key) for data
   std::vector<pb::common::KeyValue> data_kvs;

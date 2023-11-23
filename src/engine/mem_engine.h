@@ -43,7 +43,7 @@ class MemEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc cb) override;
 
-  std::shared_ptr<Engine::Reader> NewReader() override;
+  std::shared_ptr<Engine::Reader> NewReader(const pb::common::RawEngine& raw_engine_type) override;
 
  private:
   std::map<std::string, std::string> store_;

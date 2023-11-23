@@ -50,8 +50,8 @@
 
 namespace dingodb {
 
-RaftStoreEngine::RaftStoreEngine(std::shared_ptr<RawEngine> engine)
-    : raw_engine_(engine), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
+RaftStoreEngine::RaftStoreEngine(std::vector<std::shared_ptr<RawEngine>> engines)
+    : raw_engines_(engines), raft_node_manager_(std::move(std::make_unique<RaftNodeManager>())) {}
 
 RaftStoreEngine::~RaftStoreEngine() = default;
 
@@ -163,16 +163,23 @@ std::string RaftStoreEngine::GetName() { return pb::common::Engine_Name(pb::comm
 
 pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
 
-std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return raw_engine_; }
+std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine() { return raw_engines_[pb::common::RAW_ENG_ROCKSDB]; }
 
 butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   // Build StateMachine
-  auto state_machine = std::make_shared<StoreStateMachine>(raw_engine_, region, parameter.raft_meta,
-                                                           parameter.region_metrics, parameter.listeners);
+  auto state_machine =
+      std::make_shared<StoreStateMachine>(raw_engines_[region->GetRawEngineType()], region, parameter.raft_meta,
+                                          parameter.region_metrics, parameter.listeners);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
+  }
+
+  // zhangjie
+  if (region->GetRawEngineType() == pb::common::RAW_ENG_BDB) {
+    DINGO_LOG(INFO) << fmt::format("raw bdb engine type: {}, region id: {}.",
+                                   static_cast<int>(region->GetRawEngineType()), region->Id());
   }
 
   // Build log storage
@@ -396,8 +403,8 @@ butil::Status RaftStoreEngine::Reader::KvCount(std::shared_ptr<Context> ctx, con
   return reader_->KvCount(ctx->CfName(), start_key, end_key, count);
 }
 
-std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader() {
-  return std::make_shared<RaftStoreEngine::Reader>(raw_engine_->Reader());
+std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(const pb::common::RawEngine& raw_engine_type) {
+  return std::make_shared<RaftStoreEngine::Reader>(raw_engines_[raw_engine_type]->Reader());
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
@@ -447,11 +454,11 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
 }
 
 std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader() {
-  return std::make_shared<RaftStoreEngine::VectorReader>(raw_engine_->Reader());
+  return std::make_shared<RaftStoreEngine::VectorReader>(raw_engines_[pb::common::RAW_ENG_ROCKSDB]->Reader());
 }
 
 std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader() {
-  return std::make_shared<RaftStoreEngine::TxnReader>(raw_engine_);
+  return std::make_shared<RaftStoreEngine::TxnReader>(raw_engines_[pb::common::RAW_ENG_ROCKSDB]);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
@@ -478,7 +485,8 @@ butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /
 }
 
 std::shared_ptr<Engine::TxnWriter> RaftStoreEngine::NewTxnWriter(std::shared_ptr<Engine> engine) {
-  return std::make_shared<RaftStoreEngine::TxnWriter>(raw_engine_, std::dynamic_pointer_cast<RaftStoreEngine>(engine));
+  return std::make_shared<RaftStoreEngine::TxnWriter>(raw_engines_[pb::common::RAW_ENG_ROCKSDB],
+                                                      std::dynamic_pointer_cast<RaftStoreEngine>(engine));
 }
 
 butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,

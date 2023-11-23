@@ -1160,6 +1160,199 @@ void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
+void SendCreateTablesAndIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  bool with_table_id = false;
+  bool with_increment = false;
+
+  dingodb::pb::meta::CreateTablesRequest request;
+  dingodb::pb::meta::CreateTablesResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
+  if (FLAGS_part_count == 0) {
+    FLAGS_part_count = 1;
+  }
+  uint32_t part_count = FLAGS_part_count;
+
+  std::vector<int64_t> new_ids;
+  int ret = GetCreateTableIds(coordinator_interaction, 2 + 2 * FLAGS_part_count, new_ids);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.empty()) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.size() != 2 + 2 * FLAGS_part_count) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+
+  int64_t new_table_id = new_ids.at(0);
+  DINGO_LOG(INFO) << "table_id = " << new_table_id;
+  int64_t new_index_id = new_ids.at(1);
+  DINGO_LOG(INFO) << "index_id = " << new_index_id;
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = new_ids.at(2 + i);
+    part_ids.push_back(new_part_id);
+  }
+
+  std::vector<int64_t> index_part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = new_ids.at(2 + part_count + i);
+    index_part_ids.push_back(new_part_id);
+  }
+
+  {
+    auto* definition_with_id = request.add_table_definition_with_ids();
+    auto* table_id = definition_with_id->mutable_table_id();
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+    table_id->set_parent_entity_id(schema_id->entity_id());
+    table_id->set_entity_id(new_table_id);
+
+    // string name = 1;
+    auto* table_definition = definition_with_id->mutable_table_definition();
+    table_definition->set_name(FLAGS_name);
+
+    if (FLAGS_replica > 0) {
+      table_definition->set_replica(FLAGS_replica);
+    }
+
+    // repeated ColumnDefinition columns = 2;
+    for (int i = 0; i < 3; i++) {
+      auto* column = table_definition->add_columns();
+      std::string column_name("test_columen_");
+      column_name.append(std::to_string(i));
+      column->set_name(column_name);
+      column->set_sql_type("BIGINT");
+      column->set_element_type("BIGINT");
+      column->set_precision(100);
+      column->set_nullable(false);
+      column->set_indexofkey(7);
+      column->set_has_default_val(false);
+      column->set_default_val("0");
+
+      if (with_increment && i == 0) {
+        column->set_is_auto_increment(true);
+      }
+    }
+    if (with_increment) {
+      table_definition->set_auto_increment(100);
+    }
+
+    // map<string, Index> indexes = 3;
+    // uint32 version = 4;
+    table_definition->set_version(1);
+    // uint64 ttl = 5;
+    table_definition->set_ttl(0);
+    // PartitionRule table_partition = 6;
+    // Engine engine = 7;
+    table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+    // map<string, string> properties = 8;
+    auto* prop = table_definition->mutable_properties();
+    (*prop)["test property"] = "test_property_value";
+
+    // add partition_rule
+    // repeated string columns = 1;
+    // PartitionStrategy strategy = 2;
+    auto* partition_rule = table_definition->mutable_table_partition();
+    auto* part_column = partition_rule->add_columns();
+    part_column->assign("test_part_column");
+    for (int i = 0; i < part_count; i++) {
+      auto* part = partition_rule->add_partitions();
+      part->mutable_id()->set_entity_id(part_ids[i]);
+      part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+      part->mutable_id()->set_parent_entity_id(new_table_id);
+      part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+      part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
+    }
+  }
+
+  // index
+  {
+    auto* definition_with_id = request.add_table_definition_with_ids();
+    auto* table_id = definition_with_id->mutable_table_id();
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+    table_id->set_parent_entity_id(schema_id->entity_id());
+    table_id->set_entity_id(new_index_id);
+
+    // string name = 1;
+    auto* table_definition = definition_with_id->mutable_table_definition();
+    table_definition->set_name("bdb_index");
+
+    if (FLAGS_replica > 0) {
+      table_definition->set_replica(FLAGS_replica);
+    }
+
+    // repeated ColumnDefinition columns = 2;
+    auto* column = table_definition->add_columns();
+    std::string column_name("test_columen_0");
+    column->set_name(column_name);
+    column->set_sql_type("BIGINT");
+    column->set_element_type("BIGINT");
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(1);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+
+    // map<string, Index> indexes = 3;
+    // uint32 version = 4;
+    table_definition->set_version(1);
+    // uint64 ttl = 5;
+    // PartitionRule table_partition = 6;
+    // Engine engine = 7;
+    table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+    // map<string, string> properties = 8;
+    auto* prop = table_definition->mutable_properties();
+    (*prop)["test property"] = "test_property_value";
+
+    // add partition_rule
+    // repeated string columns = 1;
+    // PartitionStrategy strategy = 2;
+    auto* partition_rule = table_definition->mutable_table_partition();
+    auto* part_column = partition_rule->add_columns();
+    part_column->assign("test_index_part_column");
+    for (int i = 0; i < part_count; i++) {
+      auto* part = partition_rule->add_partitions();
+      part->mutable_id()->set_entity_id(index_part_ids[i]);
+      part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+      part->mutable_id()->set_parent_entity_id(new_index_id);
+      part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(index_part_ids[i]));
+      part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(index_part_ids[i] + 1));
+    }
+
+    // auto& index_parameter = table_definition->index_parameter();
+    // index_parameter.set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_SCALAR);
+    // auto& scalar_index_parameter = index_parameter.scalar_index_parameter();
+    // scalar_index_parameter.set_scalar_index_type(dingodb::pb::common::ScalarIndexType::SCALAR_INDEX_TYPE_BTREE);
+
+    auto index_parameter = table_definition->mutable_index_parameter();
+    index_parameter->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_SCALAR);
+    auto scalar_index_parameter = index_parameter->mutable_scalar_index_parameter();
+    scalar_index_parameter->set_scalar_index_type(dingodb::pb::common::ScalarIndexType::SCALAR_INDEX_TYPE_BTREE);
+  }
+
+  auto status = coordinator_interaction->SendRequest("CreateTables", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
 void SendSwitchAutoSplit(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::SwitchAutoSplitRequest request;
   dingodb::pb::meta::SwitchAutoSplitResponse response;

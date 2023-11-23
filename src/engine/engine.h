@@ -180,7 +180,7 @@ class Engine {
     virtual butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) = 0;
   };
 
-  virtual std::shared_ptr<Reader> NewReader() = 0;
+  virtual std::shared_ptr<Reader> NewReader(const pb::common::RawEngine& raw_engine_type) = 0;
   virtual std::shared_ptr<VectorReader> NewVectorReader() {
     DINGO_LOG(FATAL) << "Not support NewVectorReader.";
     return nullptr;

@@ -40,6 +40,6 @@ butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_pt
   return butil::Status();
 }
 
-std::shared_ptr<Engine::Reader> MemEngine::NewReader() { return nullptr; }
+std::shared_ptr<Engine::Reader> MemEngine::NewReader(const pb::common::RawEngine& raw_engine_type) { return nullptr; }
 
 }  // namespace dingodb

@@ -239,6 +239,8 @@ class Server {
   // All store engine, include MemEngine/RaftStoreEngine/RocksEngine
   std::shared_ptr<Engine> raft_engine_;
   std::shared_ptr<RawEngine> raw_engine_;
+  // std::vector<std::shared_ptr<RawEngine>> raw_engines_;
+  std::shared_ptr<RawEngine> raw_bdb_engine_;
 
   // Meta reader
   std::shared_ptr<MetaReader> meta_reader_;

@@ -301,7 +301,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       // Kev/Value operation
     } else if (method == "KvGet") {
       std::string value;
-      client::SendKvGet(FLAGS_region_id, FLAGS_key, value);
+      client::SendKvGet(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key), value);
     } else if (method == "KvBatchGet") {
       client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
@@ -790,6 +790,8 @@ int CoordinatorSender() {
     SendGetTables(coordinator_interaction_meta);
   } else if (FLAGS_method == "DropTables") {
     SendDropTables(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateTablesAndIndex") {
+    SendCreateTablesAndIndex(coordinator_interaction_meta);
   }
 
   // auto increment

@@ -74,7 +74,8 @@ class RaftControlAble {
 
 class RaftStoreEngine : public Engine, public RaftControlAble {
  public:
-  RaftStoreEngine(std::shared_ptr<RawEngine> engine);
+  // RaftStoreEngine(std::shared_ptr<RawEngine> engine);
+  RaftStoreEngine(std::vector<std::shared_ptr<RawEngine>> engines);
   ~RaftStoreEngine() override;
 
   bool Init(std::shared_ptr<Config> config) override;
@@ -121,7 +122,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     RawEngine::ReaderPtr reader_;
   };
 
-  std::shared_ptr<Engine::Reader> NewReader() override;
+  std::shared_ptr<Engine::Reader> NewReader(const pb::common::RawEngine& raw_engine_type) override;
 
   // Vector reader
   class VectorReader : public Engine::VectorReader {
@@ -208,8 +209,9 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   std::shared_ptr<Engine::TxnWriter> NewTxnWriter(std::shared_ptr<Engine> engine) override;
 
  protected:
-  std::shared_ptr<RawEngine> raw_engine_;               // NOLINT
-  std::unique_ptr<RaftNodeManager> raft_node_manager_;  // NOLINT
+  std::vector<std::shared_ptr<RawEngine>> raw_engines_;
+  std::shared_ptr<RawEngine> raw_bdb_engine_;
+  std::unique_ptr<RaftNodeManager> raft_node_manager_;
 };
 
 }  // namespace dingodb

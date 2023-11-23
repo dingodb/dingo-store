@@ -31,7 +31,8 @@ namespace dingodb {
 DEFINE_uint32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
 DEFINE_uint32(bdb_page_size, 32 * 1024, "bdb page size");
 DEFINE_int32(bdb_max_retries, 20, "bdb max retry on a deadlock");
-DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
+DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put count");
+DEFINE_int32(bdb_compact_fill_percent, 50, "bdb compact desired fillfactor: 0-100");
 
 namespace bdb {
 
@@ -372,6 +373,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
 
     if (ret == 0) {
       BdbHelper::DbtToBinary(bdb_value, value);
+      DINGO_LOG(INFO) << fmt::format("[bdb] zhangjie-> result key: {}, value: {}.", key, value);
       return butil::Status();
     } else if (ret == DB_NOTFOUND) {
       DINGO_LOG(WARNING) << "[bdb] key not found.";
@@ -487,6 +489,7 @@ butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr sn
                                             bdb_key.get_data());
           return butil::Status();
         }
+        DINGO_LOG(INFO) << fmt::format("[bdb] get real key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
         kvs.emplace_back(std::move(kv));
       }
     }
@@ -752,6 +755,8 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
         ret = txn->commit(0);
         if (ret == 0) {
           txn = nullptr;
+          DINGO_LOG(INFO) << fmt::format("zhangjie-> put ok, cf_name: {}, key: {}, value: {}.", cf_name, kv.key(),
+                                         kv.value());
           return butil::Status();
         }
       } catch (DbException& db_exception) {
@@ -1973,11 +1978,14 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     return false;
   }
 
-  std::string store_db_path_value = config->GetString(Constant::kStorePathConfigName) + "/bdb";
+  std::string store_db_path_value = config->GetString(Constant::kStorePathConfigName);
   if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] can not find: {}/bdb", Constant::kStorePathConfigName);
     return false;
   }
+
+  store_db_path_value.append("/bdb");
+  Helper::CreateDirectories(store_db_path_value);
 
   // Initialize our handles
   Db* db = nullptr;
@@ -2019,7 +2027,7 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
       return false;
     }
   } catch (DbException& db_exctption) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database environment: {}, exception: {}.", db_path_,
+    DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database environment: {}, exception: {}.", store_db_path_value,
                                     db_exctption.what());
     return false;
   }
@@ -2110,7 +2118,7 @@ butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const
       kv.set_key(iter->key().data(), iter->key().size());
       kv.set_value(iter->value().data(), iter->value().size());
 
-      kvs.emplace_back(kv);
+      kvs.emplace_back(std::move(kv));
 
       if (kvs.size() >= FLAGS_bdb_ingest_external_file_batch_put_count) {
         butil::Status s = writer_->KvBatchPut(cf_name, kvs);
@@ -2166,7 +2174,7 @@ butil::Status RawBdbEngine::Compact(const std::string& cf_name) {
   try {
     DB_COMPACT compact_data;
     memset(&compact_data, 0, sizeof(DB_COMPACT));
-    compact_data.compact_fillpercent = 80;
+    compact_data.compact_fillpercent = FLAGS_bdb_compact_fill_percent;
 
     int ret = db_->compact(nullptr, &start, &stop, &compact_data, 0, nullptr);
     if (ret == 0) {

@@ -2099,6 +2099,7 @@ void SendKvGet(int64_t region_id, const std::string& key, std::string& value) {
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvGet", request, response);
 
   value = response.value();
+  DINGO_LOG(INFO) << "======== zhangjie-> key: " << key << ", value: " << value;
 }
 
 void SendKvBatchGet(int64_t region_id, const std::string& prefix, int count) {
@@ -2122,7 +2123,7 @@ int SendKvPut(int64_t region_id, const std::string& key, std::string value) {
   // request.mutable_context()->mutable_region_epoch()->set_version(0);
   auto* kv = request.mutable_kv();
   kv->set_key(key);
-  kv->set_value(value.empty() ? Helper::GenRandomString(256) : value);
+  kv->set_value(value.empty() ? Helper::GenRandomString(32) : value);
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPut", request, response);
   return response.error().errcode();
@@ -2228,6 +2229,9 @@ void SendKvScan(int64_t region_id, const std::string& prefix) {
       return;
     }
 
+    for (const auto& kv : continue_response.kvs()) {
+      DINGO_LOG(INFO) << "============== zhangjie-> " << kv.key() << " | " << kv.value();
+    }
     count += continue_response.kvs().size();
     if (continue_response.kvs().size() < batch_size) {
       break;
