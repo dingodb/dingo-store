@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/context.h"
 #include "config/config.h"
 #include "engine/iterator.h"
@@ -81,7 +82,17 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
     virtual butil::Status KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) = 0;
     virtual butil::Status KvBatchDeleteRange(
         const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) = 0;
+
+    butil::Status KvDeleteRange(const std::vector<std::string>& cf_names, const pb::common::Range& range) {
+      std::map<std::string, std::vector<pb::common::Range>> delete_range_map;
+      for (const auto& cf_name : cf_names) {
+        delete_range_map[cf_name].push_back(range);
+      }
+      KvBatchDeleteRange(delete_range_map);
+      return butil::Status::OK();
+    }
   };
+
   using WriterPtr = std::shared_ptr<Writer>;
 
   virtual bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) = 0;

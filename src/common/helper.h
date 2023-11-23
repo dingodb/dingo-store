@@ -215,8 +215,6 @@ class Helper {
   static std::vector<std::string> GetColumnFamilyNamesByRole();
   static std::vector<std::string> GetColumnFamilyNamesExecptMetaByRole();
   static std::vector<std::string> GetColumnFamilyNames(const std::string& key);
-  static std::map<std::string, std::vector<pb::common::Range>> GetDeleteRangeMapOfOneRangeMultiCf(
-      const std::vector<std::string>& cf_names, const pb::common::Range& range);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
