@@ -8,8 +8,8 @@ import io.grpc.stub.annotations.RpcMethod;
 
 
 public class Constant {
-    public static final String RPC_PACKAGE = "io.dingodb.sdk.service.rpc";
-    public static final String MESSAGE_PACKAGE = "io.dingodb.sdk.service.rpc.message";
+    public static final String SERVICE_PKG = "io.dingodb.sdk.service";
+    public static final String MSG_PKG = "io.dingodb.sdk.service.entity";
 
     public static final String GRPC_ANNOTATION = RpcMethod.class.getName();
 
@@ -27,12 +27,12 @@ public class Constant {
 
 
 
-    public static final ClassName SERVICE = ClassName.get(RPC_PACKAGE, "Service");
-    public static final ClassName CALLER = ClassName.get(RPC_PACKAGE, "RpcCaller");
-    public static final ClassName FUTURE = ClassName.get(RPC_PACKAGE, "RpcFuture");
-    public static final ClassName ENUM = ClassName.get(RPC_PACKAGE, "Enum");
-    public static final ClassName MESSAGE = ClassName.get(RPC_PACKAGE, "Message");
-    public static final ClassName FIELD = ClassName.get(RPC_PACKAGE, "Field");
+    public static final ClassName SERVICE = ClassName.get(SERVICE_PKG, "Service");
+    public static final ClassName CALLER = ClassName.get(SERVICE_PKG, "Caller");
+    public static final ClassName FUTURE = ClassName.get(SERVICE_PKG, "RpcFuture");
+    public static final ClassName NUMERIC = ClassName.get(MSG_PKG, "Numeric");
+    public static final ClassName MESSAGE = ClassName.get(MSG_PKG, "Message");
+    public static final ClassName FIELD = ClassName.get(MSG_PKG, "Field");
     public static final ClassName RESPONSE = MESSAGE.nestedClass("Response");
     public static final ClassName STORE_REQ = MESSAGE.nestedClass("StoreRequest");
 

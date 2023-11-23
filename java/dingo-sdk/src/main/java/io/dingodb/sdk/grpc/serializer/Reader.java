@@ -2,9 +2,8 @@ package io.dingodb.sdk.grpc.serializer;
 
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.WireFormat;
-import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
-import io.dingodb.sdk.service.rpc.Message;
+import io.dingodb.sdk.service.entity.Message;
 import lombok.SneakyThrows;
 
 import java.util.AbstractMap;
@@ -112,11 +111,9 @@ public class Reader {
         Function<CodedInputStream, K> keyReader,
         Function<CodedInputStream, V> valueReader
     ) {
-        current = Optional.mapOrGet(current, HashMap::new, HashMap::new);
-        do {
-            Map.Entry<K, V> entry = readMap(input, keyReader, valueReader);
-            current.put(entry.getKey(), entry.getValue());
-        } while (number == readNumber(input));
+        current = Parameters.cleanNull(current, HashMap::new);
+        Map.Entry<K, V> entry = readMap(input, keyReader, valueReader);
+        current.put(entry.getKey(), entry.getValue());
         return current;
     }
 

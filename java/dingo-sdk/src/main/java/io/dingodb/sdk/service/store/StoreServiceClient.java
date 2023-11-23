@@ -310,7 +310,7 @@ public class StoreServiceClient {
             DingoCommonId regionId
     ) {
         return getStoreConnector(tableId, regionId).exec(
-            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.defaultCodeChecker
+            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.errorToStrategyFunc
         );
     }
 }

@@ -24,13 +24,12 @@ import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy;
 import io.dingodb.sdk.common.utils.NoBreakFunctions;
 import io.dingodb.sdk.common.utils.Optional;
-import io.dingodb.sdk.service.rpc.ChannelManager;
+import io.dingodb.sdk.service.ChannelManager;
 import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.AbstractBlockingStub;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Method;
@@ -53,7 +52,7 @@ import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.FAILED;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.IGNORE;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.REFRESH;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.RETRY;
-import static io.dingodb.sdk.common.utils.ErrorCodeUtils.defaultCodeChecker;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.errorToStrategyFunc;
 import static io.dingodb.sdk.common.utils.NoBreakFunctions.wrap;
 import static io.dingodb.sdk.common.utils.StackTraces.CURRENT_STACK;
 import static io.dingodb.sdk.common.utils.StackTraces.stack;
@@ -138,11 +137,11 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
     }
 
     public <R> R exec(Function<S, R> function) {
-        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, RETRY_TIMES, defaultCodeChecker, this::toResponse));
+        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, RETRY_TIMES, errorToStrategyFunc, this::toResponse));
     }
 
     public <R> R exec(Function<S, R> function, int retryTimes) {
-        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, retryTimes, defaultCodeChecker, this::toResponse));
+        return cleanResponse(exec(stack(CURRENT_STACK + 1), function, retryTimes, errorToStrategyFunc, this::toResponse));
     }
 
     public <R> R exec(Function<S, R> function, Function<Integer, Strategy> errChecker) {

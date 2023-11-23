@@ -2,7 +2,7 @@ package io.dingodb.sdk.grpc.serializer;
 
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
-import io.dingodb.sdk.service.rpc.Message;
+import io.dingodb.sdk.service.entity.Message;
 import io.grpc.MethodDescriptor;
 import lombok.SneakyThrows;
 
