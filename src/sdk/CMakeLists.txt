@@ -1,11 +1,13 @@
 
 add_library(sdk
-    client_stub.cc
     client_impl.cc
+    client_stub.cc
     client.cc
-    raw_kv_impl.cc
     meta_cache.cc
+    raw_kv_impl.cc
+    region_scanner_impl.cc
     rpc_interaction.cc
+    region.cc
     status.cc
     store_rpc_controller.cc
     store_rpc.cc

@@ -26,7 +26,7 @@ namespace sdk {
   void METHOD##Rpc::Send(StoreService_Stub& stub, google::protobuf::Closure* done) { \
     stub.METHOD(MutableController(), request, response, done);                       \
   }                                                                                  \
-  std::string METHOD##Rpc::ConstMethod() { return fmt::format("{}.METHOD##Rpc", StoreService::descriptor()->name()); }
+  std::string METHOD##Rpc::ConstMethod() { return fmt::format("{}.{}Rpc", StoreService::descriptor()->name(), #METHOD); }
 
 DEFINE_STORE_RPC(KvGet);
 DEFINE_STORE_RPC(KvBatchGet);
@@ -38,6 +38,10 @@ DEFINE_STORE_RPC(KvBatchDelete);
 DEFINE_STORE_RPC(KvDeleteRange);
 DEFINE_STORE_RPC(KvCompareAndSet);
 DEFINE_STORE_RPC(KvBatchCompareAndSet);
+
+DEFINE_STORE_RPC(KvScanBegin);
+DEFINE_STORE_RPC(KvScanContinue);
+DEFINE_STORE_RPC(KvScanRelease);
 
 }  // namespace sdk
 }  // namespace dingodb

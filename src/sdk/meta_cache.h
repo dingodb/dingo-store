@@ -15,105 +15,22 @@
 #ifndef DINGODB_SDK_META_CACHE_H_
 #define DINGODB_SDK_META_CACHE_H_
 
-#include <atomic>
-#include <cstdint>
+#include <map>
 #include <memory>
-#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "butil/endpoint.h"
+#include "butil/status.h"
 #include "coordinator/coordinator_interaction.h"
 #include "fmt/core.h"
-#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
-#include "status.h"
+#include "sdk/region.h"
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
-
-class ScanRegionsRpc;
-
-class MetaCache;
-class Region;
-
-enum RaftRole : uint8_t { kLeader, kFollower };
-
-struct Replica {
-  butil::EndPoint end_point;
-  RaftRole role;
-};
-
-class Region {
- public:
-  Region(const Region&) = delete;
-  const Region& operator=(const Region&) = delete;
-
-  explicit Region(int64_t id, pb::common::Range range, pb::common::RegionEpoch epoch, pb::common::RegionType type,
-                  std::vector<Replica> replicas);
-
-  ~Region() = default;
-
-  int64_t RegionId() const { return region_id_; }
-
-  const pb::common::Range& Range() const { return range_; }
-
-  const pb::common::RegionEpoch& Epoch() const { return epoch_; }
-
-  pb::common::RegionType RegionType() const { return region_type_; }
-
-  std::vector<Replica> Replicas();
-
-  std::vector<butil::EndPoint> ReplicaEndPoint();
-
-  void MarkLeader(const butil::EndPoint& end_point);
-
-  void MarkFollower(const butil::EndPoint& end_point);
-
-  Status GetLeader(butil::EndPoint& leader);
-
-  bool IsStale() { return stale_.load(std::memory_order_relaxed); }
-
-  std::string ReplicasAsString() const;
-
-  std::string ToString() const {
-    std::shared_lock<std::shared_mutex> r(rw_lock_);
-    // region_id, start_key-end_key, version, config_version, type, replicas
-    return fmt::format("({}, [{}-{}], [{},{}], {}, {})", region_id_, range_.start_key(), range_.end_key(),
-                       epoch_.version(), epoch_.conf_version(), RegionType_Name(region_type_),
-                       ReplicasAsStringUnlocked());
-  }
-
-  void TEST_MarkStale() {  // NOLINT
-    MarkStale();
-  }
-
-  void TEST_UnMarkStale() {  // NOLINT
-    UnMarkStale();
-  }
-
- private:
-  friend class MetaCache;
-
-  void MarkStale() { stale_.store(true, std::memory_order_relaxed); }
-
-  void UnMarkStale() { stale_.store(false, std::memory_order_relaxed); }
-
-  std::string ReplicasAsStringUnlocked() const;
-
-  const int64_t region_id_;
-  const pb::common::Range range_;
-  const pb::common::RegionEpoch epoch_;
-  const pb::common::RegionType region_type_;
-
-  mutable std::shared_mutex rw_lock_;
-  butil::EndPoint leader_addr_;
-  std::vector<Replica> replicas_;
-
-  std::atomic<bool> stale_;
-};
 
 class MetaCache {
  public:
@@ -125,6 +42,19 @@ class MetaCache {
   virtual ~MetaCache();
 
   Status LookupRegionByKey(const std::string& key, std::shared_ptr<Region>& region);
+
+  // return first region between [start_key, end_key), this will prefetch regions and put into cache
+  Status LookupRegionBetweenRange(const std::string& start_key, const std::string& end_key,
+                                  std::shared_ptr<Region>& region);
+
+  // return first region between [start_key, end_key), no prefetch regions
+  Status LookupRegionBetweenRangeNoPrefetch(const std::string& start_key, const std::string& end_key,
+                                            std::shared_ptr<Region>& region);
+
+  // NOTE: this will not lookup cache and will send rpc request directly to coordinator
+  // limit: 0 means no limit and will return all regions between [start_key, end_key)
+  Status ScanRegionsBetweenRange(const std::string& start_key, const std::string& end_key, int64_t limit,
+                                 std::vector<std::shared_ptr<Region>>& regions);
 
   void ClearRange(const std::shared_ptr<Region>& region);
 
@@ -156,8 +86,11 @@ class MetaCache {
 
   Status FastLookUpRegionByKeyUnlocked(const std::string& key, std::shared_ptr<Region>& region);
 
-  Status ProcessScanRangeByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,
-                                       std::shared_ptr<Region>& region);
+  Status ProcessScanRegionsByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,
+                                         std::shared_ptr<Region>& region);
+
+  Status ProcessScanRegionsBetweenRangeResponse(const pb::coordinator::ScanRegionsResponse& response,
+                                                std::vector<std::shared_ptr<Region>>& regions);
 
   static void ProcessScanRegionInfo(const pb::coordinator::ScanRegionInfo& scan_region_info,
                                     std::shared_ptr<Region>& new_region);
@@ -181,20 +114,6 @@ class MetaCache {
   std::map<std::string, std::shared_ptr<Region>> region_by_key_;
 };
 
-inline std::ostream& operator<<(std::ostream& os, const Region& region) { return os << region.ToString(); }
-
-
-static std::string RaftRoleName(const RaftRole& role) {
-  switch (role) {
-    case kLeader:
-      return "Leader";
-    case kFollower:
-      return "Follower";
-    default:
-      CHECK(false) << "role is illeagal";
-  }
-}
-
 }  // namespace sdk
 }  // namespace dingodb
-#endif // DINGODB_SDK_META_CACHE_H_
+#endif  // DINGODB_SDK_META_CACHE_H_

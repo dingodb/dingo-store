@@ -23,10 +23,12 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
 #include "sdk/common.h"
 #include "sdk/meta_cache.h"
+#include "sdk/region_scanner.h"
 #include "sdk/status.h"
 #include "sdk/store_rpc.h"
 #include "sdk/store_rpc_controller.h"
@@ -315,7 +317,7 @@ Status RawKV::RawKVImpl::BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::v
       fill->set_key(kv.key);
       fill->set_value(kv.value);
     }
-    rpc->MutableRequest()->set_is_atomic(true);
+    rpc->MutableRequest()->set_is_atomic(false);
 
     sub_batch_state.emplace_back(rpc.get(), region);
     rpcs.emplace_back(std::move(rpc));
@@ -742,6 +744,112 @@ Status RawKV::RawKVImpl::BatchCompareAndSet(const std::vector<KVPair>& kvs,
   states = std::move(tmp_states);
 
   return result;
+}
+
+// TODO: abstract range scanner
+Status RawKV::RawKVImpl::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit,
+                              std::vector<KVPair>& kvs) {
+  if (start_key.empty() || end_key.empty()) {
+    return Status::InvalidArgument("start_key and end_key must not empty, check params");
+  }
+
+  if (start_key >= end_key) {
+    return Status::InvalidArgument("end_key must greater than start_key, check params");
+  }
+
+  auto meta_cache = stub_.GetMetaCache();
+
+  {
+    // precheck: return not found if no region in [start, end_key)
+    std::shared_ptr<Region> region;
+    Status ret = meta_cache->LookupRegionBetweenRange(start_key, end_key, region);
+    if (!ret.IsOK()) {
+      if (ret.IsNotFound()) {
+        DINGO_LOG(WARNING) << fmt::format("region not found between [{},{}), no need retry, status:{}", start_key,
+                                          end_key, ret.ToString());
+      } else {
+        DINGO_LOG(WARNING) << fmt::format("lookup region fail between [{},{}), need retry, status:{}", start_key,
+                                          end_key, ret.ToString());
+      }
+      return ret;
+    }
+  }
+
+  std::string next_start = start_key;
+  std::vector<KVPair> tmp_kvs;
+
+  DINGO_LOG(INFO) << fmt::format("scan start between [{},{}), next_start:{}", start_key, end_key, next_start);
+
+  while (next_start < end_key) {
+    std::shared_ptr<Region> region;
+    Status ret = meta_cache->LookupRegionBetweenRange(next_start, end_key, region);
+
+    if (ret.IsNotFound()) {
+      DINGO_LOG(WARNING) << fmt::format("region not found  between [{},{}), start_key:{} status:{}", next_start,
+                                        end_key, start_key, ret.ToString());
+      kvs = std::move(tmp_kvs);
+      return Status::OK();
+    }
+
+    if (!ret.IsOK()) {
+      DINGO_LOG(WARNING) << fmt::format("region look fail between [{},{}), start_key:{} status:{}", next_start, end_key,
+                                        start_key, ret.ToString());
+      return ret;
+    }
+
+    std::unique_ptr<RegionScanner> scanner;
+    CHECK(stub_.GetRegionScannerFactory()->NewRegionScanner(stub_, region, scanner).IsOK());
+    ret = scanner->Open();
+    if (!ret.IsOK()) {
+      DINGO_LOG(WARNING) << fmt::format("region scanner open fail, region:{}, status:{}", region->RegionId(),
+                                        ret.ToString());
+      return ret;
+    }
+
+    DINGO_LOG(INFO) << fmt::format("region:{} scan start, region range:({}-{})", region->RegionId(),
+                                   region->Range().start_key(), region->Range().end_key());
+
+    while (scanner->HasMore()) {
+      std::vector<KVPair> scan_kvs;
+      ret = scanner->NextBatch(scan_kvs);
+      if (!ret.IsOK()) {
+        DINGO_LOG(WARNING) << fmt::format("region scanner NextBatch fail, region:{}, status:{}", region->RegionId(),
+                                          ret.ToString());
+        return ret;
+      }
+
+      if (!scan_kvs.empty()) {
+        tmp_kvs.insert(tmp_kvs.end(), std::make_move_iterator(scan_kvs.begin()),
+                       std::make_move_iterator(scan_kvs.end()));
+
+        if (limit != 0 && (tmp_kvs.size() >= limit)) {
+          tmp_kvs.resize(limit);
+          break;
+        }
+      } else {
+        DINGO_LOG(INFO) << fmt::format("region:{} scanner NextBatch is empty", region->RegionId());
+        CHECK(!scanner->HasMore());
+      }
+    }
+
+    if (limit != 0 && (tmp_kvs.size() >= limit)) {
+      DINGO_LOG(INFO) << fmt::format(
+          "region:{} scan finished, stop to scan between [{},{}), next_start:{}, limit:{}, scan_cnt:{}",
+          region->RegionId(), start_key, end_key, next_start, limit, tmp_kvs.size());
+      break;
+    } else {
+      next_start = region->Range().end_key();
+      DINGO_LOG(INFO) << fmt::format("region:{} scan finished, continue to scan between [{},{}), next_start:{}, ",
+                                     region->RegionId(), start_key, end_key, next_start);
+      continue;
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("scan end between [{},{}), next_start:{}", start_key, end_key, next_start);
+
+  kvs = std::move(tmp_kvs);
+
+  return Status::OK();
 }
 
 }  // namespace sdk

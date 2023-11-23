@@ -19,6 +19,7 @@
 #include "sdk/meta_cache.h"
 #include "sdk/rpc_interaction.h"
 #include "sdk/status.h"
+#include "sdk/region_scanner_impl.h"
 
 namespace dingodb {
 
@@ -64,6 +65,8 @@ Status ClientStub::Open(std::string naming_service_url) {
   store_rpc_interaction_.reset(new RpcInteraction(options));
 
   meta_cache_.reset(new MetaCache(coordinator_interaction_));
+
+  region_scanner_factory_.reset(new RegionScannerFactoryImpl());
 
   return Status::OK();
 }

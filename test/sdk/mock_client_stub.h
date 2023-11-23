@@ -37,6 +37,8 @@ class MockClientStub final : public ClientStub {
   MOCK_METHOD(std::shared_ptr<MetaCache>, GetMetaCache, (), (const, override));
 
   MOCK_METHOD(std::shared_ptr<RpcInteraction>, GetStoreRpcInteraction, (), (const, override));
+
+  MOCK_METHOD(std::shared_ptr<RegionScannerFactory>, GetRegionScannerFactory, (), (const, override));
 };
 
 }  // namespace sdk

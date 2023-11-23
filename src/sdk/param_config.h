@@ -19,13 +19,23 @@
 
 // TODO: make params in this file use glfags
 
-// start each rpc call params
+// start: each rpc call params
 const int64_t kRpcCallMaxRetry = 3;
 
 const int64_t kRpcTimeOutMs = 5000;
-// end each rpc call params
+// end: each rpc call params
 
 // use case: wrong leader or request range invalid
 const int64_t kRpcMaxRetry = 5;
+
+// start: use for region scanner
+const int64_t kScanBatchSize = 10;
+
+const int64_t kMinScanBatchSize = 1;
+
+const int64_t kMaxScanBatchSize = 100;
+// end: use for region scanner
+
+const int64_t kPrefetchRegionCount = 3;
 
 #endif  // DINGODB_SDK_PARAM_CONFIG_H_

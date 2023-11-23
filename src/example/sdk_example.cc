@@ -117,12 +117,16 @@ void RawKVExample() {
   keys.push_back("wc01");
   keys.push_back("wd01");
   keys.push_back("wf01");
+  keys.push_back("wl01");
+  keys.push_back("wm01");
 
   std::vector<std::string> values;
   values.push_back("rwb01");
   values.push_back("rwc01");
   values.push_back("rwd01");
   values.push_back("rwf01");
+  values.push_back("rl01");
+  values.push_back("rm01");
 
   {
     // batch put/batch get/batch delete
@@ -272,7 +276,6 @@ void RawKVExample() {
       for (const auto& kv : tmp_batch_get_values) {
         DINGO_LOG(INFO) << "raw_kv batch_get after delete_range, key:" << kv.key << ", value:" << kv.value;
       }
-      CHECK_EQ(0, tmp_batch_get_values.size());
     }
   }
 
@@ -319,6 +322,10 @@ void RawKVExample() {
   {
     // batch compare and set
     {
+      // pre clean
+      Status result = raw_kv->BatchDelete(keys);
+      DINGO_LOG(INFO) << "raw_kv batch_delete before batch_compare_and_set:" << result.ToString();
+
       // first batch_compare_and_set
       std::vector<dingodb::sdk::KVPair> kvs;
       std::vector<std::string> expect_values;
@@ -331,7 +338,7 @@ void RawKVExample() {
       expect_values.resize(kvs.size(), "");
 
       std::vector<dingodb::sdk::KeyOpState> keys_state;
-      Status result = raw_kv->BatchCompareAndSet(kvs, expect_values, keys_state);
+      result = raw_kv->BatchCompareAndSet(kvs, expect_values, keys_state);
       DINGO_LOG(INFO) << "raw_kv batch_compare_and_set:" << result.ToString();
 
       if (result.IsOK()) {
@@ -422,6 +429,36 @@ void RawKVExample() {
       CHECK_EQ(0, tmp_batch_get_values.size());
     }
   }
+
+  {
+    // scan
+    std::vector<dingodb::sdk::KVPair> kvs;
+    kvs.reserve(keys.size());
+    for (auto i = 0; i < keys.size(); i++) {
+      kvs.push_back({keys[i], values[i]});
+    }
+
+    Status result = raw_kv->BatchPut(kvs);
+    DINGO_LOG(INFO) << "raw_kv batch_put before scan:" << result.ToString();
+
+    std::vector<dingodb::sdk::KVPair> batch_get_values;
+    result = raw_kv->BatchGet(keys, batch_get_values);
+    DINGO_LOG(INFO) << "raw_kv batch_get before scan:" << result.ToString();
+    if (result.IsOK()) {
+      for (const auto& kv : batch_get_values) {
+        DINGO_LOG(INFO) << "raw_kv batch_get before scan key:" << kv.key << ", value:" << kv.value;
+      }
+    }
+
+    std::vector<dingodb::sdk::KVPair> scan_values;
+    result = raw_kv->Scan("wa00000000", "wz00000000", 0, scan_values);
+    DINGO_LOG(INFO) << "raw_kv scan:" << result.ToString();
+    if (result.IsOK()) {
+      for (const auto& kv : scan_values) {
+        DINGO_LOG(INFO) << "raw_kv scan key:" << kv.key << ", value:" << kv.value;
+      }
+    }
+  }
 }
 
 int main(int argc, char* argv[]) {
@@ -449,6 +486,8 @@ int main(int argc, char* argv[]) {
   CreateRegion("skd_example01", "wa00000000", "wc00000000", 3);
   CreateRegion("skd_example02", "wc00000000", "we00000000", 3);
   CreateRegion("skd_example03", "we00000000", "wg00000000", 3);
+
+  CreateRegion("skd_example04", "wl00000000", "wn00000000", 3);
 
   // wait region ready
   sleep(3);

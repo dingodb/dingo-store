@@ -16,11 +16,13 @@
 #define DINGODB_SDK_TEST_TEST_BASE_H_
 
 #include <memory>
+
 #include "client.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "mock_client_stub.h"
 #include "mock_meta_cache.h"
+#include "mock_region_scanner.h"
 #include "mock_rpc_interaction.h"
 #include "raw_kv_impl.h"
 #include "test_common.h"
@@ -38,6 +40,8 @@ class TestBase : public ::testing::Test {
     options.timeout_ms = 5000;
     store_rpc_interaction = std::make_shared<MockRpcInteraction>(options);
 
+    region_scanner_factory = std::make_shared<MockRegionScannerFactory>();
+
     stub = std::make_unique<MockClientStub>();
 
     ON_CALL(*stub, GetMetaCache).WillByDefault(testing::Return(meta_cache));
@@ -45,6 +49,11 @@ class TestBase : public ::testing::Test {
 
     ON_CALL(*stub, GetStoreRpcInteraction).WillByDefault(testing::Return(store_rpc_interaction));
     EXPECT_CALL(*stub, GetStoreRpcInteraction).Times(testing::AnyNumber());
+
+    ON_CALL(*meta_cache, SendScanRegionsRequest).WillByDefault(testing::Return(Status::OK()));
+
+    ON_CALL(*stub, GetRegionScannerFactory).WillByDefault(testing::Return(region_scanner_factory));
+    EXPECT_CALL(*stub, GetRegionScannerFactory).Times(testing::AnyNumber());
   }
 
   ~TestBase() override {
@@ -53,9 +62,7 @@ class TestBase : public ::testing::Test {
     meta_cache.reset();
   }
 
-  void SetUp() override {
-    PreFillMetaCache();
-  }
+  void SetUp() override { PreFillMetaCache(); }
 
   Status NewRawKV(std::shared_ptr<RawKV>& raw_kv) const {
     std::shared_ptr<RawKV> ret(new RawKV(new RawKV::RawKVImpl(*stub)));
@@ -65,6 +72,8 @@ class TestBase : public ::testing::Test {
 
   std::shared_ptr<MockMetaCache> meta_cache;
   std::shared_ptr<MockRpcInteraction> store_rpc_interaction;
+  std::shared_ptr<MockRegionScannerFactory> region_scanner_factory;
+
   std::unique_ptr<MockClientStub> stub;
 
  private:
@@ -72,6 +81,7 @@ class TestBase : public ::testing::Test {
     meta_cache->MaybeAddRegion(RegionA2C());
     meta_cache->MaybeAddRegion(RegionC2E());
     meta_cache->MaybeAddRegion(RegionE2G());
+    meta_cache->MaybeAddRegion(RegionL2N());
   }
 };
 

@@ -15,14 +15,15 @@
 #ifndef DINGODB_SDK_RAW_KV_IMPL_H_
 #define DINGODB_SDK_RAW_KV_IMPL_H_
 
+#include <cstdint>
 #include <memory>
-#include <unordered_map>
 
 #include "proto/store.pb.h"
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
 #include "sdk/meta_cache.h"
 #include "sdk/status.h"
+#include "sdk/region_scanner.h"
 
 namespace dingodb {
 namespace sdk {
@@ -51,7 +52,6 @@ class RawKV::RawKVImpl {
 
   Status BatchDelete(const std::vector<std::string>& keys);
 
-  // NOTE: start must < end
   // TODO: process when region not exist
   Status DeleteRange(const std::string& start, const std::string& end, bool with_start, bool with_end,
                      int64_t& delete_count);
@@ -63,6 +63,8 @@ class RawKV::RawKVImpl {
   // expected_values size must equal kvs size
   Status BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
                             std::vector<KeyOpState>& states);
+
+  Status Scan(const std::string& start_key, const std::string& end_key,  uint64_t limit, std::vector<KVPair>& kvs);
 
  private:
   struct SubBatchState {

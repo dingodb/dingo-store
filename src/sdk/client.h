@@ -97,6 +97,9 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
   Status BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
                             std::vector<KeyOpState>& states);
 
+  // limit: 0 means no limit, will scan all key in [start_key, end_key)
+  Status Scan(const std::string& start_key, const std::string& end_key,  uint64_t limit, std::vector<KVPair>& kvs);
+
  private:
   friend class Client;
   friend class TestBase;
