@@ -826,16 +826,6 @@ std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   return {};
 }
 
-std::map<std::string, std::vector<pb::common::Range>> Helper::GetDeleteRangeMapOfOneRangeMultiCf(
-    const std::vector<std::string>& cf_names, const pb::common::Range& range) {
-  std::map<std::string, std::vector<pb::common::Range>> delete_range_map;
-  for (const auto& cf_name : cf_names) {
-    delete_range_map[cf_name].push_back(range);
-  }
-
-  return delete_range_map;
-}
-
 int64_t Helper::TimestampNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();

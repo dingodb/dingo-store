@@ -172,7 +172,7 @@ TEST_F(SplitCheckerTest, MergedIterator) {  // NOLINT
   }
 
   // Clean
-  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
+  writer->KvDeleteRange(kAllCFs, range);
 }
 
 TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
@@ -219,7 +219,7 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   EXPECT_EQ(true, abs(static_cast<int>(left_count - right_count)) < 10000);
 
   // Clean
-  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
+  writer->KvDeleteRange(kAllCFs, range);
 }
 
 TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
@@ -263,7 +263,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   EXPECT_EQ(true, abs(split_threshold_size * split_ratio - left_count * single_key_size) < 1000);
 
   // Clean
-  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
+  writer->KvDeleteRange(kAllCFs, range);
 }
 
 TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
@@ -305,7 +305,7 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   EXPECT_EQ(true, abs(left_count - split_key_number * split_key_ratio) < 10);
 
   // Clean
-  writer->KvBatchDeleteRange(Helper::GetDeleteRangeMapOfOneRangeMultiCf(kAllCFs, range));
+  writer->KvDeleteRange(kAllCFs, range);
 }
 
 }  // namespace dingodb
