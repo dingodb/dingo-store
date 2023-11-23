@@ -14,105 +14,11 @@
 
 #include "mock_meta_cache.h"
 
-#include <memory>
-#include <string>
-#include <vector>
-
-#include "butil/endpoint.h"
-#include "butil/status.h"
-#include "common/helper.h"
-#include "coordinator_interaction.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "meta_cache.h"
-#include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
-#include "status.h"
 #include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
-
-using ::testing::_;
-
-class RegionTest : public testing::Test {
- protected:
-  void SetUp() override { InitRegion(); }
-
-  void TearDown() override {}
-
-  std::shared_ptr<Region> region;
-
- private:
-  void InitRegion() {
-    pb::common::Range range;
-    range.set_start_key("a");
-    range.set_end_key("b");
-
-    pb::common::RegionEpoch epoch;
-    epoch.set_version(1);
-    epoch.set_conf_version(1);
-
-    pb::common::RegionType type = pb::common::STORE_REGION;
-
-    std::vector<Replica> replicas;
-    replicas.reserve(kInitReplica.size());
-    for (const auto& entry : kInitReplica) {
-      butil::EndPoint end_point;
-      butil::str2endpoint(entry.first.c_str(), &end_point);
-      replicas.push_back({end_point, entry.second});
-    }
-
-    region.reset(new Region(1, range, epoch, type, replicas));
-  }
-};
-
-TEST_F(RegionTest, TestInit) {
-  EXPECT_EQ(region->RegionId(), 1);
-  EXPECT_EQ(region->Range().start_key(), "a");
-  EXPECT_EQ(region->Range().end_key(), "b");
-  EXPECT_EQ(region->Epoch().version(), 1);
-  EXPECT_EQ(region->Epoch().conf_version(), 1);
-  EXPECT_EQ(region->RegionType(), pb::common::STORE_REGION);
-
-  auto end_points = region->ReplicaEndPoint();
-
-  for (const auto& end : end_points) {
-    EXPECT_TRUE(kInitReplica.find(Helper::EndPointToStr(end)) != kInitReplica.end());
-  }
-
-  butil::EndPoint leader;
-  Status got = region->GetLeader(leader);
-  EXPECT_TRUE(got.IsOK());
-  EXPECT_EQ(Helper::EndPointToStr(leader), kAddrOne);
-  EXPECT_TRUE(region->IsStale());
-}
-
-TEST_F(RegionTest, TestMark) {
-  butil::EndPoint end;
-  butil::str2endpoint(kAddrOne.c_str(), &end);
-  region->MarkFollower(end);
-  butil::EndPoint leader;
-  Status got = region->GetLeader(leader);
-  EXPECT_TRUE(got.IsNotFound());
-
-  butil::str2endpoint(kAddrTwo.c_str(), &end);
-  region->MarkLeader(end);
-  got = region->GetLeader(leader);
-  EXPECT_TRUE(got.IsOK());
-  EXPECT_EQ(Helper::EndPointToStr(leader), kAddrTwo);
-
-  {
-    // test mark and unmark stale
-    EXPECT_TRUE(region->IsStale());
-    region->TEST_UnMarkStale();
-    EXPECT_FALSE(region->IsStale());
-
-    region->TEST_MarkStale();
-    EXPECT_TRUE(region->IsStale());
-  }
-}
-
 class MetaCacheTest : public testing::Test {
  protected:
   void SetUp() override {
@@ -128,13 +34,13 @@ class MetaCacheTest : public testing::Test {
 TEST_F(MetaCacheTest, LookupRegionByKey) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest(_, _))
-      .WillOnce(testing::Invoke(
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
             Region2ScanRegionInfo(region, response.add_regions());
             return Status::OK();
-          }));
+          });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionByKey("b", tmp);
@@ -148,13 +54,13 @@ TEST_F(MetaCacheTest, LookupRegionByKey) {
 TEST_F(MetaCacheTest, ClearRange) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest(_, _))
-      .WillOnce(testing::Invoke(
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
             Region2ScanRegionInfo(region, response.add_regions());
             return Status::OK();
-          }));
+          });
 
   {
     // clear exist
@@ -181,13 +87,13 @@ TEST_F(MetaCacheTest, ClearRange) {
 TEST_F(MetaCacheTest, AddRegion) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest(_, _))
-      .WillOnce(testing::Invoke(
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
             Region2ScanRegionInfo(region, response.add_regions());
             return Status::OK();
-          }));
+          });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionByKey("b", tmp);
@@ -444,6 +350,107 @@ TEST_F(MetaCacheTest, StaleRegion) {
     EXPECT_TRUE(a2c->IsStale());
     EXPECT_TRUE(a2c_version2->IsStale());
   }
+}
+
+TEST_F(MetaCacheTest, LookupRegionBetweenRangeNotFound) {
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "a");
+            EXPECT_EQ(request.range_end(), "d");
+            return Status::OK();
+          });
+
+  std::shared_ptr<Region> tmp;
+  Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
+  EXPECT_TRUE(got.IsNotFound());
+}
+
+TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromRemote) {
+  auto region = RegionA2C();
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "a");
+            EXPECT_EQ(request.range_end(), "d");
+            Region2ScanRegionInfo(region, response.add_regions());
+            return Status::OK();
+          });
+
+  std::shared_ptr<Region> tmp;
+  Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
+  EXPECT_TRUE(got.IsOK());
+
+  EXPECT_EQ(tmp->RegionId(), region->RegionId());
+  EXPECT_EQ(tmp->Range().start_key(), region->Range().start_key());
+  EXPECT_EQ(tmp->Range().end_key(), region->Range().end_key());
+}
+
+TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromCache) {
+  auto region = RegionA2C();
+  meta_cache->MaybeAddRegion(region);
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest).Times(0);
+
+  std::shared_ptr<Region> tmp;
+  Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
+  EXPECT_TRUE(got.IsOK());
+
+  EXPECT_EQ(tmp->RegionId(), region->RegionId());
+  EXPECT_EQ(tmp->Range().start_key(), region->Range().start_key());
+  EXPECT_EQ(tmp->Range().end_key(), region->Range().end_key());
+}
+
+TEST_F(MetaCacheTest, LookupRegionBetweenRangePrefetch) {
+  auto a2c = RegionA2C();
+  auto e2g = RegionE2G();
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "a");
+            EXPECT_EQ(request.range_end(), "f");
+            EXPECT_GT(request.limit(), 1);
+            Region2ScanRegionInfo(a2c, response.add_regions());
+            Region2ScanRegionInfo(e2g, response.add_regions());
+            return Status::OK();
+          });
+
+  std::shared_ptr<Region> tmp;
+  Status got = meta_cache->LookupRegionBetweenRange("a", "f", tmp);
+  EXPECT_TRUE(got.IsOK());
+
+  EXPECT_EQ(tmp->RegionId(), a2c->RegionId());
+  EXPECT_EQ(tmp->Range().start_key(), a2c->Range().start_key());
+  EXPECT_EQ(tmp->Range().end_key(), a2c->Range().end_key());
+
+  got = meta_cache->TEST_FastLookUpRegionByKey("e", tmp);
+  EXPECT_TRUE(got.IsOK());
+  EXPECT_EQ(tmp->RegionId(), e2g->RegionId());
+  EXPECT_EQ(tmp->Range().start_key(), e2g->Range().start_key());
+  EXPECT_EQ(tmp->Range().end_key(), e2g->Range().end_key());
+}
+
+TEST_F(MetaCacheTest, LookupRegionBetweenRangeNoPreetch) {
+  auto a2c = RegionA2C();
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "a");
+            EXPECT_EQ(request.range_end(), "f");
+            EXPECT_EQ(request.limit(), 1);
+            Region2ScanRegionInfo(a2c, response.add_regions());
+            return Status::OK();
+          });
+
+  std::shared_ptr<Region> tmp;
+  Status got = meta_cache->LookupRegionBetweenRangeNoPrefetch("a", "f", tmp);
+  EXPECT_TRUE(got.IsOK());
+
+  EXPECT_EQ(tmp->RegionId(), a2c->RegionId());
+  EXPECT_EQ(tmp->Range().start_key(), a2c->Range().start_key());
+  EXPECT_EQ(tmp->Range().end_key(), a2c->Range().end_key());
 }
 
 }  // namespace sdk

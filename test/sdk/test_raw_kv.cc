@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #include <cstdint>
+#include <cstdio>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "client.h"
 #include "common.h"
+#include "common/logging.h"
 #include "glog/logging.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "mock_region_scanner.h"
 #include "proto/error.pb.h"
 #include "store_rpc.h"
 #include "test_base.h"
@@ -903,5 +909,433 @@ TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
   }
 }
 
+TEST_F(RawKVTest, ScanInvalid) {
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "", 0, kvs);
+  EXPECT_TRUE(ret.IsInvalidArgument());
+
+  ret = raw_kv->Scan("", "c", 0, kvs);
+  EXPECT_TRUE(ret.IsInvalidArgument());
+
+  ret = raw_kv->Scan("", "", 0, kvs);
+  EXPECT_TRUE(ret.IsInvalidArgument());
+
+  ret = raw_kv->Scan("c", "a", 0, kvs);
+  EXPECT_TRUE(ret.IsInvalidArgument());
+}
+
+TEST_F(RawKVTest, ScanNotFoundRegion) {
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("x", "z", 0, kvs);
+  EXPECT_TRUE(ret.IsNotFound());
+
+  EXPECT_EQ(kvs.size(), 0);
+}
+
+TEST_F(RawKVTest, ScanLookUpRegionFail) {
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "x");
+            EXPECT_EQ(request.range_end(), "z");
+            auto* error = response.mutable_error();
+            error->set_errcode(pb::error::EINTERNAL);
+            return Status::OK();
+          });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("x", "z", 0, kvs);
+  EXPECT_TRUE(!ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), 0);
+}
+
+TEST_F(RawKVTest, ScanOpenFail) {
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::Aborted("init fail")));
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "c", 0, kvs);
+  EXPECT_TRUE(ret.IsAborted());
+
+  EXPECT_EQ(kvs.size(), 0);
+}
+
+TEST_F(RawKVTest, ScanNoData) {
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        // CHECK will call scanner HasMore
+        EXPECT_CALL(*mock_scanner, HasMore)
+            .WillOnce(testing::Return(true))
+            .WillOnce(testing::Return(false))
+            .WillOnce(testing::Return(false));
+        EXPECT_CALL(*mock_scanner, NextBatch).WillOnce(testing::Return(Status::OK()));
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "c", 0, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), 0);
+}
+
+TEST_F(RawKVTest, ScanOneRegion) {
+  std::vector<std::string> fake_datas = {"a001", "a002", "a003"};
+
+  int iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return iter < fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (iter < fake_datas.size()) {
+            kvs.push_back({fake_datas[iter], fake_datas[iter]});
+            iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "c", 0, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), fake_datas.size());
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
+
+TEST_F(RawKVTest, ScanOneRegionWithLimit) {
+  std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
+  int a2c_iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (a2c_iter < a2c_fake_datas.size()) {
+            kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
+            a2c_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  int limit = 3;
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "e", limit, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), limit);
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
+
+TEST_F(RawKVTest, ScanTwoRegion) {
+  std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
+  int a2c_iter = 0;
+
+  std::vector<std::string> c2e_fake_datas = {"c001", "c002", "c003"};
+  int c2e_iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (a2c_iter < a2c_fake_datas.size()) {
+            kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
+            a2c_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      })
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (c2e_iter < c2e_fake_datas.size()) {
+            kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
+            c2e_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "e", 0, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), (a2c_fake_datas.size() + c2e_fake_datas.size()));
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
+
+TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
+  std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
+  int a2c_iter = 0;
+
+  std::vector<std::string> c2e_fake_datas = {"c001", "c002", "c003"};
+  int c2e_iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (a2c_iter < a2c_fake_datas.size()) {
+            kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
+            a2c_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      })
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (c2e_iter < c2e_fake_datas.size()) {
+            kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
+            c2e_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  int limit = 5;
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "e", limit, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), limit);
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
+
+TEST_F(RawKVTest, ScanRegionDiscontinuous) {
+  std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
+  int a2c_iter = 0;
+
+  std::vector<std::string> c2e_fake_datas = {"c001", "c002", "c003"};
+  int c2e_iter = 0;
+
+  std::vector<std::string> l2n_fake_datas = {"m001", "m002", "m003"};
+  int l2n_iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (a2c_iter < a2c_fake_datas.size()) {
+            kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
+            a2c_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      })
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (c2e_iter < c2e_fake_datas.size()) {
+            kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
+            c2e_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      })
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return l2n_iter < l2n_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (l2n_iter < l2n_fake_datas.size()) {
+            kvs.push_back({l2n_fake_datas[l2n_iter], l2n_fake_datas[l2n_iter]});
+            l2n_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "z", 0, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), (a2c_fake_datas.size() + c2e_fake_datas.size() + l2n_fake_datas.size()));
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
+
+TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
+  std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
+  int a2c_iter = 0;
+
+  std::vector<std::string> c2e_fake_datas = {"c001", "c002", "c003"};
+  int c2e_iter = 0;
+
+  std::vector<std::string> l2n_fake_datas = {"m001", "m002", "m003"};
+  int l2n_iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (a2c_iter < a2c_fake_datas.size()) {
+            kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
+            a2c_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      })
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (c2e_iter < c2e_fake_datas.size()) {
+            kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
+            c2e_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      })
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return l2n_iter < l2n_fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+          if (l2n_iter < l2n_fake_datas.size()) {
+            kvs.push_back({l2n_fake_datas[l2n_iter], l2n_fake_datas[l2n_iter]});
+            l2n_iter++;
+          }
+          return Status::OK();
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  int limit = a2c_fake_datas.size() + c2e_fake_datas.size() + l2n_fake_datas.size() - 2;
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("a", "z", limit, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), limit);
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
 }  // namespace sdk
 }  // namespace dingodb

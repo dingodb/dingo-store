@@ -101,5 +101,9 @@ Status RawKV::BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vect
   return impl_->BatchCompareAndSet(kvs, expected_values, states);
 }
 
+Status RawKV::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs) {
+  return impl_->Scan(start_key, end_key, limit, kvs);
+}
+
 }  // namespace sdk
 }  // namespace dingodb

@@ -105,6 +105,20 @@ static std::shared_ptr<Region> RegionB2F(int version = 1, int conf_version = 1,
   return GenRegion(id, range, epoch, type);
 }
 
+static std::shared_ptr<Region> RegionL2N(int version = 1, int conf_version = 1,
+                                         pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
+  int64_t id = 'l';
+  pb::common::Range range;
+  range.set_start_key("l");
+  range.set_end_key("n");
+
+  pb::common::RegionEpoch epoch;
+  epoch.set_version(version);
+  epoch.set_conf_version(conf_version);
+
+  return GenRegion(id, range, epoch, type);
+}
+
 static std::shared_ptr<Region> RegionA2Z(int version = 1, int conf_version = 1,
                                          pb::common::RegionType type = pb::common::RegionType::STORE_REGION) {
   int64_t id = 'a';

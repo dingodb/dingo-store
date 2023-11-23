@@ -48,6 +48,10 @@ DECLARE_STORE_RPC(KvDeleteRange);
 DECLARE_STORE_RPC(KvCompareAndSet);
 DECLARE_STORE_RPC(KvBatchCompareAndSet);
 
+DECLARE_STORE_RPC(KvScanBegin);
+DECLARE_STORE_RPC(KvScanContinue);
+DECLARE_STORE_RPC(KvScanRelease);
+
 }  // namespace sdk
 }  // namespace dingodb
 #endif  // DINGODB_SDK_STORE_RPC_H_

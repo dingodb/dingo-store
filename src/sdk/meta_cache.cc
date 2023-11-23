@@ -14,124 +14,13 @@
 
 #include "sdk/meta_cache.h"
 
-#include <cstdint>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <shared_mutex>
-#include <string>
-#include <vector>
-
-#include "butil/endpoint.h"
-#include "butil/status.h"
-#include "common/helper.h"
-#include "common/logging.h"
-#include "fmt/core.h"
-#include "glog/logging.h"
-#include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
-#include "proto/error.pb.h"
 #include "sdk/common.h"
-#include "sdk/status.h"
+#include "sdk/param_config.h"
 
 namespace dingodb {
 namespace sdk {
 
 using pb::coordinator::ScanRegionInfo;
-
-Region::Region(int64_t id, pb::common::Range range, pb::common::RegionEpoch epoch, pb::common::RegionType type,
-               std::vector<Replica> replicas)
-    : region_id_(id),
-      range_(std::move(range)),
-      epoch_(std::move(epoch)),
-      region_type_(type),
-      replicas_(std::move(replicas)),
-      stale_(true) {
-  for (auto& r : replicas_) {
-    if (r.role == kLeader) {
-      leader_addr_ = r.end_point;
-      break;
-    }
-  }
-}
-
-std::vector<Replica> Region::Replicas() {
-  std::shared_lock<std::shared_mutex> r(rw_lock_);
-  return replicas_;
-}
-
-std::vector<butil::EndPoint> Region::ReplicaEndPoint() {
-  std::shared_lock<std::shared_mutex> r(rw_lock_);
-
-  std::vector<butil::EndPoint> end_points;
-  end_points.reserve(replicas_.size());
-  for (const auto& r : replicas_) {
-    end_points.push_back(r.end_point);
-  }
-
-  return end_points;
-}
-
-void Region::MarkLeader(const butil::EndPoint& end_point) {
-  std::unique_lock<std::shared_mutex> w(rw_lock_);
-  for (auto& r : replicas_) {
-    if (r.end_point == end_point) {
-      r.role = kLeader;
-    } else {
-      r.role = kFollower;
-    }
-  }
-
-  leader_addr_ = end_point;
-
-  DINGO_LOG(INFO) << "region:" << region_id_ << " replicas:" << ReplicasAsStringUnlocked();
-}
-
-void Region::MarkFollower(const butil::EndPoint& end_point) {
-  std::unique_lock<std::shared_mutex> w(rw_lock_);
-  for (auto& r : replicas_) {
-    if (r.end_point == end_point) {
-      r.role = kFollower;
-    }
-  }
-
-  if (leader_addr_ == end_point) {
-    leader_addr_.reset();
-  }
-
-  DINGO_LOG(INFO) << "region:" << region_id_ << " mark replica:" << butil::endpoint2str(end_point).c_str()
-                  << " follower, current replicas:" << ReplicasAsStringUnlocked();
-}
-
-Status Region::GetLeader(butil::EndPoint& leader) {
-  std::shared_lock<std::shared_mutex> r(rw_lock_);
-  if (leader_addr_.ip != butil::IP_ANY && leader_addr_.port != 0) {
-    leader = leader_addr_;
-    return Status::OK();
-  }
-
-  std::string msg = fmt::format("region:{} not found leader", region_id_);
-  DINGO_LOG(WARNING) << msg << " replicas:" << ReplicasAsStringUnlocked();
-  return Status::NotFound(msg);
-}
-
-std::string Region::ReplicasAsString() const {
-  std::shared_lock<std::shared_mutex> r(rw_lock_);
-  return ReplicasAsStringUnlocked();
-}
-
-std::string Region::ReplicasAsStringUnlocked() const {
-  std::string replicas_str;
-  for (const auto& r : replicas_) {
-    if (!replicas_str.empty()) {
-      replicas_str.append(", ");
-    }
-
-    std::string msg = fmt::format("({},{})", butil::endpoint2str(r.end_point).c_str(), RaftRoleName(r.role));
-    replicas_str.append(msg);
-  }
-  return replicas_str;
-}
 
 MetaCache::MetaCache(std::shared_ptr<CoordinatorInteraction> coordinator_interaction)
     : coordinator_interaction_(std::move(coordinator_interaction)) {}
@@ -139,6 +28,7 @@ MetaCache::MetaCache(std::shared_ptr<CoordinatorInteraction> coordinator_interac
 MetaCache::~MetaCache() = default;
 
 Status MetaCache::LookupRegionByKey(const std::string& key, std::shared_ptr<Region>& region) {
+  CHECK(!key.empty()) << "key should not empty";
   Status s;
   {
     std::shared_lock<std::shared_mutex> r(rw_lock_);
@@ -150,6 +40,70 @@ Status MetaCache::LookupRegionByKey(const std::string& key, std::shared_ptr<Regi
 
   s = SlowLookUpRegionByKey(key, region);
   return s;
+}
+
+Status MetaCache::LookupRegionBetweenRange(const std::string& start_key, const std::string& end_key,
+                                           std::shared_ptr<Region>& region) {
+  CHECK(!start_key.empty()) << "start_key should not empty";
+  CHECK(!end_key.empty()) << "end_key should not empty";
+  Status s;
+  {
+    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    s = FastLookUpRegionByKeyUnlocked(start_key, region);
+    if (s.IsOK()) {
+      return s;
+    }
+  }
+
+  std::vector<std::shared_ptr<Region>> regions;
+  s = ScanRegionsBetweenRange(start_key, end_key, kPrefetchRegionCount, regions);
+  if (s.IsOK() && !regions.empty()) {
+    region = std::move(regions.front());
+  }
+
+  return s;
+}
+
+Status MetaCache::LookupRegionBetweenRangeNoPrefetch(const std::string& start_key, const std::string& end_key,
+                                                     std::shared_ptr<Region>& region) {
+  CHECK(!start_key.empty()) << "start_key should not empty";
+  CHECK(!end_key.empty()) << "end_key should not empty";
+  Status s;
+  {
+    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    s = FastLookUpRegionByKeyUnlocked(start_key, region);
+    if (s.IsOK()) {
+      return s;
+    }
+  }
+
+  std::vector<std::shared_ptr<Region>> regions;
+  s = ScanRegionsBetweenRange(start_key, end_key, 1, regions);
+  if (s.IsOK() && !regions.empty()) {
+    region = std::move(regions.front());
+  }
+
+  return s;
+}
+
+Status MetaCache::ScanRegionsBetweenRange(const std::string& start_key, const std::string& end_key, int64_t limit,
+                                          std::vector<std::shared_ptr<Region>>& regions) {
+  CHECK(!start_key.empty()) << "start_key should not empty";
+  CHECK(!end_key.empty()) << "end_key should not empty";
+  CHECK_GE(limit, 0) << "limit should greater or equal 0";
+
+  pb::coordinator::ScanRegionsRequest request;
+  pb::coordinator::ScanRegionsResponse response;
+  request.set_key(start_key);
+  request.set_range_end(end_key);
+  request.set_limit(limit);
+
+  Status send = SendScanRegionsRequest(request, response);
+  if (!send.IsOK()) {
+    return send;
+  }
+
+  return ProcessScanRegionsBetweenRangeResponse(response, regions);
 }
 
 void MetaCache::ClearRange(const std::shared_ptr<Region>& region) {
@@ -202,7 +156,8 @@ Status MetaCache::FastLookUpRegionByKeyUnlocked(const std::string& key, std::sha
 
   if (key >= range.end_key()) {
     std::string msg =
-        fmt::format("not found range, key:{} is out of bounds range:({}-{})", key, range.start_key(), range.end_key());
+        fmt::format("not found region for key:{} in cache, key is out of bounds, nearest found_region:{} range:({}-{})",
+                    key, found_region->RegionId(), range.start_key(), range.end_key());
 
     DINGO_LOG(INFO) << msg;
     return Status::NotFound(msg);
@@ -222,11 +177,11 @@ Status MetaCache::SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<
     return send;
   }
 
-  return ProcessScanRangeByKeyResponse(response, region);
+  return ProcessScanRegionsByKeyResponse(response, region);
 }
 
-Status MetaCache::ProcessScanRangeByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,
-                                                std::shared_ptr<Region>& region) {
+Status MetaCache::ProcessScanRegionsByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,
+                                                  std::shared_ptr<Region>& region) {
   if (response.regions_size() > 0) {
     CHECK(response.regions_size() == 1) << "expect ScanRegionsResponse  has one region";
 
@@ -245,6 +200,34 @@ Status MetaCache::ProcessScanRangeByKeyResponse(const pb::coordinator::ScanRegio
   } else {
     DINGO_LOG(WARNING) << "response:" << response.DebugString();
     return Status::NotFound("region not found");
+  }
+}
+
+Status MetaCache::ProcessScanRegionsBetweenRangeResponse(const pb::coordinator::ScanRegionsResponse& response,
+                                                         std::vector<std::shared_ptr<Region>>& regions) {
+  if (response.regions_size() > 0) {
+    std::vector<std::shared_ptr<Region>> tmp_regions;
+
+    for (const auto& scan_region_info : response.regions()) {
+      std::shared_ptr<Region> new_region;
+      ProcessScanRegionInfo(scan_region_info, new_region);
+      {
+        std::unique_lock<std::shared_mutex> w(rw_lock_);
+        MaybeAddRegionUnlocked(new_region);
+        auto iter = region_by_id_.find(scan_region_info.region_id());
+        CHECK(iter != region_by_id_.end());
+        CHECK(iter->second.get() != nullptr);
+        tmp_regions.push_back(iter->second);
+      }
+    }
+
+    CHECK(!tmp_regions.empty());
+    regions = std::move(tmp_regions);
+
+    return Status::OK();
+  } else {
+    DINGO_LOG(WARNING) << "no scan_region_info in ScanRegionsResponse, response:" << response.DebugString();
+    return Status::NotFound("regions not found");
   }
 }
 
