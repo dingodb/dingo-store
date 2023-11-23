@@ -95,12 +95,14 @@ class IndexServiceImpl : public pb::index::IndexService {
                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
-  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
+  void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
+  void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
 
  private:
   StoragePtr storage_;
   // Run service request.
-  WorkerSetPtr worker_set_;
+  WorkerSetPtr read_worker_set_;
+  WorkerSetPtr write_worker_set_;
 };
 
 }  // namespace dingodb

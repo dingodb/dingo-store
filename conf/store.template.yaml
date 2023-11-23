@@ -7,10 +7,12 @@ server:
   port: $SERVER_PORT$
   heartbeat_interval_s: 10
   metrics_collect_interval_s: 300
-  worker_thread_num: 64 # must >4, worker_thread_num priority worker_thread_ratio
+  worker_thread_num: 96 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 1 # cpu core * ratio
-  service_worker_num: 40 # must < server.worker_thread_num
-  service_worker_max_pending_num: 1024 # 0 is unlimited
+  read_worker_num: 48 # read_worker_num + write_worker_num must < server.worker_thread_num
+  read_worker_max_pending_num: 1024 # 0 is unlimited
+  write_worker_num: 32 # read_worker_num + write_worker_num must < server.worker_thwrite_num
+  write_worker_max_pending_num: 1024 # 0 is unlimited
 region:
   region_max_size: 268435456 # 256MB
   enable_auto_split: true
