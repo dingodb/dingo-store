@@ -706,10 +706,26 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  dingodb::NodeServiceImpl node_service;    // all role use node_service
-  dingodb::DebugServiceImpl debug_service;  // store and index use debug_service
-  dingodb::PushServiceImpl push_service;    // store and index use push_service
-  dingodb::FileServiceImpl file_service;    // store and index use file_service
+  // for all role
+  dingodb::NodeServiceImpl node_service;
+
+  // for coordinator only
+  dingodb::CoordinatorServiceImpl coordinator_service;
+  dingodb::MetaServiceImpl meta_service;
+  dingodb::VersionServiceProtoImpl version_service;
+  dingodb::ClusterStatImpl cluster_stat_service;
+
+  // for store and index
+  dingodb::DebugServiceImpl debug_service;
+  dingodb::PushServiceImpl push_service;
+  dingodb::FileServiceImpl file_service;
+
+  // for store only
+  dingodb::StoreServiceImpl store_service;
+
+  // for index only
+  dingodb::IndexServiceImpl index_service;
+  dingodb::UtilServiceImpl util_service;
 
   brpc::Server brpc_server;
   brpc::Server raft_server;
@@ -742,11 +758,6 @@ int main(int argc, char *argv[]) {
   }
 
   if (role == dingodb::pb::common::ClusterRole::COORDINATOR) {
-    dingodb::CoordinatorServiceImpl coordinator_service;
-    dingodb::MetaServiceImpl meta_service;
-    dingodb::VersionServiceProtoImpl version_service;
-    dingodb::ClusterStatImpl cluster_stat_service;
-
     if (!dingo_server.InitCoordinatorInteractionForAutoIncrement()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteractionForAutoIncrement failed!";
       return -1;
@@ -914,8 +925,6 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(INFO) << "Auto Increment region start";
 
   } else if (role == dingodb::pb::common::ClusterRole::STORE) {
-    dingodb::StoreServiceImpl store_service;
-
     // init service workers
     auto ret1 = InitServiceWorkerParameters(config);
     if (ret1 < 0) {
@@ -1011,9 +1020,6 @@ int main(int argc, char *argv[]) {
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   } else if (role == dingodb::pb::common::ClusterRole::INDEX) {
-    dingodb::IndexServiceImpl index_service;
-    dingodb::UtilServiceImpl util_service;
-
     // init service workers
     auto ret1 = InitServiceWorkerParameters(config);
     if (ret1 < 0) {
@@ -1121,6 +1127,9 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+  } else {
+    DINGO_LOG(ERROR) << "Invalid server role[" + dingodb::GetRoleName() + "]";
+    return -1;
   }
 
   if (!dingo_server.Recover()) {
