@@ -2,8 +2,8 @@ package io.dingodb.sdk.grpc.serializer;
 
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.WireFormat;
-import io.dingodb.sdk.service.rpc.Enum;
-import io.dingodb.sdk.service.rpc.Message;
+import io.dingodb.sdk.service.entity.Message;
+import io.dingodb.sdk.service.entity.Numeric;
 import lombok.SneakyThrows;
 
 import java.util.List;
@@ -54,7 +54,7 @@ public class Writer {
     }
 
     @SneakyThrows
-    public static void write(Enum value, CodedOutputStream out) {
+    public static void write(Numeric value, CodedOutputStream out) {
         if (value != null) {
             write(value.number(), out);
         }
@@ -124,7 +124,7 @@ public class Writer {
     }
 
     @SneakyThrows
-    public static void write(Integer number, Enum value, CodedOutputStream out) {
+    public static void write(Integer number, Numeric value, CodedOutputStream out) {
         write(number, value.number(), out);
     }
 
@@ -149,6 +149,15 @@ public class Writer {
     public static void write(Integer number, Message value, CodedOutputStream out) {
         if (value != null) {
             out.writeTag(number, WireFormat.WIRETYPE_LENGTH_DELIMITED);
+            out.writeUInt32NoTag(value.sizeOf());
+            value.write(out);
+        }
+    }
+
+    @SneakyThrows
+    public static void write(Numeric numeric, Message value, CodedOutputStream out) {
+        if (value != null) {
+            out.writeTag(numeric.number(), WireFormat.WIRETYPE_LENGTH_DELIMITED);
             out.writeUInt32NoTag(value.sizeOf());
             value.write(out);
         }

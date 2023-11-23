@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.dingodb.sdk.service.rpc;
+package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.utils.Optional;
-import io.dingodb.sdk.service.rpc.message.common.Location;
+import io.dingodb.sdk.service.entity.common.Location;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
@@ -40,7 +40,7 @@ public final class ChannelManager {
     private static final Map<Location, ManagedChannel> channels = new ConcurrentHashMap<>();
 
     public static ManagedChannel getChannel(String host, int port) {
-        return getChannel(new Location().host(host).port(port));
+        return getChannel(Location.builder().host(host).port(port).build());
     }
 
     public static ManagedChannel getChannel(io.dingodb.sdk.common.Location location) {
@@ -48,16 +48,16 @@ public final class ChannelManager {
             .filter(__ -> !__.getHost().isEmpty())
             .ifAbsent(() -> log.warn("Cannot connect empty host."))
             .map(__ -> channels.computeIfAbsent(
-                new Location().host(location.getHost()).port(location.getPort()),
-                k -> newChannel(k.host(), k.port())
+                Location.builder().host(location.getHost()).port(location.getPort()).build(),
+                k -> newChannel(k.getHost(), k.getPort())
             )).orNull();
     }
 
     public static ManagedChannel getChannel(Location location) {
         return Optional.ofNullable(location)
-            .filter(__ -> !__.host().isEmpty())
+            .filter(__ -> !__.getHost().isEmpty())
             .ifAbsent(() -> log.warn("Cannot connect empty host."))
-            .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.host(), k.port())))
+            .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.getHost(), k.getPort())))
             .orNull();
     }
 

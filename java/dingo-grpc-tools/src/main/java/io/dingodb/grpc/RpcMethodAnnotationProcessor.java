@@ -101,7 +101,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             Map<String, AnnotationValue> annotationValues = getAnnotationValues(annotationMirror);
             String name = element.getEnclosingElement().getSimpleName().toString();
             name = name.substring(0, name.length() - 4);
-            ClassName className = ClassName.get(Constant.RPC_PACKAGE, name);
+            ClassName className = ClassName.get(Constant.SERVICE_PKG, name);
             TypeSpec.Builder typeBuilder = rpcs.computeIfAbsent(className, TypeSpec::interfaceBuilder);
             String methodName = cleanFullMethodName(annotationValues.get(fullMethodName).toString());
             TypeName getMethodEnclosingTypeName = ClassName.get((TypeElement) element.getEnclosingElement());
@@ -123,6 +123,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                     messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.STORE_REQ);
                 }
             } catch (Exception e) {
+                e.printStackTrace();
                 throw new RuntimeException(e);
             }
 
@@ -147,9 +148,10 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                     .addSuperinterface(ParameterizedTypeName.get(Constant.SERVICE, entry.getKey()))
                     .addModifiers(PUBLIC);
 
-                createJavaFile(Constant.RPC_PACKAGE, builder.build());
+                createJavaFile(Constant.SERVICE_PKG, builder.build());
             }
         } catch (Exception e) {
+            e.printStackTrace();
             throw new RuntimeException(e);
         }
         return processed = true;

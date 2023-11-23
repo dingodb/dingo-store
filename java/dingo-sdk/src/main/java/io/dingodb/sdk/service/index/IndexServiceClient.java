@@ -269,7 +269,7 @@ public class IndexServiceClient {
             DingoCommonId indexId,
             DingoCommonId regionId) {
         return getIndexStoreConnector(indexId, regionId).exec(
-            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.defaultCodeChecker
+            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.errorToStrategyFunc
         );
     }
 }

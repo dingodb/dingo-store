@@ -1,9 +1,9 @@
-package io.dingodb.sdk.service.rpc;
+package io.dingodb.sdk.service.entity;
 
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
-import io.dingodb.sdk.service.rpc.message.error.Error;
-import io.dingodb.sdk.service.rpc.message.store.Context;
+import io.dingodb.sdk.service.entity.error.Error;
+import io.dingodb.sdk.service.entity.store.Context;
 
 public interface Message {
 
@@ -12,16 +12,16 @@ public interface Message {
     int sizeOf();
 
     interface Response extends Message {
-        default Error error() {
+        default Error getError() {
             throw new UnsupportedOperationException();
         }
     }
 
     interface StoreRequest extends Message {
 
-        Context context();
+        Context getContext();
 
-        StoreRequest context(Context context);
+        void setContext(Context context);
 
     }
 }

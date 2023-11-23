@@ -1,4 +1,4 @@
-package io.dingodb.sdk.service.rpc;
+package io.dingodb.sdk.service;
 
 import io.grpc.ClientCall;
 import io.grpc.Metadata;

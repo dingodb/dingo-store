@@ -47,7 +47,6 @@ public class LockService {
     public final String resourcePrefixBegin;
     public final String resourcePrefixEnd;
 
-
     private final VersionServiceConnector connector;
 
     public LockService(String servers) {

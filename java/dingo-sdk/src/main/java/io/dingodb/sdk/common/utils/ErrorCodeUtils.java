@@ -37,7 +37,10 @@ import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_NOT_FOUND_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ETABLE_NOT_FOUND_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EVECTOR_INDEX_NOT_READY_VALUE;
 
-public class ErrorCodeUtils {
+public final class ErrorCodeUtils {
+
+    private ErrorCodeUtils() {
+    }
 
     public enum Strategy {
         FAILED,
@@ -72,7 +75,7 @@ public class ErrorCodeUtils {
         ESCHEMA_NOT_FOUND_VALUE
     );
 
-    public static final Function<Integer, Strategy> defaultCodeChecker = code -> {
+    public static Strategy errorToStrategy(int code) {
         if (ignoreCode.contains(code)) {
             return Strategy.IGNORE;
         }
@@ -83,5 +86,7 @@ public class ErrorCodeUtils {
             return Strategy.RETRY;
         }
         return Strategy.FAILED;
-    };
+    }
+
+    public static final Function<Integer, Strategy> errorToStrategyFunc = ErrorCodeUtils::errorToStrategy;
 }

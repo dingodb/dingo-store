@@ -1,13 +1,11 @@
 package io.dingodb.sdk.grpc.serializer;
 
-import com.google.protobuf.CodedOutputStream;
-import com.google.protobuf.WireFormat;
-import io.dingodb.sdk.service.rpc.Enum;
-import io.dingodb.sdk.service.rpc.Message;
+import io.dingodb.sdk.service.entity.Numeric;
+import io.dingodb.sdk.service.entity.Message;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static com.google.protobuf.CodedOutputStream.computeBoolSize;
@@ -48,7 +46,7 @@ public class SizeUtils {
         return value == null || value == 0 ? 0 : computeDoubleSizeNoTag(value);
     }
 
-    public static Integer sizeOf(Enum value) {
+    public static Integer sizeOf(Numeric value) {
         return value == null ? 0 : computeEnumSizeNoTag(value.number());
     }
 
@@ -90,8 +88,8 @@ public class SizeUtils {
         return value == null || value == 0 ? 0 : computeDoubleSize(number, value);
     }
 
-    public static Integer sizeOf(Integer number, Enum value) {
-        return value == null ? 0 : computeEnumSize(number, value.number());
+    public static Integer sizeOf(Integer number, Numeric value) {
+        return value == null || value.number() == 0 ? 0 : computeEnumSize(number, value.number());
     }
 
     public static Integer sizeOf(Integer number, String value) {
@@ -112,37 +110,47 @@ public class SizeUtils {
         return 0;
     }
 
+    public static Integer sizeOf(Numeric numeric, Message value) {
+        if (value != null) {
+            int size = value.sizeOf();
+            size += computeInt32SizeNoTag(size);
+            size += computeTagSize(numeric.number());
+            return size;
+        }
+        return 0;
+    }
+
     public static <T> int sizeOf(Integer number, List<T> value, Function<T, Integer> sizeComputer) {
         if (value != null && value.size() > 0) {
             int size = 0;
             for (T element : value) {
+                size += computeTagSize(number);
                 size += sizeComputer.apply(element);
             }
-            size += computeInt32SizeNoTag(size);
+            //size += computeInt32SizeNoTag(size);
             //size += computeInt32SizeNoTag(number);
             return size;
         }
         return 0;
     }
 
-    public static <K, V> Integer sizeOf(
+    public static <K, V> int sizeOf(
         Integer number,
         Map<K, V> value,
-        BiConsumer<K, CodedOutputStream> keySerializer,
-        BiConsumer<V, CodedOutputStream> valueSerializer,
-        Function<K, Integer> keySizeComputer,
-        Function<V, Integer> valueSizeComputer
+        BiFunction<Integer, K, Integer> keySizeComputer,
+        BiFunction<Integer, V, Integer> valueSizeComputer
     ) {
         if (value != null && value.size() > 0) {
             int size = 0;
             for (Map.Entry<K, V> entry : value.entrySet()) {
+                int entrySize = 0;
                 size += computeTagSize(number);
-                int dataSize =
-                      computeTagSize(1) + keySizeComputer.apply(entry.getKey())
-                    + computeTagSize(2) + valueSizeComputer.apply(entry.getValue());
-                size += computeInt32SizeNoTag(dataSize);
-                size += dataSize;
+                entrySize += keySizeComputer.apply(1, entry.getKey());
+                entrySize += valueSizeComputer.apply(2, entry.getValue());
+                entrySize += computeUInt32SizeNoTag(entrySize);
+                size += entrySize;
             }
+            return size;
         }
         return 0;
     }
