@@ -47,6 +47,9 @@ public class LockService {
     public final String resourcePrefixBegin;
     public final String resourcePrefixEnd;
 
+    private final String resourcePrefixKeyBegin;
+    private final String resourcePrefixKeyEnd;
+
     private final VersionServiceConnector connector;
 
     public LockService(String servers) {
@@ -67,8 +70,10 @@ public class LockService {
     private LockService(String resource, VersionServiceConnector connector) {
         this.resource = resource;
         this.connector = connector;
-        this.resourcePrefixBegin = (resource + '|' + lease() + "|0|");
-        this.resourcePrefixEnd = (resource + '|' + lease() + "|1|");
+        this.resourcePrefixBegin = resource + "|0|";
+        this.resourcePrefixKeyBegin = (resourcePrefixBegin + lease() + "|0|");
+        this.resourcePrefixEnd = resource + "|1|";
+        this.resourcePrefixKeyEnd = (resourcePrefixEnd + lease() + "|1|");
         this.resourceSepIndex = resource.length() + 1;
     }
 
@@ -113,7 +118,7 @@ public class LockService {
     public class Lock implements java.util.concurrent.locks.Lock {
 
         public final String lockId = UUID.randomUUID().toString();
-        public final String resourceKey = resourcePrefixBegin + lockId;
+        public final String resourceKey = resourcePrefixKeyBegin + lockId;
         public final String resourceValue;
 
         private final Consumer<Lock> onReset;
@@ -174,6 +179,28 @@ public class LockService {
             throw new RuntimeException("Cannot watch, not lock.");
         }
 
+        private boolean isLockRevision(long revision, Version.RangeResponse rangeResponse) {
+            if (rangeResponse.getKvsList().isEmpty()) {
+                throw new RuntimeException("Put " + resourceKey + " success, but range is empty.");
+            }
+            Version.Kv current = rangeResponse.getKvsList().stream()
+                .min(Comparator.comparingLong(Version.Kv::getModRevision))
+                .get();
+            if (current.getModRevision() == revision) {
+                this.revision = revision;
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                        "Lock {} success use {} revision, current locks: {}.",
+                        resourceKey, revision, rangeResponse.getKvsList()
+                    );
+                }
+                locked++;
+                watchLock(current);
+                return true;
+            }
+            return false;
+        }
+
         @Override
         public synchronized void lock() {
             if (locked()) {
@@ -188,22 +215,7 @@ public class LockService {
                     Version.PutResponse response = connector.exec(stub -> stub.kvPut(putRequest(resourceKey)));
                     long revision = response.getHeader().getRevision();
                     Version.RangeResponse rangeResponse = connector.exec(stub -> stub.kvRange(rangeRequest()));
-                    if (rangeResponse.getKvsList().isEmpty()) {
-                        throw new RuntimeException("Put " + resourceKey + " success, but range is empty.");
-                    }
-                    Version.Kv current = rangeResponse.getKvsList().stream()
-                        .min(Comparator.comparingLong(Version.Kv::getModRevision))
-                        .get();
-                    if (current.getModRevision() == revision) {
-                        this.revision = revision;
-                        if (log.isDebugEnabled()) {
-                            log.debug(
-                                "Lock {} success use {} revision, current locks: {}.",
-                                resourceKey, revision, rangeResponse.getKvsList()
-                            );
-                        }
-                        locked++;
-                        watchLock(current);
+                    if (isLockRevision(revision, rangeResponse)) {
                         return;
                     }
                     Version.Kv previous = rangeResponse.getKvsList().stream()
@@ -217,7 +229,11 @@ public class LockService {
                         connector.exec(
                             stub -> stub.watch(watchRequest(previous.getKv().getKey(), previous.getModRevision())),
                             __ -> ErrorCodeUtils.Strategy.IGNORE
-                        );                    } catch (Exception ignored) {
+                        );
+                        if (isLockRevision(revision, connector.exec(stub -> stub.kvRange(rangeRequest())))) {
+                            return;
+                        }
+                    } catch (Exception ignored) {
                     }
                 } catch (Exception e) {
                     log.error("Lock {} error, id: {}", resourceKey, lockId, e);
@@ -331,13 +347,13 @@ public class LockService {
 
     private Version.PutRequest putRequest(String resourceKey) {
         return Version.PutRequest.newBuilder()
-                .setLease(connector.getLease())
+            .setLease(connector.getLease())
             .setIgnoreValue(true)
-                .setKeyValue(Common.KeyValue.newBuilder()
-                        .setKey(ByteString.copyFromUtf8(resourceKey))
-                        .build())
-                .setNeedPrevKv(true)
-                .build();
+            .setKeyValue(Common.KeyValue.newBuilder()
+                    .setKey(ByteString.copyFromUtf8(resourceKey))
+                .build())
+            .setNeedPrevKv(false)
+            .build();
     }
 
     private Version.RangeRequest rangeRequest() {
@@ -355,8 +371,8 @@ public class LockService {
 
     private Version.DeleteRangeRequest deleteAllRangeRequest() {
         return Version.DeleteRangeRequest.newBuilder()
-            .setKey(ByteString.copyFromUtf8(resourcePrefixBegin))
-            .setRangeEnd(ByteString.copyFromUtf8(resourcePrefixEnd))
+            .setKey(ByteString.copyFromUtf8(resourcePrefixKeyBegin))
+            .setRangeEnd(ByteString.copyFromUtf8(resourcePrefixKeyEnd))
             .build();
     }
 
