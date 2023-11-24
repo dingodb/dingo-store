@@ -50,17 +50,8 @@ namespace dingodb {
 class VectorIndex {
  public:
   VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-              const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-      : id(id),
-        apply_log_id(0),
-        snapshot_log_id(0),
-        vector_index_parameter(vector_index_parameter),
-        epoch(epoch),
-        range(range) {
-    vector_index_type = vector_index_parameter.vector_index_type();
-  }
-
-  virtual ~VectorIndex() = default;
+              const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+  virtual ~VectorIndex();
 
   VectorIndex(const VectorIndex& rhs) = delete;
   VectorIndex& operator=(const VectorIndex& rhs) = delete;
@@ -270,24 +261,7 @@ using VectorIndexPtr = std::shared_ptr<VectorIndex>;
 class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrapper> {
  public:
   VectorIndexWrapper(int64_t id, pb::common::VectorIndexParameter index_parameter,
-                     int64_t save_snapshot_threshold_write_key_num)
-      : id_(id),
-        vector_index_type_(index_parameter.vector_index_type()),
-        ready_(false),
-        stop_(false),
-        is_switching_vector_index_(false),
-        apply_log_id_(0),
-        snapshot_log_id_(0),
-        index_parameter_(index_parameter),
-        is_hold_vector_index_(false),
-        pending_task_num_(0),
-        loadorbuilding_num_(0),
-        rebuilding_num_(0),
-        saving_num_(0),
-        save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
-    snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
-    bthread_mutex_init(&vector_index_mutex_, nullptr);
-  }
+                     int64_t save_snapshot_threshold_write_key_num);
   ~VectorIndexWrapper();
 
   static std::shared_ptr<VectorIndexWrapper> New(int64_t id, pb::common::VectorIndexParameter index_parameter);

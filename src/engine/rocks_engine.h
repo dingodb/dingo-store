@@ -39,7 +39,8 @@ class RocksEngine : public Engine {
   pb::common::Engine GetID() override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
-  butil::Status DoSnapshot(std::shared_ptr<Context>, int64_t) override { return butil::Status(); }
+  butil::Status SaveSnapshot(std::shared_ptr<Context>, int64_t, bool) override { return butil::Status(); }
+  butil::Status AyncSaveSnapshot(std::shared_ptr<Context>, int64_t, bool) override { return butil::Status(); }
 
   butil::Status Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) override;

@@ -150,17 +150,9 @@ class SegmentLogStorage {
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
   explicit SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
-                             bool enable_sync = true)
-      : path_(path),
-        region_id_(region_id),
-        max_segment_size_(max_segment_size),
-        first_log_index_(1),
-        last_log_index_(0),
-        vector_index_first_log_index_(INT64_MAX),
-        checksum_type_(0),
-        enable_sync_(enable_sync) {}
+                             bool enable_sync = true);
 
-  SegmentLogStorage() : first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(true) {}
+  SegmentLogStorage();
 
   ~SegmentLogStorage();
 

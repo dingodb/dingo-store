@@ -630,7 +630,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvDeleteRangeRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -869,7 +869,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -934,8 +934,7 @@ static butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvS
   }
 
   // Check is exist region.
-  if (!Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
-          request->context().region_id())) {
+  if (!GET_STORE_REGION_META->IsExistRegion(request->context().region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
                          request->context().region_id(), Server::GetInstance().Id());
   }
@@ -1015,8 +1014,7 @@ static butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvSc
   }
 
   // Check is exist region.
-  if (!Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->IsExistRegion(
-          request->context().region_id())) {
+  if (!GET_STORE_REGION_META->IsExistRegion(request->context().region_id())) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
                          request->context().region_id(), Server::GetInstance().Id());
   }
@@ -1188,7 +1186,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequest(request, region, uniform_range);
   if (!status.ok()) {

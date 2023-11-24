@@ -417,7 +417,7 @@ void PreSplitCheckTask::PreSplitCheck() {
 
   auto raw_engine = Server::GetInstance().GetRawEngine();
   auto metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
-  auto regions = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
+  auto regions = GET_STORE_REGION_META->GetAllAliveRegion();
   uint32_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
   for (auto& region : regions) {
     auto region_metric = metrics->GetMetrics(region->Id());

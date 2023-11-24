@@ -39,7 +39,7 @@ int SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmApplyEvent>(event);
 
   // Dispatch
-  auto* done = dynamic_cast<StoreClosure*>(the_event->done);
+  auto* done = dynamic_cast<BaseClosure*>(the_event->done);
   auto ctx = done ? done->GetCtx() : nullptr;
   for (const auto& req : the_event->raft_cmd->requests()) {
     auto handler = handler_collection_->GetHandler(static_cast<HandlerType>(req.cmd_type()));
@@ -108,7 +108,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
     }
   }
 
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
@@ -155,7 +155,7 @@ int SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event)
   auto the_event = std::dynamic_pointer_cast<SmConfigurationCommittedEvent>(event);
 
   // Update region definition peers
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   if (store_region_meta == nullptr) {
     return 0;
   }
@@ -219,7 +219,7 @@ int SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
     }
   }
 
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
     if (store_region_meta != nullptr) {
       store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);

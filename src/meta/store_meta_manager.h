@@ -16,6 +16,7 @@
 #define DINGODB_STORE_META_MANAGER_H_
 
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -48,13 +49,13 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
-  Region() { bthread_mutex_init(&mutex_, nullptr); };
-  ~Region() { bthread_mutex_destroy(&mutex_); }
+  Region(int64_t region_id);
+  ~Region();
 
   Region(const Region&) = delete;
   void operator=(const Region&) = delete;
 
-  static std::shared_ptr<Region> New();
+  static std::shared_ptr<Region> New(int64_t region_id);
   static std::shared_ptr<Region> New(const pb::common::RegionDefinition& definition);
 
   bool Recover();
@@ -324,10 +325,10 @@ class StoreMetaManager {
 
   bool Init();
 
-  std::shared_ptr<StoreServerMeta> GetStoreServerMeta() { return server_meta_; }
-  std::shared_ptr<StoreRegionMeta> GetStoreRegionMeta() { return region_meta_; }
-  std::shared_ptr<StoreRaftMeta> GetStoreRaftMeta() { return raft_meta_; }
-  std::shared_ptr<RegionChangeRecorder> GetRegionChangeRecorder() { return region_change_recorder_; }
+  std::shared_ptr<StoreServerMeta> GetStoreServerMeta();
+  std::shared_ptr<StoreRegionMeta> GetStoreRegionMeta();
+  std::shared_ptr<StoreRaftMeta> GetStoreRaftMeta();
+  std::shared_ptr<RegionChangeRecorder> GetRegionChangeRecorder();
 
  private:
   // Store server meta data, like id/state/endpoint etc.

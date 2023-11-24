@@ -23,6 +23,7 @@
 #include "common/meta_control.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
+#include "engine/snapshot.h"
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
@@ -47,7 +48,6 @@ class RaftControlAble {
 
     std::string raft_path;
     int election_timeout_ms;
-    int snapshot_interval_s;
     int64_t log_max_segment_size;
     std::string log_path;
 
@@ -98,7 +98,9 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   butil::Status TransferLeader(int64_t region_id, const pb::common::Peer& peer) override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
-  butil::Status DoSnapshot(std::shared_ptr<Context> ctx, int64_t region_id) override;
+  butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, int64_t region_id, bool force) override;
+  butil::Status AyncSaveSnapshot(std::shared_ptr<Context> ctx, int64_t region_id, bool force) override;
+  void DoSnapshotPeriodicity();
 
   butil::Status Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) override;
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) override;

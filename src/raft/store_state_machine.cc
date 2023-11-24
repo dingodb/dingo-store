@@ -39,29 +39,6 @@ const int kSaveAppliedIndexStep = 10;
 
 namespace dingodb {
 
-void StoreClosure::Run() {
-  // Delete self after run
-  std::unique_ptr<StoreClosure> self_guard(this);
-  brpc::ClosureGuard const done_guard(ctx_->Done());
-  if (!status().ok()) {
-    DINGO_LOG(ERROR) << fmt::format("raft log commit failed, region[{}] {}:{}", ctx_->RegionId(), status().error_code(),
-                                    status().error_str());
-
-    ctx_->SetStatus(butil::Status(pb::error::ERAFT_COMMITLOG, status().error_str()));
-  }
-
-  // if sync_mode_cond exists, it means a sync mode call is in progress.
-  // now sync mode call does not support write callback function.
-  auto sync_mode_cond = ctx_->SyncModeCond();
-  if (sync_mode_cond) {
-    sync_mode_cond->DecreaseSignal();
-  } else {
-    if (ctx_->WriteCb()) {
-      ctx_->WriteCb()(ctx_, ctx_->Status());
-    }
-  }
-}
-
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                                      std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                      store::RegionMetricsPtr region_metrics,
@@ -73,11 +50,16 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
       region_metrics_(region_metrics),
       listeners_(listeners),
       applied_term_(raft_meta->term()),
-      applied_index_(raft_meta->applied_index()) {
+      applied_index_(raft_meta->applied_index()),
+      last_snapshot_index_(0) {
   bthread_mutex_init(&apply_mutex_, nullptr);
+  DINGO_LOG(DEBUG) << fmt::format("[new.StoreStateMachine][id({})]", str_node_id_);
 }
 
-StoreStateMachine::~StoreStateMachine() { bthread_mutex_destroy(&apply_mutex_); }
+StoreStateMachine::~StoreStateMachine() {
+  DINGO_LOG(DEBUG) << fmt::format("[delete.StoreStateMachine][id({})]", str_node_id_);
+  bthread_mutex_destroy(&apply_mutex_);
+}
 
 bool StoreStateMachine::Init() { return true; }
 
@@ -114,7 +96,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     // Parse raft command
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     if (iter.done()) {
-      StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
+      BaseClosure* store_closure = dynamic_cast<BaseClosure*>(iter.done());
       raft_cmd = store_closure->GetRequest();
     } else {
       butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
@@ -131,7 +113,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
                                   pb::common::StoreRegionState_Name(region_state));
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
 
-      auto* done = dynamic_cast<StoreClosure*>(iter.done());
+      auto* done = dynamic_cast<BaseClosure*>(iter.done());
       auto ctx = done ? done->GetCtx() : nullptr;
       if (ctx != nullptr) {
         ctx->SetStatus(butil::Status(pb::error::EREGION_UNAVAILABLE, s));
@@ -145,7 +127,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
                                   region_->EpochToString(), Helper::RegionEpochToString(raft_cmd->header().epoch()));
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
 
-      auto* done = dynamic_cast<StoreClosure*>(iter.done());
+      auto* done = dynamic_cast<BaseClosure*>(iter.done());
       auto ctx = done ? done->GetCtx() : nullptr;
       if (ctx != nullptr) {
         ctx->SetStatus(butil::Status(pb::error::EREGION_VERSION, s));
@@ -283,6 +265,8 @@ void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::C
 
   DispatchEvent(EventType::kSmSnapshotSave, event);
 
+  last_snapshot_index_ = applied_index_;
+
   if (raft_meta_ != nullptr) {
     Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
   }
@@ -364,6 +348,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     // Update applied term and index
     applied_term_ = meta.last_included_term();
     applied_index_ = meta.last_included_index();
+    last_snapshot_index_ = meta.last_included_index();
 
     if (raft_meta_ != nullptr) {
       raft_meta_->set_term(meta.last_included_term());
@@ -447,5 +432,7 @@ void StoreStateMachine::on_stop_following(const braft::LeaderChangeContext& ctx)
 void StoreStateMachine::UpdateAppliedIndex(int64_t applied_index) { applied_index_ = applied_index; }
 
 int64_t StoreStateMachine::GetAppliedIndex() const { return applied_index_; }
+
+int64_t StoreStateMachine::GetLastSnapshotIndex() const { return last_snapshot_index_; }
 
 }  // namespace dingodb

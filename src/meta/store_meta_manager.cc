@@ -38,11 +38,21 @@ namespace dingodb {
 
 namespace store {
 
-std::shared_ptr<Region> Region::New() { return std::make_shared<Region>(); }
+Region::Region(int64_t region_id) {
+  inner_region_.set_id(region_id);
+  bthread_mutex_init(&mutex_, nullptr);
+  DINGO_LOG(DEBUG) << fmt::format("[new.Region][id({})]", region_id);
+};
+
+Region::~Region() {
+  DINGO_LOG(DEBUG) << fmt::format("[delete.Region][id({})]", Id());
+  bthread_mutex_destroy(&mutex_);
+}
+
+std::shared_ptr<Region> Region::New(int64_t region_id) { return std::make_shared<Region>(region_id); }
 
 std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definition) {
-  auto region = std::make_shared<Region>();
-  region->inner_region_.set_id(definition.id());
+  auto region = std::make_shared<Region>(definition.id());
   if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
     region->inner_region_.set_region_type(pb::common::INDEX_REGION);
     auto vector_index_wrapper =
@@ -910,7 +920,7 @@ std::shared_ptr<pb::common::KeyValue> StoreRegionMeta::TransformToKv(std::any ob
 void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) {
   for (const auto& kv : kvs) {
     int64_t region_id = ParseRegionId(kv.key());
-    auto region = store::Region::New();
+    auto region = store::Region::New(region_id);
     region->DeSerialize(kv.value());
     region->Recover();
 
@@ -1055,6 +1065,26 @@ bool StoreMetaManager::Init() {
   }
 
   return true;
+}
+
+std::shared_ptr<StoreServerMeta> StoreMetaManager::GetStoreServerMeta() {
+  assert(server_meta_ != nullptr);
+  return server_meta_;
+}
+
+std::shared_ptr<StoreRegionMeta> StoreMetaManager::GetStoreRegionMeta() {
+  assert(region_meta_ != nullptr);
+  return region_meta_;
+}
+
+std::shared_ptr<StoreRaftMeta> StoreMetaManager::GetStoreRaftMeta() {
+  assert(raft_meta_ != nullptr);
+  return raft_meta_;
+}
+
+std::shared_ptr<RegionChangeRecorder> StoreMetaManager::GetRegionChangeRecorder() {
+  assert(region_change_recorder_ != nullptr);
+  return region_change_recorder_;
 }
 
 }  // namespace dingodb

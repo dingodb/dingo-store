@@ -88,7 +88,7 @@ static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_path, 
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftStoreEngine::Recover() {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto config = ConfigManager::GetInstance().GetRoleConfig();
@@ -119,7 +119,6 @@ bool RaftStoreEngine::Recover() {
 
       parameter.raft_path = config->GetString("raft.path");
       parameter.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
-      parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
       parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
       parameter.log_path = config->GetString("raft.log_path");
 
@@ -146,7 +145,9 @@ bool RaftStoreEngine::Recover() {
         DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] need do snapshot.", region->Id());
         auto node = GetNode(region->Id());
         if (node != nullptr) {
-          node->Snapshot(new SplitHandler::SplitClosure(region));
+          auto ctx = std::make_shared<Context>();
+          ctx->SetRegionId(region->Id());
+          node->Snapshot(ctx, true);
         }
       }
 
@@ -187,13 +188,12 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
                                          state_machine, log_storage);
 
   if (node->Init(region, Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), parameter.raft_path,
-                 parameter.election_timeout_ms, parameter.snapshot_interval_s) != 0) {
+                 parameter.election_timeout_ms) != 0) {
     if (parameter.is_restart) {
       DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] Raft init failed. Please check raft storage!",
                                       region->Id())
                        << ", raft_path: " << parameter.raft_path
                        << ", election_timeout_ms: " << parameter.election_timeout_ms
-                       << ", snapshot_interval_s: " << parameter.snapshot_interval_s
                        << ", peers: " << Helper::FormatPeers(Helper::ExtractLocations(region->Peers()));
     } else {
       node->Destroy();
@@ -226,8 +226,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
 
   // Build RaftNode
   if (node->Init(nullptr, Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
-                 config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000,
-                 config->GetInt("raft.snapshot_interval_s")) != 0) {
+                 config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000) != 0) {
     // node->Destroy();
     // this function is only used by coordinator, and will only be called on starting.
     // so if init failed, we can just exit the process, let user to check if the config is correct.
@@ -235,7 +234,6 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
                                     region->id())
                      << ", raft_path: " << config->GetString("raft.path")
                      << ", election_timeout_ms: " << config->GetInt("raft.election_timeout_s") * 1000
-                     << ", snapshot_interval_s: " << config->GetInt("raft.snapshot_interval_s")
                      << ", peers: " << Helper::FormatPeers(Helper::ExtractLocations(region->peers()))
                      << ", region: " << region->ShortDebugString();
 
@@ -300,14 +298,48 @@ bool RaftStoreEngine::IsLeader(int64_t region_id) {
   return node->IsLeader();
 }
 
-butil::Status RaftStoreEngine::DoSnapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
+butil::Status RaftStoreEngine::SaveSnapshot(std::shared_ptr<Context> ctx, int64_t region_id, bool force) {
+  ctx->SetRegionId(region_id);
   auto node = raft_node_manager_->GetNode(region_id);
   if (node == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
-  node->Snapshot(dynamic_cast<braft::Closure*>(ctx->Done()));
+  auto sync_mode_cond = ctx->CreateSyncModeCond();
+
+  auto status = node->Snapshot(ctx, force);
+  if (!status.ok()) {
+    return status;
+  }
+
+  DINGO_LOG(INFO) << "===here 001";
+  sync_mode_cond->IncreaseWait();
+  DINGO_LOG(INFO) << "===here 002";
+  if (!ctx->Status().ok()) {
+    return ctx->Status();
+  }
+
   return butil::Status();
+}
+
+butil::Status RaftStoreEngine::AyncSaveSnapshot(std::shared_ptr<Context> ctx, int64_t region_id, bool force) {
+  ctx->SetRegionId(region_id);
+  auto node = raft_node_manager_->GetNode(region_id);
+  if (node == nullptr) {
+    return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
+  }
+
+  return node->Snapshot(ctx, force);
+}
+
+void RaftStoreEngine::DoSnapshotPeriodicity() {
+  auto nodes = raft_node_manager_->GetAllNode();
+
+  for (auto& node : nodes) {
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(node->GetNodeId());
+    node->Snapshot(ctx, false);
+  }
 }
 
 butil::Status RaftStoreEngine::TransferLeader(int64_t region_id, const pb::common::Peer& peer) {

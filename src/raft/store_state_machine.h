@@ -29,24 +29,9 @@
 #include "metrics/store_metrics_manager.h"
 #include "proto/raft.pb.h"
 #include "proto/store_internal.pb.h"
+#include "raft/state_machine.h"
 
 namespace dingodb {
-
-class StoreClosure : public braft::Closure {
- public:
-  StoreClosure(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> request)
-      : ctx_(ctx), request_(request) {}
-  ~StoreClosure() override = default;
-
-  void Run() override;
-
-  std::shared_ptr<Context> GetCtx() { return ctx_; }
-  std::shared_ptr<pb::raft::RaftCmdRequest> GetRequest() { return request_; }
-
- private:
-  std::shared_ptr<Context> ctx_;
-  std::shared_ptr<pb::raft::RaftCmdRequest> request_;
-};
 
 struct SnapshotContext;
 
@@ -54,7 +39,7 @@ struct SnapshotContext;
 //                           on_configuration_committed
 //                           on_leader_start|on_start_following
 //                           on_apply
-class StoreStateMachine : public braft::StateMachine {
+class StoreStateMachine : public BaseStateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                              std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
@@ -76,7 +61,9 @@ class StoreStateMachine : public braft::StateMachine {
   void on_stop_following(const braft::LeaderChangeContext& ctx) override;
 
   void UpdateAppliedIndex(int64_t applied_index);
-  int64_t GetAppliedIndex() const;
+  int64_t GetAppliedIndex() const override;
+
+  int64_t GetLastSnapshotIndex() const override;
 
   int32_t CatchUpApplyLog(const std::vector<pb::raft::LogEntry>& entries);
 
@@ -92,6 +79,7 @@ class StoreStateMachine : public braft::StateMachine {
 
   int64_t applied_term_;
   int64_t applied_index_;
+  int64_t last_snapshot_index_;
   std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
 
   store::RegionMetricsPtr region_metrics_;

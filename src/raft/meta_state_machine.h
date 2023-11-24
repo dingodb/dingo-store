@@ -24,14 +24,13 @@
 #include "common/context.h"
 #include "common/meta_control.h"
 #include "coordinator/coordinator_control.h"
-// #include "engine/engine.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
-#include "raft/store_state_machine.h"
+#include "raft/state_machine.h"
 
 namespace dingodb {
 
-class MetaStateMachine : public braft::StateMachine {
+class MetaStateMachine : public BaseStateMachine {
  public:
   MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile = false);
   void on_apply(braft::Iterator& iter) override;
@@ -47,6 +46,9 @@ class MetaStateMachine : public braft::StateMachine {
 
   void SetVolatile(bool is_volatile_state_machine) { is_volatile_state_machine_ = is_volatile_state_machine; }
 
+  int64_t GetAppliedIndex() const override;
+  int64_t GetLastSnapshotIndex() const override;
+
  private:
   void DispatchRequest(bool is_leader, int64_t term, int64_t index, const pb::raft::RaftCmdRequest& raft_cmd,
                        google::protobuf::Message* response);
@@ -54,6 +56,10 @@ class MetaStateMachine : public braft::StateMachine {
                          google::protobuf::Message* response);
   std::shared_ptr<MetaControl> meta_control_;
   bool is_volatile_state_machine_ = false;
+
+  int64_t applied_term_;
+  int64_t applied_index_;
+  int64_t last_snapshot_index_;
 };
 
 }  // namespace dingodb

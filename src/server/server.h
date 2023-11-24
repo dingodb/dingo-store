@@ -15,6 +15,7 @@
 #ifndef DINGODB_STORE_SERVER_H_
 #define DINGODB_STORE_SERVER_H_
 
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -119,86 +120,65 @@ class Server {
 
   bool Ip2Hostname(std::string& ip2hostname);
 
-  int64_t Id() const { return id_; }
-  std::string Keyring() const { return keyring_; }
+  int64_t Id() const;
+  std::string Keyring() const;
 
-  std::string ServerAddr() { return server_addr_; }
-  butil::EndPoint ServerEndpoint() { return server_endpoint_; }
-  void SetServerEndpoint(const butil::EndPoint& endpoint) {
-    server_endpoint_ = endpoint;
-    server_addr_ = Helper::EndPointToStr(endpoint);
-  }
+  std::string ServerAddr();
+  butil::EndPoint ServerEndpoint();
+  void SetServerEndpoint(const butil::EndPoint& endpoint);
+  butil::EndPoint RaftEndpoint();
+  void SetRaftEndpoint(const butil::EndPoint& endpoint);
 
-  butil::EndPoint RaftEndpoint() { return raft_endpoint_; }
-  void SetRaftEndpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
+  std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction();
+  std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr();
 
-  std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
-  std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr() { return coordinator_interaction_incr_; }
+  std::shared_ptr<Engine> GetEngine();
+  std::shared_ptr<RawEngine> GetRawEngine();
 
-  std::shared_ptr<Engine> GetEngine() { return raft_engine_; }
-  std::shared_ptr<RawEngine> GetRawEngine() { return raw_engine_; }
+  std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
 
-  std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine() {
-    auto engine = GetEngine();
-    if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
-      return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-    }
-    return nullptr;
-  }
+  std::shared_ptr<MetaReader> GetMetaReader();
+  std::shared_ptr<MetaWriter> GetMetaWriter();
 
-  std::shared_ptr<MetaReader> GetMetaReader() { return meta_reader_; }
-  std::shared_ptr<MetaWriter> GetMetaWriter() { return meta_writer_; }
+  std::shared_ptr<LogStorageManager> GetLogStorageManager();
 
-  std::shared_ptr<LogStorageManager> GetLogStorageManager() { return log_storage_; }
+  std::shared_ptr<Storage> GetStorage();
+  std::shared_ptr<StoreMetaManager> GetStoreMetaManager();
 
-  std::shared_ptr<Storage> GetStorage() { return storage_; }
-  std::shared_ptr<StoreMetaManager> GetStoreMetaManager() { return store_meta_manager_; }
+  // Shortcut
   store::RegionPtr GetRegion(int64_t region_id);
   std::vector<store::RegionPtr> GetAllAliveRegion();
-  std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager() { return store_metrics_manager_; }
-  std::shared_ptr<CrontabManager> GetCrontabManager() { return crontab_manager_; }
+  StoreRaftMeta::RaftMetaPtr GetRaftMeta(int64_t region_id);
 
-  std::shared_ptr<StoreController> GetStoreController() { return store_controller_; }
-  std::shared_ptr<RegionController> GetRegionController() { return region_controller_; }
-  std::shared_ptr<RegionCommandManager> GetRegionCommandManager() { return region_command_manager_; }
-  VectorIndexManagerPtr GetVectorIndexManager() { return vector_index_manager_; }
-  std::shared_ptr<CoordinatorControl> GetCoordinatorControl() { return coordinator_control_; }
-  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControl() { return auto_increment_control_; }
-  std::shared_ptr<TsoControl> GetTsoControl() { return tso_control_; }
-  std::shared_ptr<KvControl> GetKvControl() { return kv_control_; }
+  std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager();
+  std::shared_ptr<CrontabManager> GetCrontabManager();
 
-  void SetEndpoints(const std::vector<butil::EndPoint> endpoints) { endpoints_ = endpoints; }
+  std::shared_ptr<StoreController> GetStoreController();
+  std::shared_ptr<RegionController> GetRegionController();
+  std::shared_ptr<RegionCommandManager> GetRegionCommandManager();
+  VectorIndexManagerPtr GetVectorIndexManager();
+  std::shared_ptr<CoordinatorControl> GetCoordinatorControl();
+  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControl();
+  std::shared_ptr<TsoControl> GetTsoControl();
+  std::shared_ptr<KvControl> GetKvControl();
+  void SetEndpoints(const std::vector<butil::EndPoint>& endpoints);
 
-  std::shared_ptr<Heartbeat> GetHeartbeat() { return heartbeat_; }
+  std::shared_ptr<Heartbeat> GetHeartbeat();
 
-  std::string GetCheckpointPath() { return checkpoint_path_; }
+  std::string GetCheckpointPath();
 
-  static std::string GetStorePath() {
-    auto config = ConfigManager::GetInstance().GetRoleConfig();
-    return config == nullptr ? "" : config->GetString("store.path");
-  }
+  static std::string GetStorePath();
 
-  static std::string GetRaftPath() {
-    auto config = ConfigManager::GetInstance().GetRoleConfig();
-    return config == nullptr ? "" : config->GetString("raft.path");
-  }
+  static std::string GetRaftPath();
 
-  static std::string GetRaftLogPath() {
-    auto config = ConfigManager::GetInstance().GetRoleConfig();
-    return config == nullptr ? "" : config->GetString("raft.log_path");
-  }
+  static std::string GetRaftLogPath();
 
-  static std::string GetIndexPath() {
-    auto config = ConfigManager::GetInstance().GetRoleConfig();
-    return config == nullptr ? "" : config->GetString("vector.index_path");
-  }
+  static std::string GetIndexPath();
 
-  bool IsReadOnly() const { return is_read_only_; }
-  void SetReadOnly(bool is_read_only) { is_read_only_ = is_read_only; }
-
-  bool IsLeader(int64_t region_id) { return storage_->IsLeader(region_id); }
-
-  std::shared_ptr<PreSplitChecker> GetPreSplitChecker() { return pre_split_checker_; }
+  bool IsReadOnly() const;
+  void SetReadOnly(bool is_read_only);
+  bool IsLeader(int64_t region_id);
+  std::shared_ptr<PreSplitChecker> GetPreSplitChecker();
 
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
@@ -298,6 +278,8 @@ class Server {
 #define GET_REGION_CHANGE_RECORDER Server::GetInstance().GetStoreMetaManager()->GetRegionChangeRecorder()
 #define ADD_REGION_CHANGE_RECORD GET_REGION_CHANGE_RECORDER->AddChangeRecord
 #define ADD_REGION_CHANGE_RECORD_TIMEPOINT GET_REGION_CHANGE_RECORDER->AddChangeRecordTimePoint
+
+#define GET_STORE_REGION_META Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()
 
 }  // namespace dingodb
 
