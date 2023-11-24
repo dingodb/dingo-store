@@ -192,6 +192,12 @@ void DoLeaseGrant(google::protobuf::RpcController* controller, const pb::version
     return;
   }
 
+  if (request->id() < 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is negative");
+    return;
+  }
+
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   // lease grant
@@ -292,9 +298,9 @@ void DoLeaseQuery(google::protobuf::RpcController* /*controller*/, const pb::ver
     return kv_control->RedirectResponse(response);
   }
 
-  if (request->id() == 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("lease id is zero");
+  if (request->id() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED);
+    response->mutable_error()->set_errmsg("lease id is zero or negative");
     return;
   }
 
@@ -527,7 +533,7 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
     return;
   }
 
-  DINGO_LOG(INFO) << "Put success: key_valuee=" << request->key_value().ShortDebugString()
+  DINGO_LOG(INFO) << "Put success: key_value=" << request->key_value().ShortDebugString()
                   << ", lease_grant_id=" << lease_grant_id << ", revision=" << main_revision << "." << sub_revision;
 
   if (request->need_prev_kv()) {
@@ -726,7 +732,8 @@ void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* contro
                                          pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(INFO) << "Receive LeaseGrant Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive LeaseGrant Request: IsLeader:" << is_leader << ", lease_id: " << request->id()
+                  << ", ttl: " << request->ttl();
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -735,6 +742,12 @@ void VersionServiceProtoImpl::LeaseGrant(google::protobuf::RpcController* contro
   if (request->ttl() <= 0) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
     response->mutable_error()->set_errmsg("ttl is zero or negative");
+    return;
+  }
+
+  if (request->id() < 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("lease id is negative");
     return;
   }
 
@@ -821,9 +834,9 @@ void VersionServiceProtoImpl::LeaseQuery(google::protobuf::RpcController* contro
     return RedirectResponse(response);
   }
 
-  if (request->id() == 0) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("lease id is zero");
+  if (request->id() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED);
+    response->mutable_error()->set_errmsg("lease id is zero or negative");
     return;
   }
 

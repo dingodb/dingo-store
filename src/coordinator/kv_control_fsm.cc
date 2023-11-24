@@ -78,11 +78,14 @@ void KvControl::OnLeaderStart(int64_t term) {
   BuildLeaseToKeyMap();
 
   // clear one time watch map
+  one_time_watch_closure_status_map_.Clear();
   {
     BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
     one_time_watch_map_.clear();
-    one_time_watch_closure_map_.clear();
-    one_time_watch_closure_status_map_.Clear();
+    {
+      BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
+      one_time_watch_closure_map_.clear();
+    }
   }
 
   DINGO_LOG(INFO) << "OnLeaderStart init lease_to_key_map_temp_ finished, term=" << term
@@ -93,21 +96,19 @@ void KvControl::OnLeaderStart(int64_t term) {
 
 void KvControl::OnLeaderStop() {
   // clear one time watch map
+  one_time_watch_closure_status_map_.Clear();
   {
     BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
-    for (auto& it : one_time_watch_map_) {
-      auto& closure_to_reposne_map = it.second;
-      for (auto& ctrm : closure_to_reposne_map) {
-        auto* done = ctrm.first;
-        if (done) {
-          done->Run();
-        }
-      }
+
+    for (auto& it : one_time_watch_closure_map_) {
+      it.second.Done();
     }
 
     one_time_watch_map_.clear();
-    one_time_watch_closure_map_.clear();
-    one_time_watch_closure_status_map_.Clear();
+    {
+      BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
+      one_time_watch_closure_map_.clear();
+    }
   }
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";

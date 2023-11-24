@@ -15,6 +15,8 @@
 #ifndef DINGODB_KV_CONTROL_H_
 #define DINGODB_KV_CONTROL_H_
 
+#include <sys/types.h>
+
 #include <atomic>
 #include <cstdint>
 #include <map>
@@ -45,29 +47,74 @@
 namespace dingodb {
 
 struct KvWatchNode {
-  KvWatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response)
-      : done(done),
-        response(response),
+  KvWatchNode(uint64_t closure_id_in)
+      : closure_id(closure_id_in),
         start_revision(0),
         no_put_event(false),
         no_delete_event(false),
         need_prev_kv(false) {}
 
-  KvWatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response, int64_t start_revision,
-              bool no_put_event, bool no_delete_event, bool need_prev_kv)
-      : done(done),
-        response(response),
+  KvWatchNode(uint64_t closure_id_in, int64_t start_revision, bool no_put_event, bool no_delete_event,
+              bool need_prev_kv)
+      : closure_id(closure_id_in),
         start_revision(start_revision),
         no_put_event(no_put_event),
         no_delete_event(no_delete_event),
         need_prev_kv(need_prev_kv) {}
 
-  google::protobuf::Closure *done;
-  pb::version::WatchResponse *response;
+  uint64_t closure_id;
   int64_t start_revision;
   bool no_put_event;
   bool no_delete_event;
   bool need_prev_kv;
+};
+
+class DeferDone {
+ public:
+  DeferDone() {
+    // bthread_mutex_init(&mutex_, nullptr);
+  }
+  DeferDone(uint64_t closure_id, const std::string &watch_key, google::protobuf::Closure *done,
+            pb::version::WatchResponse *response)
+      : closure_id_(closure_id), watch_key_(watch_key), done_(done), response_(response) {
+    // bthread_mutex_init(&mutex_, nullptr);
+  }
+
+  ~DeferDone() {
+    // bthread_mutex_destroy(&mutex_);
+  }
+
+  bool IsDone() {
+    // bthread_mutex_lock(&mutex_);
+    bool is_done = done_ == nullptr;
+    // bthread_mutex_unlock(&mutex_);
+    return is_done;
+  }
+
+  std::string GetWatchKey() { return watch_key_; }
+  pb::version::WatchResponse *GetResponse() {
+    // bthread_mutex_lock(&mutex_);
+    auto *response = response_;
+    // bthread_mutex_unlock(&mutex_);
+    return response;
+  }
+
+  void Done() {
+    // bthread_mutex_lock(&mutex_);
+    if (done_) {
+      braft::AsyncClosureGuard done_guard(done_);
+      done_ = nullptr;
+      response_ = nullptr;
+    }
+    // bthread_mutex_unlock(&mutex_);
+  }
+
+ private:
+  uint64_t closure_id_;
+  std::string watch_key_;
+  bthread_mutex_t mutex_;
+  google::protobuf::Closure *done_;
+  pb::version::WatchResponse *response_;
 };
 
 struct KvLeaseWithKeys {
@@ -272,12 +319,13 @@ class KvControl : public MetaControl {
 
   // add watch to map
   butil::Status AddOneTimeWatch(const std::string &watch_key, int64_t start_revision, bool no_put_event,
-                                bool no_delete_event, bool need_prev_kv, google::protobuf::Closure *done,
-                                pb::version::WatchResponse *response);
+                                bool no_delete_event, bool need_prev_kv, uint64_t closure_id);
   // remove watch from map
   butil::Status RemoveOneTimeWatch();
-  butil::Status RemoveOneTimeWatchWithLock(google::protobuf::Closure *done);
-  butil::Status CancelOneTimeWatchClosure(google::protobuf::Closure *done);
+  butil::Status RemoveOneTimeWatch(uint64_t closure_id);
+  butil::Status RemoveOneTimeWatchWithLock(uint64_t closure_id);
+  butil::Status CancelOneTimeWatchClosure(uint64_t closure_id);
+  bool CheckClosureStatus(uint64_t closure_id);
 
   // watch functions for raft fsm
   butil::Status TriggerOneWatch(const std::string &key, pb::version::Event::EventType event_type,
@@ -308,10 +356,12 @@ class KvControl : public MetaControl {
 
   // one time watch map
   // this map on work on leader, is out of state machine
-  std::map<std::string, std::map<google::protobuf::Closure *, KvWatchNode>> one_time_watch_map_;
-  std::map<google::protobuf::Closure *, std::string> one_time_watch_closure_map_;
+  std::map<std::string, std::map<uint64_t, KvWatchNode>> one_time_watch_map_;
   bthread_mutex_t one_time_watch_map_mutex_;
-  DingoSafeStdMap<google::protobuf::Closure *, bool> one_time_watch_closure_status_map_;
+  std::map<uint64_t, DeferDone> one_time_watch_closure_map_;
+  bthread_mutex_t one_time_watch_closure_map_mutex_;
+  std::atomic<uint64_t> one_time_watch_closure_seq_{1000};  // used to generate unique closure id
+  DingoSafeStdMap<uint64_t, bool> one_time_watch_closure_status_map_;
 
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;
