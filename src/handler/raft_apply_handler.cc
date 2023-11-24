@@ -177,24 +177,25 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   return 0;
 }
 
-// Launch do snapshot
-static void LaunchDoSnapshot(store::RegionPtr region) {  // NOLINT
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
-  assert(store_region_meta != nullptr);
+static void LaunchAyncSaveSnapshot(store::RegionPtr region) {  // NOLINT
+  auto store_region_meta = GET_STORE_REGION_META;
   store_region_meta->UpdateNeedBootstrapDoSnapshot(region, true);
-
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->SetDone(new SplitHandler::SplitClosure(region));
   auto engine = Server::GetInstance().GetEngine();
+
   bool is_success = false;
   for (int i = 0; i < Constant::kSplitDoSnapshotRetryTimes; ++i) {
-    auto ret = engine->DoSnapshot(ctx, region->Id());
-    if (ret.ok()) {
+    auto *done = new SplitHandler::SplitClosure(region->Id());
+    auto ctx = std::make_shared<Context>();
+    ctx->SetDone(done);
+    auto status = engine->AyncSaveSnapshot(ctx, region->Id(), true);
+    if (status.ok()) {
       is_success = true;
       break;
     }
+
+    delete done;
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({})] do snapshot failed, retry({}) error: {}",
-                                    region->Id(), i, ret.error_str());
+                                    region->Id(), i, status.error_str());
     bthread_usleep(1000 * 100);
   }
 
@@ -205,31 +206,38 @@ static void LaunchDoSnapshot(store::RegionPtr region) {  // NOLINT
 
 void SplitHandler::SplitClosure::Run() {
   std::unique_ptr<SplitClosure> self_guard(this);
+
+  auto region = Server::GetInstance().GetRegion(region_id_);
+  if (region == nullptr) {
+    DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] not found region.", region_id_);
+    return;
+  }
+
   if (!status().ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({})] finish snapshot failed, error: {}", region_->Id(),
+    DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({})] finish snapshot failed, error: {}", region_id_,
                                       status().error_str());
-    bthread_usleep(1000 * 200);
+    bthread_usleep(1000 * 100);
 
     // Retry do snapshot
-    LaunchDoSnapshot(region_);
+    LaunchAyncSaveSnapshot(region);
     return;
   } else {
-    DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] finish snapshot success", region_->Id());
+    DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] finish snapshot success", region_id_);
   }
 
   auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
 
-  if (region_->Type() == pb::common::STORE_REGION) {
-    store_region_meta->UpdateTemporaryDisableChange(region_, false);
+  if (region->Type() == pb::common::STORE_REGION) {
+    store_region_meta->UpdateTemporaryDisableChange(region, false);
   }
 
-  store_region_meta->UpdateNeedBootstrapDoSnapshot(region_, false);
+  store_region_meta->UpdateNeedBootstrapDoSnapshot(region, false);
 }
 
 // Pre create region split
 bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr from_region, int64_t term_id,
                                 int64_t log_id) {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
 
   ADD_REGION_CHANGE_RECORD(request);
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Appling SplitRequest");
@@ -313,12 +321,12 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                  to_region->Id());
 
   // Do parent region snapshot
-  LaunchDoSnapshot(from_region);
+  LaunchAyncSaveSnapshot(from_region);
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] child do snapshot", from_region->Id(),
                                  to_region->Id());
   // Do child region snapshot
-  LaunchDoSnapshot(to_region);
+  LaunchAyncSaveSnapshot(to_region);
 
   if (to_region->Type() == pb::common::INDEX_REGION) {
     // Set child share vector index
@@ -379,7 +387,6 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
 
   parameter.raft_path = config->GetString("raft.path");
   parameter.election_timeout_ms = parent_node->IsLeader() ? 200 : 10 * 1000;
-  parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
   parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   parameter.log_path = config->GetString("raft.log_path");
 
@@ -396,7 +403,7 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
   }
 
   Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
-  Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->AddRegion(region);
+  GET_STORE_REGION_META->AddRegion(region);
   Server::GetInstance().GetRegionController()->RegisterExecutor(region->Id());
 
   return region;
@@ -405,7 +412,7 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
 // Post create region split
 bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::RegionPtr parent_region, int64_t term_id,
                                  int64_t log_id) {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   int64_t parent_region_id = request.from_region_id();
   int64_t child_region_id = request.to_region_id();
 
@@ -481,7 +488,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", parent_region_id,
                                  child_region_id);
   // Do parent region snapshot
-  LaunchDoSnapshot(parent_region);
+  LaunchAyncSaveSnapshot(parent_region);
 
   // Set do snapshot when bootstrap
   store_region_meta->UpdateNeedBootstrapDoSnapshot(child_region, true);
@@ -590,7 +597,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
                                 const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
                                 int64_t /*term_id*/, int64_t log_id) {
   const auto &request = req.prepare_merge();
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto target_region = store_region_meta->GetRegion(request.target_region_id());
 
   DINGO_LOG(INFO) << fmt::format(
@@ -686,7 +693,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
                                const pb::raft::Request &req, store::RegionMetricsPtr, int64_t, int64_t /*log_id*/) {
   assert(target_region != nullptr);
   const auto &request = req.commit_merge();
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   assert(store_region_meta != nullptr);
   auto raft_store_engine = Server::GetInstance().GetStorage()->GetRaftStoreEngine();
   assert(raft_store_engine != nullptr);
@@ -761,7 +768,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range);
 
   // Do snapshot
-  LaunchDoSnapshot(target_region);
+  LaunchAyncSaveSnapshot(target_region);
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save target region snapshot finish");
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save snapshot finish");
@@ -815,9 +822,8 @@ int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr r
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] save snapshot, term({}) log_id({})",
                                  region->ParentId(), region->Id(), term_id, log_id);
   auto engine = Server::GetInstance().GetEngine();
-  std::shared_ptr<Context> to_ctx = std::make_shared<Context>();
-  to_ctx->SetDone(new SplitHandler::SplitClosure(region));
-  auto status = engine->DoSnapshot(to_ctx, region->Id());
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  auto status = engine->AyncSaveSnapshot(ctx, region->Id(), true);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] do snapshot failed, error: {}",
                                     region->ParentId(), region->Id(), status.error_str());

@@ -33,7 +33,7 @@
 namespace dingodb {
 
 MetaStateMachine::MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile)
-    : meta_control_(meta_control), is_volatile_state_machine_(is_volatile) {}
+    : meta_control_(meta_control), is_volatile_state_machine_(is_volatile), last_snapshot_index_(0) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, int64_t term, int64_t index,
                                        const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
@@ -72,7 +72,7 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
     google::protobuf::Message* response = nullptr;
     pb::raft::RaftCmdRequest raft_cmd;
     if (iter.done()) {
-      StoreClosure* store_closure = dynamic_cast<StoreClosure*>(iter.done());
+      BaseClosure* store_closure = dynamic_cast<BaseClosure*>(iter.done());
       response = store_closure->GetCtx()->Response();
       raft_cmd = *(store_closure->GetRequest());
       is_leader = true;
@@ -85,6 +85,9 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
                                     raft_cmd.header().region_id(), iter.term(), iter.index(), raft_cmd.DebugString());
 
     DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd, response);
+
+    applied_term_ = iter.term();
+    applied_index_ = iter.index();
   }
 }
 
@@ -140,6 +143,8 @@ void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Cl
   arg->done = done;
   bthread_t tid;
   bthread_start_urgent(&tid, nullptr, SaveSnapshot, arg);
+
+  last_snapshot_index_ = applied_index_;
 }
 
 int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
@@ -198,6 +203,10 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     DINGO_LOG(ERROR) << "Fail to load snapshot from " << snapshot_path << " LoadMetaFromSnapshotFile return false";
     return -1;
   }
+
+  applied_term_ = snapshot_meta.last_included_term();
+  applied_index_ = snapshot_meta.last_included_index();
+  last_snapshot_index_ = snapshot_meta.last_included_index();
   return 0;
 }
 
@@ -231,5 +240,9 @@ void MetaStateMachine::on_start_following(const ::braft::LeaderChangeContext& /*
 void MetaStateMachine::on_stop_following(const ::braft::LeaderChangeContext& /*ctx*/) {
   DINGO_LOG(INFO) << "on_stop_following...";
 }
+
+int64_t MetaStateMachine::GetAppliedIndex() const { return applied_index_; }
+
+int64_t MetaStateMachine::GetLastSnapshotIndex() const { return last_snapshot_index_; }
 
 }  // namespace dingodb

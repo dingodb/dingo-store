@@ -78,7 +78,7 @@ void NodeServiceImpl::GetRegionInfo(google::protobuf::RpcController*, const pb::
                                     pb::node::GetRegionInfoResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard const done_guard(done);
 
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   for (auto region_id : request->region_ids()) {
     auto region = store_region_meta->GetRegion(region_id);
     if (region == nullptr) {
@@ -409,7 +409,7 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
   }
 
   int64_t vector_index_id = request->meta().vector_index_id();
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(vector_index_id);
   if (region == nullptr) {
     ServiceHelper::SetError(response->mutable_error(), Errno::EREGION_NOT_FOUND,
@@ -440,7 +440,7 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
   brpc::ClosureGuard done_guard(done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
     ServiceHelper::SetError(response->mutable_error(), Errno::EREGION_NOT_FOUND,
@@ -474,7 +474,7 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*contro
                                        pb::node::CheckVectorIndexResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
 
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(request->vector_index_id());
   if (region == nullptr) {
     ServiceHelper::SetError(response->mutable_error(), Errno::EREGION_NOT_FOUND,

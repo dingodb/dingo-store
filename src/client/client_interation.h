@@ -99,7 +99,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     method = dingodb::pb::index::IndexService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "UtilService") {
     method = dingodb::pb::util::UtilService::descriptor()->FindMethodByName(api_name);
-  } else if (service_name == "RegionControlService") {
+  } else if (service_name == "DebugService") {
     method = dingodb::pb::debug::DebugService::descriptor()->FindMethodByName(api_name);
   } else {
     DINGO_LOG(FATAL) << "Unknown service name: " << service_name;
@@ -218,7 +218,7 @@ template <typename Request, typename Response>
 butil::Status InteractionManager::SendRequestWithoutContext(const std::string& service_name,
                                                             const std::string& api_name, const Request& request,
                                                             Response& response) {
-  if (service_name == "UtilService" || service_name == "RegionControlService") {
+  if (service_name == "UtilService" || service_name == "DebugService") {
     if (store_interaction_ == nullptr) {
       DINGO_LOG(ERROR) << "Store interaction is nullptr.";
       return butil::Status(dingodb::pb::error::EINTERNAL, "Store interaction is nullptr.");

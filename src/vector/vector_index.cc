@@ -36,7 +36,19 @@
 
 namespace dingodb {
 
-// DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
+VectorIndex::VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                         const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+    : id(id),
+      apply_log_id(0),
+      snapshot_log_id(0),
+      vector_index_parameter(vector_index_parameter),
+      epoch(epoch),
+      range(range) {
+  vector_index_type = vector_index_parameter.vector_index_type();
+  DINGO_LOG(DEBUG) << fmt::format("[new.VectorIndex][id({})]", id);
+}
+
+VectorIndex::~VectorIndex() { DINGO_LOG(DEBUG) << fmt::format("[delete.VectorIndex][id({})]", id); }
 
 void VectorIndex::SetSnapshotLogId(int64_t snapshot_log_id) {
   this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
@@ -71,12 +83,35 @@ butil::Status VectorIndex::GetMemorySize([[maybe_unused]] int64_t& memory_size) 
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement get memory size");
 }
 
+VectorIndexWrapper::VectorIndexWrapper(int64_t id, pb::common::VectorIndexParameter index_parameter,
+                                       int64_t save_snapshot_threshold_write_key_num)
+    : id_(id),
+      vector_index_type_(index_parameter.vector_index_type()),
+      ready_(false),
+      stop_(false),
+      is_switching_vector_index_(false),
+      apply_log_id_(0),
+      snapshot_log_id_(0),
+      index_parameter_(index_parameter),
+      is_hold_vector_index_(false),
+      pending_task_num_(0),
+      loadorbuilding_num_(0),
+      rebuilding_num_(0),
+      saving_num_(0),
+      save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
+  snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
+  bthread_mutex_init(&vector_index_mutex_, nullptr);
+  DINGO_LOG(DEBUG) << fmt::format("[new.VectorIndexWrapper][id({})]", id_);
+}
+
 VectorIndexWrapper::~VectorIndexWrapper() {
   ClearVectorIndex();
   if (snapshot_set_ != nullptr) {
     snapshot_set_->ClearSnapshot();
   }
+
   bthread_mutex_destroy(&vector_index_mutex_);
+  DINGO_LOG(DEBUG) << fmt::format("[delete.VectorIndexWrapper][id({})]", id_);
 }
 
 std::shared_ptr<VectorIndexWrapper> VectorIndexWrapper::New(int64_t id,

@@ -204,6 +204,7 @@ class Constant {
   static const int32_t kStoreMetricsCollectIntervalS = 30;
   static const int32_t kRegionMetricsCollectIntervalS = 300;
   static const int32_t kDefaultSplitCheckIntervalS = 120;
+  static const int32_t kRaftSnapshotIntervalS = 120;
 
   // raft snapshot
   inline static const std::string kRaftSnapshotRegionMetaFileName = "region_meta";

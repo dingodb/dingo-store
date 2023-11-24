@@ -39,8 +39,8 @@ namespace store {
 
 class RegionMetrics {
  public:
-  RegionMetrics() { bthread_mutex_init(&mutex_, nullptr); }
-  ~RegionMetrics() { bthread_mutex_destroy(&mutex_); }
+  RegionMetrics(int64_t region_id);
+  ~RegionMetrics();
 
   std::string Serialize();
   void DeSerialize(const std::string& data);
@@ -78,10 +78,6 @@ class RegionMetrics {
   int64_t Id() {
     BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_metrics_.id();
-  }
-  void SetId(int64_t region_id) {
-    BAIDU_SCOPED_LOCK(mutex_);
-    inner_region_metrics_.set_id(region_id);
   }
 
   const std::string& MinKey() {

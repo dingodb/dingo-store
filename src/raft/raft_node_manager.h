@@ -19,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <shared_mutex>
+#include <vector>
 
 #include "raft/raft_node.h"
 
@@ -35,13 +36,14 @@ class RaftNodeManager {
 
   bool IsExist(int64_t node_id);
   std::shared_ptr<RaftNode> GetNode(int64_t node_id);
+  std::vector<std::shared_ptr<RaftNode>> GetAllNode();
   void AddNode(int64_t node_id, std::shared_ptr<RaftNode> node);
   void DeleteNode(int64_t node_id);
 
  private:
   bthread_mutex_t mutex_;
 
-  std::map<int64_t, std::shared_ptr<RaftNode> > nodes_;
+  std::map<int64_t, std::shared_ptr<RaftNode>> nodes_;
 };
 
 }  // namespace dingodb

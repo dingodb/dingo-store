@@ -219,7 +219,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
   Helper::RemoveAllFileOrDirectory(region_checkpoint_path);
 
   // update snapshot epoch to store meta
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   if (!store_region_meta) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] get store region meta failed", region->Id());
     return false;
@@ -251,7 +251,7 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
     return butil::Status(pb::error::EREGION_VERSION, "snapshot version abnormal, abandon load snapshot");
 
   } else if (meta.epoch().version() > region->Epoch().version()) {
-    auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+    auto store_region_meta = GET_STORE_REGION_META;
     store_region_meta->UpdateEpochVersionAndRange(region, meta.epoch().version(), meta.range());
   }
 

@@ -39,6 +39,18 @@ std::shared_ptr<RaftNode> RaftNodeManager::GetNode(int64_t node_id) {
   return it->second;
 }
 
+std::vector<std::shared_ptr<RaftNode>> RaftNodeManager::GetAllNode() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  std::vector<std::shared_ptr<RaftNode>> nodes;
+  nodes.reserve(nodes_.size());
+  for (auto& [_, node] : nodes_) {
+    nodes.push_back(node);
+  }
+
+  return nodes;
+}
+
 void RaftNodeManager::AddNode(int64_t node_id, std::shared_ptr<RaftNode> node) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (nodes_.find(node_id) != nodes_.end()) {

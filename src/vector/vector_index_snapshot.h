@@ -67,12 +67,10 @@ using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;
 
 class SnapshotMetaSet {
  public:
-  SnapshotMetaSet(int64_t vector_index_id) : vector_index_id_(vector_index_id) { bthread_mutex_init(&mutex_, nullptr); }
-  ~SnapshotMetaSet() { bthread_mutex_destroy(&mutex_); }
+  SnapshotMetaSet(int64_t vector_index_id);
+  ~SnapshotMetaSet();
 
-  static std::shared_ptr<SnapshotMetaSet> New(int64_t vector_index_id) {
-    return std::make_shared<SnapshotMetaSet>(vector_index_id);
-  }
+  static std::shared_ptr<SnapshotMetaSet> New(int64_t vector_index_id);
 
   int64_t VectorIndexId() const { return vector_index_id_; }
 

@@ -27,8 +27,8 @@
 
 namespace dingodb {
 
-TaskRunnable::TaskRunnable() { DINGO_LOG(DEBUG) << "new exec task..."; }
-TaskRunnable::~TaskRunnable() { DINGO_LOG(DEBUG) << "delete exec task..."; }
+TaskRunnable::TaskRunnable() {}   // NOLINT
+TaskRunnable::~TaskRunnable() {}  // NOLINT
 
 int ExecuteRoutine(void* meta, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NOLINT
   Worker* worker = static_cast<Worker*>(meta);

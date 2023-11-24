@@ -29,6 +29,7 @@
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
@@ -1923,7 +1924,9 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
       DINGO_LOG(INFO) << "Snapshot:" << request->node_index();
       RaftControlClosure *snapshot_done =
           new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
-      raft_node->Snapshot(snapshot_done);
+      auto ctx = std::make_shared<Context>();
+      ctx->SetDone(snapshot_done);
+      raft_node->Snapshot(ctx, true);
       return;
     }
     case pb::coordinator::RaftControlOp::ResetPeer: {

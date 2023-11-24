@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <any>
+#include <cassert>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -523,6 +524,18 @@ bool Server::InitCrontabManager() {
       [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
   });
 
+  auto raft_store_engine = GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
+    // Add raft snapshot controller crontab
+    crontab_configs_.push_back({
+        "RAFT_SNAPSHOT_CONTROLLER",
+        {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX},
+        GetInterval(config, "raft.snapshot_interval_s", Constant::kRaftSnapshotIntervalS) * 1000,
+        false,
+        [](void*) { Server::GetInstance().GetRaftStoreEngine()->DoSnapshotPeriodicity(); },
+    });
+  }
+
   crontab_manager_->AddCrontab(crontab_configs_);
 
   return true;
@@ -637,27 +650,174 @@ bool Server::Ip2Hostname(std::string& ip2hostname) {
   return true;
 }
 
+int64_t Server::Id() const {
+  assert(id_ != 0);
+  return id_;
+}
+
+std::string Server::Keyring() const { return keyring_; }
+
+std::string Server::ServerAddr() { return server_addr_; }
+
+butil::EndPoint Server::ServerEndpoint() { return server_endpoint_; }
+
+void Server::SetServerEndpoint(const butil::EndPoint& endpoint) {
+  server_endpoint_ = endpoint;
+  server_addr_ = Helper::EndPointToStr(endpoint);
+}
+
+butil::EndPoint Server::RaftEndpoint() { return raft_endpoint_; }
+
+void Server::SetRaftEndpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
+
+std::shared_ptr<CoordinatorInteraction> Server::GetCoordinatorInteraction() {
+  assert(coordinator_interaction_ != nullptr);
+  return coordinator_interaction_;
+}
+
+std::shared_ptr<CoordinatorInteraction> Server::GetCoordinatorInteractionIncr() {
+  assert(coordinator_interaction_incr_ != nullptr);
+  return coordinator_interaction_incr_;
+}
+
+std::shared_ptr<Engine> Server::GetEngine() {
+  assert(raft_engine_ != nullptr);
+  return raft_engine_;
+}
+
+std::shared_ptr<RawEngine> Server::GetRawEngine() {
+  assert(raw_engine_ != nullptr);
+  return raw_engine_;
+}
+
+std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
+  auto engine = GetEngine();
+  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+    return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  }
+  return nullptr;
+}
+
+std::shared_ptr<MetaReader> Server::GetMetaReader() {
+  assert(meta_reader_ != nullptr);
+  return meta_reader_;
+}
+
+std::shared_ptr<MetaWriter> Server::GetMetaWriter() {
+  assert(meta_writer_ != nullptr);
+  return meta_writer_;
+}
+
+std::shared_ptr<LogStorageManager> Server::GetLogStorageManager() {
+  assert(log_storage_ != nullptr);
+  return log_storage_;
+}
+
+std::shared_ptr<Storage> Server::GetStorage() {
+  assert(storage_ != nullptr);
+  return storage_;
+}
+
+std::shared_ptr<StoreMetaManager> Server::GetStoreMetaManager() {
+  assert(store_meta_manager_ != nullptr);
+  return store_meta_manager_;
+}
+
 store::RegionPtr Server::GetRegion(int64_t region_id) {
-  if (store_meta_manager_ == nullptr) {
-    return nullptr;
-  }
-  auto store_region_meta = store_meta_manager_->GetStoreRegionMeta();
-  if (store_region_meta == nullptr) {
-    return nullptr;
-  }
-  return store_region_meta->GetRegion(region_id);
+  return GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
 }
 
 std::vector<store::RegionPtr> Server::GetAllAliveRegion() {
-  if (store_meta_manager_ == nullptr) {
-    return {};
-  }
-  auto store_region_meta = store_meta_manager_->GetStoreRegionMeta();
-  if (store_region_meta == nullptr) {
-    return {};
-  }
-  return store_region_meta->GetAllAliveRegion();
+  return GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
 }
+
+StoreRaftMeta::RaftMetaPtr Server::GetRaftMeta(int64_t region_id) {
+  return GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(region_id);
+}
+
+std::shared_ptr<StoreMetricsManager> Server::GetStoreMetricsManager() {
+  assert(store_metrics_manager_ != nullptr);
+  return store_metrics_manager_;
+}
+
+std::shared_ptr<CrontabManager> Server::GetCrontabManager() {
+  assert(crontab_manager_ != nullptr);
+  return crontab_manager_;
+}
+
+std::shared_ptr<StoreController> Server::GetStoreController() {
+  assert(store_controller_ != nullptr);
+  return store_controller_;
+}
+
+std::shared_ptr<RegionController> Server::GetRegionController() {
+  assert(region_controller_ != nullptr);
+  return region_controller_;
+}
+
+std::shared_ptr<RegionCommandManager> Server::GetRegionCommandManager() {
+  assert(region_command_manager_ != nullptr);
+  return region_command_manager_;
+}
+
+VectorIndexManagerPtr Server::GetVectorIndexManager() {
+  assert(vector_index_manager_ != nullptr);
+  return vector_index_manager_;
+}
+
+std::shared_ptr<CoordinatorControl> Server::GetCoordinatorControl() {
+  assert(coordinator_control_ != nullptr);
+  return coordinator_control_;
+}
+
+std::shared_ptr<AutoIncrementControl>& Server::GetAutoIncrementControl() {
+  assert(auto_increment_control_ != nullptr);
+  return auto_increment_control_;
+}
+
+std::shared_ptr<TsoControl> Server::GetTsoControl() {
+  assert(tso_control_ != nullptr);
+  return tso_control_;
+}
+
+std::shared_ptr<KvControl> Server::GetKvControl() {
+  assert(kv_control_ != nullptr);
+  return kv_control_;
+}
+
+void Server::SetEndpoints(const std::vector<butil::EndPoint>& endpoints) { endpoints_ = endpoints; }
+
+std::shared_ptr<Heartbeat> Server::GetHeartbeat() { return heartbeat_; }
+
+std::string Server::GetCheckpointPath() { return checkpoint_path_; }
+
+std::string Server::GetStorePath() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  return config == nullptr ? "" : config->GetString("store.path");
+}
+
+std::string Server::GetRaftPath() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  return config == nullptr ? "" : config->GetString("raft.path");
+}
+
+std::string Server::GetRaftLogPath() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  return config == nullptr ? "" : config->GetString("raft.log_path");
+}
+
+std::string Server::GetIndexPath() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  return config == nullptr ? "" : config->GetString("vector.index_path");
+}
+
+bool Server::IsReadOnly() const { return is_read_only_; }
+
+void Server::SetReadOnly(bool is_read_only) { is_read_only_ = is_read_only; }
+
+bool Server::IsLeader(int64_t region_id) { return storage_->IsLeader(region_id); }
+
+std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split_checker_; }
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
                                                                               const int64_t region_id,

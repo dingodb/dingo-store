@@ -99,7 +99,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorBatchQueryRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -226,7 +226,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorSearchRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -387,7 +387,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   auto status = ValidateVectorAddRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -482,7 +482,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   auto status = ValidateVectorDeleteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -553,7 +553,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorGetBorderIdRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -642,7 +642,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorScanQueryRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -742,7 +742,7 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorGetRegionMetricsRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -852,7 +852,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorCountRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -978,7 +978,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   butil::Status status = ValidateVectorSearchDebugRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1189,7 +1189,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   int64_t region_id = request->context().region_id();
 
-  auto region = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto region = Server::GetInstance().GetRegion(region_id);
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequestIndex(request, region, uniform_range);
   if (!status.ok()) {
@@ -1361,7 +1361,7 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
   }
 
   // Validate region exist.
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
@@ -1551,7 +1551,7 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
   }
 
   // Validate region exist.
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(request->context().region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
@@ -1677,8 +1677,7 @@ static butil::Status VectorValidateTxnCheckTxnStatusRequest(const pb::store::Txn
     return status;
   }
 
-  auto region =
-      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
+  auto region = Server::GetInstance().GetRegion(request->context().region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
@@ -1752,8 +1751,7 @@ static butil::Status VectorValidateTxnResolveLockRequest(const pb::store::TxnRes
     }
   }
 
-  auto region =
-      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
+  auto region = Server::GetInstance().GetRegion(request->context().region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
@@ -2093,8 +2091,7 @@ static butil::Status VectorValidateTxnGcRequest(const pb::store::TxnGcRequest* r
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "safe_point_ts is 0");
   }
 
-  auto region =
-      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(request->context().region_id());
+  auto region = Server::GetInstance().GetRegion(request->context().region_id());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }

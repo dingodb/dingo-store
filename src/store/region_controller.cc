@@ -102,7 +102,6 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   parameter.raft_path = config->GetString("raft.path");
   parameter.election_timeout_ms = 200;
-  parameter.snapshot_interval_s = config->GetInt("raft.snapshot_interval_s");
   parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   parameter.log_path = config->GetString("raft.log_path");
 
@@ -251,7 +250,8 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Purge region for coordinator recycle_orphan_region mechanism
   // TODO: need to implement a better mechanism of tombstone for region's meta info
-  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] purge region.", region_id);
+  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] delete region finish, ref_count({})", region_id,
+                                 region.use_count());
   store_region_meta->DeleteRegion(region_id);
 
   return butil::Status();
@@ -377,7 +377,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
 }
 
 butil::Status SplitRegionTask::SplitRegion() {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
 
   auto status = ValidateSplitRegion(store_region_meta, region_cmd_->split_request());
   if (!status.ok()) {
@@ -426,7 +426,7 @@ void SplitRegionTask::Run() {
 }
 
 butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::RegionCmd& command) {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   const auto& merge_request = command.merge_request();
   if (command.region_id() != merge_request.source_region_id()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param source_region_id must equal RegionCmd.region_id");
@@ -626,7 +626,7 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
 
 butil::Status MergeRegionTask::MergeRegion() {
   const auto& merge_request = region_cmd_->merge_request();
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   assert(store_region_meta != nullptr);
 
   // Todo: forbid truncate raft log.
@@ -852,7 +852,7 @@ void TransferLeaderTask::Run() {
 
 butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
   auto engine = Server::GetInstance().GetEngine();
-  return engine->DoSnapshot(ctx, region_id);
+  return engine->SaveSnapshot(ctx, region_id, true);
 }
 
 void SnapshotRegionTask::Run() {
@@ -1122,7 +1122,7 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
 }
 
 butil::Status SwitchSplitTask::PreValidateSwitchSplit(const pb::coordinator::RegionCmd& command) {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
 
   auto region = store_region_meta->GetRegion(command.switch_split_request().region_id());
   if (region == nullptr) {
@@ -1148,7 +1148,7 @@ void SwitchSplitTask::Run() {
 
 butil::Status SwitchSplitTask::SwitchSplit(std::shared_ptr<Context>, int64_t region_id, bool disable_split) {
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] switch split.", region_id);
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
 
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
@@ -1165,7 +1165,7 @@ butil::Status HoldVectorIndexTask::PreValidateHoldVectorIndex(const pb::coordina
 }
 
 butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
@@ -1188,7 +1188,7 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
   int64_t region_id = region_cmd->hold_vector_index_request().region_id();
   bool is_hold = region_cmd->hold_vector_index_request().is_hold();
 
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
@@ -1369,8 +1369,7 @@ bool RegionController::Init() {
     return false;
   }
 
-  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-  auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
+  auto regions = Server::GetInstance().GetAllAliveRegion();
   for (auto& region : regions) {
     if (!RegisterExecutor(region->Id())) {
       DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] register region control executor failed.",

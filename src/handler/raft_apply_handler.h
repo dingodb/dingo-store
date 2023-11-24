@@ -15,6 +15,7 @@
 #ifndef DINGODB_HANDLER_RAFT_HANDLER_H_
 #define DINGODB_HANDLER_RAFT_HANDLER_H_
 
+#include <cstdint>
 #include <memory>
 
 #include "butil/status.h"
@@ -57,13 +58,15 @@ class SplitHandler : public BaseHandler {
  public:
   class SplitClosure : public braft::Closure {
    public:
-    SplitClosure(store::RegionPtr region) : region_(region) {}
-    ~SplitClosure() override = default;
+    SplitClosure(int64_t region_id) : region_id_(region_id) {
+      DINGO_LOG(DEBUG) << fmt::format("[new.SplitClosure][id({})]", region_id_);
+    }
+    ~SplitClosure() override { DINGO_LOG(DEBUG) << fmt::format("[delete.SplitClosure][id({})]", region_id_); }
 
     void Run() override;
 
    private:
-    store::RegionPtr region_;
+    int64_t region_id_;
   };
 
   HandlerType GetType() override { return HandlerType::kSplit; }

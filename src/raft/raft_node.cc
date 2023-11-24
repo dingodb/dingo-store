@@ -41,17 +41,21 @@ DEFINE_int32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
 namespace dingodb {
 
 RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-                   std::shared_ptr<braft::StateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage)
+                   std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage)
     : node_id_(node_id),
       str_node_id_(std::to_string(node_id)),
       raft_group_name_(raft_group_name),
       node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm),
-      log_storage_(log_storage) {}
+      log_storage_(log_storage) {
+  DINGO_LOG(DEBUG) << fmt::format("[new.RaftNode][id({})]", node_id);
+}
+
+RaftNode::~RaftNode() { DINGO_LOG(DEBUG) << fmt::format("[delete.RaftNode][id({})]", node_id_); }
 
 // init_conf: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
 int RaftNode::Init(store::RegionPtr region, const std::string& init_conf, const std::string& raft_path,
-                   int election_timeout_ms, int snapshot_interval_s) {
+                   int election_timeout_ms) {
   DINGO_LOG(INFO) << fmt::format("[raft.node][node_id({})] raft init init_conf: {}", node_id_, init_conf);
   election_timeout_ms_ = election_timeout_ms;
 
@@ -63,7 +67,8 @@ int RaftNode::Init(store::RegionPtr region, const std::string& init_conf, const 
   node_options.election_timeout_ms = election_timeout_ms;
   node_options.fsm = fsm_.get();
   node_options.node_owns_fsm = false;
-  node_options.snapshot_interval_s = snapshot_interval_s;
+  // Disable braft snapshot trigger
+  node_options.snapshot_interval_s = 0;
 
   path_ = fmt::format("{}/{}", raft_path, node_id_);
   node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
@@ -128,7 +133,7 @@ butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb:
 
   braft::Task task;
   task.data = &data;
-  task.done = new StoreClosure(ctx, raft_cmd);
+  task.done = new BaseClosure(ctx, raft_cmd);
   node_->apply(task);
 
   StoreBvarMetrics::GetInstance().IncCommitCountPerSecond(str_node_id_);
@@ -190,7 +195,23 @@ butil::Status RaftNode::ResetPeers(const braft::Configuration& new_peers) { retu
 
 int RaftNode::TransferLeadershipTo(const braft::PeerId& peer) { return node_->transfer_leadership_to(peer); }
 
-void RaftNode::Snapshot(braft::Closure* done) { node_->snapshot(done); }
+butil::Status RaftNode::Snapshot(std::shared_ptr<Context> ctx, bool force) {
+  if (disable_save_snapshot_.load()) {
+    return butil::Status(pb::error::ERAFT_DISABLE_SAVE_SNAPSHOT, "disable save snapshot");
+  }
+  if (!force && !fsm_->MaySaveSnapshot()) {
+    return butil::Status(pb::error::ERAFT_NOT_NEED_SNAPSHOT, "not need save snapshot");
+  }
+
+  DINGO_LOG(INFO) << "here 003";
+  auto* done = new RaftSnapshotClosure(ctx);
+  if (done == nullptr) {
+    DINGO_LOG(INFO) << "here 004";
+  }
+  node_->snapshot(done);
+
+  return butil::Status();
+}
 
 std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
   braft::NodeStatus status;
@@ -244,11 +265,15 @@ std::shared_ptr<pb::common::BRaftStatus> RaftNode::GetStatus() {
   return braft_status;
 }
 
-std::shared_ptr<braft::StateMachine> RaftNode::GetStateMachine() { return fsm_; }
+std::shared_ptr<BaseStateMachine> RaftNode::GetStateMachine() { return fsm_; }
 
 std::shared_ptr<SnapshotContext> RaftNode::MakeSnapshotContext() {
   auto fsm = std::dynamic_pointer_cast<StoreStateMachine>(fsm_);
   return fsm != nullptr ? fsm->MakeSnapshotContext() : nullptr;
 }
+
+void RaftNode::SetDisableSaveSnapshot(bool disable) { return disable_save_snapshot_.store(disable); }
+
+bool RaftNode::DisableSaveSnapshot() { return disable_save_snapshot_.load(); }
 
 }  // namespace dingodb

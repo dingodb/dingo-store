@@ -128,7 +128,7 @@ void RebuildVectorIndexTask::Run() {
       vector_index_wrapper_->ClearVectorIndex();
     }
 
-    auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+    auto store_region_meta = GET_STORE_REGION_META;
     store_region_meta->UpdateTemporaryDisableChange(region, false);
   }
 }
@@ -196,8 +196,7 @@ void LoadOrBuildVectorIndexTask::Run() {
   });
 
   // Get region meta
-  auto region =
-      Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(vector_index_wrapper_->Id());
+  auto region = Server::GetInstance().GetRegion(vector_index_wrapper_->Id());
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][region({})] not found region.",
                                     vector_index_wrapper_->Id());
@@ -227,8 +226,7 @@ void LoadOrBuildVectorIndexTask::Run() {
 
   // Pull snapshot from peers.
   // New region don't pull snapshot, directly build.
-  auto raft_meta =
-      Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(vector_index_wrapper_->Id());
+  auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
   if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][region({})] pull last snapshot from peers.",
                                    vector_index_wrapper_->Id());
@@ -804,12 +802,7 @@ void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_inde
 }
 
 butil::Status VectorIndexManager::ScrubVectorIndex() {
-  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-  if (store_meta_manager == nullptr) {
-    return butil::Status(pb::error::Errno::EINTERNAL, "Get store meta manager failed");
-  }
-
-  auto regions = store_meta_manager->GetStoreRegionMeta()->GetAllAliveRegion();
+  auto regions = Server::GetInstance().GetAllAliveRegion();
   if (regions.empty()) {
     DINGO_LOG(INFO) << "[vector_index.scrub][index_id()] No alive region, skip scrub vector index";
     return butil::Status::OK();

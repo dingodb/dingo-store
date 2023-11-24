@@ -38,6 +38,17 @@ DEFINE_double(min_system_memory_capacity_free_ratio, 0.10, "Min system memory ca
 
 namespace store {
 
+RegionMetrics::RegionMetrics(int64_t region_id) {
+  inner_region_metrics_.set_id(region_id);
+  bthread_mutex_init(&mutex_, nullptr);
+  DINGO_LOG(DEBUG) << fmt::format("[new.RegionMetrics][id({})]", region_id);
+}
+
+RegionMetrics::~RegionMetrics() {
+  DINGO_LOG(DEBUG) << fmt::format("[delete.RegionMetrics][id({})]", Id());
+  bthread_mutex_destroy(&mutex_);
+}
+
 std::string RegionMetrics::Serialize() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_metrics_.SerializeAsString();
@@ -280,7 +291,7 @@ std::vector<std::vector<store::RegionPtr>> GenBatchRegion(std::vector<store::Reg
 }
 
 bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
@@ -328,7 +339,7 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
 }
 
 bool StoreRegionMetrics::CollectMetrics() {
-  auto store_region_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta();
+  auto store_region_meta = GET_STORE_REGION_META;
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
@@ -435,9 +446,7 @@ bool StoreRegionMetrics::CollectMetrics() {
 }
 
 store::RegionMetricsPtr StoreRegionMetrics::NewMetrics(int64_t region_id) {
-  auto metrics = std::make_shared<store::RegionMetrics>();
-  metrics->SetId(region_id);
-  return metrics;
+  return std::make_shared<store::RegionMetrics>(region_id);
 }
 
 void StoreRegionMetrics::AddMetrics(store::RegionMetricsPtr metrics) {
@@ -492,7 +501,7 @@ void StoreRegionMetrics::TransformFromKv(const std::vector<pb::common::KeyValue>
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
     int64_t region_id = ParseRegionId(kv.key());
-    auto region_metrics = std::make_shared<store::RegionMetrics>();
+    auto region_metrics = StoreRegionMetrics::NewMetrics(region_id);
     region_metrics->DeSerialize(kv.value());
     metricses_.insert_or_assign(region_id, region_metrics);
   }
