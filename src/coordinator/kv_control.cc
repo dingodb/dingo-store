@@ -335,6 +335,10 @@ void KvControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_inf
       int64_t kv_rev_count = kv_rev_meta_->Count();
       memory_info.set_kv_rev_map_count(kv_rev_count);
     }
+    {
+      int64_t kv_watch_count = one_time_watch_closure_status_map_.Size();
+      memory_info.set_kv_watch_count(kv_watch_count);
+    }
   }
 }
 

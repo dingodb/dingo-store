@@ -322,6 +322,8 @@ message CoordinatorMemoryInfo {
   int64 kv_rev_map_count = 85;
   int64 kv_rev_map_size = 86;
 
+  int64 kv_watch_count = 87;
+
   // auto increment
   int64 auto_increment_map_count = 91;
   int64 auto_increment_map_size = 92;

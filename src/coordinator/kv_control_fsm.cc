@@ -71,6 +71,7 @@ void KvControl::BuildTempMaps() {
 
 // OnLeaderStart will init id_epoch_map_temp_ from id_epoch_map_ which is in state machine
 void KvControl::OnLeaderStart(int64_t term) {
+  DINGO_LOG(INFO) << "OnLeaderStart start, term=" << term;
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
 
@@ -95,6 +96,7 @@ void KvControl::OnLeaderStart(int64_t term) {
 }
 
 void KvControl::OnLeaderStop() {
+  DINGO_LOG(INFO) << "OnLeaderStop start";
   // clear one time watch map
   one_time_watch_closure_status_map_.Clear();
   {

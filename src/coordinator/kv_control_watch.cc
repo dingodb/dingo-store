@@ -219,8 +219,8 @@ butil::Status KvControl::CancelOneTimeWatchClosure(uint64_t closure_id) {
 
   auto ret1 = bthread_mutex_trylock(&one_time_watch_map_mutex_);
   if (ret1 != 0) {
-    DINGO_LOG(ERROR) << "RemoveOneTimeWatch, bthread_mutex_trylock failed, closure_id:" << closure_id
-                     << ", ret1:" << ret1;
+    DINGO_LOG(WARNING) << "RemoveOneTimeWatch, bthread_mutex_trylock failed, closure_id:" << closure_id
+                       << ", ret1:" << ret1;
     return butil::Status(EINVAL, "RemoveOneTimeWatch, bthread_mutex_trylock failed");
   }
 
@@ -279,8 +279,8 @@ butil::Status KvControl::RemoveOneTimeWatch(uint64_t closure_id) {
 
   auto ret1 = bthread_mutex_trylock(&one_time_watch_map_mutex_);
   if (ret1 != 0) {
-    DINGO_LOG(ERROR) << "RemoveOneTimeWatch, bthread_mutex_trylock failed, closure_id:" << closure_id
-                     << ", ret1:" << ret1;
+    DINGO_LOG(WARNING) << "RemoveOneTimeWatch, bthread_mutex_trylock failed, closure_id:" << closure_id
+                       << ", ret1:" << ret1;
     return butil::Status(EINVAL, "RemoveOneTimeWatch, bthread_mutex_trylock failed");
   }
 
