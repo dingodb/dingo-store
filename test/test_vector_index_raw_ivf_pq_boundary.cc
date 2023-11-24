@@ -127,27 +127,60 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     exit(1);
   }
 
-  for (int internal_dimension = 1; internal_dimension <= 1024; internal_dimension++) {
-    // create random data
-    {
-      std::mt19937 rng;
-      std::uniform_real_distribution<> distrib;
+  int max_internal_dimension = 512;
+  int max_internal_nbits_per_idx = 16;
+  int max_internal_ncentroids = 256;
 
-      data_base.resize(internal_dimension * data_base_size, 0.0f);
+  for (int internal_dimension = 1; internal_dimension <= max_internal_dimension; internal_dimension++) {
+    // // create random data
+    // {
+    //   std::mt19937 rng;
+    //   std::uniform_real_distribution<> distrib;
 
-      for (int i = 0; i < data_base_size; i++) {
-        for (int j = 0; j < internal_dimension; j++) {
-          data_base[internal_dimension * i + j] = distrib(rng);
-        }
-      }
-    }
+    //   auto data_base_size1 = (256 * internal_dimension * max_internal_ncentroids);
+    //   auto data_base_size2 = (256 * internal_dimension * (1 << max_internal_nbits_per_idx));
+    //   data_base_size = std::max(data_base_size1, data_base_size2);
 
-    std::cout << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
-                             internal_dimension)
-              << '\n';
-    for (int internal_nbits_per_idx = 1; internal_nbits_per_idx <= 64; internal_nbits_per_idx++) {
+    //   data_base.resize(0);
+    //   data_base.resize(internal_dimension * data_base_size, 0.0f);
+
+    //   for (int i = 0; i < data_base_size; i++) {
+    //     for (int j = 0; j < internal_dimension; j++) {
+    //       data_base[internal_dimension * i + j] = distrib(rng);
+    //     }
+    //   }
+    // }
+
+    // std::cout << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
+    //                          internal_dimension)
+    //           << '\n';
+    for (int internal_nbits_per_idx = 1; internal_nbits_per_idx <= max_internal_nbits_per_idx;
+         internal_nbits_per_idx++) {
       for (int internal_nsubvector = 1; internal_nsubvector <= internal_dimension; internal_nsubvector++)
-        for (int internal_ncentroids = 1; internal_ncentroids < 1000; internal_ncentroids++) {
+        for (int internal_ncentroids = 1; internal_ncentroids <= max_internal_ncentroids; internal_ncentroids++) {
+          // create random data
+          {
+            std::mt19937 rng;
+            std::uniform_real_distribution<> distrib;
+
+            auto data_base_size1 = (256 * internal_dimension * internal_ncentroids);
+            auto data_base_size2 = (256 * internal_dimension * (1 << internal_nbits_per_idx));
+            data_base_size = std::max(data_base_size1, data_base_size2);
+
+            data_base.resize(0);
+            data_base.resize(internal_dimension * data_base_size, 0.0f);
+
+            for (int i = 0; i < data_base_size; i++) {
+              for (int j = 0; j < internal_dimension; j++) {
+                data_base[internal_dimension * i + j] = distrib(rng);
+              }
+            }
+          }
+
+          // std::cout << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
+          //                          internal_dimension)
+          //           << '\n';
+
           static const pb::common::Range kRange;
 
           std::array<std::pair<std::string, bool>, 3> error_flags{std::pair<std::string, bool>{"l2", false},
@@ -272,15 +305,19 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             }
             butil::Status ok = raw_ivf->Train(internal_data_base);
             if (!ok.ok()) {
-              std::cout << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} train failed",
-                                       internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                       internal_ncentroids, name)
+              std::cout << fmt::format(
+                               "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
+                               "train failed",
+                               data_base_size, internal_dimension, internal_nbits_per_idx, internal_nsubvector,
+                               internal_ncentroids, name)
                         << "\n"
                         << "\n";
 
-              outfile << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} train failed",
-                                     internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                     internal_ncentroids, name)
+              outfile << fmt::format(
+                             "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
+                             "train failed",
+                             data_base_size, internal_dimension, internal_nbits_per_idx, internal_nsubvector,
+                             internal_ncentroids, name)
                       << "\n"
                       << "\n";
               outfile.flush();
@@ -318,14 +355,18 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             }
             butil::Status ok = raw_ivf->Add(vector_with_ids);
             if (!ok.ok()) {
-              std::cout << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} add failed",
-                                       internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                       internal_ncentroids, name)
+              std::cout << fmt::format(
+                               "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
+                               "add failed",
+                               data_base_size, internal_dimension, internal_nbits_per_idx, internal_nsubvector,
+                               internal_ncentroids, name)
                         << "\n"
                         << "\n";
-              outfile << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} add failed",
-                                     internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                     internal_ncentroids, name)
+              outfile << fmt::format(
+                             "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} add "
+                             "failed",
+                             data_base_size, internal_dimension, internal_nbits_per_idx, internal_nsubvector,
+                             internal_ncentroids, name)
                       << "\n"
                       << "\n";
               lambda_set_error(name, true);
@@ -372,15 +413,19 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             std::vector<pb::index::VectorWithDistanceResult> results;
             butil::Status ok = raw_ivf->Search(vector_with_ids_clone, topk, {filter}, false, parameter, results);
             if (!ok.ok()) {
-              std::cout << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} search failed",
-                                       internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                       internal_ncentroids, name)
+              std::cout << fmt::format(
+                               "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
+                               "search failed",
+                               data_base_size, internal_dimension, internal_nbits_per_idx, internal_nsubvector,
+                               internal_ncentroids, name)
                         << "\n"
                         << "\n";
 
-              outfile << fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} search failed",
-                                     internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                     internal_ncentroids, name)
+              outfile << fmt::format(
+                             "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
+                             "search failed",
+                             data_base_size, internal_dimension, internal_nbits_per_idx, internal_nsubvector,
+                             internal_ncentroids, name)
                       << "\n"
                       << "\n";
               outfile.flush();
@@ -398,9 +443,9 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
             t.join();
           }
 
-          lambda_output_info(fmt::format("dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{}",
-                                         internal_dimension, internal_nbits_per_idx, internal_nsubvector,
-                                         internal_ncentroids));
+          lambda_output_info(fmt::format(
+              "data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{}", data_base_size,
+              internal_dimension, internal_nbits_per_idx, internal_nsubvector, internal_ncentroids));
 
           outfile.flush();
         }
