@@ -203,7 +203,6 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     pb::coordinator_internal::KvIndexInternal kv_index;
     auto ret = GetRawKvIndex(key, kv_index);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "KvRange GetRawKvIndex not found, key: " << key << ", error: " << ret.error_str();
       return butil::Status::OK();
     }
     kv_index_values.push_back(kv_index);
