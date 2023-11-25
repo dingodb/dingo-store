@@ -47,7 +47,6 @@ KvControl::KvControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<Me
   // init bthread mutex
   bthread_mutex_init(&lease_to_key_map_temp_mutex_, nullptr);
   bthread_mutex_init(&one_time_watch_map_mutex_, nullptr);
-  bthread_mutex_init(&one_time_watch_closure_map_mutex_, nullptr);
   leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft

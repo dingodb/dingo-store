@@ -83,10 +83,7 @@ void KvControl::OnLeaderStart(int64_t term) {
   {
     BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
     one_time_watch_map_.clear();
-    {
-      BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
-      one_time_watch_closure_map_.clear();
-    }
+    one_time_watch_closure_map_.clear();
   }
 
   DINGO_LOG(INFO) << "OnLeaderStart init lease_to_key_map_temp_ finished, term=" << term
@@ -107,10 +104,7 @@ void KvControl::OnLeaderStop() {
     }
 
     one_time_watch_map_.clear();
-    {
-      BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
-      one_time_watch_closure_map_.clear();
-    }
+    one_time_watch_closure_map_.clear();
   }
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";

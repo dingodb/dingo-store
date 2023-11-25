@@ -371,6 +371,12 @@ void SetupSignalHandler() {
     printf("Failed to setup signal handler for SIGABRT\n");
     exit(-1);
   }
+  // ignore SIGPIPE
+  s = signal(SIGPIPE, SIG_IGN);
+  if (s == SIG_ERR) {
+    printf("Failed to setup signal handler for SIGPIPE\n");
+    exit(-1);
+  }
 }
 
 // Modify gflag variable
@@ -737,6 +743,7 @@ int main(int argc, char *argv[]) {
   options.h2_settings.connection_window_size = FLAGS_h2_server_connection_window_size;
   options.h2_settings.max_frame_size = FLAGS_h2_server_max_frame_size;
   options.h2_settings.max_header_list_size = FLAGS_h2_server_max_header_list_size;
+  // options.idle_timeout_sec = 30;
 
   DINGO_LOG(INFO) << "h2_settings.max_concurrent_streams: " << options.h2_settings.max_concurrent_streams;
   DINGO_LOG(INFO) << "h2_settings.stream_window_size: " << options.h2_settings.stream_window_size;

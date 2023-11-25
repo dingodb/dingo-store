@@ -29,6 +29,7 @@
 #include "bthread/mutex.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
+#include "butil/time.h"
 #include "common/logging.h"
 #include "coordinator/kv_control.h"
 #include "gflags/gflags.h"
@@ -40,14 +41,8 @@ namespace dingodb {
 DEFINE_int64(version_watch_max_count, 50000, "max count of version watch");
 
 void WatchCancelCallback(KvControl* kv_control, uint64_t closure_id) {
-  if (!kv_control->CheckClosureStatus(closure_id)) {
-    DINGO_LOG(INFO) << "WatchCancelCallback, closure_id:" << closure_id << ", already removed";
-    return;
-  } else {
-    DINGO_LOG(INFO) << "WatchCancelCallback, closure_id:" << closure_id << ", will remove";
-    // kv_control->CancelOneTimeWatchClosure(closure_id);
-    kv_control->RemoveOneTimeWatch(closure_id);
-  }
+  kv_control->CancelOneTimeWatchClosure(closure_id);
+  // kv_control->RemoveOneTimeWatch(closure_id);
 }
 
 butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t start_revision, bool no_put_event,
@@ -104,16 +99,12 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
   }
 
   // add to watch
-  // auto* defer_done = done_guard.release();
   auto closure_id = one_time_watch_closure_seq_.fetch_add(1, std::memory_order_relaxed);
   DeferDone defer_done(closure_id, watch_key, done_guard.release(), response);
 
   // add defer_done to done_map
-  {
-    // BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
-    one_time_watch_closure_map_.insert_or_assign(closure_id, defer_done);
-  }
-  one_time_watch_closure_status_map_.Put(closure_id, true);
+  one_time_watch_closure_status_map_.Put(closure_id, false);
+  one_time_watch_closure_map_.insert_or_assign(closure_id, defer_done);
 
   AddOneTimeWatch(watch_key, start_revision, no_put_event, no_delete_event, need_prev_kv, closure_id);
 
@@ -152,22 +143,18 @@ butil::Status KvControl::AddOneTimeWatch(const std::string& watch_key, int64_t s
 butil::Status KvControl::RemoveOneTimeWatchWithLock(uint64_t closure_id) {
   one_time_watch_closure_status_map_.Erase(closure_id);
 
-  DeferDone defer_done;
-  {
-    // BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
-    auto it_defer_done = one_time_watch_closure_map_.find(closure_id);
-    if (it_defer_done == one_time_watch_closure_map_.end()) {
-      DINGO_LOG(INFO) << "RemoveOneTimeWatch not found, closure_id:" << closure_id;
-      return butil::Status(EINVAL, "RemoveOneTimeWatch not found");
-    }
-
-    defer_done = it_defer_done->second;
-    one_time_watch_closure_map_.erase(it_defer_done);
+  auto it_defer_done = one_time_watch_closure_map_.find(closure_id);
+  if (it_defer_done == one_time_watch_closure_map_.end()) {
+    DINGO_LOG(INFO) << "RemoveOneTimeWatch not found, closure_id:" << closure_id;
+    return butil::Status(EINVAL, "RemoveOneTimeWatch not found");
   }
+  auto& defer_done = it_defer_done->second;
 
   DINGO_LOG(INFO) << "RemoveOneTimeWatch, closure_id:" << closure_id << ", done->Run() start";
+  int64_t start_ts = butil::gettimeofday_ms();
   defer_done.Done();
-  DINGO_LOG(INFO) << "RemoveOneTimeWatch, closure_id:" << closure_id << ", done->Run() finish";
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch, closure_id:" << closure_id
+                  << ", done->Run() finish, cost: " << butil::gettimeofday_ms() - start_ts << " ms";
 
   auto watch_key = defer_done.GetWatchKey();
   if (watch_key.empty()) {
@@ -192,7 +179,8 @@ butil::Status KvControl::RemoveOneTimeWatchWithLock(uint64_t closure_id) {
   }
 
   watch_node_map.erase(it_watch_node);
-  DINGO_LOG(INFO) << "RemoveOneTimeWatch, done->Run: " << closure_id << ", watch_key:" << watch_key;
+  DINGO_LOG(INFO) << "RemoveOneTimeWatch, done->Run: " << closure_id << ", watch_key:" << watch_key
+                  << ", cost: " << butil::gettimeofday_ms() - start_ts << " ms";
 
   if (watch_node_map.empty()) {
     DINGO_LOG(INFO) << "RemoveOneTimeWatch, watch_node_map is empty, watch_key:" << watch_key;
@@ -202,74 +190,50 @@ butil::Status KvControl::RemoveOneTimeWatchWithLock(uint64_t closure_id) {
   return butil::Status::OK();
 }
 
-bool KvControl::CheckClosureStatus(uint64_t closure_id) {
-  bool status = false;
-  auto ret = one_time_watch_closure_status_map_.Get(closure_id, status);
-  if (ret < 0) {
-    return false;
-  }
-
-  return status;
-}
-
 // this function is called by WatchCancelCallback
 butil::Status KvControl::CancelOneTimeWatchClosure(uint64_t closure_id) {
   DINGO_LOG(INFO) << "CancelOneTimeWatchClosure, closure_id:" << closure_id;
   one_time_watch_closure_status_map_.Put(closure_id, true);
-
-  auto ret1 = bthread_mutex_trylock(&one_time_watch_map_mutex_);
-  if (ret1 != 0) {
-    DINGO_LOG(WARNING) << "RemoveOneTimeWatch, bthread_mutex_trylock failed, closure_id:" << closure_id
-                       << ", ret1:" << ret1;
-    return butil::Status(EINVAL, "RemoveOneTimeWatch, bthread_mutex_trylock failed");
-  }
-
-  {
-    // BAIDU_SCOPED_LOCK(one_time_watch_closure_map_mutex_);
-    auto it_defer_done = one_time_watch_closure_map_.find(closure_id);
-    if (it_defer_done == one_time_watch_closure_map_.end()) {
-      DINGO_LOG(INFO) << "CancelOneTimeWatchClosure, closure_id:" << closure_id << ", not found";
-    } else {
-      it_defer_done->second.Done();
-    }
-  }
-
-  bthread_mutex_unlock(&one_time_watch_map_mutex_);
-
-  DINGO_LOG(INFO) << "CancelOneTimeWatchClosure, closure_id:" << closure_id << ", done->Run() finish";
   return butil::Status::OK();
 }
 
 // this function is called by crontab
-butil::Status KvControl::RemoveOneTimeWatch() {  // NOLINT
-  // DINGO_LOG(INFO) << "RemoveOneTimeWatch";
+butil::Status KvControl::RemoveOneTimeWatch() {
+  DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatch for canceled";
 
-  // BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
+  std::map<uint64_t, bool> closure_status_map;
 
-  // std::map<uint64_t, bool> closure_status_map;
+  one_time_watch_closure_status_map_.GetRawMapCopy(closure_status_map);
 
-  // one_time_watch_closure_status_map_.GetRawMapCopy(closure_status_map);
+  if (closure_status_map.empty()) {
+    DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatch, done_map is empty";
+    return butil::Status::OK();
+  }
 
-  // if (closure_status_map.empty()) {
-  //   DINGO_LOG(INFO) << "RemoveOneTimeWatch, done_map is empty";
-  //   return butil::Status::OK();
-  // }
+  DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatch, closure_status_map.size:" << closure_status_map.size();
 
-  // DINGO_LOG(INFO) << "RemoveOneTimeWatch, closure_status_map.size:" << closure_status_map.size();
+  BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
 
-  // for (auto& it : closure_status_map) {
-  //   auto closure_id = it.first;
-  //   DINGO_LOG(INFO) << "RemoveOneTimeWatch, closure_id:" << closure_id;
+  int64_t start_ts = butil::gettimeofday_ms();
+  int64_t count = 0;
+  for (auto& it : closure_status_map) {
+    auto closure_id = it.first;
 
-  //   auto ret = RemoveOneTimeWatchWithLock(closure_id);
-  //   if (ret.ok()) {
-  //     DINGO_LOG(INFO) << "RemoveOneTimeWatchWithLock success, do done->Run(), closure_id:" << closure_id;
-  //   }
+    if (!it.second) {
+      continue;
+    }
 
-  //   one_time_watch_closure_status_map_.Erase(closure_id);
-  // }
+    DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatch, closure_id:" << closure_id;
 
-  // DINGO_LOG(INFO) << "RemoveOneTimeWatch finish, done_map.size:" << closure_status_map.size();
+    auto ret = RemoveOneTimeWatchWithLock(closure_id);
+    if (ret.ok()) {
+      DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatchWithLock success, closure_id:" << closure_id;
+    }
+    count++;
+  }
+
+  DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatch success, clean count: " << closure_status_map.size()
+                  << ", cost: " << butil::gettimeofday_ms() - start_ts << " ms";
 
   return butil::Status::OK();
 }
@@ -277,10 +241,11 @@ butil::Status KvControl::RemoveOneTimeWatch() {  // NOLINT
 butil::Status KvControl::RemoveOneTimeWatch(uint64_t closure_id) {
   DINGO_LOG(INFO) << "RemoveOneTimeWatch closure_id:" << closure_id;
 
+  int64_t start_ts = butil::gettimeofday_ms();
   auto ret1 = bthread_mutex_trylock(&one_time_watch_map_mutex_);
   if (ret1 != 0) {
     DINGO_LOG(WARNING) << "RemoveOneTimeWatch, bthread_mutex_trylock failed, closure_id:" << closure_id
-                       << ", ret1:" << ret1;
+                       << ", ret1:" << ret1 << ", cost: " << butil::gettimeofday_ms() - start_ts << " ms";
     return butil::Status(EINVAL, "RemoveOneTimeWatch, bthread_mutex_trylock failed");
   }
 
@@ -384,6 +349,9 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
     auto ret = RemoveOneTimeWatchWithLock(closure_id);
     if (ret.ok()) {
       DINGO_LOG(INFO) << "RemoveOneTimeWatchWithLock success, do done->Run(), closure_id:" << closure_id;
+    } else {
+      DINGO_LOG(ERROR) << "RemoveOneTimeWatchWithLock failed, do done->Run(), closure_id:" << closure_id
+                       << ", errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
     }
   }
 

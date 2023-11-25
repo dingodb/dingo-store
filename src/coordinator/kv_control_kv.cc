@@ -258,7 +258,7 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
       kv_temp.mutable_kv()->set_value(kv_in_rev.value());
     }
 
-    DINGO_LOG(INFO) << "KvRange will return kv: " << kv_temp.ShortDebugString();
+    DINGO_LOG(DEBUG) << "KvRange will return kv: " << kv_temp.ShortDebugString();
 
     // add to output
     kv.push_back(kv_temp);
