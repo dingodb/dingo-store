@@ -125,7 +125,9 @@ public class Writer {
 
     @SneakyThrows
     public static void write(Integer number, Numeric value, CodedOutputStream out) {
-        write(number, value.number(), out);
+        if (value != null) {
+            write(number, value.number(), out);
+        }
     }
 
     @SneakyThrows

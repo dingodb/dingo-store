@@ -18,9 +18,11 @@ package io.dingodb.sdk.service.lock;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.nio.charset.StandardCharsets;
 
+@ToString
 @EqualsAndHashCode
 @AllArgsConstructor
 public class LockInfo {

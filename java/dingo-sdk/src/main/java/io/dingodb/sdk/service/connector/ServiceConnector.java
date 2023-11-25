@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -62,7 +63,6 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
     public static final int RETRY_TIMES = 30;
     private static Map<Class, ResponseBuilder> responseBuilders = new ConcurrentHashMap<>();
-    private static ThreadLocal<Map<String, Integer>> ERR_MSGS = ThreadLocal.withInitial(HashMap::new);
 
     @Getter
     @AllArgsConstructor
@@ -182,7 +182,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
         S stub = null;
         boolean connected = false;
-        ERR_MSGS.get().clear();
+        Map<String, Integer> errMsgs = new HashMap<>();
 
         while (retryTimes-- > 0) {
             try {
@@ -198,7 +198,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 int errCode = error.getErrcodeValue();
                 if (errCode != 0) {
                     String authority = Optional.mapOrGet(stub.getChannel(), Channel::authority, () -> "");
-                    ERR_MSGS.get().compute(authority + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1);
+                    errMsgs.compute(authority + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1);
                     switch (errChecker.apply(errCode)) {
                         case RETRY:
                             errorLog(name, authority, error, RETRY);
@@ -228,21 +228,21 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                 if (log.isDebugEnabled()) {
                     log.warn("Exec {} failed: {}.", name, e.getMessage());
                 }
-                ERR_MSGS.get().compute(e.getMessage(), (k, v) -> v == null ? 1 : v + 1);
+                errMsgs.compute(e.getMessage(), (k, v) -> v == null ? 1 : v + 1);
                 LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
                 refresh(stub);
             }
         }
 
-        throw generateException(name, connected);
+        throw generateException(name, connected, errMsgs);
     }
 
-    private <R> RuntimeException generateException(String name, boolean connected) {
+    private <R> RuntimeException generateException(String name, boolean connected, Map<String, Integer> errMsgs) {
         // if connected is false, means can not get leader connection
         if (connected) {
             StringBuilder errMsgBuilder = new StringBuilder();
             errMsgBuilder.append("task: ").append(name).append("==>>");
-            ERR_MSGS.get().forEach((k, v) -> errMsgBuilder
+            errMsgs.forEach((k, v) -> errMsgBuilder
                 .append('[').append(v).append("] times [").append(k).append(']').append(", ")
             );
             throw new RetryException(
@@ -272,7 +272,6 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             if (!stubRef.compareAndSet(stub, null)) {
                 return;
             }
-
             if (locations.isEmpty()) {
                 Optional.ofNullable(this.transformToLeaderChannel(null))
                     .map(this::newStub)
@@ -286,8 +285,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                     .map(wrap(this::transformToLeaderChannel))
                     .map(this::newStub)
                     .ifPresent(stubRef::set)
-                    .isPresent()
-                ) {
+                    .isPresent()) {
                     return;
                 }
             }

@@ -2,12 +2,13 @@ package io.dingodb.sdk.service.caller;
 
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.service.Caller;
-import io.dingodb.sdk.service.ChannelProvider;
+import io.dingodb.sdk.service.Service;
 import io.dingodb.sdk.service.entity.Message;
 import io.dingodb.sdk.service.entity.Message.Response;
-import io.dingodb.sdk.service.Service;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ClientCalls;
@@ -16,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.RETRY;
@@ -24,12 +27,12 @@ import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.RETRY;
 @AllArgsConstructor
 public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHandler {
 
-    private final ChannelProvider channelProvider;
+    private final Channel channel;
     private final CallOptions options;
     private final S service;
 
-    public RpcCaller(ChannelProvider channelProvider, CallOptions options, Class<S> genericClass) {
-        this.channelProvider = channelProvider;
+    public RpcCaller(Channel channel, CallOptions options, Class<S> genericClass) {
+        this.channel = channel;
         this.options = options;
         this.service = proxy(genericClass);
     }
@@ -57,34 +60,57 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
     }
 
     public <REQ extends Message, RES extends Response> RES call(MethodDescriptor<REQ, RES> method, REQ request) {
-        Channel channel = channelProvider.channel();
-        RES res = call(method, request, options, channel);
-        if (res == null) {
-            channelProvider.refresh(channel);
-        }
-        return res;
+        return call(method, request, options, channel, System.identityHashCode(request));
     }
 
-    public static <REQ extends Message, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel
+    public static <REQ extends Message, RES extends Response> RpcFuture<RES> asyncCall(
+        MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel, long trace
     ) {
-        long traceId = System.identityHashCode(request);
         String methodName = method.getFullMethodName();
+        RpcFuture<RES> future = new RpcFuture<>();
+
         if (log.isDebugEnabled()) {
             log.debug(
-                "Call [{}], trace [{}], request: {}, options: {}", methodName, traceId, request, options
+                "Call [{}], trace [{}], request: {}, options: {}", methodName, trace, request, options
             );
         }
         if (channel == null) {
             log.debug(
-                "Call [{}] channel is null, will refresh and retry, trace [{}], request: {}, options: {}", methodName, traceId, request, options
+                "Call [{}] channel is null, will refresh and retry, trace [{}], request: {}, options: {}",
+                methodName, trace, request, options
+            );
+            future.complete(null);
+            return future;
+        }
+        ClientCall<REQ, RES> call = channel.newCall(method, options);
+        call.start(future.listener, new Metadata());
+        call.request(2);
+        call.sendMessage(request);
+        call.halfClose();
+        return future;
+    }
+
+    public static <REQ extends Message, RES extends Response> RES call(
+        MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel, long trace
+    ) {
+        String methodName = method.getFullMethodName();
+        if (log.isDebugEnabled()) {
+            log.debug(
+                "Call [{}], trace [{}], request: {}, options: {}", methodName, trace, request, options
+            );
+        }
+        if (channel == null) {
+            log.debug(
+                "Call [{}] channel is null, will refresh and retry, trace [{}], request: {}, options: {}",
+                methodName, trace, request, options
             );
             return null;
         }
+        long start = System.currentTimeMillis();
         if (log.isDebugEnabled()) {
             log.debug(
                 "Call [{}:{}] begin, trace [{}], request: {}, options: {}",
-                channel.authority(), methodName, traceId, request, options
+                channel.authority(), methodName, trace, request, options
             );
         }
         RES response = null;
@@ -94,14 +120,14 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
             if (log.isDebugEnabled()) {
                 log.debug(
                     "Call [{}:{}] StatusRuntimeException [{}], trace [{}], request: {}, options: {}",
-                    channel.authority(), methodName, e.getMessage(), traceId, request, options
+                    channel.authority(), methodName, e.getMessage(), trace, request, options
                 );
             }
         }
         if (log.isDebugEnabled()) {
             log.debug(
-                "Call [{}:{}] finish, trace [{}], request: {}, response: {}, options: {}",
-                channel.authority(), methodName, traceId, request, response, options
+                "Call [{}:{}] finish, use [{}] ms, trace [{}], request: {}, response: {}, options: {}",
+                channel.authority(), methodName, System.currentTimeMillis() - start, trace, request, response, options
             );
         }
         if (response != null && response.getError() != null) {
@@ -109,7 +135,7 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
                 if (log.isDebugEnabled()) {
                     log.debug(
                         "Call [{}:{}] return retry code, will refresh, trace [{}], return code [{}]",
-                        channel.authority(), methodName, traceId, response.getError().getErrmsg()
+                        channel.authority(), methodName, trace, response.getError().getErrmsg()
                     );
                 }
                 response = null;
