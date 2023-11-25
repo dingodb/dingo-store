@@ -15,7 +15,7 @@ server:
   write_worker_num: 32 # read_worker_num + write_worker_num must < server.worker_thwrite_num
   write_worker_max_pending_num: 1024 # 0 is unlimited
 region:
-  region_max_size: 536870912 # 512MB
+  region_max_size: 268435456 # 512MB
   enable_auto_split: true
 raft:
   host: $RAFT_HOST$
@@ -23,7 +23,7 @@ raft:
   path: $BASE_PATH$/data/raft_data
   log_path: $BASE_PATH$/data/raft_log
   election_timeout_s: 6
-  snapshot_interval_s: 600
+  snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32MB
 log:
   level: INFO

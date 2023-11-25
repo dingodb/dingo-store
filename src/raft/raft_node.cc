@@ -203,12 +203,7 @@ butil::Status RaftNode::Snapshot(std::shared_ptr<Context> ctx, bool force) {
     return butil::Status(pb::error::ERAFT_NOT_NEED_SNAPSHOT, "not need save snapshot");
   }
 
-  DINGO_LOG(INFO) << "here 003";
-  auto* done = new RaftSnapshotClosure(ctx);
-  if (done == nullptr) {
-    DINGO_LOG(INFO) << "here 004";
-  }
-  node_->snapshot(done);
+  node_->snapshot(new RaftSnapshotClosure(ctx));
 
   return butil::Status();
 }
