@@ -26,6 +26,7 @@ void BaseClosure::Run() {
   // Delete self after run
   std::unique_ptr<BaseClosure> self_guard(this);
   brpc::ClosureGuard const done_guard(ctx_->Done());
+
   if (!status().ok()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.sm][region({})] raft log commit failed, error: {} {}", ctx_->RegionId(),
                                     status().error_code(), status().error_str());
@@ -46,7 +47,6 @@ void BaseClosure::Run() {
 }
 
 void RaftSnapshotClosure::Run() {
-  DINGO_LOG(INFO) << "RaftSnapshotClosure run....";
   // Delete self after run
   std::unique_ptr<RaftSnapshotClosure> self_guard(this);
   brpc::ClosureGuard const done_guard(ctx_->Done());
