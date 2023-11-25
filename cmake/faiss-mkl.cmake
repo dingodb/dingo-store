@@ -26,6 +26,10 @@ else()
     message(FATAL_ERROR "NOT DEFINED MKLROOT VARIABLES")
 endif()
 
+SET(prefix_path ${MKLROOT}/include)
+
+message(STATUS "faiss prefix_path is: ${prefix_path}")
+
 ExternalProject_Add(
         extern_faiss
         ${EXTERNAL_PROJECT_LOG_ARGS}

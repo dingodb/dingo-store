@@ -247,58 +247,42 @@ if(LINK_TCMALLOC)
 endif()
 
 if(WITH_MKL)
-    find_package(MKL REQUIRED)
-    if(MKL_FOUND)
-        message(STATUS "The MKL is found, use intel mkl to replace openblas.")
-    else()
-        message(FATAL_ERROR "The MKL is not found, please install MKL and enable MKL.")
-    endif()
-
     if(DEFINED ENV{MKLROOT})
         message(STATUS "MKLROOT is: $ENV{MKLROOT}")
+        set(MKLROOT $ENV{MKLROOT})
     else()
         message(FATAL_ERROR "NOT DEFINED MKLROOT VARIABLES")
     endif()
 
-    message(STATUS "MKL_LIBRARIES=${MKL_LIBRARIES}")
+    set(MKL_LIBRARIES)
 
-    set(INT_LIB "libmkl_intel_ilp64.a")
+    set(INT_LIB "libmkl_intel_lp64.a")
     set(SEQ_LIB "libmkl_sequential.a")
     set(COR_LIB "libmkl_core.a")
 
-    set(INTEL_ROOT_DEFAULT "/opt/intel")
-    set(INTEL_ROOT ${INTEL_ROOT_DEFAULT} CACHE PATH "Folder contains intel libs")
-    find_path(MKL_ROOT include/mkl.h PATHS $ENV{MKLROOT} ${INTEL_ROOT}/mkl DOC "Folder contains MKL")
-    find_path(MKL_INCLUDE_DIR NAMES mkl.h HINTS ${MKL_ROOT}/include /usr/include/mkl)
+    find_path(MKL_ROOT include/mkl.h PATHS ${MKLROOT} DOC "Folder contains MKL")
+    find_path(MKL_INCLUDE_DIR NAMES mkl.h HINTS ${MKL_ROOT}/include)
 
     find_library(MKL_INTERFACE_LIBRARY
              NAMES ${INT_LIB}
-             PATHS ${MKL_ROOT}/lib
-                   ${MKL_ROOT}/lib/intel64
-                   ${MKL_ROOT}/lib/intel64_win
-                   ${INTEL_ROOT}/mkl/lib/intel64)
+             PATHS ${MKL_ROOT}/lib/intel64)
 
     find_library(MKL_SEQUENTIAL_LAYER_LIBRARY
              NAMES ${SEQ_LIB}
-             PATHS ${MKL_ROOT}/lib
-                   ${MKL_ROOT}/lib/intel64
-                   ${INTEL_ROOT}/mkl/lib/intel64)
+             PATHS ${MKL_ROOT}/lib/intel64)
 
     find_library(MKL_CORE_LIBRARY
              NAMES ${COR_LIB}
-             PATHS ${MKL_ROOT}/lib
-                   ${MKL_ROOT}/lib/intel64
-                   ${INTEL_ROOT}/mkl/lib/intel64)
+             PATHS ${MKL_ROOT}/lib/intel64)
 
-    set(MKL_INCLUDE_DIRS ${MKL_INCLUDE_DIR})
     set(MKL_LIBRARIES ${MKL_INTERFACE_LIBRARY} ${MKL_SEQUENTIAL_LAYER_LIBRARY} ${MKL_CORE_LIBRARY})
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${MKL_LIBRARIES})
 
     message(STATUS "MKL_LIBRARIES=${MKL_LIBRARIES}")
-    # set(MKL_LIBRARIES -Wl,--start-group ${MKL_LIBRARIES} -Wl,--end-group)
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${MKL_LIBRARIES})
 
     add_definitions(-DUSE_MKL=ON)
 
+    include_directories(${MKL_INCLUDE_DIR})
     include(faiss-mkl)
 
 else()
