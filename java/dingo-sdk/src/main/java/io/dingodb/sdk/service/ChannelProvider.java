@@ -6,6 +6,6 @@ public interface ChannelProvider {
 
     Channel channel();
 
-    void refresh(Channel channel);
+    void refresh(Channel channel, long trace);
 
 }

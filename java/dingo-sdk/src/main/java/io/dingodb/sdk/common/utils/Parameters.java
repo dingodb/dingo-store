@@ -43,7 +43,7 @@ public final class Parameters {
     }
 
     /**
-     * If input is null, throw {@link NullPointerException}, else return input.
+     * If input is null or empty, throw {@link IllegalArgumentException}, else return input.
      *
      * @param <C> input collection type
      * @param input check object
@@ -51,7 +51,7 @@ public final class Parameters {
      * @return input
      */
     public static <E, C extends Collection<E>> @NonNull C notEmpty(C input, String message) {
-        return check(input, in -> in != null && !in.isEmpty(), () -> new NullPointerException(message));
+        return check(input, in -> in != null && !in.isEmpty(), () -> new IllegalArgumentException(message));
     }
 
     /**

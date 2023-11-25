@@ -35,7 +35,7 @@ public class CoordinatorChannelProvider implements ChannelProvider {
     }
 
     @Override
-    public synchronized void refresh(Channel oldChannel) {
+    public synchronized void refresh(Channel oldChannel, long trace) {
         if (oldChannel != channel) {
             return;
         }
@@ -44,12 +44,13 @@ public class CoordinatorChannelProvider implements ChannelProvider {
             ManagedChannel channel = ChannelManager.getChannel(location);
             try {
                 GetCoordinatorMapResponse response = RpcCaller
-                    .call(
+                    .asyncCall(
                         CoordinatorService.getCoordinatorMap,
                         new GetCoordinatorMapRequest(),
-                        CallOptions.DEFAULT.withDeadlineAfter(3, TimeUnit.SECONDS),
-                        channel
-                    );
+                        CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
+                        channel,
+                        trace
+                    ).join();
                 channelOptional = Optional.of(response)
                     .ifPresent(res -> locations = new HashSet<>(res.getCoordinatorLocations()))
                     .map(locationGetter)

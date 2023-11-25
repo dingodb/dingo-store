@@ -4,6 +4,7 @@ package io.dingodb.grpc;
 import com.google.common.base.CaseFormat;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MapField;
+import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ArrayTypeName;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.CodeBlock;
@@ -14,10 +15,10 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Delegate;
+import lombok.experimental.SuperBuilder;
 
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
@@ -89,7 +91,7 @@ public class MessageGenerateProcessor {
     }
 
     public String packageOf(Element element) {
-        return elements.getPackageOf(types.asElement(element.asType())).getSimpleName().toString();
+        return elements.getPackageOf(element).getSimpleName().toString();
     }
 
     public boolean exist(ClassName className) {
@@ -100,67 +102,71 @@ public class MessageGenerateProcessor {
         return generateMessage(null, element);
     }
 
-    private TypeName fieldType(String name, Element element, Map<String, ? extends Element> parentElements) {
-        if (element.asType().getKind().isPrimitive()) {
-            TypeMirror primitiveType = element.asType();
-            if (primitiveType.getKind() == TypeKind.INT) {
-                element = this.types.asElement(((ExecutableElement) parentElements.get(
-                    UPPER_UNDERSCORE.to(LOWER_CAMEL, "GET_" + LOWER_CAMEL.to(UPPER_UNDERSCORE, name) + "()")
-                )).getReturnType());
-                if (element != null && element.getKind() == ElementKind.ENUM) {
-                    ClassName className = ClassName.get(
-                        MSG_PKG + "." + packageOf(element), element.getSimpleName().toString());
-                    generateEnum(className, (TypeElement) element);
-                    return className;
-                }
-            }
-            return ClassName.get(primitiveType);
+    private TypeName fieldType(String name, TypeMirror type, Map<String, ? extends Element> parentElements) {
+        Optional<TypeMirror> getterReturn = Optional.ofNullable(name)
+            .map(__ -> UPPER_UNDERSCORE.to(LOWER_CAMEL, "GET_" + LOWER_CAMEL.to(UPPER_UNDERSCORE, name)) + "()")
+            .map(parentElements::get)
+            .map(ExecutableElement.class::cast)
+            .map(ExecutableElement::getReturnType);
+        if (type.getKind().isPrimitive()
+            && (type.getKind() != TypeKind.INT || !getterReturn.filter(t -> !t.getKind().isPrimitive()).isPresent())) {
+            return ClassName.get(type);
         }
-        if (element.asType().toString().equals(Object.class.getName())) {
-            element = this.types.asElement(((ExecutableElement) parentElements.get(
-                UPPER_UNDERSCORE.to(LOWER_CAMEL, "GET_" + LOWER_CAMEL.to(UPPER_UNDERSCORE, name) + "()")
-            )).getReturnType());
-            return fieldType(name, element, parentElements);
+        if ((types.asElement(type) != null && types.asElement(type).getKind() == ElementKind.ENUM)
+            || (getterReturn.map(types::asElement).filter(__ -> __.getKind() == ElementKind.ENUM).isPresent())
+        ) {
+            Element element = types.asElement(type);
+            if (element == null) {
+                element = types.asElement(getterReturn.get());
+            }
+            ClassName className = ClassName.get(
+                MSG_PKG + "." + packageOf(element), element.getSimpleName().toString());
+            generateEnum(className, (TypeElement) element);
+            return className;
         }
 
-        if (ByteString.class.getName().equals(element.asType().toString())) {
+        if (type.toString().equals(Object.class.getName())) {
+            return fieldType(name, getterReturn.get(), parentElements);
+        }
+
+        if (ByteString.class.getName().equals(type.toString())) {
             return ArrayTypeName.of(byte.class);
         }
 
-        if (Object.class.getPackage().getName().equals(elements.getPackageOf(element).toString())) {
-            return ClassName.get(element.asType());
+        if (Object.class.getPackage().getName().equals(elements.getPackageOf(types.asElement(type)).toString())) {
+            return ClassName.get(type);
         }
 
         if (types.isAssignable(
-            types.erasure(element.asType()), types.erasure(elements.getTypeElement(List.class.getName()).asType())
+            types.erasure(type), types.erasure(elements.getTypeElement(List.class.getName()).asType())
         )) {
 
             ClassName className = ClassName.get(List.class);
-            DeclaredType declaredType = (DeclaredType) element.asType();
+            DeclaredType declaredType = (DeclaredType) type;
             while (declaredType.getTypeArguments().size() < 1) {
                 declaredType = (DeclaredType) types.directSupertypes(declaredType).get(1);
             }
-            TypeName arg = fieldType(null, types.asElement(declaredType.getTypeArguments().get(0)), parentElements);
+            TypeName arg = fieldType(null, declaredType.getTypeArguments().get(0), parentElements);
             return ParameterizedTypeName.get(className, arg);
         }
 
         if (types.isAssignable(
-            types.erasure(element.asType()), types.erasure(elements.getTypeElement(Map.class.getName()).asType())
+            types.erasure(type), types.erasure(elements.getTypeElement(Map.class.getName()).asType())
         ) || types.isAssignable(
-            types.erasure(element.asType()), types.erasure(elements.getTypeElement(MapField.class.getName()).asType())
+            types.erasure(type), types.erasure(elements.getTypeElement(MapField.class.getName()).asType())
         )) {
 
             ClassName className = ClassName.get(Map.class);
-            DeclaredType declaredType = (DeclaredType) element.asType();
+            DeclaredType declaredType = (DeclaredType) type;
             while (declaredType.getTypeArguments().size() < 2) {
                 declaredType = (DeclaredType) types.directSupertypes(declaredType).get(1);
             }
-            TypeName arg1 = fieldType(null, types.asElement(declaredType.getTypeArguments().get(0)), parentElements);
-            TypeName arg2 = fieldType(null, types.asElement(declaredType.getTypeArguments().get(1)), parentElements);
+            TypeName arg1 = fieldType(null, declaredType.getTypeArguments().get(0), parentElements);
+            TypeName arg2 = fieldType(null, declaredType.getTypeArguments().get(1), parentElements);
             return ParameterizedTypeName.get(className, arg1, arg2);
         }
 
-        element = types.asElement(element.asType());
+        Element element = types.asElement(type);
         ClassName className = ClassName.get(MSG_PKG + "." + packageOf(element), element.getSimpleName().toString());
         generateMessage(className, (TypeElement) element);
         return className;
@@ -176,26 +182,20 @@ public class MessageGenerateProcessor {
 
     private CodeBlock makeSizeOfStatement(String fieldName, TypeName fieldType, int number) {
         if (number == 0) {
-            return CodeBlock.of("$T.$L($L, $L)", SIZE_UTILS, SIZE_OF, fieldName, fieldName);
+            return CodeBlock.of("size += $T.$L($L, $L)", SIZE_UTILS, SIZE_OF, fieldName, fieldName);
         } else {
             return sizeOfStatement(fieldName, fieldType, number);
         }
     }
 
     private CodeBlock makeReadStatement(String fieldName, TypeName fieldType, int number) {
-        CodeBlock readStatement;
-        if (enumMessages.containsKey(fieldType)) {
-            readStatement = CodeBlock.of(
-                "case $L: $L = ($T.forNumber($T.readInt($L)))",
-                number, fieldName, fieldType, READER, INPUT
-            );
-        } else {
-            readStatement = readStatement(fieldName, fieldType, number);
-        }
-        return readStatement;
+        return readStatement(fieldName, fieldType, number, enumMessages.keySet());
     }
 
-    private void generateEnum(ClassName className, TypeElement element) {
+    public void generateEnum(ClassName className, TypeElement element) {
+        if (messages.containsKey(className)) {
+            return;
+        }
         TypeSpec.Builder builder = TypeSpec.enumBuilder(className).addModifiers(PUBLIC)
             .addSuperinterface(NUMERIC)
             .addField(Integer.class, NUMBER, PUBLIC, FINAL)
@@ -248,7 +248,7 @@ public class MessageGenerateProcessor {
         }
 
         TypeSpec.Builder builder = TypeSpec.classBuilder(newClassName).addModifiers(PUBLIC).addSuperinterface(MESSAGE)
-            .addAnnotation(Data.class).addAnnotation(Builder.class).addAnnotation(NoArgsConstructor.class);
+            .addAnnotation(Data.class).addAnnotation(SuperBuilder.class).addAnnotation(NoArgsConstructor.class);
 
         Map<String, Integer> real = new HashMap<>();
         NavigableMap<Integer, Map.Entry<String, TypeName>> all = new TreeMap<>();
@@ -278,7 +278,14 @@ public class MessageGenerateProcessor {
             }
             String fieldName = name.substring(0, name.length() - 1);
 
-            Element fieldElement = elements.get(name);
+            TypeMirror fieldElement = elements.get(name).asType();
+            if (elements.get(name + "converter_") != null) {
+                Element getterElement = elements.get(
+                    UPPER_UNDERSCORE.to(LOWER_CAMEL, "GET_" + LOWER_CAMEL.to(UPPER_UNDERSCORE, fieldName)) + "List()");
+                if (getterElement != null) {
+                    fieldElement = ((ExecutableElement)getterElement).getReturnType();
+                }
+            }
             VariableElement numberField = (VariableElement) elements.get(fieldName.toUpperCase());
             int number = 0;
 
@@ -368,42 +375,42 @@ public class MessageGenerateProcessor {
                 realTypeName = ClassName.get(returnType).box();
                 realValueField = FieldSpec.builder(realTypeName, VALUE, PRIVATE);
             } else {
-                TypeElement realType = (TypeElement) types.asElement(returnType);
+                TypeMirror realType = returnType;
                 realTypeName = fieldType(null, realType, parentElements);
                 realValueField = FieldSpec.builder(realTypeName, VALUE, PRIVATE);
                 if (realTypeName instanceof ClassName) {
-                    generateMessage((ClassName) realTypeName, realType);
+                    generateMessage((ClassName) realTypeName, (TypeElement) types.asElement(realType));
                     realValueField.addAnnotation(Delegate.class);
                 }
             }
 
             if (canDirect(realTypeName)) {
                 nestClassBuilder.addMethod(overrideBuilder("read", VOID, INPUT_ARG)
-                    .addStatement("$L = $T.$L($L)", VALUE, READER, directRead(realTypeName), INPUT)
-                    .build()
-                ).addMethod(overrideBuilder("write", VOID, OUT_ARG)
-                    .addStatement("$T.$L($L, $L)", WRITER, WRITE, VALUE, OUT)
-                    .build()
-                ).addMethod(overrideBuilder(SIZE_OF, INT)
-                    .addStatement("return $T.$L($L)", SIZE_UTILS, SIZE_OF, VALUE)
-                    .build()
-                );
+                        .addStatement("$L = $T.$L($L)", VALUE, READER, directRead(realTypeName), INPUT)
+                        .build()
+                    ).addMethod(overrideBuilder("write", VOID, OUT_ARG)
+                        .addStatement("$T.$L($L, $L)", WRITER, WRITE, VALUE, OUT)
+                        .build()
+                    ).addMethod(overrideBuilder(SIZE_OF, INT)
+                        .addStatement("return $T.$L($L)", SIZE_UTILS, SIZE_OF, VALUE)
+                        .build()
+                    ).addAnnotation(
+                        AnnotationSpec.builder(AllArgsConstructor.class).addMember("staticName", "$S", "of").build()
+                    ).addAnnotation(NoArgsConstructor.class)
+                    .addField(realValueField.build());
+            } else {
+                nestClassBuilder.superclass(realTypeName)
+                    .addAnnotation(NoArgsConstructor.class).addAnnotation(SuperBuilder.class);
             }
 
             all.put(number, new AbstractMap.SimpleEntry<>(fieldName, nestClassName));
-
-            if (!canDirect(realTypeName)) {
-                realValueField.initializer("new $T()", realTypeName);
-            }
 
             nestBuilder.addEnumConstant(name, TypeSpec.anonymousClassBuilder("$L", number).build());
 
             builder.addType(
                 nestClassBuilder
-                    .addAnnotation(Data.class)
                     .addSuperinterface(className)
                     .addModifiers(PUBLIC, STATIC)
-                    .addField(realValueField.build())
                     .addField(FieldSpec.builder(INT, NUMBER, PUBLIC, STATIC, FINAL).initializer("$L", number).build())
                     .addMethod(overrideBuilder(NUMBER, INT).addStatement("return $L", number).build())
                     .addMethod(overrideBuilder("nest", nest).addStatement("return $T.$L", nest, name).build())

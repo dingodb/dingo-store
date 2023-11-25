@@ -76,8 +76,10 @@ message ColumnDefinition {
   bool has_default_val = 8;
   string default_val = 9;
   bool is_auto_increment = 10;
-  int32 state = 11;
-  string comment = 12;
+
+  int32 state = 20;
+
+  string comment = 30;
 }
 
 // Information about Index.
@@ -130,17 +132,22 @@ message TableDefinition {
   string create_sql = 5;
   string charset = 6;
   string collate = 7;
+
   PartitionRule table_partition = 20;
   uint32 replica = 21;
   dingodb.pb.common.Engine engine = 22;
+
   repeated ColumnDefinition columns = 30;
+
   map<string, string> properties = 40;
   dingodb.pb.common.IndexParameter index_parameter = 41;  // for index
 
-  int64 create_timestamp = 50;
-  int64 update_timestamp = 51;
-  int64 delete_timestamp = 52;
-  string comment = 53;
+
+  int64 create_timestamp = 51;
+  int64 update_timestamp = 52;
+  int64 delete_timestamp = 53;
+
+  string comment = 60;
 }
 
 // IndexDefinition is for vector/scalar index

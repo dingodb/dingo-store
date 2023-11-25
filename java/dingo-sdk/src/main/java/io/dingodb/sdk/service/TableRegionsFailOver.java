@@ -36,11 +36,11 @@ public class TableRegionsFailOver {
         this.rangesGetter = tableId.getEntityType() == ENTITY_TYPE_TABLE ? this::tableGetter : this::indexGetter;
     }
 
-    public RegionChannelProvider createRegionProvider(DingoCommonId regionId) {
+    public ChannelProvider createRegionProvider(DingoCommonId regionId) {
         return new RegionChannelProvider(regionId);
     }
 
-    private class RegionChannelProvider implements ChannelProvider {
+    public class RegionChannelProvider implements ChannelProvider {
 
         private final DingoCommonId regionId;
         private Location location;
@@ -56,8 +56,8 @@ public class TableRegionsFailOver {
         }
 
         @Override
-        public synchronized void refresh(Channel channel) {
-            TableRegionsFailOver.this.refresh(regionId, location);
+        public synchronized void refresh(Channel channel, long trace) {
+            TableRegionsFailOver.this.refresh(regionId, location, trace);
             location = regionChannels.get(regionId);
             this.channel = ChannelManager.getChannel(location);
         }
@@ -73,7 +73,7 @@ public class TableRegionsFailOver {
             .getIndexRange().getRangeDistribution();
     }
 
-    public void refresh(DingoCommonId regionId, Location location) {
+    public void refresh(DingoCommonId regionId, Location location, long trace) {
         if (!refresh.compareAndSet(false, true)) {
             return;
         }

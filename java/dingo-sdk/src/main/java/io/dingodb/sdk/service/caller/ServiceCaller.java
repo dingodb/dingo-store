@@ -1,6 +1,5 @@
 package io.dingodb.sdk.service.caller;
 
-import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
 import io.dingodb.sdk.common.DingoClientException.RetryException;
@@ -18,7 +17,6 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,15 +37,15 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
 
     private static final ThreadLocal<Map<String, Integer>> ERR_MSGS = ThreadLocal.withInitial(HashMap::new);
 
+    private int retry;
+    private CallOptions options;
+
     private final ChannelProvider channelProvider;
-    private final int retry;
-    private final CallOptions options;
 
     private final Class<S> genericType;
     private final S service;
-    private final RpcCaller<S> caller;
 
-    private final Set<MethodDescriptor> excludeErrorCheck = new HashSet<>();
+    private final Set<MethodDescriptor> directCallOnce = new HashSet<>();
 
     public ServiceCaller(ChannelProvider channelProvider, int retry, CallOptions options) {
         this.channelProvider = channelProvider;
@@ -56,11 +54,10 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
         this.genericType = ReflectionUtils.getGenericType(this.getClass(), 0);
 
         service = proxy(genericType);
-        caller = new RpcCaller<>(this.channelProvider, this.options, genericType);
     }
 
     public ServiceCaller<S> addExcludeErrorCheck(MethodDescriptor method) {
-        excludeErrorCheck.add(method);
+        directCallOnce.add(method);
         return this;
     }
 
@@ -75,6 +72,24 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
             }
         }
         throw new RuntimeException("Not found " + genericType.getName() + " impl.");
+    }
+
+    public int retry() {
+        return retry;
+    }
+
+    public ServiceCaller<S> retry(int retry) {
+        this.retry = retry;
+        return this;
+    }
+
+    public CallOptions options() {
+        return options;
+    }
+
+    public ServiceCaller<S> options(CallOptions options) {
+        this.options = options;
+        return this;
     }
 
     @Override
@@ -99,7 +114,7 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
 
     public <REQ extends Message, RES extends Message.Response> RES call(
         MethodDescriptor<REQ, RES> method, Supplier<REQ> provider, long traceId
-    ) throws InvocationTargetException, IllegalAccessException {
+    ) throws Exception {
 
         SimpleChannelProvider channelProvider = new SimpleChannelProvider(this.channelProvider.channel());
         int retry = this.retry;
@@ -110,46 +125,52 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
             try {
                 Channel channel = channelProvider.getChannel();
                 REQ request = provider.get();
-                long rpcTraceId = System.identityHashCode(request);
                 if (log.isDebugEnabled()) {
-                    log.debug("Invoke [{}] begin, trace [{}:{}], request: {}, options: {}", methodName, traceId,
-                        rpcTraceId, request, options
+                    log.debug("Invoke [{}] begin, trace [{}], request: {}, options: {}", methodName, traceId,
+                        request, options
                     );
                 }
-                RES response = RpcCaller.call(method, request, options, channel);
+                RES response = RpcCaller.asyncCall(method, request, options, channel, traceId).join();
                 if (response == null) {
                     if (log.isDebugEnabled()) {
                         log.debug(
-                            "Invoke [{}] return null, refresh and wait retry, trace [{}:{}], request: {}, options: {}",
-                            methodName, traceId, rpcTraceId, request, options
+                            "Invoke [{}] return null, refresh and wait retry, trace [{}], request: {}, options: {}",
+                            methodName, traceId, request, options
                         );
                     }
-                    updateChannel(channelProvider);
+                    updateChannel(channelProvider, traceId);
                     continue;
                 }
                 connected = true;
                 if (response.getError() != null && response.getError().getErrcode().number() != 0) {
                     Error error = response.getError();
                     int errCode = error.getErrcode().number();
-                    ERR_MSGS.get().compute(channel.authority() + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1);
+                    ERR_MSGS.get().compute(
+                        channel.authority() + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1
+                    );
                     switch (errorToStrategy(errCode)) {
                         case RETRY:
-                            errorLog(methodName, channel.authority(), traceId, rpcTraceId, error, RETRY);
-                            updateChannel(channelProvider);
+                            errorLog(methodName, channel.authority(), traceId, error, RETRY);
+                            updateChannel(channelProvider, traceId);
                             continue;
                         case FAILED:
-                            errorLog(methodName, channel.authority(), traceId, rpcTraceId, error, FAILED);
+                            errorLog(methodName, channel.authority(), traceId, error, FAILED);
                             throw new RequestErrorException(errCode, error.getErrmsg());
                         case REFRESH:
-                            errorLog(methodName, channel.authority(), traceId, rpcTraceId, error, REFRESH);
-                            updateChannel(channelProvider);
+                            errorLog(methodName, channel.authority(), traceId, error, REFRESH);
+                            updateChannel(channelProvider, traceId);
                             throw new InvalidRouteTableException(error.getErrmsg());
                         case IGNORE:
-                            errorLog(methodName, channel.authority(), traceId, rpcTraceId, error, IGNORE);
+                            errorLog(methodName, channel.authority(), traceId, error, IGNORE);
                             return null;
                         default:
                             throw new IllegalStateException("Unexpected value: " + errorToStrategy(errCode));
                     }
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Invoke [{}] finish, trace [{}], request: {}, options: {}, response: {}",
+                        methodName, traceId, request, options, response
+                    );
                 }
                 return response;
             } catch (Exception e) {
@@ -171,8 +192,8 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
         LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
     }
 
-    private void updateChannel(SimpleChannelProvider channelProvider) {
-        this.channelProvider.refresh(channelProvider.getChannel());
+    private void updateChannel(SimpleChannelProvider channelProvider, long trace) {
+        this.channelProvider.refresh(channelProvider.getChannel(), trace);
         waitRetry();
         channelProvider.setChannel(this.channelProvider.channel());
     }
@@ -194,12 +215,12 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
     }
 
     private void errorLog(
-        String name, String remote, long traceId, long rpcTraceId, Error error, ErrorCodeUtils.Strategy strategy
+        String name, String remote, long traceId, Error error, ErrorCodeUtils.Strategy strategy
     ) {
         if (log.isDebugEnabled()) {
             log.warn(
-                "Exec {} failed, remote: [{}] trace: [{}:{}], code: [{}], message: {}, strategy: {}.",
-                name, remote, traceId, rpcTraceId, error.getErrmsg(), error.getErrmsg(), strategy
+                "Exec {} failed, remote: [{}] trace: [{}], code: [{}], message: {}, strategy: {}.",
+                name, remote, traceId, error.getErrmsg(), error.getErrmsg(), strategy
             );
         }
     }

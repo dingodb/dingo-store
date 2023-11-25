@@ -31,9 +31,11 @@ import lombok.Getter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.processing.AbstractProcessor;
@@ -44,14 +46,20 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
 
+import static io.dingodb.grpc.Constant.CALLER;
 import static io.dingodb.grpc.Constant.MARSHALLER;
+import static io.dingodb.grpc.Constant.MSG_PKG;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
+import static javax.lang.model.element.Modifier.ABSTRACT;
 import static javax.lang.model.element.Modifier.DEFAULT;
 import static javax.lang.model.element.Modifier.FINAL;
 import static javax.lang.model.element.Modifier.PUBLIC;
@@ -90,6 +98,9 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             return true;
         }
         Map<ClassName, TypeSpec.Builder> rpcs = new HashMap<>();
+        Set<FileObject> sources = new TreeSet<>(Comparator.comparing(FileObject::getName));
+        Set<TypeElement> serviceElements = new TreeSet<>(Comparator.comparing(Element::toString));
+        Set<TypeElement> entityElements = new TreeSet<>(Comparator.comparing(Element::toString));
         for (Element element : roundEnv.getElementsAnnotatedWith(RpcMethod.class)) {
             if (!(element instanceof ExecutableElement)) {
                 continue;
@@ -104,8 +115,6 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             ClassName className = ClassName.get(Constant.SERVICE_PKG, name);
             TypeSpec.Builder typeBuilder = rpcs.computeIfAbsent(className, TypeSpec::interfaceBuilder);
             String methodName = cleanFullMethodName(annotationValues.get(fullMethodName).toString());
-            TypeName getMethodEnclosingTypeName = ClassName.get((TypeElement) element.getEnclosingElement());
-            String getMethodName = element.getSimpleName().toString();
             try {
                 TypeElement reqTypeElement = (TypeElement) types.asElement((TypeMirror) annotationValues.get(requestType).getValue());
                 TypeElement resTypeElement = (TypeElement) types.asElement((TypeMirror) annotationValues.get(responseType).getValue());
@@ -122,6 +131,8 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                 if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("store")) {
                     messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.STORE_REQ);
                 }
+                serviceElements.add((TypeElement) element.getEnclosingElement());
+                entityElements.add((TypeElement) reqTypeElement.getEnclosingElement());
             } catch (Exception e) {
                 e.printStackTrace();
                 throw new RuntimeException(e);
@@ -129,22 +140,38 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
 
         }
         try {
+            entityElements.stream()
+                .flatMap(element -> element.getEnclosedElements().stream())
+                .filter(element -> element.getKind() == ElementKind.ENUM)
+                .map(TypeElement.class::cast)
+                .forEach(element -> {
+                    messageGenerateProcessor.generateEnum(ClassName.get(
+                        MSG_PKG + "." + messageGenerateProcessor.packageOf(element), element.getSimpleName().toString()
+                    ), element);
+                });
             for (Map.Entry<ClassName, TypeSpec.Builder> entry : messageGenerateProcessor.messages.entrySet()) {
                 createJavaFile(entry.getKey().packageName(), entry.getValue().build());
             }
             for (Map.Entry<ClassName, TypeSpec.Builder> entry : rpcs.entrySet()) {
                 TypeSpec.Builder builder = entry.getValue();
 
+                ParameterizedTypeName caller = ParameterizedTypeName.get(CALLER, entry.getKey());
                 TypeSpec implType = TypeSpec.classBuilder("Impl")
                     .addSuperinterface(entry.getKey())
                     .addAnnotation(Getter.class)
                     .addAnnotation(AllArgsConstructor.class)
-                    .addField(ParameterizedTypeName.get(Constant.CALLER, entry.getKey()), "caller", PUBLIC, FINAL)
+                    .addField(caller, "caller", PUBLIC, FINAL)
                     .addModifiers(PUBLIC, STATIC)
                     .build();
 
                 builder
                     .addType(implType)
+                    .addMethod(MethodSpec
+                        .methodBuilder("getCaller")
+                        .addModifiers(PUBLIC, ABSTRACT)
+                        .returns(caller)
+                        .build()
+                    )
                     .addSuperinterface(ParameterizedTypeName.get(Constant.SERVICE, entry.getKey()))
                     .addModifiers(PUBLIC);
 
@@ -155,6 +182,14 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             throw new RuntimeException(e);
         }
         return processed = true;
+    }
+
+    private FileObject getSourceFilePathForElement(Element element) throws IOException {
+        String packageName = processingEnv.getElementUtils().getPackageOf(element).getQualifiedName().toString();
+        String className = element.getSimpleName().toString();
+        String fileName = className + ".java";
+
+        return processingEnv.getFiler().getResource(StandardLocation.SOURCE_PATH, packageName, fileName);
     }
 
     private FieldSpec makeMethodFieldSpec(String name, String fullMethodName, TypeName req, TypeName res) {

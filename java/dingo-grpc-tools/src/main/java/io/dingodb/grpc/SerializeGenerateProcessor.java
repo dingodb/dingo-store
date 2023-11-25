@@ -7,6 +7,7 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.google.common.base.CaseFormat.LOWER_CAMEL;
 import static com.google.common.base.CaseFormat.LOWER_UNDERSCORE;
@@ -43,11 +44,17 @@ public class SerializeGenerateProcessor {
         return LOWER_UNDERSCORE.to(LOWER_CAMEL, "read_" + typeName.unbox());
     }
 
-    public static CodeBlock readStatement(String fieldName, TypeName fieldType, int number) {
+    public static CodeBlock readStatement(String fieldName, TypeName fieldType, int number, Set<ClassName> enums) {
         if (canDirect(fieldType)) {
             return CodeBlock.of(
                 "case $L: $L = $T.$L($L); break",
                 number, fieldName, READER, directRead(fieldType), INPUT
+            );
+        }
+        if (enums.contains(fieldType)) {
+            return CodeBlock.of(
+                "case $L: $L = $T.forNumber($T.readInt($L)); break",
+                number, fieldName, fieldType, READER, INPUT
             );
         }
         if (fieldType instanceof ParameterizedTypeName) {
@@ -63,6 +70,11 @@ public class SerializeGenerateProcessor {
                             "case $L: $L = $T.readList($L, $L, $T::$L); break",
                             number, fieldName, READER, fieldName, INPUT, READER, directRead(firstGenericType)
                         );
+                } else if (enums.contains(firstGenericType)) {
+                    return CodeBlock.of(
+                        "case $L: $L = $T.readList($L, $L, in -> $T.forNumber($T.readInt($L))); break",
+                        number, fieldName, READER, fieldName, INPUT, firstGenericType, READER, INPUT
+                    );
                 } else {
                     return CodeBlock.of(
                         "case $L: $L = $T.readList($L, $L, in -> $T.readMessage(new $T(), in)); break",
@@ -76,6 +88,13 @@ public class SerializeGenerateProcessor {
                     return CodeBlock.of(
                         "case $L: $L = $T.readMap($L, $L, $L, $T::$L, $T::$L); break",
                         number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueReader
+                    );
+                } else if (enums.contains(firstGenericType)) {
+                    String keyReader = directRead(firstGenericType);
+                    TypeName valueType = ((ParameterizedTypeName) fieldType).typeArguments.get(1);
+                    return CodeBlock.of(
+                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, in -> in -> $T.forNumber($T.readInt(in))); break",
+                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueType
                     );
                 } else {
                     String keyReader = directRead(firstGenericType);

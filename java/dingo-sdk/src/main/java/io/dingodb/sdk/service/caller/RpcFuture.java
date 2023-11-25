@@ -1,5 +1,6 @@
-package io.dingodb.sdk.service;
+package io.dingodb.sdk.service.caller;
 
+import io.dingodb.sdk.common.DingoClientException;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -65,6 +66,13 @@ public class RpcFuture<T> extends CompletableFuture<T> {
     public void onClose(Status status, Metadata trailers) {
         this.status = status;
         this.trailers = trailers;
+        if (!status.isOk()) {
+            if (status.getCause() != null) {
+                completeExceptionally(status.getCause());
+            } else {
+                completeExceptionally(new DingoClientException(status.getCode().value(), status.getDescription()));
+            }
+        }
     }
 
     public void onReady() {
