@@ -73,16 +73,16 @@ class DeferDone {
  public:
   DeferDone() {
     // bthread_mutex_init(&mutex_, nullptr);
+    create_time_ = butil::gettimeofday_ms();
   }
   DeferDone(uint64_t closure_id, const std::string &watch_key, google::protobuf::Closure *done,
             pb::version::WatchResponse *response)
       : closure_id_(closure_id), watch_key_(watch_key), done_(done), response_(response) {
+    create_time_ = butil::gettimeofday_ms();
     // bthread_mutex_init(&mutex_, nullptr);
   }
 
-  ~DeferDone() {
-    // bthread_mutex_destroy(&mutex_);
-  }
+  ~DeferDone() = default;
 
   bool IsDone() {
     // bthread_mutex_lock(&mutex_);
@@ -99,12 +99,19 @@ class DeferDone {
     return response;
   }
 
+  int64_t GetStartTime() const { return create_time_; }
+
   void Done() {
     // bthread_mutex_lock(&mutex_);
     if (done_) {
       braft::AsyncClosureGuard done_guard(done_);
       done_ = nullptr;
       response_ = nullptr;
+      DINGO_LOG(INFO) << "Deferred done_first closure_id=" << closure_id_ << " watch_key=" << watch_key_
+                      << " cost: " << butil::gettimeofday_ms() - create_time_ << " ms, create_time: " << create_time_;
+    } else {
+      DINGO_LOG(INFO) << "Deferred done_again closure_id=" << closure_id_ << " watch_key=" << watch_key_
+                      << " cost: " << butil::gettimeofday_ms() - create_time_ << " ms, create_time: " << create_time_;
     }
     // bthread_mutex_unlock(&mutex_);
   }
@@ -115,6 +122,7 @@ class DeferDone {
   bthread_mutex_t mutex_;
   google::protobuf::Closure *done_;
   pb::version::WatchResponse *response_;
+  int64_t create_time_;
 };
 
 struct KvLeaseWithKeys {
@@ -325,7 +333,6 @@ class KvControl : public MetaControl {
   butil::Status RemoveOneTimeWatch(uint64_t closure_id);
   butil::Status RemoveOneTimeWatchWithLock(uint64_t closure_id);
   butil::Status CancelOneTimeWatchClosure(uint64_t closure_id);
-  bool CheckClosureStatus(uint64_t closure_id);
 
   // watch functions for raft fsm
   butil::Status TriggerOneWatch(const std::string &key, pb::version::Event::EventType event_type,
@@ -359,7 +366,6 @@ class KvControl : public MetaControl {
   std::map<std::string, std::map<uint64_t, KvWatchNode>> one_time_watch_map_;
   bthread_mutex_t one_time_watch_map_mutex_;
   std::map<uint64_t, DeferDone> one_time_watch_closure_map_;
-  bthread_mutex_t one_time_watch_closure_map_mutex_;
   std::atomic<uint64_t> one_time_watch_closure_seq_{1000};  // used to generate unique closure id
   DingoSafeStdMap<uint64_t, bool> one_time_watch_closure_status_map_;
 
