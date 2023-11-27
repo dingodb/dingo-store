@@ -79,9 +79,10 @@ message CoordinatorOperation {
 }
 
 message Task {
-  TaskPreCheck pre_check = 1;
-  repeated StoreOperation store_operations = 2;
-  repeated CoordinatorOperation coordinator_operations = 3;
+  int32 step = 1;
+  TaskPreCheck pre_check = 2;
+  repeated StoreOperation store_operations = 3;
+  repeated CoordinatorOperation coordinator_operations = 4;
 }
 
 message TaskList {

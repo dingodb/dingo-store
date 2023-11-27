@@ -1759,6 +1759,9 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
   for (const auto &it : task_lists) {
     auto *new_task_list = response->add_task_lists();
     *new_task_list = it.second;
+    for (int i = 0; i < new_task_list->tasks_size(); ++i) {
+      new_task_list->mutable_tasks(i)->set_step(i);
+    }
   }
 }
 
