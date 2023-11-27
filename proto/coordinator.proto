@@ -656,6 +656,7 @@ message CreateRegionRequest {
   string resource_tag = 2;
   int64 replica_num = 3;
   dingodb.pb.common.Range range = 4;
+  dingodb.pb.common.RawEngine raw_engine = 5;
   int64 schema_id = 11;  // optional
   int64 table_id = 12;   // optional
   int64 index_id = 13;   // optional, if region_type is INDEX, this field is required

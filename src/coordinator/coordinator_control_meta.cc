@@ -651,6 +651,14 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     replica = 3;
   }
 
+  pb::common::RawEngine region_raw_engine_type;
+  auto ret2 = TranslateEngineToRawEngine(table_definition.engine(), region_raw_engine_type);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "TranslateEngineToRawEngine error:" << ret2.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
+    return ret2;
+  }
+
   // this is just a null parameter
   pb::common::IndexParameter index_parameter;
 
@@ -663,9 +671,9 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret = CreateRegionAutoSelectStore(
-        region_name, pb::common::RegionType::STORE_REGION, pb::common::RawEngine::RAW_ENG_ROCKSDB, "", replica,
-        new_part_range, schema_id, new_table_id, 0, new_part_id, index_parameter, new_region_id, meta_increment);
+    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type,
+                                           "", replica, new_part_range, schema_id, new_table_id, 0, new_part_id,
+                                           index_parameter, new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
@@ -1074,6 +1082,14 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     replica = 3;
   }
 
+  pb::common::RawEngine region_raw_engine_type;
+  auto ret2 = TranslateEngineToRawEngine(table_definition.engine(), region_raw_engine_type);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "TranslateEngineToRawEngine error:" << ret2.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
+    return ret2;
+  }
+
   for (int i = 0; i < new_part_ranges.size(); i++) {
     int64_t new_region_id = 0;
     int64_t new_part_id = new_part_ids[i];
@@ -1082,10 +1098,9 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION,
-                                           pb::common::RawEngine::RAW_ENG_ROCKSDB, "", replica, new_part_range,
-                                           schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
-                                           new_region_id, meta_increment);
+    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type,
+                                           "", replica, new_part_range, schema_id, 0, new_index_id, new_part_id,
+                                           table_definition.index_parameter(), new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
@@ -3043,6 +3058,19 @@ butil::Status CoordinatorControl::CalcTableInternalRange(const pb::meta::Partiti
   } else {
     DINGO_LOG(ERROR) << "no range provided ";
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "no partition provided");
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::TranslateEngineToRawEngine(const pb::common::Engine& engine,
+                                                             pb::common::RawEngine& raw_engine) {
+  if (engine == pb::common::Engine::ENG_ROCKSDB) {
+    raw_engine = pb::common::RawEngine::RAW_ENG_ROCKSDB;
+  } else if (engine == pb::common::Engine::ENG_BDB) {
+    raw_engine = pb::common::RawEngine::RAW_ENG_BDB;
+  } else {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "engine not support");
   }
 
   return butil::Status::OK();

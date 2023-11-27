@@ -125,6 +125,8 @@ DEFINE_string(scalar_filter_key2, "", "Request scalar_filter_key");
 DEFINE_string(scalar_filter_value2, "", "Request scalar_filter_value");
 DEFINE_int64(ttl, 0, "ttl");
 DEFINE_bool(auto_split, false, "auto split");
+DEFINE_string(engine, "rocksdb", "engine type for table and index, [rocksdb, bdb]");
+DEFINE_string(raw_engine, "", "engine type for table and index, [rocksdb, bdb]");
 
 DEFINE_string(alg_type, "faiss", "use alg type. such as faiss or hnsw");
 DEFINE_string(metric_type, "L2", "metric type. such as L2 or IP or cosine");

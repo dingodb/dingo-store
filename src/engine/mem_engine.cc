@@ -25,9 +25,9 @@ bool MemEngine::Init(std::shared_ptr<Config> /*config*/) {
   return true;
 }
 
-std::string MemEngine::GetName() { return "kMemEngine"; }
+std::string MemEngine::GetName() { return pb::common::StorageEngine_Name(GetID()); }
 
-pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
+pb::common::StorageEngine MemEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_MEMORY; }
 
 butil::Status MemEngine::Write(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/) {
   return butil::Status();

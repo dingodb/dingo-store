@@ -29,11 +29,13 @@ enum ClusterRole {
 
 enum Engine {
   ENG_ROCKSDB = 0;
-  ENG_MEMORY = 1;
-  ENG_XDP = 2;
-  ENG_RAFT_STORE = 3;
-  ENG_COLUMNAR = 4;
-  ENG_BTREE = 5;
+  ENG_BDB = 1;
+};
+
+enum StorageEngine {
+  STORE_ENG_RAFT_STORE = 0;
+  STORE_ENG_ROCKSDB = 1;
+  STORE_ENG_MEMORY = 2;
 };
 
 enum RawEngine {

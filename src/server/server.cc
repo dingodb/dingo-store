@@ -708,7 +708,7 @@ std::shared_ptr<RawEngine> Server::GetRawEngineByRegion(int64_t region_id) {
 
 std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
   auto engine = GetEngine();
-  if (engine->GetID() == pb::common::ENG_RAFT_STORE) {
+  if (engine->GetID() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
     return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
   }
   return nullptr;

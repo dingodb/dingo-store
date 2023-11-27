@@ -123,7 +123,7 @@ TEST_F(RawBdbEngineTest, GetName) {
 }
 
 TEST_F(RawBdbEngineTest, GetID) {
-  pb::common::RawEngine id = RawBdbEngineTest::engine->GetID();
+  pb::common::RawEngine id = RawBdbEngineTest::engine->GetRawEngineType();
   EXPECT_EQ(id, pb::common::RawEngine::RAW_ENG_BDB);
 }
 

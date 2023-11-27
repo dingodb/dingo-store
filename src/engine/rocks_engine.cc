@@ -42,9 +42,11 @@
 namespace dingodb {
 
 bool RocksEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { return true; }
-std::string RocksEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_ROCKSDB); }
+std::string RocksEngine::GetName() {
+  return pb::common::StorageEngine_Name(pb::common::StorageEngine::STORE_ENG_ROCKSDB);
+}
 
-pb::common::Engine RocksEngine::GetID() { return pb::common::ENG_ROCKSDB; }
+pb::common::StorageEngine RocksEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_ROCKSDB; }
 
 butil::Status RocksEngine::Write(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/) {
   return butil::Status();

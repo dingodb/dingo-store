@@ -50,7 +50,7 @@ class Engine {
   virtual bool Recover() { return true; }
 
   virtual std::string GetName() = 0;
-  virtual pb::common::Engine GetID() = 0;
+  virtual pb::common::StorageEngine GetID() = 0;
 
   virtual std::shared_ptr<RawEngine> GetRawEngineByRegion(int64_t region_id) = 0;
 

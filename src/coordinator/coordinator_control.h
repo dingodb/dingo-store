@@ -198,6 +198,9 @@ class CoordinatorControl : public MetaControl {
   void GetServerLocation(pb::common::Location &raft_location, pb::common::Location &server_location);
   void GetRaftLocation(pb::common::Location &server_location, pb::common::Location &raft_location);
 
+  // translate Engine to RawEngine for CreateRegion
+  static butil::Status TranslateEngineToRawEngine(const pb::common::Engine &engine, pb::common::RawEngine &raw_engine);
+
   // create region ids
   butil::Status CreateRegionId(uint32_t count, std::vector<int64_t> &region_ids,
                                pb::coordinator_internal::MetaIncrement &meta_increment);
