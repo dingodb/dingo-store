@@ -219,7 +219,7 @@ TEST_F(RawRocksEngineTest, GetName) {
 }
 
 TEST_F(RawRocksEngineTest, GetID) {
-  pb::common::RawEngine id = RawRocksEngineTest::engine->GetID();
+  pb::common::RawEngine id = RawRocksEngineTest::engine->GetRawEngineType();
   EXPECT_EQ(id, pb::common::RawEngine::RAW_ENG_ROCKSDB);
 }
 

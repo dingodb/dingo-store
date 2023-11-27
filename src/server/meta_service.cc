@@ -58,6 +58,7 @@ void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefi
   index_definition.set_auto_increment(table_definition.auto_increment());
 }
 
+// This function is only used by pysdk, so we can only use ENG_ROCKSDB here.
 void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefinition &index_definition,
                                                        pb::meta::TableDefinition &table_definition) {
   table_definition.set_name(index_definition.name());
@@ -65,13 +66,7 @@ void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefi
   table_definition.set_auto_increment(index_definition.auto_increment());
   *(table_definition.mutable_table_partition()) = index_definition.index_partition();
   table_definition.set_replica(index_definition.replica());
-  if ((index_definition.index_parameter().index_type() == pb::common::IndexType::INDEX_TYPE_SCALAR) &&
-      (index_definition.index_parameter().scalar_index_parameter().scalar_index_type() ==
-       pb::common::ScalarIndexType::SCALAR_INDEX_TYPE_BTREE)) {
-    table_definition.set_engine(pb::common::Engine::ENG_BTREE);
-  } else {
-    table_definition.set_engine(pb::common::Engine::ENG_ROCKSDB);
-  }
+  table_definition.set_engine(index_definition.engine());
   *(table_definition.mutable_index_parameter()) = index_definition.index_parameter();
 }
 

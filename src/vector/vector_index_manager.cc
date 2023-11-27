@@ -425,7 +425,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
 
   int64_t start_time = Helper::TimestampMs();
   auto engine = Server::GetInstance().GetEngine();
-  if (engine->GetID() != pb::common::ENG_RAFT_STORE) {
+  if (engine->GetID() != pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
     return butil::Status(pb::error::Errno::EINTERNAL, "Engine is not raft store.");
   }
   auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);

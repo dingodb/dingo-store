@@ -80,7 +80,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   bool Recover() override;
 
   std::string GetName() override;
-  pb::common::Engine GetID() override;
+  pb::common::StorageEngine GetID() override;
 
   std::shared_ptr<RawEngine> GetRawEngineByRegion(int64_t region_id) override;
 

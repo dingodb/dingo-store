@@ -49,12 +49,23 @@ DECLARE_int64(def_version);
 DECLARE_int32(nsubvector);
 DECLARE_int32(nbits_per_idx);
 DECLARE_int64(count);
+DECLARE_string(engine);
 
 DECLARE_int64(tso_save_physical);
 DECLARE_int64(tso_new_physical);
 DECLARE_int64(tso_new_logical);
 
 DEFINE_bool(is_updating_index, false, "is index");
+
+dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
+  if (engine_name == "rocksdb") {
+    return dingodb::pb::common::Engine::ENG_ROCKSDB;
+  } else if (engine_name == "bdb") {
+    return dingodb::pb::common::Engine::ENG_BDB;
+  } else {
+    DINGO_LOG(FATAL) << "engine_name is illegal, please input -engine=[rocksdb, bdb]";
+  }
+}
 
 // meta hello
 void SendMetaHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -431,7 +442,11 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   table_definition->set_ttl(0);
   // PartitionRule table_partition = 6;
   // Engine engine = 7;
-  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  if (FLAGS_engine != "rocksdb" && FLAGS_engine != "bdb") {
+    DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
+    return;
+  }
+  table_definition->set_engine(GetEngine(FLAGS_engine));
   // map<string, string> properties = 8;
   auto* prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -1099,7 +1114,11 @@ void SendCreateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   table_definition->set_ttl(0);
   // PartitionRule table_partition = 6;
   // Engine engine = 7;
-  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  if (FLAGS_engine != "rocksdb" && FLAGS_engine != "bdb") {
+    DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
+    return;
+  }
+  table_definition->set_engine(GetEngine(FLAGS_engine));
   // map<string, string> properties = 8;
   auto* prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -1410,7 +1429,11 @@ void SendUpdateTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   table_definition->set_ttl(0);
   // PartitionRule table_partition = 6;
   // Engine engine = 7;
-  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  if (FLAGS_engine != "rocksdb" && FLAGS_engine != "bdb") {
+    DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
+    return;
+  }
+  table_definition->set_engine(GetEngine(FLAGS_engine));
   // map<string, string> properties = 8;
   auto* prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -1522,7 +1545,11 @@ void SendAddIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   table_definition->set_ttl(0);
   // PartitionRule table_partition = 6;
   // Engine engine = 7;
-  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  if (FLAGS_engine != "rocksdb" && FLAGS_engine != "bdb") {
+    DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
+    return;
+  }
+  table_definition->set_engine(GetEngine(FLAGS_engine));
   // map<string, string> properties = 8;
   auto* prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";

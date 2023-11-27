@@ -37,7 +37,7 @@ class RocksEngine : public Engine {
 
   bool Init(std::shared_ptr<Config> config) override;
   std::string GetName() override;
-  pb::common::Engine GetID() override;
+  pb::common::StorageEngine GetID() override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
   butil::Status SaveSnapshot(std::shared_ptr<Context>, int64_t, bool) override { return butil::Status(); }

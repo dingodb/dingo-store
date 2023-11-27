@@ -165,9 +165,9 @@ bool RaftStoreEngine::Recover() {
   return true;
 }
 
-std::string RaftStoreEngine::GetName() { return pb::common::Engine_Name(pb::common::ENG_RAFT_STORE); }
+std::string RaftStoreEngine::GetName() { return pb::common::StorageEngine_Name(GetID()); }
 
-pb::common::Engine RaftStoreEngine::GetID() { return pb::common::ENG_RAFT_STORE; }
+pb::common::StorageEngine RaftStoreEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_RAFT_STORE; }
 
 std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngineByRegion(int64_t region_id) {
   auto raft_node = raft_node_manager->GetNode(region_id);

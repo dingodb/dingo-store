@@ -55,7 +55,7 @@ Snapshot* Storage::GetSnapshot() { return nullptr; }
 void Storage::ReleaseSnapshot() {}
 
 butil::Status Storage::ValidateLeader(int64_t region_id) {
-  if (engine_->GetID() == pb::common::ENG_RAFT_STORE) {
+  if (engine_->GetID() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
     auto node = raft_kv_engine->GetNode(region_id);
     if (node == nullptr) {
@@ -71,7 +71,7 @@ butil::Status Storage::ValidateLeader(int64_t region_id) {
 }
 
 bool Storage::IsLeader(int64_t region_id) {
-  if (engine_ == nullptr || engine_->GetID() != pb::common::ENG_RAFT_STORE) {
+  if (engine_ == nullptr || engine_->GetID() != pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
     return false;
   }
   auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);

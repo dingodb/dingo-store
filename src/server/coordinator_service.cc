@@ -1079,6 +1079,7 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
   std::string resource_tag = request->resource_tag();
   int64_t replica_num = request->replica_num();
   pb::common::Range range = request->range();
+  pb::common::RawEngine raw_engine = request->raw_engine();
   int64_t schema_id = request->schema_id();
   int64_t table_id = request->table_id();
   int64_t index_id = request->index_id();
@@ -1112,13 +1113,13 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
       store_ids.push_back(id);
     }
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    ret = coordinator_control->CreateRegionFinal(
-        region_name, region_type, pb::common::RawEngine::RAW_ENG_ROCKSDB, resource_tag, replica_num, range, schema_id,
-        table_id, index_id, part_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
+    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, resource_tag, replica_num, range,
+                                                 schema_id, table_id, index_id, part_id, index_parameter, store_ids, 0,
+                                                 new_region_id, store_operations, meta_increment);
   } else {
-    ret = coordinator_control->CreateRegionAutoSelectStore(
-        region_name, region_type, pb::common::RawEngine::RAW_ENG_ROCKSDB, resource_tag, replica_num, range, schema_id,
-        table_id, index_id, part_id, index_parameter, new_region_id, meta_increment);
+    ret = coordinator_control->CreateRegionAutoSelectStore(region_name, region_type, raw_engine, resource_tag,
+                                                           replica_num, range, schema_id, table_id, index_id, part_id,
+                                                           index_parameter, new_region_id, meta_increment);
   }
 
   if (!ret.ok()) {

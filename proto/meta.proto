@@ -152,6 +152,7 @@ message IndexDefinition {
   dingodb.pb.common.IndexParameter index_parameter = 5;
   bool with_auto_incrment = 6;  // if true, the index create a auto increment
   int64 auto_increment = 7;     // auto increment start id
+  dingodb.pb.common.Engine engine = 8;
 }
 
 message RegionStatus {
