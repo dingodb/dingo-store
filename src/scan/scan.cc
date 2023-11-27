@@ -31,7 +31,6 @@
 #include "common/logging.h"
 #include "coprocessor/utils.h"
 #include "engine/write_data.h"  // IWYU pragma: keep
-#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #if defined(ENABLE_SCAN_OPTIMIZATION)

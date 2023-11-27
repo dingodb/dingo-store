@@ -898,7 +898,7 @@ std::shared_ptr<RawRocksEngine> RawRocksEngine::GetSelfPtr() {
 
 std::string RawRocksEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_ROCKSDB); }
 
-pb::common::RawEngine RawRocksEngine::GetID() { return pb::common::RAW_ENG_ROCKSDB; }
+pb::common::RawEngine RawRocksEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_ROCKSDB; }
 
 std::string RawRocksEngine::DbPath() { return db_path_; }
 

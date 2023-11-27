@@ -535,14 +535,27 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   // Get last applied log id
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
-  if (raft_store_engine != nullptr) {
-    auto raft_node = raft_store_engine->GetNode(vector_index_id);
-    if (raft_node != nullptr) {
-      auto raft_status = raft_node->GetStatus();
-      if (raft_status->known_applied_index() > 0) {
-        vector_index->SetApplyLogId(raft_status->known_applied_index());
-      }
-    }
+  if (raft_store_engine == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[vector_index.build][index_id({})] raft store engine is null.", vector_index_id);
+  }
+
+  auto raft_node = raft_store_engine->GetNode(vector_index_id);
+  if (raft_node == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found raft node, skip this build.",
+                                    vector_index_id);
+    return nullptr;
+  }
+
+  auto raft_status = raft_node->GetStatus();
+  if (raft_status->known_applied_index() > 0) {
+    vector_index->SetApplyLogId(raft_status->known_applied_index());
+  }
+
+  std::shared_ptr<RawEngine> raw_engine = raft_node->GetRawEngine();
+  if (raw_engine == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found raw engine, skip this build.",
+                                    vector_index_id);
+    return nullptr;
   }
 
   // std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
@@ -560,7 +573,6 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   IteratorOptions options;
   options.upper_bound = end_key;
 
-  auto raw_engine = Server::GetInstance().GetRawEngine();
   auto iter = raw_engine->Reader()->NewIterator(Constant::kVectorDataCF, options);
 
   // Note: This is iterated 2 times for the following reasons:

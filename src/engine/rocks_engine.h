@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_ROCKS_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ROCKS_ENGINE_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -47,7 +48,7 @@ class RocksEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc write_cb) override;
 
-  std::shared_ptr<Engine::Reader> NewReader() override;
+  std::shared_ptr<Engine::Reader> NewReader(int64_t region_id) override;
 };
 
 }  // namespace dingodb

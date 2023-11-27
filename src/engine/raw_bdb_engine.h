@@ -200,7 +200,7 @@ class RawBdbEngine : public RawEngine {
   // bool Recover() override;
 
   std::string GetName() override;
-  pb::common::RawEngine GetID() override;
+  pb::common::RawEngine GetRawEngineType() override;
   dingodb::SnapshotPtr GetSnapshot() override;
 
   RawEngine::ReaderPtr Reader() override { return reader_; }

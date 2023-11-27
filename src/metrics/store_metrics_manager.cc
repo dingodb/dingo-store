@@ -400,7 +400,7 @@ bool StoreRegionMetrics::CollectMetrics() {
         vector_index_wrapper->GetDeletedCount(deleted_count);
         region_metrics->SetVectorDeletedCount(deleted_count);
 
-        auto reader = engine_->NewVectorReader();
+        auto reader = engine_->NewVectorReader(region->Id());
         int64_t max_id = 0;
 
         reader->VectorGetBorderId(region->Range(), false, max_id);
