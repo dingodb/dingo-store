@@ -149,8 +149,7 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
   auto node = std::make_shared<dingodb::RaftNode>(
       node_id, region->Name(), braft::PeerId(FormatLocation(peer.raft_location())), state_machine, log_storage);
 
-  if (node->Init(region, init_conf, config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000,
-                 config->GetInt("raft.snapshot_interval_s")) != 0) {
+  if (node->Init(region, init_conf, config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000)) {
     node->Destroy();
     return nullptr;
   }
