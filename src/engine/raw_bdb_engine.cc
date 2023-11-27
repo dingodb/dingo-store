@@ -1327,16 +1327,24 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     return false;
   }
 
-  std::string store_db_path_value = config->GetString(Constant::kStorePathConfigName) + "/bdb";
-  if (BAIDU_UNLIKELY(store_db_path_value.empty())) {
+  std::string bdb_path = config->GetString(Constant::kStorePathConfigName) + "/bdb";
+  if (BAIDU_UNLIKELY(bdb_path.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] can not find: {}/bdb", Constant::kStorePathConfigName);
     return false;
+  }
+
+  if (!Helper::IsExistPath(bdb_path)) {
+    auto ret = Helper::CreateDirectories(bdb_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] create dir failed: {}.", ret.error_cstr());
+      return false;
+    }
   }
 
   // Initialize our handles
   Db* db = nullptr;
   DbEnv* envp = nullptr;
-  const char* file_name = "888.db";
+  const char* file_name = "dingo.db";
 
   // Env open flags
   uint32_t env_flags = DB_CREATE |        // Create the environment if it does not exist
@@ -1359,7 +1367,7 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     envp->set_lk_detect(DB_LOCK_MINWRITE);
     envp->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 0);
 
-    envp->open((const char*)store_db_path_value.c_str(), env_flags, 0);
+    envp->open((const char*)bdb_path.c_str(), env_flags, 0);
 
     // If we had utility threads (for running checkpoints or
     // deadlock detection, for example) we would spawn those
@@ -1368,8 +1376,7 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // Open the database
     int ret = OpenDb(&db, file_name, envp, 0);
     if (ret < 0) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", store_db_path_value, file_name,
-                                      ret);
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
       return false;
     }
   } catch (DbException& db_exctption) {
@@ -1378,7 +1385,7 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     return false;
   }
 
-  db_path_ = store_db_path_value + "/" + file_name;
+  db_path_ = bdb_path + "/" + file_name;
   db_.reset(db);
 
   reader_ = std::make_shared<bdb::Reader>(GetSelfPtr());
@@ -1413,7 +1420,7 @@ void RawBdbEngine::Close() {
 
 std::string RawBdbEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_BDB); }
 
-pb::common::RawEngine RawBdbEngine::GetID() { return pb::common::RAW_ENG_BDB; }
+pb::common::RawEngine RawBdbEngine::GetRawEngineType() { return pb::common::RAW_ENG_BDB; }
 
 dingodb::SnapshotPtr RawBdbEngine::GetSnapshot() {
   try {

@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "config/config_manager.h"
+#include "engine/raw_engine.h"
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
 #include "metrics/store_bvar_metrics.h"
@@ -41,13 +42,15 @@ DEFINE_int32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
 namespace dingodb {
 
 RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-                   std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage)
+                   std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage,
+                   std::shared_ptr<RawEngine> raw_engine)
     : node_id_(node_id),
       str_node_id_(std::to_string(node_id)),
       raft_group_name_(raft_group_name),
       node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm),
-      log_storage_(log_storage) {
+      log_storage_(log_storage),
+      raw_engine_(raw_engine) {
   DINGO_LOG(DEBUG) << fmt::format("[new.RaftNode][id({})]", node_id);
 }
 

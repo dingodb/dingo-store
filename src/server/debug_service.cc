@@ -264,7 +264,7 @@ void DebugServiceImpl::Compact(google::protobuf::RpcController* controller, cons
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
-  auto raw_engine = Server::GetInstance().GetRawEngine();
+  auto raw_engine = Server::GetInstance().GetSystemRawEngine();
   if (raw_engine == nullptr) {
     response->mutable_error()->set_errcode(pb::error::ERAW_ENGINE_NOT_FOUND);
     response->mutable_error()->set_errmsg("Not found raw engine.");
@@ -295,7 +295,11 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
     return region_metrics;
   }
 
-  auto raw_engine = Server::GetInstance().GetRawEngine();
+  auto raw_engine = Server::GetInstance().GetRawEngineByRegion(region_id);
+  if (raw_engine == nullptr) {
+    DINGO_LOG(ERROR) << "Not found raw engine for region " << region_id;
+    return region_metrics;
+  }
 
   int64_t size = 0;
   int32_t key_count = 0;

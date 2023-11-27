@@ -15,6 +15,7 @@
 #ifndef DINGODB_ENGINE_MEM_ENGINE_H_
 #define DINGODB_ENGINE_MEM_ENGINE_H_
 
+#include <cstdint>
 #include <map>
 #include <shared_mutex>
 
@@ -44,7 +45,7 @@ class MemEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc cb) override;
 
-  std::shared_ptr<Engine::Reader> NewReader() override;
+  std::shared_ptr<Engine::Reader> NewReader(int64_t region_id) override;
 
  private:
   std::map<std::string, std::string> store_;

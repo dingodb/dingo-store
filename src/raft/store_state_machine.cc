@@ -43,7 +43,7 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
                                      std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
                                      store::RegionMetricsPtr region_metrics,
                                      std::shared_ptr<EventListenerCollection> listeners)
-    : engine_(engine),
+    : raw_engine_(engine),
       region_(region),
       str_node_id_(std::to_string(region->Id())),
       raft_meta_(raft_meta),
@@ -145,7 +145,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       // Build event
       auto event = std::make_shared<SmApplyEvent>();
       event->region = region_;
-      event->engine = engine_;
+      event->engine = raw_engine_;
       event->done = iter.done();
       event->raft_cmd = raft_cmd;
       event->region_metrics = region_metrics_;
@@ -206,7 +206,7 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
 
       auto event = std::make_shared<SmApplyEvent>();
       event->region = region_;
-      event->engine = engine_;
+      event->engine = raw_engine_;
       event->raft_cmd = raft_cmd;
       event->region_metrics = region_metrics_;
       event->term_id = entry.term();
@@ -237,7 +237,7 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
 std::shared_ptr<SnapshotContext> StoreStateMachine::MakeSnapshotContext() {
   BAIDU_SCOPED_LOCK(apply_mutex_);
 
-  auto snapshot_ctx = std::make_shared<SnapshotContext>(engine_);
+  auto snapshot_ctx = std::make_shared<SnapshotContext>(raw_engine_);
   snapshot_ctx->applied_term = applied_term_;
   snapshot_ctx->applied_index = applied_index_;
   snapshot_ctx->region_epoch = region_->Epoch();
@@ -256,7 +256,7 @@ void StoreStateMachine::on_shutdown() {
 void StoreStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_snapshot_save", region_->Id());
   auto event = std::make_shared<SmSnapshotSaveEvent>();
-  event->engine = engine_;
+  event->engine = raw_engine_;
   event->writer = writer;
   event->done = done;
   event->region = region_;
@@ -336,7 +336,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
 
   if (business_meta.log_index() > applied_index_) {
     auto event = std::make_shared<SmSnapshotLoadEvent>();
-    event->engine = engine_;
+    event->engine = raw_engine_;
     event->reader = reader;
     event->region = region_;
 

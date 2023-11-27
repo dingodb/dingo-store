@@ -261,7 +261,7 @@ class RawRocksEngine : public RawEngine {
   std::shared_ptr<RawRocksEngine> GetSelfPtr();
 
   std::string GetName() override;
-  pb::common::RawEngine GetID() override;
+  pb::common::RawEngine GetRawEngineType() override;
   std::string DbPath();
 
   bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) override;

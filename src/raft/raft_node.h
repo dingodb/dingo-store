@@ -25,6 +25,7 @@
 
 #include "common/context.h"
 #include "config/config.h"
+#include "engine/raw_engine.h"
 #include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -40,7 +41,8 @@ struct SnapshotContext;
 class RaftNode {
  public:
   RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-           std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage);
+           std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage,
+           std::shared_ptr<RawEngine> raw_engine);
   ~RaftNode();
 
   int Init(store::RegionPtr region, const std::string& init_conf, const std::string& raft_path,
@@ -83,6 +85,8 @@ class RaftNode {
   void SetDisableSaveSnapshot(bool disable);
   bool DisableSaveSnapshot();
 
+  std::shared_ptr<RawEngine> GetRawEngine() const { return raw_engine_; }
+
  private:
   std::string path_;
   int64_t node_id_;
@@ -96,6 +100,8 @@ class RaftNode {
   std::unique_ptr<braft::Node> node_;
 
   std::atomic<bool> disable_save_snapshot_;
+
+  std::shared_ptr<RawEngine> raw_engine_;
 };
 
 }  // namespace dingodb

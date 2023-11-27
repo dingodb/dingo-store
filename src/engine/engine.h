@@ -52,7 +52,7 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual pb::common::Engine GetID() = 0;
 
-  virtual std::shared_ptr<RawEngine> GetRawEngine() { return nullptr; }
+  virtual std::shared_ptr<RawEngine> GetRawEngineByRegion(int64_t region_id) = 0;
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
   virtual butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, int64_t region_id, bool force) = 0;
@@ -197,15 +197,12 @@ class Engine {
     virtual butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) = 0;
   };
 
-  virtual std::shared_ptr<Reader> NewReader() = 0;
-  virtual std::shared_ptr<Writer> NewWriter(std::shared_ptr<Engine> engine) = 0;
-  virtual std::shared_ptr<VectorReader> NewVectorReader() {
-    DINGO_LOG(FATAL) << "Not support NewVectorReader.";
-    return nullptr;
-  }
+  virtual std::shared_ptr<Reader> NewReader(int64_t region_id) = 0;
+  virtual std::shared_ptr<Writer> NewWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) = 0;
+  virtual std::shared_ptr<VectorReader> NewVectorReader(int64_t region_id) = 0;
 
-  virtual std::shared_ptr<TxnReader> NewTxnReader() = 0;
-  virtual std::shared_ptr<TxnWriter> NewTxnWriter(std::shared_ptr<Engine> engine) = 0;
+  virtual std::shared_ptr<TxnReader> NewTxnReader(int64_t region_id) = 0;
+  virtual std::shared_ptr<TxnWriter> NewTxnWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) = 0;
 
   //  This is used by RaftStoreEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.

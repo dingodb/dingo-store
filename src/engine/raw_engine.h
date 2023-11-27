@@ -101,7 +101,7 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
   virtual bool Recover() { return true; }
 
   virtual std::string GetName() = 0;
-  virtual pb::common::RawEngine GetID() = 0;
+  virtual pb::common::RawEngine GetRawEngineType() = 0;
 
   virtual SnapshotPtr GetSnapshot() = 0;
 

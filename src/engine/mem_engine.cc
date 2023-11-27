@@ -14,11 +14,13 @@
 
 #include "engine/mem_engine.h"
 
+#include <cstdint>
+
 #include "common/logging.h"
 
 namespace dingodb {
 
-bool MemEngine::Init(std::shared_ptr<Config> config) {
+bool MemEngine::Init(std::shared_ptr<Config> /*config*/) {
   DINGO_LOG(INFO) << "Init MemEngine...";
   return true;
 }
@@ -27,19 +29,19 @@ std::string MemEngine::GetName() { return "kMemEngine"; }
 
 pb::common::Engine MemEngine::GetID() { return pb::common::ENG_MEMORY; }
 
-butil::Status MemEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
+butil::Status MemEngine::Write(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/) {
   return butil::Status();
 }
 
-butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
+butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/) {
   return butil::Status();
 }
 
-butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
-                                    WriteCbFunc cb) {
+butil::Status MemEngine::AsyncWrite(std::shared_ptr<Context> /*ctx*/, std::shared_ptr<WriteData> /*write_data*/,
+                                    WriteCbFunc /*cb*/) {
   return butil::Status();
 }
 
-std::shared_ptr<Engine::Reader> MemEngine::NewReader() { return nullptr; }
+std::shared_ptr<Engine::Reader> MemEngine::NewReader(int64_t /*region_id*/) { return nullptr; }
 
 }  // namespace dingodb

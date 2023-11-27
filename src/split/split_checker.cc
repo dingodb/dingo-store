@@ -415,7 +415,6 @@ void PreSplitCheckTask::PreSplitCheck() {
     return;
   }
 
-  auto raw_engine = Server::GetInstance().GetRawEngine();
   auto metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto regions = GET_STORE_REGION_META->GetAllAliveRegion();
   uint32_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
@@ -478,6 +477,13 @@ void PreSplitCheckTask::PreSplitCheck() {
         need_scan_check, reason, region_metric == nullptr ? 0 : region_metric->InnerRegionMetrics().region_size(),
         split_check_approximate_size);
     if (!need_scan_check) {
+      continue;
+    }
+
+    auto raw_engine = Server::GetInstance().GetRawEngineByRegion(region->Id());
+    if (raw_engine == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get raw_engine failed, skip this region.",
+                                      region->Id());
       continue;
     }
 

@@ -74,7 +74,7 @@ class StoreStateMachine : public BaseStateMachine {
 
   store::RegionPtr region_;
   std::string str_node_id_;
-  std::shared_ptr<RawEngine> engine_;
+  std::shared_ptr<RawEngine> raw_engine_;
   std::shared_ptr<EventListenerCollection> listeners_;
 
   int64_t applied_term_;
