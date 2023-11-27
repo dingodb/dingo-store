@@ -35,7 +35,7 @@
 
 namespace dingodb {
 
-class VectorIndexMemoryTest : public testing::Test {
+class VectorIndexMemoryHnswTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
@@ -55,7 +55,7 @@ class VectorIndexMemoryTest : public testing::Test {
   inline static int step_count = 1000;
 };
 
-TEST_F(VectorIndexMemoryTest, Create) {
+TEST_F(VectorIndexMemoryHnswTest, Create) {
   static const pb::common::Range kRange;
   static pb::common::RegionEpoch kEpoch;
   kEpoch.set_conf_version(1);
@@ -79,7 +79,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, Add) {
+TEST_F(VectorIndexMemoryHnswTest, Add) {
   butil::Status ok;
 
   // create random data

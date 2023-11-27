@@ -73,7 +73,7 @@ const std::string kYamlConfigContent =
     "  path: " +
     kStorePath + "\n";
 
-std::string StrToHex(std::string str, std::string separator = "") {
+static std::string StrToHex(std::string str, std::string separator = "") {
   const std::string hex = "0123456789ABCDEF";
   std::stringstream ss;
 

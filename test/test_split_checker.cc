@@ -61,7 +61,7 @@ const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
 // ================== Helper function ==================
 
 // rand string
-std::string GenRandomString(int len) {
+static std::string GenRandomString(int len) {
   std::string result;
   int alphabet_len = sizeof(kAlphabet);
 
