@@ -46,5 +46,8 @@ public class TableDefinition implements Table {
     private long autoIncrement = 1;
     private String createSql;
     private IndexParameter indexParameter;
+    private String comment;
+    private String charset;
+    private String collate;
 
 }

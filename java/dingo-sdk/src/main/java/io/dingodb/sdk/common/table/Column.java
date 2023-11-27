@@ -36,6 +36,10 @@ public interface Column {
 
     boolean isAutoIncrement();
 
+    int getState();
+
+    String getComment();
+
     default boolean isPrimary() {
         return getPrimary() > -1;
     }
