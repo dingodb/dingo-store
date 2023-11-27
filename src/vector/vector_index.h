@@ -343,8 +343,8 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
     return snapshot_set_;
   }
 
-  void UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& reason);
-  void ClearVectorIndex();
+  void UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& trace);
+  void ClearVectorIndex(const std::string& trace);
 
   VectorIndexPtr GetOwnVectorIndex();
   VectorIndexPtr GetVectorIndex();

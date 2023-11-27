@@ -642,10 +642,10 @@ int RaftLoadSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
     if (vector_index_wrapper->IsReady()) {
       DINGO_LOG(WARNING) << fmt::format(
           "[raft.handle][region({})] vector index is ready, clear index and do load again.", region->Id());
-      vector_index_wrapper->ClearVectorIndex();
+      vector_index_wrapper->ClearVectorIndex("load raft snapshot");
     }
 
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper);
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, 0, "load raft snapshot");
   }
 
   return 0;

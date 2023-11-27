@@ -105,7 +105,7 @@ VectorIndexWrapper::VectorIndexWrapper(int64_t id, pb::common::VectorIndexParame
 }
 
 VectorIndexWrapper::~VectorIndexWrapper() {
-  ClearVectorIndex();
+  ClearVectorIndex("destruct");
   if (snapshot_set_ != nullptr) {
     snapshot_set_->ClearSnapshot();
   }
@@ -163,7 +163,7 @@ bool VectorIndexWrapper::Recover() {
 
   if (IsTempHoldVectorIndex()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] need bootstrap build vector index.", Id());
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(GetSelf());
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(GetSelf(), false, 0, "recover");
   }
 
   return true;
@@ -259,9 +259,9 @@ void VectorIndexWrapper::SetIsTempHoldVectorIndex(bool need) {
   SaveMeta();
 }
 
-void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& reason) {
+void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& trace) {
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.wrapper][index_id({})] update vector index, reason({}) epoch({}) range({})", Id(), reason,
+      "[vector_index.wrapper][index_id({})][trace({})] update vector index, epoch({}) range({})", Id(), trace,
       Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()));
   // Check vector index is stop
   if (IsStop()) {
@@ -270,8 +270,8 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
   }
   if (!IsPermanentHoldVectorIndex(this->Id()) && !IsTempHoldVectorIndex()) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.wrapper][index_id({})] vector index is not hold. is_perm_hold: {}, is_temp_hold: {}", Id(),
-        IsPermanentHoldVectorIndex(this->Id()), IsTempHoldVectorIndex());
+        "[vector_index.wrapper][index_id({})][trace({})] vector index is not hold. is_perm_hold: {}, is_temp_hold: {}",
+        Id(), trace, IsPermanentHoldVectorIndex(this->Id()), IsTempHoldVectorIndex());
     return;
   }
 
@@ -294,9 +294,9 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
     int64_t apply_log_id = ApplyLogId();
     int64_t snapshot_log_id = SnapshotLogId();
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.wrapper][index_id({})] update vector index, apply_log_id({}/{}) snapshot_log_id({}/{}) "
-        "reason({})",
-        Id(), apply_log_id, vector_index->ApplyLogId(), snapshot_log_id, vector_index->SnapshotLogId(), reason);
+        "[vector_index.wrapper][index_id({})][trace({})] update vector index, apply_log_id({}/{}) "
+        "snapshot_log_id({}/{}).",
+        Id(), apply_log_id, vector_index->ApplyLogId(), snapshot_log_id, vector_index->SnapshotLogId(), trace);
     if (apply_log_id < vector_index->ApplyLogId()) {
       SetApplyLogId(vector_index->ApplyLogId());
     }
@@ -308,8 +308,8 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
   }
 }
 
-void VectorIndexWrapper::ClearVectorIndex() {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] Clear all vector index", Id());
+void VectorIndexWrapper::ClearVectorIndex(const std::string& trace) {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})][trace({})] Clear all vector index", Id(), trace);
 
   BAIDU_SCOPED_LOCK(vector_index_mutex_);
 

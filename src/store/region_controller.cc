@@ -1007,7 +1007,7 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*c
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
   }
 
-  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper);
+  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, "from client");
   if (!status.ok()) {
     return status;
   }
@@ -1214,13 +1214,14 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
     ADD_REGION_CHANGE_RECORD(*region_cmd);
     // Load vector index.
     DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, region_cmd->job_id());
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, region_cmd->job_id(),
+                                                     "hold vector index");
 
   } else {
     // Delete vector index.
     if (vector_index_wrapper->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.hold][region({})] delete vector index.", region_id);
-      vector_index_wrapper->ClearVectorIndex();
+      vector_index_wrapper->ClearVectorIndex(fmt::format("{}-nohold", region_cmd->job_id()));
     }
   }
 
