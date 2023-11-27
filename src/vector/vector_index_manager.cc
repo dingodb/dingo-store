@@ -51,9 +51,10 @@ namespace dingodb {
 
 void RebuildVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.rebuild][index_id({})] pending tasks({}/{}) total running({}/{}).", vector_index_wrapper_->Id(),
-      vector_index_wrapper_->RebuildingNum(), vector_index_wrapper_->PendingTaskNum(),
-      VectorIndexManager::GetVectorIndexRebuildTaskRunningNum(), VectorIndexManager::GetVectorIndexTaskRunningNum());
+      "[vector_index.rebuild][index_id({})][trace({})] pending tasks({}/{}) total running({}/{}).",
+      vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->RebuildingNum(),
+      vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexRebuildTaskRunningNum(),
+      VectorIndexManager::GetVectorIndexTaskRunningNum());
 
   VectorIndexManager::IncVectorIndexTaskRunningNum();
   VectorIndexManager::IncVectorIndexRebuildTaskRunningNum();
@@ -64,15 +65,16 @@ void RebuildVectorIndexTask::Run() {
     vector_index_wrapper_->DecRebuildingNum();
 
     LOG(INFO) << fmt::format(
-        "[vector_index.rebuild][index_id({})] pending tasks({}/{}) total running({}/{}).", vector_index_wrapper_->Id(),
-        vector_index_wrapper_->RebuildingNum(), vector_index_wrapper_->PendingTaskNum(),
-        VectorIndexManager::GetVectorIndexRebuildTaskRunningNum(), VectorIndexManager::GetVectorIndexTaskRunningNum());
+        "[vector_index.rebuild][index_id({})][trace({})] pending tasks({}/{}) total running({}/{}).",
+        vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->RebuildingNum(),
+        vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexRebuildTaskRunningNum(),
+        VectorIndexManager::GetVectorIndexTaskRunningNum());
   });
 
   auto region = Server::GetInstance().GetRegion(vector_index_wrapper_->Id());
   if (region == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})] Not found region.",
-                                      vector_index_wrapper_->Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] Not found region.",
+                                      vector_index_wrapper_->Id(), trace_);
     return;
   }
 
@@ -80,22 +82,22 @@ void RebuildVectorIndexTask::Run() {
 
   if (vector_index_wrapper_->IsStop()) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.rebuild][index_id({})] vector index is stop, gave up rebuild vector index.",
-        vector_index_wrapper_->Id());
+        "[vector_index.rebuild][index_id({})][trace({})] vector index is stop, gave up rebuild vector index.",
+        vector_index_wrapper_->Id(), trace_);
     return;
   }
 
   if (!force_) {
     if (!vector_index_wrapper_->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.rebuild][index_id({})] vector index is not ready, gave up rebuild vector index.",
-          vector_index_wrapper_->Id());
+          "[vector_index.rebuild][index_id({})][trace({})] vector index is not ready, gave up rebuild vector index.",
+          vector_index_wrapper_->Id(), trace_);
       return;
     }
     if (!vector_index_wrapper_->NeedToRebuild()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.rebuild][index_id({})] vector index not need rebuild, gave up rebuild vector index.",
-          vector_index_wrapper_->Id());
+          "[vector_index.rebuild][index_id({})][trace({})] vector index not need rebuild, gave up rebuild vector index",
+          vector_index_wrapper_->Id(), trace_);
       return;
     }
   }
@@ -103,21 +105,23 @@ void RebuildVectorIndexTask::Run() {
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuilding vector index {}", region->Id()));
 
   vector_index_wrapper_->SetIsTempHoldVectorIndex(true);
-  auto status = VectorIndexManager::RebuildVectorIndex(vector_index_wrapper_);
+  auto status = VectorIndexManager::RebuildVectorIndex(vector_index_wrapper_, trace_);
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuilded vector index {}", region->Id()));
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({}_v{})] rebuild vector index failed, error {}",
-                                    vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), status.error_str());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.rebuild][index_id({}_v{})][trace({})] rebuild vector index failed, error {}",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
     return;
   }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saving vector index {}", region->Id()));
 
-  status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper_);
+  status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper_, trace_);
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saved vector index {} failed", region->Id()));
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.save][index_id({}_v{})] save vector index failed, error {}",
-                                    vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), status.error_str());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.save][index_id({}_v{})][trace({})] save vector index failed, error {}",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
   }
 
   vector_index_wrapper_->SetIsTempHoldVectorIndex(false);
@@ -125,7 +129,7 @@ void RebuildVectorIndexTask::Run() {
 
   if (force_) {
     if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper_->Id())) {
-      vector_index_wrapper_->ClearVectorIndex();
+      vector_index_wrapper_->ClearVectorIndex(trace_);
     }
 
     auto store_region_meta = GET_STORE_REGION_META;
@@ -135,8 +139,8 @@ void RebuildVectorIndexTask::Run() {
 
 void SaveVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.save][index_id({})] pending tasks({}/{}) total running({}/{}).", vector_index_wrapper_->Id(),
-      vector_index_wrapper_->SavingNum(), vector_index_wrapper_->PendingTaskNum(),
+      "[vector_index.save][index_id({})][trace({})] pending tasks({}/{}) total running({}/{}).",
+      vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->SavingNum(), vector_index_wrapper_->PendingTaskNum(),
       VectorIndexManager::GetVectorIndexSaveTaskRunningNum(), VectorIndexManager::GetVectorIndexTaskRunningNum());
 
   VectorIndexManager::IncVectorIndexTaskRunningNum();
@@ -147,38 +151,41 @@ void SaveVectorIndexTask::Run() {
     vector_index_wrapper_->DecPendingTaskNum();
     vector_index_wrapper_->DecSavingNum();
 
-    LOG(INFO) << fmt::format(
-        "[vector_index.save][index_id({})] pending tasks({}/{}) total running({}/{}).", vector_index_wrapper_->Id(),
-        vector_index_wrapper_->SavingNum(), vector_index_wrapper_->PendingTaskNum(),
-        VectorIndexManager::GetVectorIndexSaveTaskRunningNum(), VectorIndexManager::GetVectorIndexTaskRunningNum());
+    LOG(INFO) << fmt::format("[vector_index.save][index_id({})][trace({})] pending tasks({}/{}) total running({}/{}).",
+                             vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->SavingNum(),
+                             vector_index_wrapper_->PendingTaskNum(),
+                             VectorIndexManager::GetVectorIndexSaveTaskRunningNum(),
+                             VectorIndexManager::GetVectorIndexTaskRunningNum());
   });
 
   if (vector_index_wrapper_->IsStop()) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({})] vector index is stop, gave up save vector index.",
-                                   vector_index_wrapper_->Id());
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.save][index_id({})][trace({})] vector index is stop, gave up save vector index.",
+        vector_index_wrapper_->Id(), trace_);
     return;
   }
   if (!vector_index_wrapper_->IsOwnReady()) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.save][index_id({})] vector index is not ready, gave up save vector index.",
-        vector_index_wrapper_->Id());
+        "[vector_index.save][index_id({})][trace({})] vector index is not ready, gave up save vector index.",
+        vector_index_wrapper_->Id(), trace_);
     return;
   }
 
-  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper_);
+  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper_, trace_);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.save][index_id({}_v{})] save vector index failed, error {}",
-                                    vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), status.error_str());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.save][index_id({}_v{})][trace({})] save vector index failed, error {}",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
     return;
   }
 }
 
 void LoadOrBuildVectorIndexTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending tasks({}/{}) total running({}/{}).",
-                                 vector_index_wrapper_->Id(), vector_index_wrapper_->LoadorbuildingNum(),
-                                 vector_index_wrapper_->PendingTaskNum(),
-                                 VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum(),
-                                 VectorIndexManager::GetVectorIndexTaskRunningNum());
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.loadorbuild][index_id({})][trace({})] pending tasks({}/{}) total running({}/{}).",
+      vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->LoadorbuildingNum(),
+      vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum(),
+      VectorIndexManager::GetVectorIndexTaskRunningNum());
 
   VectorIndexManager::IncVectorIndexTaskRunningNum();
   VectorIndexManager::IncVectorIndexLoadorbuildTaskRunningNum();
@@ -188,18 +195,18 @@ void LoadOrBuildVectorIndexTask::Run() {
     vector_index_wrapper_->DecPendingTaskNum();
     vector_index_wrapper_->DecLoadoruildingNum();
 
-    LOG(INFO) << fmt::format("[vector_index.loadorbuild][index_id({})] pending tasks({}/{}) total running({}/{}).",
-                             vector_index_wrapper_->Id(), vector_index_wrapper_->LoadorbuildingNum(),
-                             vector_index_wrapper_->PendingTaskNum(),
-                             VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum(),
-                             VectorIndexManager::GetVectorIndexTaskRunningNum());
+    LOG(INFO) << fmt::format(
+        "[vector_index.loadorbuild][index_id({})][trace({})] pending tasks({}/{}) total running({}/{}).",
+        vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->LoadorbuildingNum(),
+        vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum(),
+        VectorIndexManager::GetVectorIndexTaskRunningNum());
   });
 
   // Get region meta
   auto region = Server::GetInstance().GetRegion(vector_index_wrapper_->Id());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][region({})] not found region.",
-                                    vector_index_wrapper_->Id());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][region({})][trace({})] not found region.",
+                                    vector_index_wrapper_->Id(), trace_);
     return;
   }
 
@@ -211,16 +218,16 @@ void LoadOrBuildVectorIndexTask::Run() {
 
   if (vector_index_wrapper_->IsStop()) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.loadorbuild][index_id({})] vector index is stop, gave up loadorbuild vector index.",
-        vector_index_wrapper_->Id());
+        "[vector_index.loadorbuild][index_id({})][trace({})] vector index is stop, gave up loadorbuild vector index.",
+        vector_index_wrapper_->Id(), trace_);
     return;
   }
 
   if (vector_index_wrapper_->IsOwnReady()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Already own vector index {}", region->Id()));
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.loadorbuild][index_id({})] vector index is ready, gave up loadorbuild vector index.",
-        vector_index_wrapper_->Id());
+        "[vector_index.loadorbuild][index_id({})][trace({})] vector index is ready, gave up loadorbuild vector index.",
+        vector_index_wrapper_->Id(), trace_);
     return;
   }
 
@@ -228,27 +235,28 @@ void LoadOrBuildVectorIndexTask::Run() {
   // New region don't pull snapshot, directly build.
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
   if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][region({})] pull last snapshot from peers.",
-                                   vector_index_wrapper_->Id());
+    DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][region({})][trace({})] pull last snapshot from peers.",
+                                   vector_index_wrapper_->Id(), trace_);
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
     if (!status.ok()) {
       if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
           status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
         DINGO_LOG(ERROR) << fmt::format(
-            "[vector_index.loadorbuild][region({})] pull vector index last snapshot failed, error: {}",
-            vector_index_wrapper_->Id(), status.error_str());
+            "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot failed, error: {}",
+            vector_index_wrapper_->Id(), trace_, status.error_str());
       }
     }
   }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuilding vector index {}", region->Id()));
 
-  auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper_, region->Epoch());
+  auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper_, region->Epoch(), trace_);
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuilded vector index {} failed", region->Id()));
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.load][index_id({}_v{})] load or build vector index failed, error {}",
-                                    vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), status.error_str());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.load][index_id({}_v{})][trace({})] load or build vector index failed, error {}",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
     return;
   }
 
@@ -279,7 +287,8 @@ void VectorIndexManager::Destroy() {
 // Load vector index for already exist vector index at bootstrap.
 // Priority load from snapshot, if snapshot not exist then load from original data.
 butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                                         const pb::common::RegionEpoch& epoch) {
+                                                         const pb::common::RegionEpoch& epoch,
+                                                         const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
   int64_t start_time = Helper::TimestampMs();
@@ -290,15 +299,16 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   if (new_vector_index != nullptr) {
     // replay wal
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.load][index_id({})] Load vector index from snapshot success, will ReplayWal", vector_index_id);
+        "[vector_index.load][index_id({})][trace({})] Load vector index from snapshot success, will ReplayWal",
+        vector_index_id, trace);
     auto status = ReplayWalToVectorIndex(new_vector_index, new_vector_index->ApplyLogId() + 1, INT64_MAX);
     if (status.ok()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.load][index_id({})] ReplayWal success, log_id {} elapsed time({}ms)", vector_index_id,
-          new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
+          "[vector_index.load][index_id({})][trace({})] ReplayWal success, log_id {} elapsed time({}ms)",
+          vector_index_id, trace, new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
 
       // Switch vector index.
-      vector_index_wrapper->UpdateVectorIndex(new_vector_index, "LOAD_SNAPSHOT");
+      vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("LOAD_SNAPSHOT-{}", trace));
       vector_index_wrapper->SetBuildSuccess();
 
       return status;
@@ -306,15 +316,15 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.load][index_id({})] Load vector index from snapshot failed, will build vector_index",
-      vector_index_id);
+      "[vector_index.load][index_id({})][trace({})] Load vector index from snapshot failed, will build vector_index.",
+      vector_index_id, trace);
 
   // Build a new vector_index from original data
-  new_vector_index = BuildVectorIndex(vector_index_wrapper);
+  new_vector_index = BuildVectorIndex(vector_index_wrapper, trace);
   if (new_vector_index == nullptr) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.build][index_id({})] Build vector index failed, elapsed time({}ms).", vector_index_id,
-        Helper::TimestampMs() - start_time);
+        "[vector_index.build][index_id({})][trace({})] Build vector index failed, elapsed time({}ms).", vector_index_id,
+        trace, Helper::TimestampMs() - start_time);
 
     vector_index_wrapper->SetBuildError();
 
@@ -323,17 +333,19 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   }
 
   // Switch vector index.
-  vector_index_wrapper->UpdateVectorIndex(new_vector_index, "BUILD");
+  vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("BUILD-{}", trace));
   vector_index_wrapper->SetBuildSuccess();
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})] Build vector index success, elapsed time({}ms).",
-                                 vector_index_id, Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.load][index_id({})][trace({})] Build vector index success, elapsed time({}ms).", vector_index_id,
+      trace, Helper::TimestampMs() - start_time);
 
   return butil::Status();
 }
 
 void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                                      bool is_temp_hold_vector_index, int64_t job_id) {
+                                                      bool is_temp_hold_vector_index, int64_t job_id,
+                                                      const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
   if (is_temp_hold_vector_index) {
@@ -341,19 +353,24 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
   }
 
   if (vector_index_wrapper->LoadorbuildingNum() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.launch][index_id({})] Already exist loadorbuild on execute queue.",
-                                   vector_index_wrapper->Id());
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.launch][index_id({})] Already exist loadorbuild on execute queue, job({}) trace({}).",
+        vector_index_wrapper->Id(), job_id, trace);
     return;
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total running({}).",
-      vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
+      "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total running({}) "
+      "job({}) trace({}).",
+      vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum(), job_id,
+      trace);
 
-  auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index, job_id);
+  auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index, job_id,
+                                                           fmt::format("{}-{}", job_id, trace));
   if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch loadorbuild vector index failed",
-                                    vector_index_wrapper->Id());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.launch][index_id({})] Launch loadorbuild vector index failed, job({}) trace({})",
+        vector_index_wrapper->Id(), job_id, trace);
   } else {
     vector_index_wrapper->IncLoadoruildingNum();
     vector_index_wrapper->IncPendingTaskNum();
@@ -361,18 +378,20 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
 }
 
 // Parallel load vector index at server bootstrap.
-butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions,
-                                                                 int concurrency) {
+butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency,
+                                                                 const std::string& trace) {
   struct Parameter {
     std::vector<store::RegionPtr> regions;
     std::atomic<int> offset;
     std::vector<int> results;
+    std::string trace;
   };
 
   auto param = std::make_shared<Parameter>();
   param->regions = regions;
   param->offset = 0;
   param->results.resize(regions.size(), 0);
+  param->trace = trace;
 
   auto task = [](void* arg) -> void* {
     if (arg == nullptr) {
@@ -392,7 +411,7 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
       int64_t vector_index_id = vector_index_wrapper->Id();
       LOG(INFO) << fmt::format("Init load region {} vector index", vector_index_id);
 
-      auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper, region->Epoch());
+      auto status = VectorIndexManager::LoadOrBuildVectorIndex(vector_index_wrapper, region->Epoch(), param->trace);
       if (!status.ok()) {
         LOG(ERROR) << fmt::format("Load region {} vector index failed, ", vector_index_id);
         param->results[offset] = -1;
@@ -515,13 +534,15 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
 }
 
 // Build vector index with original all data.
-VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                                    const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
   int64_t vector_index_id = vector_index_wrapper->Id();
 
   auto region = Server::GetInstance().GetRegion(vector_index_id);
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found region.", vector_index_id);
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})][trace({})] not found region.", vector_index_id,
+                                    trace);
     return nullptr;
   }
 
@@ -529,7 +550,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   auto vector_index =
       VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), region->Epoch(), range);
   if (!vector_index) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] New vector index failed.", vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})][trace({})] New vector index failed.",
+                                      vector_index_id, trace);
     return nullptr;
   }
 
@@ -564,9 +586,9 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   const std::string& end_key = range.end_key();
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.build][index_id({})] Build vector index, range: [{}({})-{}({})) parallel: {}", vector_index_id,
-      Helper::StringToHex(start_key), VectorCodec::DecodeVectorId(start_key), Helper::StringToHex(end_key),
-      VectorCodec::DecodeVectorId(end_key), vector_index->WriteOpParallelNum());
+      "[vector_index.build][index_id({})][trace({})] Build vector index, range: [{}({})-{}({})) parallel: {}",
+      vector_index_id, trace, Helper::StringToHex(start_key), VectorCodec::DecodeVectorId(start_key),
+      Helper::StringToHex(end_key), VectorCodec::DecodeVectorId(end_key), vector_index->WriteOpParallelNum());
 
   int64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
@@ -585,8 +607,9 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     if (!vector_index->IsTrained()) {
       auto status = TrainForBuild(vector_index, iter, start_key, end_key);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("TrainForBuild failed error_code : {} error_cstr : {}", status.error_code(),
-                                        status.error_cstr());
+        DINGO_LOG(ERROR) << fmt::format(
+            "[vector_index.build][index_id({})][trace({})] TrainForBuild failed, error: {} {}", vector_index_id, trace,
+            status.error_code(), status.error_cstr());
         return {};
       }
     }
@@ -604,12 +627,15 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.");
+      DINGO_LOG(WARNING) << fmt::format(
+          "[vector_index.build][index_id({})][trace({})] vector with id ParseFromString failed.", vector_index_id,
+          trace);
       continue;
     }
 
     if (vector.vector().float_values_size() <= 0) {
-      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector values_size error.", vector.id());
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})][trace({})] vector values_size error.",
+                                        vector_index_id, trace);
       continue;
     }
 
@@ -631,9 +657,9 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     // Print build progress
     if ((count + 1) % (Constant::kBuildVectorIndexBatchSize * 10) == 0) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.build][index_id({})] Build vector index progress, parallel({}) count({}) elapsed "
+          "[vector_index.build][index_id({})][trace({})] Build vector index progress, parallel({}) count({}) elapsed "
           "time({}/{}ms)",
-          vector_index_id, vector_index->WriteOpParallelNum(), count, upsert_use_time,
+          vector_index_id, trace, vector_index->WriteOpParallelNum(), count, upsert_use_time,
           Helper::TimestampMs() - start_time);
     }
   }
@@ -645,27 +671,31 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.build][index_id({})] Build vector index finish, parallel({}) count({}) epoch({}) range({}) "
+      "[vector_index.build][index_id({})][trace({})] Build vector index finish, parallel({}) count({}) epoch({}) "
+      "range({}) "
       "elapsed time({}/{}ms)",
-      vector_index_id, vector_index->WriteOpParallelNum(), count, Helper::RegionEpochToString(vector_index->Epoch()),
-      VectorCodec::DecodeRangeToString(vector_index->Range()), upsert_use_time, Helper::TimestampMs() - start_time);
+      vector_index_id, trace, vector_index->WriteOpParallelNum(), count,
+      Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()),
+      upsert_use_time, Helper::TimestampMs() - start_time);
 
   return vector_index;
 }
 
-void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id) {
+void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id,
+                                                  const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch rebuild vector index, rebuild({}) pending tasks({}) total "
+      "[vector_index.launch][index_id({})][trace({})] Launch rebuild vector index, rebuild({}) pending tasks({}) total "
       "running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->RebuildingNum(), vector_index_wrapper->PendingTaskNum(),
-      GetVectorIndexTaskRunningNum());
+      GetVectorIndexTaskRunningNum(), trace);
 
-  auto task = std::make_shared<RebuildVectorIndexTask>(vector_index_wrapper, job_id);
+  auto task =
+      std::make_shared<RebuildVectorIndexTask>(vector_index_wrapper, job_id, fmt::format("{}-{}", job_id, trace));
   if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch rebuild vector index failed",
-                                    vector_index_wrapper->Id());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})][trace({})] Launch rebuild vector index failed",
+                                    vector_index_wrapper->Id(), job_id);
   } else {
     vector_index_wrapper->IncRebuildingNum();
     vector_index_wrapper->IncPendingTaskNum();
@@ -673,20 +703,21 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
 }
 
 // Rebuild vector index
-butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                                     const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
   int64_t vector_index_id = vector_index_wrapper->Id();
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})] Start rebuild vector index.",
-                                 vector_index_id, vector_index_wrapper->Version());
+  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})][trace({})] Start rebuild vector index.",
+                                 vector_index_id, vector_index_wrapper->Version(), trace);
 
   int64_t start_time = Helper::TimestampMs();
   // Build vector index with original data.
-  auto vector_index = BuildVectorIndex(vector_index_wrapper);
+  auto vector_index = BuildVectorIndex(vector_index_wrapper, trace);
   if (vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})] Build vector index failed.",
-                                      vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] Build vector index failed.",
+                                      vector_index_id, trace);
 
     vector_index_wrapper->SetRebuildError();
 
@@ -695,33 +726,38 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
   // Check vector index is stop
   if (vector_index_wrapper->IsStop()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})] vector index is stop.", vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] vector index is stop.",
+                                      vector_index_id, trace);
     vector_index_wrapper->SetRebuildError();
 
     return butil::Status();
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.rebuild][index_id({}_v{})] Build vector index success, log_id {} elapsed time: {}ms",
-      vector_index_id, vector_index_wrapper->Version(), vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
+      "[vector_index.rebuild][index_id({}_v{})][trace({})] Build vector index success, log_id {} elapsed time: {}ms",
+      vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
+      Helper::TimestampMs() - start_time);
 
   start_time = Helper::TimestampMs();
   // first ground replay wal
   auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, INT64_MAX);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] ReplayWal failed first-round, log_id {}",
-                                    vector_index_id, vector_index->ApplyLogId());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.rebuild][index_id({})][trace({})] ReplayWal failed first-round, log_id {}", vector_index_id,
+        trace, vector_index->ApplyLogId());
     vector_index_wrapper->SetRebuildError();
     return butil::Status(pb::error::Errno::EINTERNAL, "ReplayWal failed first-round");
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.rebuild][index_id({}_v{})] ReplayWal success first-round, log_id {} elapsed time: {}ms",
-      vector_index_id, vector_index_wrapper->Version(), vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
+      "[vector_index.rebuild][index_id({}_v{})][trace({})] ReplayWal success first-round, log_id {} elapsed time: {}ms",
+      vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
+      Helper::TimestampMs() - start_time);
 
   // Check vector index is stop
   if (vector_index_wrapper->IsStop()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})] vector index is stop.", vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] vector index is stop.",
+                                      vector_index_id, trace);
     return butil::Status();
   }
 
@@ -735,78 +771,80 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
     // second ground replay wal
     status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, INT64_MAX);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[vector_index.rebuild][index_id({})] ReplayWal failed catch-up round, log_id {}",
-                                      vector_index_id, vector_index->ApplyLogId());
+      DINGO_LOG(ERROR) << fmt::format(
+          "[vector_index.rebuild][index_id({})][trace({})] ReplayWal failed catch-up round, log_id {}", vector_index_id,
+          trace, vector_index->ApplyLogId());
       vector_index_wrapper->SetRebuildError();
       return status;
     }
 
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.rebuild][index_id({}_v{})] ReplayWal success catch-up round, log_id {} elapsed time: "
+        "[vector_index.rebuild][index_id({}_v{})][trace({})] ReplayWal success catch-up round, log_id {} elapsed time: "
         "{}ms",
-        vector_index_id, vector_index_wrapper->Version(), vector_index->ApplyLogId(),
+        vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
         Helper::TimestampMs() - start_time);
 
-    vector_index_wrapper->UpdateVectorIndex(vector_index, "REBUILD");
+    vector_index_wrapper->UpdateVectorIndex(vector_index, fmt::format("REBUILD-{}", trace));
     vector_index_wrapper->SetRebuildSuccess();
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})] Rebuild vector index success",
-                                 vector_index_id, vector_index_wrapper->Version());
+  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})][trace({})] Rebuild vector index success",
+                                 vector_index_id, vector_index_wrapper->Version(), trace);
   return butil::Status();
 }
 
-butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+butil::Status VectorIndexManager::SaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                                  const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
   int64_t start_time = Helper::TimestampMs();
 
   // Check vector index is stop
   if (vector_index_wrapper->IsStop()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.save][index_id({})] vector index is stop.",
-                                      vector_index_wrapper->Id());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.save][index_id({})][trace({})] vector index is stop.",
+                                      vector_index_wrapper->Id(), trace);
     return butil::Status();
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({}_v{})] Save vector index.", vector_index_wrapper->Id(),
-                                 vector_index_wrapper->Version());
+  DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({}_v{})][trace({})] Save vector index.",
+                                 vector_index_wrapper->Id(), vector_index_wrapper->Version(), trace);
 
   int64_t snapshot_log_id = 0;
   auto status = VectorIndexSnapshotManager::SaveVectorIndexSnapshot(vector_index_wrapper, snapshot_log_id);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save][index_id({})] Save vector index snapshot failed, errno: {}, errstr: {}",
-        vector_index_wrapper->Id(), status.error_code(), status.error_str());
+        "[vector_index.save][index_id({})][trace({})] Save vector index snapshot failed, errno: {}, errstr: {}",
+        vector_index_wrapper->Id(), trace, status.error_code(), status.error_str());
     return status;
   } else {
     vector_index_wrapper->SetSnapshotLogId(snapshot_log_id);
   }
 
   // Update vector index status NORMAL
-  DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({}_v{})] Save vector index success, elapsed time({}ms)",
-                                 vector_index_wrapper->Id(), vector_index_wrapper->Version(),
-                                 Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.save][index_id({}_v{})][trace({})] Save vector index success, elapsed time({}ms)",
+      vector_index_wrapper->Id(), vector_index_wrapper->Version(), trace, Helper::TimestampMs() - start_time);
 
   // Check vector index is stop
   if (vector_index_wrapper->IsStop()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.save][index_id({}_v{})] vector index is stop.",
-                                      vector_index_wrapper->Id(), vector_index_wrapper->Version());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.save][index_id({}_v{})][trace({})] vector index is stop.",
+                                      vector_index_wrapper->Id(), vector_index_wrapper->Version(), trace);
     return butil::Status();
   }
 
   return butil::Status();
 }
 
-void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper) {
+void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch save vector index, pending tasks({}) total running({}).",
-      vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
+      "[vector_index.launch][index_id({})][trace({})] Launch save vector index, pending tasks({}) total running({}).",
+      vector_index_wrapper->Id(), trace, vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
-  auto task = std::make_shared<SaveVectorIndexTask>(vector_index_wrapper);
+  auto task = std::make_shared<SaveVectorIndexTask>(vector_index_wrapper, trace);
   if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})] Launch save vector index failed",
-                                    vector_index_wrapper->Id());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})][trace({})] Launch save vector index failed",
+                                    vector_index_wrapper->Id(), trace);
   } else {
     vector_index_wrapper->IncPendingTaskNum();
     vector_index_wrapper->IncSavingNum();
@@ -846,17 +884,17 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
     if (need_rebuild && vector_index_wrapper->RebuildingNum() == 0) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need rebuild, do rebuild vector index.",
                                      vector_index_id);
-      LaunchRebuildVectorIndex(vector_index_wrapper, 0);
+      LaunchRebuildVectorIndex(vector_index_wrapper, 0, "from scrub");
       continue;
     }
 
-    std::string reason;
-    bool need_save = vector_index_wrapper->NeedToSave(reason);
+    std::string trace;
+    bool need_save = vector_index_wrapper->NeedToSave(trace);
     if (need_save && vector_index_wrapper->RebuildingNum() == 0 && vector_index_wrapper->SavingNum() == 0) {
-      DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need save, reason: {}.", vector_index_id,
-                                     reason);
+      DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need save, trace: {}.", vector_index_id,
+                                     trace);
 
-      LaunchSaveVectorIndex(vector_index_wrapper);
+      LaunchSaveVectorIndex(vector_index_wrapper, fmt::format("scrub-{}", trace));
     }
   }
 

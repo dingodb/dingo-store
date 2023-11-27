@@ -340,8 +340,8 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id());
-    VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id());
+    VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id(), "child split");
+    VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id(), "parent split");
   }
 
   // update StoreRegionState to NORMAL
@@ -787,7 +787,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch target region rebuild vector index");
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), request.job_id());
+    VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), request.job_id(), "merge");
   } else {
     store_region_meta->UpdateTemporaryDisableChange(target_region, false);
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply target region CommitMerge finish");
@@ -1130,7 +1130,7 @@ int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr
   if (vector_index_wrapper != nullptr) {
     vector_index_wrapper->SaveApplyLogId(log_id);
 
-    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, request.cmd_id());
+    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, request.cmd_id(), "from raft");
   }
 
   return 0;
