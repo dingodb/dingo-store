@@ -80,7 +80,7 @@ const std::string kYamlConfigContent =
     "  path: " +
     kStorePath + "\n";
 
-std::string StrToHex(std::string str, std::string separator = "") {
+static std::string StrToHex(std::string str, std::string separator = "") {
   const std::string hex = "0123456789ABCDEF";
   std::stringstream ss;
 
@@ -90,7 +90,7 @@ std::string StrToHex(std::string str, std::string separator = "") {
 }
 
 // rand string
-std::string GenRandomString(int len) {
+static std::string GenRandomString(int len) {
   std::string result;
   int alphabet_len = sizeof(kAlphabet);
 

@@ -86,8 +86,8 @@ std::string GetRaftInitConf(const std::vector<std::string>& raft_addrs) {
   return s;
 }
 
-dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
-                                      std::vector<std::string>& raft_addrs) {
+static dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
+                                             std::vector<std::string>& raft_addrs) {
   dingodb::pb::common::RegionDefinition region_definition;
   region_definition.set_id(region_id);
   region_definition.set_name(raft_group_name);
@@ -133,8 +133,7 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
                                                   const dingodb::pb::common::Peer& peer, std::string init_conf) {
   // build state machine
   auto raft_meta = dingodb::StoreRaftMeta::NewRaftMeta(region->Id());
-  auto state_machine =
-      std::make_shared<dingodb::StoreStateMachine>(nullptr, region, raft_meta, nullptr, nullptr);
+  auto state_machine = std::make_shared<dingodb::StoreStateMachine>(nullptr, region, raft_meta, nullptr, nullptr);
   if (!state_machine->Init()) {
     std::cout << "Init state machine failed";
     return nullptr;
@@ -149,7 +148,8 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
   auto node = std::make_shared<dingodb::RaftNode>(
       node_id, region->Name(), braft::PeerId(FormatLocation(peer.raft_location())), state_machine, log_storage);
 
-  if (node->Init(region, init_conf, config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000)) {
+  if (node->Init(region, init_conf, config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000) !=
+      0) {
     node->Destroy();
     return nullptr;
   }

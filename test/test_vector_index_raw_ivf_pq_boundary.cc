@@ -39,7 +39,7 @@
 
 namespace dingodb {
 
-class VectorIndexRawIvfPqTest : public testing::Test {
+class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
@@ -113,7 +113,7 @@ class VectorIndexRawIvfPqTest : public testing::Test {
   inline static int32_t start_id = 1000;
 };
 
-TEST_F(VectorIndexRawIvfPqTest, Create) {
+TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
   butil::Status ok;
   static pb::common::RegionEpoch kEpoch;  // NOLINT
   kEpoch.set_conf_version(1);

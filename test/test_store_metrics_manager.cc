@@ -55,7 +55,7 @@ const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
                           's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
 // rand string
-std::string GenRandomString(int len) {
+static std::string GenRandomString(int len) {
   std::string result;
   int alphabet_len = sizeof(kAlphabet);
 
@@ -99,8 +99,8 @@ class StoreRegionMetricsTest : public testing::Test {
 
 std::shared_ptr<dingodb::RawRocksEngine> StoreRegionMetricsTest::engine = nullptr;
 
-dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
-                                      std::vector<std::string>& raft_addrs) {
+static dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
+                                             std::vector<std::string>& raft_addrs) {
   dingodb::pb::common::RegionDefinition region_definition;
   region_definition.set_id(region_id);
   region_definition.set_name(raft_group_name);

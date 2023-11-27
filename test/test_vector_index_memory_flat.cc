@@ -37,7 +37,7 @@
 
 namespace dingodb {
 
-class VectorIndexMemoryTest : public testing::Test {
+class VectorIndexMemoryFlatTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
@@ -54,7 +54,7 @@ class VectorIndexMemoryTest : public testing::Test {
   inline static int step_count = 1000;
 };
 
-TEST_F(VectorIndexMemoryTest, Create) {
+TEST_F(VectorIndexMemoryFlatTest, Create) {
   static const pb::common::Range kRange;
   std::cout << "pid : " << getpid() << '\n';
   static pb::common::RegionEpoch kEpoch;
@@ -73,7 +73,7 @@ TEST_F(VectorIndexMemoryTest, Create) {
   }
 }
 
-TEST_F(VectorIndexMemoryTest, Add) {
+TEST_F(VectorIndexMemoryFlatTest, Add) {
   butil::Status ok;
 
   // create random data

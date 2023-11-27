@@ -1,22 +1,23 @@
 enable_testing()
 
+SET(UNIT_TEST_BIN "dingodb_unit_test")
+
 file(GLOB TEST_SRCS "test_*.cc")
-foreach(TEST_SRC ${TEST_SRCS})
-  message(STATUS "TEST_SRC: ${TEST_SRC}")
-  get_filename_component(TEST_WE ${TEST_SRC} NAME_WE)
-  add_executable(${TEST_WE}
-                 ${TEST_SRC}
-                 $<TARGET_OBJECTS:DINGODB_OBJS>
-                 $<TARGET_OBJECTS:PROTO_OBJS>
-                )
-  add_dependencies(${TEST_WE} ${DEPEND_LIBS})
-  target_link_libraries(${TEST_WE}
-                        "-Xlinker \"-(\""
-                        ${GTEST_MAIN_LIBRARIES}
-                        ${GTEST_LIBRARIES}
-                        ${DYNAMIC_LIB}
-                        "-Xlinker \"-)\""
-                        )
-endforeach()
+
+add_executable(${UNIT_TEST_BIN}
+                main.cc
+                ${TEST_SRCS}
+                $<TARGET_OBJECTS:DINGODB_OBJS>
+                $<TARGET_OBJECTS:PROTO_OBJS>
+              )
+
+add_dependencies(${UNIT_TEST_BIN} ${DEPEND_LIBS})
+
+target_link_libraries(${UNIT_TEST_BIN}
+                      "-Xlinker \"-(\""
+                      ${GTEST_LIBRARIES}
+                      ${DYNAMIC_LIB}
+                      "-Xlinker \"-)\""
+                      )
 
 add_subdirectory(sdk)

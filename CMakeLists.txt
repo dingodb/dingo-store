@@ -19,7 +19,7 @@ project(dingo-store C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
-option(BUILD_UNIT_TESTS "Build unit test" OFF)
+option(BUILD_UNIT_TESTS "Build unit test" ON)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" ON)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)

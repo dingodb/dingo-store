@@ -38,7 +38,7 @@
 
 namespace dingodb {
 
-class VectorIndexFlatSearchParamTest : public testing::Test {
+class VectorIndexFlatSearchParamLimitTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {}
 
@@ -72,7 +72,7 @@ class VectorIndexFlatSearchParamTest : public testing::Test {
   inline static int search_topk = 1;
 };
 
-TEST_F(VectorIndexFlatSearchParamTest, Create) {
+TEST_F(VectorIndexFlatSearchParamLimitTest, Create) {
   static const pb::common::Range kRange;
   static pb::common::RegionEpoch kEpoch;  // NOLINT
   kEpoch.set_conf_version(1);
@@ -113,7 +113,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Create) {
   }
 }
 
-TEST_F(VectorIndexFlatSearchParamTest, Search) {
+TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
   butil::Status ok;
 
   auto lambda_random_function = []() {
@@ -259,7 +259,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
   }
 }
 
-TEST_F(VectorIndexFlatSearchParamTest, Upsert) {
+TEST_F(VectorIndexFlatSearchParamLimitTest, Upsert) {
   butil::Status ok;
 
   // create random data
@@ -318,7 +318,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Upsert) {
   }
 }
 
-TEST_F(VectorIndexFlatSearchParamTest, SearchAfterInsert) {
+TEST_F(VectorIndexFlatSearchParamLimitTest, SearchAfterInsert) {
   butil::Status ok;
 
   auto lambda_random_function = []() {
