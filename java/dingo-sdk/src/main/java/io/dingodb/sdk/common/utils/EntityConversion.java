@@ -119,6 +119,9 @@ public class EntityConversion {
                 .putAllProperties(table.getProperties() == null ? new HashMap() : table.getProperties())
                 .setCreateSql(Parameters.cleanNull(table.getCreateSql(), ""))
                 .setIndexParameter(Optional.mapOrGet(table.getIndexParameter(), EntityConversion::mapping, () -> Common.IndexParameter.newBuilder().build()))
+                .setComment(table.getComment())
+                .setCharset(table.getCharset())
+                .setCollate(table.getCollate())
                 .build();
     }
 
@@ -139,6 +142,9 @@ public class EntityConversion {
                 .autoIncrement(tableDefinition.getAutoIncrement())
                 .createSql(tableDefinition.getCreateSql())
                 .indexParameter(Optional.mapOrNull(tableDefinition.getIndexParameter(), EntityConversion::mapping))
+                .comment(tableDefinition.getComment())
+                .charset(tableDefinition.getCharset())
+                .collate(tableDefinition.getCollate())
                 .build();
     }
 
@@ -173,6 +179,8 @@ public class EntityConversion {
                 .primary(definition.getIndexOfKey())
                 .defaultValue(definition.getDefaultVal())
                 .isAutoIncrement(definition.getIsAutoIncrement())
+                .state(definition.getState())
+                .comment(definition.getComment())
                 .build();
     }
 
@@ -878,6 +886,8 @@ public class EntityConversion {
                 .setIndexOfKey(column.getPrimary())
                 .setSqlType(column.getType())
                 .setIsAutoIncrement(column.isAutoIncrement())
+                .setState(column.getState())
+                .setComment(column.getComment())
                 .build();
     }
     

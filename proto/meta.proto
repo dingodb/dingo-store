@@ -76,6 +76,8 @@ message ColumnDefinition {
   bool has_default_val = 8;
   string default_val = 9;
   bool is_auto_increment = 10;
+  int32 state = 11;
+  string comment = 12;
 }
 
 // Information about Index.
@@ -126,6 +128,9 @@ message TableDefinition {
   int64 ttl = 3;
   int64 auto_increment = 4;
   string create_sql = 5;
+  string comment = 6;
+  string charset = 7;
+  string collate = 8;
   PartitionRule table_partition = 20;
   uint32 replica = 21;
   dingodb.pb.common.Engine engine = 22;

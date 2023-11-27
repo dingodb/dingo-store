@@ -18,6 +18,7 @@ package io.dingodb.sdk.common.table;
 
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
+import lombok.Setter;
 import lombok.ToString;
 
 @Builder
@@ -41,6 +42,11 @@ public class ColumnDefinition implements Column {
     private int primary = -1;
     private String defaultValue;
     private boolean isAutoIncrement;
+    @Builder.Default
+    @Setter
+    private int state = 1;
+
+    private String comment;
 
     @Deprecated
     public ColumnDefinition(
@@ -52,7 +58,9 @@ public class ColumnDefinition implements Column {
         boolean nullable,
         int primary,
         String defaultValue,
-        boolean isAutoIncrement
+        boolean isAutoIncrement,
+        int state,
+        String comment
     ) {
         this.name = name;
         this.type = type;
@@ -63,6 +71,8 @@ public class ColumnDefinition implements Column {
         this.primary = primary;
         this.defaultValue = defaultValue;
         this.isAutoIncrement = isAutoIncrement;
+        this.state = state;
+        this.comment = comment;
     }
 
     @Override
@@ -108,5 +118,15 @@ public class ColumnDefinition implements Column {
     @Override
     public boolean isAutoIncrement() {
         return isAutoIncrement;
+    }
+
+    @Override
+    public int getState() {
+        return state;
+    }
+
+    @Override
+    public String getComment() {
+        return comment;
     }
 }

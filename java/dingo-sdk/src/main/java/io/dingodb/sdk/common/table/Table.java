@@ -48,6 +48,12 @@ public interface Table {
 
     IndexParameter getIndexParameter();
 
+    String getComment();
+
+    String getCharset();
+
+    String getCollate();
+
     default int getPrimaryKeyCount() {
         int count = 0;
         for (Column column : getColumns()) {
