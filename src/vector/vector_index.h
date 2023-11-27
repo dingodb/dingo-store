@@ -61,7 +61,7 @@ class VectorIndex {
   class FilterFunctor {
    public:
     virtual ~FilterFunctor() = default;
-    virtual void Build([[maybe_unused]] std::vector<faiss::idx_t>& id_map) {}
+    virtual void Build(std::vector<faiss::idx_t>& id_map) {}
     virtual bool Check(int64_t vector_id) = 0;
   };
 
@@ -178,26 +178,24 @@ class VectorIndex {
   };
 
   virtual int32_t GetDimension() = 0;
-  virtual butil::Status GetCount([[maybe_unused]] int64_t& count);
-  virtual butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count);
-  virtual butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size);
+  virtual butil::Status GetCount(int64_t& count);
+  virtual butil::Status GetDeletedCount(int64_t& deleted_count);
+  virtual butil::Status GetMemorySize(int64_t& memory_size);
   virtual bool IsExceedsMaxElements() = 0;
 
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
   virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
-  virtual butil::Status Delete([[maybe_unused]] const std::vector<int64_t>& delete_ids) = 0;
+  virtual butil::Status Delete(const std::vector<int64_t>& delete_ids) = 0;
 
-  virtual butil::Status Save([[maybe_unused]] const std::string& path);
+  virtual butil::Status Save(const std::string& path);
 
-  virtual butil::Status Load([[maybe_unused]] const std::string& path);
+  virtual butil::Status Load(const std::string& path);
 
-  virtual butil::Status Search([[maybe_unused]] std::vector<pb::common::VectorWithId> vector_with_ids,
-                               [[maybe_unused]] uint32_t topk,
-                               [[maybe_unused]] std::vector<std::shared_ptr<FilterFunctor>> filters,
-                               [[maybe_unused]] bool reconstruct,
-                               [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,
+  virtual butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                               std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+                               const pb::common::VectorSearchParameter& parameter,
                                std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
   virtual butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,

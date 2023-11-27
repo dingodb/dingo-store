@@ -288,7 +288,7 @@ butil::Status VectorIndexHnsw::Load(const std::string& path) {
 
 butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
                                       std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
-                                      const pb::common::VectorSearchParameter&,
+                                      const pb::common::VectorSearchParameter& search_parameter,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
@@ -311,6 +311,13 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
     return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%d",
                          vector_with_ids[0].vector().float_values_size(), this->dimension_);
+  }
+
+  if (search_parameter.hnsw().efsearch() < 0 || search_parameter.hnsw().efsearch() > 1024) {
+    std::string errmsg =
+        fmt::format("[hnsw] efsearch is illegal, {}, muste between 0 and 1024", search_parameter.hnsw().efsearch());
+    DINGO_LOG(ERROR) << errmsg;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, errmsg);
   }
 
   butil::Status ret;
@@ -408,6 +415,13 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   };
 
   auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
+
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  if (search_parameter.hnsw().efsearch() > 0) {
+    DINGO_LOG(INFO) << "[hnsw] set ef_search=" << search_parameter.hnsw().efsearch();
+    hnsw_index_->setEf(search_parameter.hnsw().efsearch());
+  }
 
   if (!normalize_) {
     ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {

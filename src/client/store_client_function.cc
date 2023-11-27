@@ -60,6 +60,7 @@ DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
 DECLARE_int32(vector_ids_count);
 DECLARE_bool(key_is_hex);
+DECLARE_int64(ef_search);
 
 namespace client {
 
@@ -444,6 +445,11 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
 
       vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
     }
+  }
+
+  if (FLAGS_ef_search > 0) {
+    DINGO_LOG(INFO) << "ef_search=" << FLAGS_ef_search;
+    request.mutable_parameter()->mutable_hnsw()->set_efsearch(FLAGS_ef_search);
   }
 
   if (FLAGS_print_vector_search_delay) {

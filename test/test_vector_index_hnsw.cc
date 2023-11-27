@@ -304,6 +304,50 @@ TEST_F(VectorIndexHnswTest, Search) {
   }
 }
 
+TEST_F(VectorIndexHnswTest, EfSearch) {
+  butil::Status ok;
+
+  // ok
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i + dimension];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = 10;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+
+    pb::common::VectorSearchParameter parameter;
+    parameter.mutable_hnsw()->set_efsearch(400);
+
+    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, true, parameter, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto &result : results) {
+      for (const auto &vector_with_distances : result.vector_with_distances()) {
+        std::cout << "id : " << vector_with_distances.vector_with_id().id() << " ";
+        // std::cout << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
+        // std::cout << "value : [";
+        std::cout << "distance : " << vector_with_distances.distance();
+        std::cout << " [";
+        for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
+          std::cout << value << " ";
+        }
+        std::cout << "] ";
+
+        std::cout << '\n';
+      }
+      EXPECT_EQ(result.vector_with_distances_size(), 10);
+    }
+  }
+}
+
 TEST_F(VectorIndexHnswTest, CreateCosine) {
   static const pb::common::Range kRange;
   // valid param L2
@@ -501,6 +545,50 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
     vector_with_ids.push_back(vector_with_id);
     auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
     ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, true, {}, results);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    for (const auto &result : results) {
+      for (const auto &vector_with_distances : result.vector_with_distances()) {
+        std::cout << "id : " << vector_with_distances.vector_with_id().id() << " ";
+        // std::cout << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
+        // std::cout << "value : [";
+        std::cout << "distance : " << vector_with_distances.distance();
+        std::cout << " [";
+        for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
+          std::cout << fmt::format("{}", value) << " ";
+        }
+        std::cout << "] ";
+
+        std::cout << '\n';
+      }
+      EXPECT_EQ(result.vector_with_distances_size(), topk);
+    }
+  }
+}
+
+TEST_F(VectorIndexHnswTest, EfSearchCosine) {
+  butil::Status ok;
+
+  // ok
+  {
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.set_id(0);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (size_t i = 0; i < dimension; i++) {
+      float value = data_base[i];
+      vector_with_id.mutable_vector()->add_float_values(value);
+    }
+    uint32_t topk = 5;
+    std::vector<pb::index::VectorWithDistanceResult> results;
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+    vector_with_ids.push_back(vector_with_id);
+    auto filter = std::make_shared<VectorIndex::RangeFilterFunctor>(0, INT64_MAX);
+
+    pb::common::VectorSearchParameter parameter;
+    parameter.mutable_hnsw()->set_efsearch(400);
+
+    ok = vector_index_hnsw->Search(vector_with_ids, topk, {filter}, true, parameter, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     for (const auto &result : results) {
