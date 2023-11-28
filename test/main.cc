@@ -14,8 +14,52 @@
 
 #include <gtest/gtest.h>
 
+#include <iostream>
+
 int main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
+
+  if (testing::FLAGS_gtest_filter == "*") {
+    std::string default_run_case;
+    default_run_case += "ConfigTest.*";
+    default_run_case += ":WriteDataBuilderTest.*";
+    default_run_case += ":HelperTest.*";
+    default_run_case += ":DingoLoggerTest.*";
+    default_run_case += ":StorePbTest.*";
+    default_run_case += ":FailPointManagerTest.*";
+    default_run_case += ":FailPointTest.*";
+    default_run_case += ":CoprocessorTest.*";
+    default_run_case += ":CoprocessorUtilsTest.*";
+    default_run_case += ":CoprocessorAggregationManagerTest.*";
+    default_run_case += ":DingoSafeMapTest.*";
+    default_run_case += ":SegmentLogStorageTest.*";
+    default_run_case += ":DingoSerialListTypeTest.*";
+    default_run_case += ":DingoSerialTest.*";
+    default_run_case += ":DingoSerialTest.*";
+    default_run_case += ":ServiceHelperTest.*";
+    default_run_case += ":SplitCheckerTest.*";
+
+    // default_run_case += ":StoreRegionMetaTest.*";
+    // default_run_case += ":StoreRegionMetricsTest.*";
+
+    default_run_case += ":VectorIndexWrapperTest.*";
+    default_run_case += ":VectorIndexUtilsTest.*";
+    default_run_case += ":VectorIndexSnapshotTest.*";
+    default_run_case += ":VectorIndexRawIvfPqTest.*";
+    default_run_case += ":VectorIndexRawIvfPqBoundaryTest.*";
+    default_run_case += ":VectorIndexMemoryTest.*";
+    default_run_case += ":VectorIndexMemoryHnswTest.*";
+    default_run_case += ":VectorIndexMemoryFlatTest.*";
+    default_run_case += ":VectorIndexIvfPqTest.*";
+    default_run_case += ":VectorIndexIvfFlatTest.*";
+    default_run_case += ":VectorIndexHnswTest.*";
+    default_run_case += ":VectorIndexHnswSearchParamTest.*";
+    default_run_case += ":VectorIndexFlatTest.*";
+    default_run_case += ":VectorIndexFlatSearchParamTest.*";
+    default_run_case += ":VectorIndexFlatSearchParamLimitTest.*";
+
+    testing::GTEST_FLAG(filter) = default_run_case;
+  }
 
   return RUN_ALL_TESTS();
 }

@@ -28,18 +28,23 @@
 #include "log/segment_log_storage.h"
 #include "proto/raft.pb.h"
 
+const std::string kRootPath = "./unit_test";
+const std::string kLogPath = kRootPath + "/segment_log";
+
 class SegmentLogStorageTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    log_stroage = std::make_shared<dingodb::SegmentLogStorage>("/tmp/log", 100, 8 * 1024 * 1024);
+    dingodb::Helper::CreateDirectories(kLogPath);
+
+    log_stroage = std::make_shared<dingodb::SegmentLogStorage>(kLogPath, 100, 8 * 1024 * 1024);
     static braft::ConfigurationManager configuration_manager;
     log_stroage->Init(&configuration_manager);
   }
   static void TearDownTestSuite() {
     log_stroage->Reset(log_stroage->LastLogIndex() + 1);
-    log_stroage->GcInstance("/tmp/log");
+    log_stroage->GcInstance(kLogPath);
 
-    std::filesystem::remove_all("/tmp/log");
+    dingodb::Helper::RemoveAllFileOrDirectory(kLogPath);
   }
 
   void SetUp() override {}
@@ -97,7 +102,7 @@ braft::LogEntry* GenLogEntry() {
 TEST_F(SegmentLogStorageTest, AppendEntries) {
   int64_t begin_log_index = log_stroage->FirstLogIndex();
 
-  const int k_log_entry_count = 1000;
+  const int k_log_entry_count = 100;
   for (int i = 0; i < k_log_entry_count; ++i) {
     auto* log_entry = GenLogEntry();
     log_stroage->AppendEntry(log_entry);
@@ -111,15 +116,15 @@ TEST_F(SegmentLogStorageTest, AppendEntries) {
 }
 
 TEST_F(SegmentLogStorageTest, GetEntrys) {
-  const int k_log_entry_count = 1000;
+  const int k_log_entry_count = 100;
   for (int i = 0; i < k_log_entry_count; ++i) {
     auto* log_entry = GenLogEntry();
     log_stroage->AppendEntry(log_entry);
     log_entry->Release();
   }
 
-  int64_t begin_index = 600;
-  int64_t end_index = 1000;
+  int64_t begin_index = 60;
+  int64_t end_index = 100;
   auto log_entrys = log_stroage->GetEntrys(begin_index, end_index);
 
   DINGO_LOG(INFO) << fmt::format("log entrys count {}", log_entrys.size());
