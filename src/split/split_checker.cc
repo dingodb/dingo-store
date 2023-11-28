@@ -445,7 +445,7 @@ void PreSplitCheckTask::PreSplitCheck() {
       }
       if (region->TemporaryDisableChange()) {
         need_scan_check = false;
-        reason = "region is temporary disable split";
+        reason = "region is temporary disable change";
         break;
       }
       if (split_check_workers_->IsExistRegionChecking(region->Id())) {
