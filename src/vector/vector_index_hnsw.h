@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -68,9 +69,10 @@ class VectorIndexHnsw : public VectorIndex {
                             std::vector<pb::index::VectorWithDistanceResult>& results) override;
 
   int32_t GetDimension() override;
-  butil::Status GetCount([[maybe_unused]] int64_t& count) override;
-  butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
-  butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
+  pb::common::MetricType GetMetricType() override;
+  butil::Status GetCount(int64_t& count) override;
+  butil::Status GetDeletedCount(int64_t& deleted_count) override;
+  butil::Status GetMemorySize(int64_t& memory_size) override;
 
   butil::Status ResizeMaxElements(int64_t new_max_elements);
   butil::Status GetMaxElements(int64_t& max_elements);

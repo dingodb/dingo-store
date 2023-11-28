@@ -352,16 +352,19 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
   for (const auto& vector : request->vectors()) {
     if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
       if (vector.vector().float_values().size() != dimension) {
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
       }
     } else {
       if (vector.vector().binary_values().size() != dimension) {
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
       }
     }
   }
@@ -1423,16 +1426,19 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
       const auto& vector = mutation.vector();
       if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
         if (vector.vector().float_values().size() != dimension) {
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+          return butil::Status(
+              pb::error::EILLEGAL_PARAMTETERS,
+              "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
         }
       } else {
         if (vector.vector().binary_values().size() != dimension) {
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                               "Param vector dimension is error, correct dimension is " + std::to_string(dimension));
+          return butil::Status(
+              pb::error::EILLEGAL_PARAMTETERS,
+              "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
         }
       }
     }

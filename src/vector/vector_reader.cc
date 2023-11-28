@@ -20,15 +20,22 @@
 #include <utility>
 #include <vector>
 
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_factory.h"
+#include "vector/vector_index_flat.h"
 
 namespace dingodb {
+
+DEFINE_int64(vector_index_max_range_search_result_count, 1024, "max range search result count");
+DEFINE_int64(vector_index_bruteforce_batch_count, 2048, "bruteforce batch count");
 
 butil::Status VectorReader::QueryVectorWithId(const pb::common::Range& region_range, int64_t partition_id,
                                               int64_t vector_id, bool with_vector_data,
@@ -1108,21 +1115,398 @@ butil::Status VectorReader::SearchAndRangeSearchWrapper(
   bool enable_range_search = parameter.enable_range_search();
   float radius = parameter.radius();
   butil::Status status;
-  if (enable_range_search) {
-    status = vector_index->RangeSearch(vector_with_ids, radius, region_range, filters, with_vector_data, parameter,
-                                       vector_with_distance_results);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", status.error_code(),
-                                      status.error_str());
-      return status;
+
+  // if vector index does not support restruct vector ,we restruct it using RocksDB
+  // if use_brute_force is true, we use brute force search, else we call vector index search, if vector index not
+  // support, then use brute force search again to get result
+  if (parameter.use_brute_force()) {
+    if (enable_range_search) {
+      status = BruteForceRangeSearch(vector_index, vector_with_ids, radius, region_range, filters, with_vector_data,
+                                     parameter, vector_with_distance_results);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", status.error_code(),
+                                        status.error_str());
+        return status;
+      }
+    } else {
+      status = BruteForceSearch(vector_index, vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
+                                vector_with_distance_results);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", status.error_code(),
+                                        status.error_str());
+        return status;
+      }
     }
   } else {
-    status = vector_index->Search(vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
-                                  vector_with_distance_results);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", status.error_code(),
-                                      status.error_str());
-      return status;
+    if (enable_range_search) {
+      status = vector_index->RangeSearch(vector_with_ids, radius, region_range, filters, with_vector_data, parameter,
+                                         vector_with_distance_results);
+      if (status.error_code() == pb::error::Errno::EVECTOR_NOT_SUPPORT) {
+        DINGO_LOG(INFO) << "RangeSearch vector index not support, try brute force, id: " << vector_index->Id();
+        return BruteForceRangeSearch(vector_index, vector_with_ids, radius, region_range, filters, with_vector_data,
+                                     parameter, vector_with_distance_results);
+      } else if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", status.error_code(),
+                                        status.error_str());
+        return status;
+      }
+    } else {
+      status = vector_index->Search(vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
+                                    vector_with_distance_results);
+      if (status.error_code() == pb::error::Errno::EVECTOR_NOT_SUPPORT) {
+        DINGO_LOG(INFO) << "Search vector index not support, try brute force, id: " << vector_index->Id();
+        return BruteForceSearch(vector_index, vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
+                                vector_with_distance_results);
+      } else if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", status.error_code(),
+                                        status.error_str());
+        return status;
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+// DistanceResult
+// This class is used for priority queue to merge the search result from many batch scan data from raw engine.
+class DistanceResult {
+ public:
+  float distance{0};
+  pb::common::VectorWithDistance vector_with_distance{};
+  DistanceResult() = default;
+  DistanceResult(float distance, pb::common::VectorWithDistance vector_with_distance)
+      : distance(distance), vector_with_distance(vector_with_distance) {}
+};
+
+// Overload the < operator.
+bool operator<(const DistanceResult& result1, const DistanceResult& result2) {
+  if (result1.distance != result2.distance) {
+    return result1.distance > result2.distance;
+  } else {
+    return result1.vector_with_distance.vector_with_id().id() > result2.vector_with_distance.vector_with_id().id();
+  }
+}
+// Overload the > operator.
+bool operator>(const DistanceResult& result1, const DistanceResult& result2) {
+  if (result1.distance != result2.distance) {
+    return result1.distance < result2.distance;
+  } else {
+    return result1.vector_with_distance.vector_with_id().id() < result2.vector_with_distance.vector_with_id().id();
+  }
+}
+
+// ScanData from raw engine, build vector index and search
+butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
+                                             std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                             const pb::common::Range& region_range,
+                                             std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
+                                             bool reconstruct, const pb::common::VectorSearchParameter& parameter,
+                                             std::vector<pb::index::VectorWithDistanceResult>& results) {
+  auto metric_type = vector_index->GetMetricType();
+  auto dimension = vector_index->GetDimension();
+
+  pb::common::RegionEpoch epoch;
+  pb::common::VectorIndexParameter index_parameter;
+  index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+  index_parameter.mutable_flat_parameter()->set_metric_type(metric_type);
+
+  IteratorOptions options;
+  options.lower_bound = region_range.start_key();
+  options.upper_bound = region_range.end_key();
+  auto iterator = reader_->NewIterator(Constant::kVectorDataCF, options);
+
+  iterator->Seek(region_range.start_key());
+  if (!iterator->Valid()) {
+    return butil::Status();
+  }
+
+  // topk results
+  std::vector<std::priority_queue<DistanceResult>> top_rsults;
+  top_rsults.resize(vector_with_ids.size());
+
+  int64_t count = 0;
+  std::vector<pb::common::VectorWithId> vector_with_id_batch;
+  std::vector<pb::index::VectorWithDistanceResult> results_batch;
+
+  // scan data from raw engine
+  while (iterator->Valid()) {
+    std::string key(iterator->Key());
+    auto vector_id = VectorCodec::DecodeVectorId(key);
+    if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
+      iterator->Next();
+      continue;
+    }
+
+    auto value = iterator->Value();
+
+    pb::common::Vector vector;
+    if (!vector.ParseFromArray(value.data(), value.size())) {
+      return butil::Status(pb::error::EINTERNAL, "Parse proto from string error");
+    }
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.mutable_vector()->Swap(&vector);
+    vector_with_id.set_id(vector_id);
+
+    vector_with_id_batch.push_back(vector_with_id);
+
+    if (vector_with_id_batch.size() == FLAGS_vector_index_bruteforce_batch_count) {
+      auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+      if (flat_index == nullptr) {
+        DINGO_LOG(FATAL) << "flat_index is nullptr";
+      }
+
+      auto ret = flat_index->Add(vector_with_id_batch);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
+                                        ret.error_str());
+        return ret;
+      }
+
+      ret = flat_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_batch);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", ret.error_code(), ret.error_str());
+        return ret;
+      }
+
+      CHECK(results_batch.size() == vector_with_ids.size());
+
+      for (int i = 0; i < results_batch.size(); i++) {
+        auto& result = results_batch[i];
+        auto& top_result = top_rsults[i];
+
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          auto& top_result = top_rsults[i];
+          if (top_result.size() < topk) {
+            top_result.emplace(vector_with_distance.distance(), vector_with_distance);
+          } else {
+            if (top_result.top().distance > vector_with_distance.distance()) {
+              top_result.pop();
+              top_result.emplace(vector_with_distance.distance(), vector_with_distance);
+            }
+          }
+        }
+      }
+
+      results_batch.clear();
+      vector_with_id_batch.clear();
+    }
+
+    iterator->Next();
+  }
+
+  if (!vector_with_id_batch.empty()) {
+    auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+    if (flat_index == nullptr) {
+      DINGO_LOG(FATAL) << "flat_index is nullptr";
+    }
+
+    auto ret = flat_index->Add(vector_with_id_batch);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
+                                      ret.error_str());
+      return ret;
+    }
+
+    ret = flat_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_batch);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", ret.error_code(), ret.error_str());
+      return ret;
+    }
+
+    CHECK(results_batch.size() == vector_with_ids.size());
+
+    for (int i = 0; i < results_batch.size(); i++) {
+      auto& result = results_batch[i];
+      auto& top_result = top_rsults[i];
+
+      for (const auto& vector_with_distance : result.vector_with_distances()) {
+        auto& top_result = top_rsults[i];
+        if (top_result.size() < topk) {
+          top_result.emplace(vector_with_distance.distance(), vector_with_distance);
+        } else {
+          if (top_result.top().distance > vector_with_distance.distance()) {
+            top_result.pop();
+            top_result.emplace(vector_with_distance.distance(), vector_with_distance);
+          }
+        }
+      }
+    }
+
+    results_batch.clear();
+    vector_with_id_batch.clear();
+  }
+
+  // copy top_results to results
+  // we don't do sorting by distance here
+  // the client will do sorting by distance
+  results.resize(top_rsults.size());
+  for (int i = 0; i < top_rsults.size(); i++) {
+    auto& top_result = top_rsults[i];
+    auto& result = results[i];
+
+    while (!top_result.empty()) {
+      auto top = top_result.top();
+      auto& vector_with_distance = *result.add_vector_with_distances();
+      vector_with_distance.Swap(&top.vector_with_distance);
+      top_result.pop();
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_index,
+                                                  std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                                                  const pb::common::Range& region_range,
+                                                  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                                                  bool reconstruct, const pb::common::VectorSearchParameter& parameter,
+                                                  std::vector<pb::index::VectorWithDistanceResult>& results) {
+  auto metric_type = vector_index->GetMetricType();
+  auto dimension = vector_index->GetDimension();
+
+  pb::common::RegionEpoch epoch;
+  pb::common::VectorIndexParameter index_parameter;
+  index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+  index_parameter.mutable_flat_parameter()->set_metric_type(metric_type);
+
+  IteratorOptions options;
+  options.lower_bound = region_range.start_key();
+  options.upper_bound = region_range.end_key();
+  auto iterator = reader_->NewIterator(Constant::kVectorDataCF, options);
+
+  iterator->Seek(region_range.start_key());
+  if (!iterator->Valid()) {
+    return butil::Status();
+  }
+
+  // range search results
+  std::vector<std::vector<std::pair<float, pb::common::VectorWithDistance>>> range_rsults;
+  range_rsults.resize(vector_with_ids.size());
+
+  int64_t count = 0;
+  std::vector<pb::common::VectorWithId> vector_with_id_batch;
+  std::vector<pb::index::VectorWithDistanceResult> results_batch;
+
+  // scan data from raw engine
+  while (iterator->Valid()) {
+    std::string key(iterator->Key());
+    auto vector_id = VectorCodec::DecodeVectorId(key);
+    if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
+      iterator->Next();
+      continue;
+    }
+
+    auto value = iterator->Value();
+
+    pb::common::Vector vector;
+    if (!vector.ParseFromArray(value.data(), value.size())) {
+      return butil::Status(pb::error::EINTERNAL, "Parse proto from string error");
+    }
+    pb::common::VectorWithId vector_with_id;
+    vector_with_id.mutable_vector()->Swap(&vector);
+    vector_with_id.set_id(vector_id);
+
+    vector_with_id_batch.push_back(vector_with_id);
+
+    if (vector_with_id_batch.size() == FLAGS_vector_index_bruteforce_batch_count) {
+      auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+      if (flat_index == nullptr) {
+        DINGO_LOG(FATAL) << "flat_index is nullptr";
+      }
+
+      auto ret = flat_index->Add(vector_with_id_batch);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
+                                        ret.error_str());
+        return ret;
+      }
+
+      ret = flat_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_batch);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", ret.error_code(),
+                                        ret.error_str());
+        return ret;
+      }
+
+      CHECK(results_batch.size() == vector_with_ids.size());
+
+      for (int i = 0; i < results_batch.size(); i++) {
+        auto& result = results_batch[i];
+        auto& top_result = range_rsults[i];
+
+        for (const auto& vector_with_distance : result.vector_with_distances()) {
+          auto& top_result = range_rsults[i];
+          if (top_result.size() < FLAGS_vector_index_max_range_search_result_count) {
+            top_result.emplace_back(vector_with_distance.distance(), vector_with_distance);
+          } else {
+            DINGO_LOG(WARNING) << fmt::format("RangeSearch result count exceed limit, limit: {}, actual: {}",
+                                              FLAGS_vector_index_max_range_search_result_count, top_result.size() + 1);
+            break;
+          }
+        }
+      }
+
+      results_batch.clear();
+      vector_with_id_batch.clear();
+    }
+
+    iterator->Next();
+  }
+
+  if (!vector_with_id_batch.empty()) {
+    auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+    if (flat_index == nullptr) {
+      DINGO_LOG(FATAL) << "flat_index is nullptr";
+    }
+
+    auto ret = flat_index->Add(vector_with_id_batch);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
+                                      ret.error_str());
+      return ret;
+    }
+
+    ret = flat_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_batch);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", ret.error_code(),
+                                      ret.error_str());
+      return ret;
+    }
+
+    CHECK(results_batch.size() == vector_with_ids.size());
+
+    for (int i = 0; i < results_batch.size(); i++) {
+      auto& result = results_batch[i];
+      auto& top_result = range_rsults[i];
+
+      for (const auto& vector_with_distance : result.vector_with_distances()) {
+        auto& top_result = range_rsults[i];
+        if (top_result.size() < FLAGS_vector_index_max_range_search_result_count) {
+          top_result.emplace_back(vector_with_distance.distance(), vector_with_distance);
+        } else {
+          DINGO_LOG(WARNING) << fmt::format("RangeSearch result count exceed limit, limit: {}, actual: {}",
+                                            FLAGS_vector_index_max_range_search_result_count, top_result.size() + 1);
+          break;
+        }
+      }
+    }
+
+    results_batch.clear();
+    vector_with_id_batch.clear();
+  }
+
+  // copy top_results to results
+  // we don't do sorting by distance here
+  // the client will do sorting by distance
+  results.resize(range_rsults.size());
+  for (int i = 0; i < range_rsults.size(); i++) {
+    auto& top_result = range_rsults[i];
+    auto& result = results[i];
+
+    for (auto& top : top_result) {
+      auto& vector_with_distance = *result.add_vector_with_distances();
+      vector_with_distance.Swap(&top.second);
     }
   }
 

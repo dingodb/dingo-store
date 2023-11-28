@@ -42,6 +42,7 @@
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
+
 DEFINE_int64(flat_need_save_count, 10000, "flat need save count");
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
@@ -462,6 +463,8 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
 }
 
 int32_t VectorIndexFlat::GetDimension() { return this->dimension_; }
+
+pb::common::MetricType VectorIndexFlat::GetMetricType() { return this->metric_type_; }
 
 butil::Status VectorIndexFlat::GetCount(int64_t& count) {
   BAIDU_SCOPED_LOCK(mutex_);

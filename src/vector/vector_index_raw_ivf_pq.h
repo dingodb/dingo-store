@@ -104,6 +104,7 @@ class VectorIndexRawIvfPq : public VectorIndex {
   void UnlockWrite() override;
 
   int32_t GetDimension() override;
+  pb::common::MetricType GetMetricType() override;
   butil::Status GetCount([[maybe_unused]] int64_t& count) override;
   butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;

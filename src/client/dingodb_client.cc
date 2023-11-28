@@ -112,6 +112,7 @@ DEFINE_bool(without_vector, false, "Search vector without output vector data");
 DEFINE_bool(without_scalar, false, "Search vector without scalar data");
 DEFINE_bool(without_table, false, "Search vector without table data");
 DEFINE_int64(ef_search, 0, "hnsw index search ef");
+DEFINE_bool(bruteforce, false, "use bruteforce search");
 DEFINE_int64(vector_index_id, 0, "vector index id unique. default 0");
 DEFINE_string(vector_index_add_cost_file, "./cost.txt", "exec batch vector add. cost time");
 DEFINE_int32(step_count, 1024, "step_count");

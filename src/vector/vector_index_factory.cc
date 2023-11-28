@@ -28,6 +28,7 @@
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_bruteforce.h"
 #include "vector/vector_index_flat.h"
 #include "vector/vector_index_hnsw.h"
 #include "vector/vector_index_ivf_flat.h"
@@ -42,6 +43,10 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
   std::shared_ptr<VectorIndex> vector_index = nullptr;
 
   switch (index_parameter.vector_index_type()) {
+    case pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE: {
+      vector_index = NewBruteForce(id, index_parameter, epoch, range);
+      break;
+    }
     case pb::common::VECTOR_INDEX_TYPE_FLAT: {
       vector_index = NewFlat(id, index_parameter, epoch, range);
       break;
@@ -119,6 +124,40 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(int64_t id,
     return new_hnsw_index;
   } catch (std::exception& e) {
     DINGO_LOG(ERROR) << "create hnsw index failed of exception occured, " << e.what() << ", id=" << id
+                     << ", parameter=" << index_parameter.ShortDebugString();
+    return nullptr;
+  }
+}
+
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewBruteForce(int64_t id,
+                                                               const pb::common::VectorIndexParameter& index_parameter,
+                                                               const pb::common::RegionEpoch& epoch,
+                                                               const pb::common::Range& range) {
+  const auto& bruteforce_parameter = index_parameter.bruteforce_parameter();
+
+  if (bruteforce_parameter.dimension() <= 0) {
+    DINGO_LOG(ERROR) << "vector_index_parameter is illegal, dimension <= 0";
+    return nullptr;
+  }
+  if (bruteforce_parameter.metric_type() == pb::common::MetricType::METRIC_TYPE_NONE) {
+    DINGO_LOG(ERROR) << "vector_index_parameter is illegal, METRIC_TYPE_NONE";
+    return nullptr;
+  }
+
+  // create index may throw exeception, so we need to catch it
+  try {
+    auto new_bruteforce_index = std::make_shared<VectorIndexBruteforce>(id, index_parameter, epoch, range);
+    if (new_bruteforce_index == nullptr) {
+      DINGO_LOG(ERROR) << "create bruteforce index failed of new_bruteforce_index is nullptr"
+                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      return nullptr;
+    } else {
+      DINGO_LOG(INFO) << "create bruteforce index success, id=" << id
+                      << ", parameter=" << index_parameter.ShortDebugString();
+    }
+    return new_bruteforce_index;
+  } catch (std::exception& e) {
+    DINGO_LOG(ERROR) << "create bruteforce index failed of exception occured, " << e.what() << ", id=" << id
                      << ", parameter=" << index_parameter.ShortDebugString();
     return nullptr;
   }
