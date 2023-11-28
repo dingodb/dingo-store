@@ -412,6 +412,11 @@ butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
+  // CAUTION: sync mode cannot pass Done here
+  if (ctx->Done()) {
+    DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] sync mode cannot pass Done here.", ctx->RegionId());
+  }
+
   auto sync_mode_cond = ctx->CreateSyncModeCond();
 
   auto status = node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
