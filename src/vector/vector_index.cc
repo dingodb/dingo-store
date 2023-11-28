@@ -296,7 +296,7 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.wrapper][index_id({})][trace({})] update vector index, apply_log_id({}/{}) "
         "snapshot_log_id({}/{}).",
-        Id(), apply_log_id, vector_index->ApplyLogId(), snapshot_log_id, vector_index->SnapshotLogId(), trace);
+        Id(), trace, apply_log_id, vector_index->ApplyLogId(), snapshot_log_id, vector_index->SnapshotLogId());
     if (apply_log_id < vector_index->ApplyLogId()) {
       SetApplyLogId(vector_index->ApplyLogId());
     }

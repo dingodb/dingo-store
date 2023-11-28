@@ -171,6 +171,8 @@ message GetVectorIndexSnapshotResponse {
 
 message CheckVectorIndexRequest {
   int64 vector_index_id = 1;
+  bool need_hold_if_absent = 2;
+  int64 job_id = 3;
 }
 
 message CheckVectorIndexResponse {

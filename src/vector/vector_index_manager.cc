@@ -308,7 +308,7 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
           vector_index_id, trace, new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
 
       // Switch vector index.
-      vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("LOAD_SNAPSHOT-{}", trace));
+      vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("LOAD.SNAPSHOT-{}", trace));
       vector_index_wrapper->SetBuildSuccess();
 
       return status;
@@ -333,7 +333,7 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   }
 
   // Switch vector index.
-  vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("BUILD-{}", trace));
+  vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("LOAD.BUILD-{}", trace));
   vector_index_wrapper->SetBuildSuccess();
 
   DINGO_LOG(INFO) << fmt::format(

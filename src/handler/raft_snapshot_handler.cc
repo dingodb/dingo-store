@@ -227,7 +227,7 @@ bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr 
 
   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] update snapshot_epoch_version, from: {} to: {}",
                                  region->Id(), region->SnapshotEpochVersion(), region_version);
-  store_region_meta->UpdateSnapshotEpochVersion(region, region_version);
+  store_region_meta->UpdateSnapshotEpochVersion(region, region_version, "save snapshot");
 
   return true;
 }
@@ -252,7 +252,7 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
 
   } else if (meta.epoch().version() > region->Epoch().version()) {
     auto store_region_meta = GET_STORE_REGION_META;
-    store_region_meta->UpdateEpochVersionAndRange(region, meta.epoch().version(), meta.range());
+    store_region_meta->UpdateEpochVersionAndRange(region, meta.epoch().version(), meta.range(), "load snapshot");
   }
 
   // Delete old region datas

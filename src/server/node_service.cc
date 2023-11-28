@@ -490,6 +490,10 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*contro
   }
   if (vector_index_wrapper->IsOwnReady()) {
     response->set_is_exist(true);
+  } else {
+    if (request->need_hold_if_absent()) {
+      VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, request->job_id(), "from peer");
+    }
   }
 }
 
