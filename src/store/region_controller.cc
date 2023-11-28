@@ -283,11 +283,11 @@ void DeleteRegionTask::Run() {
 butil::Status SplitRegionTask::PreValidateSplitRegion(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
-  return ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request());
+  return ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request(), command.job_id());
 }
 
 butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
-                                                   const pb::coordinator::SplitRequest& split_request) {
+                                                   const pb::coordinator::SplitRequest& split_request, int64_t job_id) {
   auto parent_region_id = split_request.split_from_region_id();
   auto child_region_id = split_request.split_to_region_id();
 
@@ -363,6 +363,8 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
       if (peer != self_peer) {
         pb::node::CheckVectorIndexRequest request;
         request.set_vector_index_id(parent_region_id);
+        request.set_need_hold_if_absent(true);
+        request.set_job_id(job_id);
         pb::node::CheckVectorIndexResponse response;
         auto status = ServiceAccess::CheckVectorIndex(request, peer.addr, response);
         if (!status.ok()) {
@@ -385,7 +387,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
 butil::Status SplitRegionTask::SplitRegion() {
   auto store_region_meta = GET_STORE_REGION_META;
 
-  auto status = ValidateSplitRegion(store_region_meta, region_cmd_->split_request());
+  auto status = ValidateSplitRegion(store_region_meta, region_cmd_->split_request(), region_cmd_->job_id());
   if (!status.ok()) {
     return status;
   }

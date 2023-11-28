@@ -92,7 +92,7 @@ class SplitRegionTask : public TaskRunnable {
 
  private:
   static butil::Status ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
-                                           const pb::coordinator::SplitRequest& split_request);
+                                           const pb::coordinator::SplitRequest& split_request, int64_t job_id);
   butil::Status SplitRegion();
 
   std::shared_ptr<Context> ctx_;

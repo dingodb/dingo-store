@@ -309,11 +309,12 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   to_region->SetParentId(from_region->Id());
 
   // set child region version/range/state
-  store_region_meta->UpdateEpochVersionAndRange(to_region, to_region->Epoch().version() + 1, to_range);
+  store_region_meta->UpdateEpochVersionAndRange(to_region, to_region->Epoch().version() + 1, to_range, "split child");
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
 
   // set parent region version/range/state
-  store_region_meta->UpdateEpochVersionAndRange(from_region, from_region->Epoch().version() + 1, from_range);
+  store_region_meta->UpdateEpochVersionAndRange(from_region, from_region->Epoch().version() + 1, from_range,
+                                                "split parent");
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Doing raft snapshot");
@@ -482,8 +483,10 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::SPLITTING);
 
   // Increase region version
-  store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range);
-  store_region_meta->UpdateEpochVersionAndRange(parent_region, parent_region->Epoch().version() + 1, parent_range);
+  store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range,
+                                                "split child");
+  store_region_meta->UpdateEpochVersionAndRange(parent_region, parent_region->Epoch().version() + 1, parent_range,
+                                                "split parent");
 
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", parent_region_id,
                                  child_region_id);
@@ -665,7 +668,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   auto new_range = source_region_definition.range();
   new_range.set_start_key(Helper::GenMaxStartKey());
   int64_t new_version = source_region_definition.epoch().version() + 1;
-  store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, new_range);
+  store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, new_range, "merge source");
 
   FAIL_POINT("before_launch_commit_merge");
 
@@ -765,7 +768,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   }
   int64_t new_version = std::max(request.source_region_epoch().version(), target_region->Epoch().version()) + 1;
 
-  store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range);
+  store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range, "merge target");
 
   // Do snapshot
   LaunchAyncSaveSnapshot(target_region);

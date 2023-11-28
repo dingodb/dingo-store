@@ -14,6 +14,7 @@
 
 #include "meta/store_meta_manager.h"
 
+#include <algorithm>
 #include <any>
 #include <atomic>
 #include <cassert>
@@ -292,10 +293,10 @@ RegionChangeRecorder::~RegionChangeRecorder() { bthread_mutex_destroy(&mutex_); 
 bool RegionChangeRecorder::Init() {
   std::vector<pb::common::KeyValue> kvs;
   if (!meta_reader_->Scan(Prefix(), kvs)) {
-    DINGO_LOG(ERROR) << "Scan region change record failed!";
+    DINGO_LOG(ERROR) << "[region.record] Scan region change record failed!";
     return false;
   }
-  DINGO_LOG(INFO) << "Init region change record num: " << kvs.size();
+  DINGO_LOG(INFO) << "[region.record] Init region change record num: " << kvs.size();
 
   if (!kvs.empty()) {
     TransformFromKv(kvs);
@@ -436,6 +437,11 @@ pb::store_internal::RegionChangeRecord RegionChangeRecorder::ChangeRecord(int64_
   return {};
 }
 
+static bool CompareRecord(const pb::store_internal::RegionChangeRecord& record1,
+                          const pb::store_internal::RegionChangeRecord& record2) {
+  return record1.job_id() < record2.job_id();
+}
+
 std::vector<pb::store_internal::RegionChangeRecord> RegionChangeRecorder::GetChangeRecord(int64_t region_id) {
   std::vector<pb::common::KeyValue> kvs;
   if (!meta_reader_->Scan(GenKey(region_id), kvs)) {
@@ -449,6 +455,8 @@ std::vector<pb::store_internal::RegionChangeRecord> RegionChangeRecorder::GetCha
     record.ParseFromString(kv.value());
     records.push_back(record);
   }
+
+  std::sort(records.begin(), records.end(), CompareRecord);
 
   return records;
 }
@@ -466,6 +474,8 @@ std::vector<pb::store_internal::RegionChangeRecord> RegionChangeRecorder::GetAll
     record.ParseFromString(kv.value());
     records.push_back(record);
   }
+
+  std::sort(records.begin(), records.end(), CompareRecord);
 
   return records;
 }
@@ -536,7 +546,7 @@ bool StoreServerMeta::Init() {
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_INDEX);
   } else {
-    DINGO_LOG(FATAL) << "unknown server role: " << GetRole();
+    DINGO_LOG(FATAL) << "[store.meta] unknown server role: " << GetRole();
   }
 
   auto* server_location = store->mutable_server_location();
@@ -546,7 +556,7 @@ bool StoreServerMeta::Init() {
   raf_location->set_host(butil::ip2str(server.RaftEndpoint().ip).c_str());
   raf_location->set_port(server.RaftEndpoint().port);
 
-  DINGO_LOG(INFO) << "store server meta: " << store->ShortDebugString();
+  DINGO_LOG(INFO) << "[store.meta] store server meta: " << store->ShortDebugString();
   AddStore(store);
 
   return true;
@@ -567,7 +577,7 @@ bool StoreServerMeta::IsExist(int64_t store_id) {
 void StoreServerMeta::AddStore(std::shared_ptr<pb::common::Store> store) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (stores_.find(store->id()) != stores_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("store {} already exist!", store->id());
+    DINGO_LOG(WARNING) << fmt::format("[store.meta][store_id({})] store already exist!", store->id());
     return;
   }
 
@@ -588,7 +598,7 @@ std::shared_ptr<pb::common::Store> StoreServerMeta::GetStore(int64_t store_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = stores_.find(store_id);
   if (it == stores_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("region {} not exist!", store_id);
+    DINGO_LOG(WARNING) << fmt::format("[store.meta][store_id({})] store not exist!", store_id);
     return nullptr;
   }
 
@@ -637,10 +647,10 @@ pb::node::NodeInfo StoreServerMeta::GetNodeInfoByServerEndPoint(const butil::End
 bool StoreRegionMeta::Init() {
   std::vector<pb::common::KeyValue> kvs;
   if (!meta_reader_->Scan(Prefix(), kvs)) {
-    DINGO_LOG(ERROR) << "Scan store region meta failed!";
+    DINGO_LOG(ERROR) << "[region.meta] Scan store region meta failed!";
     return false;
   }
-  DINGO_LOG(INFO) << "Init store region meta num: " << kvs.size();
+  DINGO_LOG(INFO) << "[region.meta] Init store region meta num: " << kvs.size();
 
   if (!kvs.empty()) {
     TransformFromKv(kvs);
@@ -652,7 +662,7 @@ int64_t StoreRegionMeta::GetEpoch() { return 0; }
 
 void StoreRegionMeta::AddRegion(store::RegionPtr region) {
   if (regions_.Get(region->Id()) != nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("region {} already exist!", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[region.meta][region({})] region already exist!", region->Id());
     return;
   }
 
@@ -729,7 +739,8 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
     case pb::common::StoreRegionState::TOMBSTONE:
       break;
     default:
-      DINGO_LOG(ERROR) << "Unknown region state " << pb::common::StoreRegionState_Name(cur_state);
+      DINGO_LOG(ERROR) << fmt::format("[region.meta][region({})] unknown region state ", region->Id(),
+                                      pb::common::StoreRegionState_Name(cur_state));
       break;
   }
 
@@ -738,13 +749,13 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
     if (meta_writer_ != nullptr) {
       meta_writer_->Put(TransformToKv(region));
     } else {
-      DINGO_LOG(WARNING) << fmt::format("Update region state persistence failed, region {} state {} to {}",
-                                        region->Id(), pb::common::StoreRegionState_Name(cur_state),
-                                        pb::common::StoreRegionState_Name(new_state));
+      DINGO_LOG(WARNING) << fmt::format(
+          "[region.meta][region({})] update region state persistence failed, state {} to {}", region->Id(),
+          pb::common::StoreRegionState_Name(cur_state), pb::common::StoreRegionState_Name(new_state));
     }
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("Update region state {} {} to {} {}", region->Id(),
+  DINGO_LOG(DEBUG) << fmt::format("[region.meta][region({})] update region state {} to {} {}", region->Id(),
                                   pb::common::StoreRegionState_Name(cur_state),
                                   pb::common::StoreRegionState_Name(new_state), (successed ? "true" : "false"));
 }
@@ -783,30 +794,36 @@ void StoreRegionMeta::UpdatePeers(int64_t region_id, std::vector<pb::common::Pee
 }
 
 void StoreRegionMeta::UpdateEpochVersionAndRange(store::RegionPtr region, int64_t version,
-                                                 const pb::common::Range& range) {
+                                                 const pb::common::Range& range, const std::string& trace) {
   assert(region != nullptr);
   if (version <= region->Epoch().version()) {
     return;
   }
 
+  DINGO_LOG(INFO) << fmt::format("[region.meta][region({})][trace({})] update epoch({}) and range({})", region->Id(),
+                                 trace, version, Helper::RangeToString(range));
+
   region->SetEpochVersionAndRange(version, range);
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version) {
+void StoreRegionMeta::UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version, const std::string& trace) {
   assert(region != nullptr);
   if (version <= region->SnapshotEpochVersion()) {
     return;
   }
 
+  DINGO_LOG(INFO) << fmt::format("[region.meta][region({})][trace({})] update epoch({})", region->Id(), trace, version);
+
   region->SetSnapshotEpochVersion(version);
   meta_writer_->Put(TransformToKv(region));
 }
 
-void StoreRegionMeta::UpdateEpochVersionAndRange(int64_t region_id, int64_t version, const pb::common::Range& range) {
+void StoreRegionMeta::UpdateEpochVersionAndRange(int64_t region_id, int64_t version, const pb::common::Range& range,
+                                                 const std::string& trace) {
   auto region = GetRegion(region_id);
   if (region != nullptr) {
-    UpdateEpochVersionAndRange(region, version, range);
+    UpdateEpochVersionAndRange(region, version, range, trace);
   }
 }
 
@@ -871,7 +888,7 @@ std::vector<store::RegionPtr> StoreRegionMeta::GetAllRegion() {
   regions.reserve(regions_.Size());
 
   if (regions_.GetAllValues(regions) < 0) {
-    DINGO_LOG(ERROR) << "Get all regions failed!";
+    DINGO_LOG(ERROR) << "[region.meta] get all regions failed!";
     return regions;
   }
 
@@ -885,7 +902,7 @@ std::vector<store::RegionPtr> StoreRegionMeta::GetAllAliveRegion() {
   if (regions_.GetAllValues(regions, [](store::RegionPtr region) -> bool {
         return region->State() != pb::common::StoreRegionState::DELETED;
       }) < 0) {
-    DINGO_LOG(ERROR) << "Get all regions failed!";
+    DINGO_LOG(ERROR) << "[region.meta] get all regions failed!";
     return regions;
   }
 
@@ -901,7 +918,7 @@ std::vector<store::RegionPtr> StoreRegionMeta::GetAllMetricsRegion() {
                region->State() != pb::common::StoreRegionState::SPLITTING ||
                region->State() != pb::common::StoreRegionState::MERGING;
       }) < 0) {
-    DINGO_LOG(ERROR) << "Get all regions failed!";
+    DINGO_LOG(ERROR) << "[region.meta] get all regions failed!";
     return regions;
   }
 
@@ -931,10 +948,10 @@ void StoreRegionMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& k
 bool StoreRaftMeta::Init() {
   std::vector<pb::common::KeyValue> kvs;
   if (!meta_reader_->Scan(Prefix(), kvs)) {
-    DINGO_LOG(ERROR) << "Scan store raft meta failed!";
+    DINGO_LOG(ERROR) << "[raft.meta] scan store raft meta failed!";
     return false;
   }
-  DINGO_LOG(INFO) << "Init store raft meta num: " << kvs.size();
+  DINGO_LOG(INFO) << "[raft.meta] init store raft meta num: " << kvs.size();
 
   if (!kvs.empty()) {
     TransformFromKv(kvs);
@@ -953,9 +970,9 @@ StoreRaftMeta::RaftMetaPtr StoreRaftMeta::NewRaftMeta(int64_t region_id) {
 void StoreRaftMeta::AddRaftMeta(RaftMetaPtr raft_meta) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    DINGO_LOG(INFO) << "Add raft meta " << raft_meta->region_id();
+    DINGO_LOG(INFO) << fmt::format("[raft.meta][region({})] Add raft meta.", raft_meta->region_id());
     if (raft_metas_.find(raft_meta->region_id()) != raft_metas_.end()) {
-      DINGO_LOG(WARNING) << fmt::format("raft meta {} already exist!", raft_meta->region_id());
+      DINGO_LOG(WARNING) << fmt::format("[raft.meta][region({})] raft meta already exist!", raft_meta->region_id());
       return;
     }
 
@@ -994,7 +1011,7 @@ StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = raft_metas_.find(region_id);
   if (it == raft_metas_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("raft meta {} not exist!", region_id);
+    DINGO_LOG(WARNING) << fmt::format("[raft.meta][region({})] raft meta not exist!", region_id);
     return nullptr;
   }
 
@@ -1006,7 +1023,7 @@ pb::store_internal::RaftMeta StoreRaftMeta::GetRaftMetaValue(int64_t region_id) 
   pb::store_internal::RaftMeta raft_meta;
   auto it = raft_metas_.find(region_id);
   if (it == raft_metas_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("raft meta {} not exist!", region_id);
+    DINGO_LOG(WARNING) << fmt::format("[raft.meta][region({})] raft meta not exist!", region_id);
     return raft_meta;
   }
 

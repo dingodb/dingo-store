@@ -237,11 +237,13 @@ class StoreRegionMeta : public TransformKvAble {
   void UpdatePeers(store::RegionPtr region, std::vector<pb::common::Peer>& peers);
   void UpdatePeers(int64_t region_id, std::vector<pb::common::Peer>& peers);
 
-  void UpdateEpochVersionAndRange(store::RegionPtr region, int64_t version, const pb::common::Range& range);
-  void UpdateEpochVersionAndRange(int64_t region_id, int64_t version, const pb::common::Range& range);
+  void UpdateEpochVersionAndRange(store::RegionPtr region, int64_t version, const pb::common::Range& range,
+                                  const std::string& trace);
+  void UpdateEpochVersionAndRange(int64_t region_id, int64_t version, const pb::common::Range& range,
+                                  const std::string& trace);
   void UpdateEpochConfVersion(store::RegionPtr region, int64_t version);
   void UpdateEpochConfVersion(int64_t region_id, int64_t version);
-  void UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version);
+  void UpdateSnapshotEpochVersion(store::RegionPtr region, int64_t version, const std::string& trace);
 
   void UpdateNeedBootstrapDoSnapshot(store::RegionPtr region, bool need_do_snapshot);
   void UpdateDisableChange(store::RegionPtr region, bool disable_change);
