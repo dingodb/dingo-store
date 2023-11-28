@@ -462,88 +462,66 @@ void RawKV::RawKVImpl::ProcessSubBatchDeleteRange(SubBatchState* sub) {
   sub->delete_count = rpc->Response()->delete_count();
 }
 
-Status RawKV::RawKVImpl::DeleteRange(const std::string& start, const std::string& end, bool with_start, bool with_end,
+Status RawKV::RawKVImpl::DeleteRange(const std::string& start_key, const std::string& end_key, bool continuous,
                                      int64_t& delete_count) {
-  if (start >= end) {
-    return Status::IllegalState("start key must < end key");
+  if (start_key.empty() || end_key.empty()) {
+    return Status::InvalidArgument("start_key and end_key must not empty, check params");
+  }
+
+  if (start_key >= end_key) {
+    return Status::InvalidArgument("end_key must greater than start_key, check params");
+  }
+
+  auto meta_cache = stub_.GetMetaCache();
+
+  std::vector<std::shared_ptr<Region>> regions;
+  Status ret = meta_cache->ScanRegionsBetweenRange(start_key, end_key, 0, regions);
+  if (!ret.IsOK()) {
+    if (ret.IsNotFound()) {
+      DINGO_LOG(WARNING) << fmt::format("region not found between [{},{}), no need retry, status:{}", start_key,
+                                        end_key, ret.ToString());
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("lookup region fail between [{},{}), need retry, status:{}", start_key, end_key,
+                                        ret.ToString());
+    }
+    return ret;
+  }
+
+  CHECK(!regions.empty()) << "regions must not empty";
+
+  if (continuous) {
+    for (int i = 0; i < regions.size() - 1; i++) {
+      auto cur = regions[i];
+      auto next = regions[i + 1];
+      if (cur->Range().end_key() != next->Range().start_key()) {
+        std::string msg = fmt::format("regions bewteen [{}, {}) not continuous", start_key, end_key);
+        DINGO_LOG(WARNING) << msg
+                           << fmt::format(", cur region:{} ({}-{}), next region:{} ({}-{})", cur->RegionId(),
+                                          cur->Range().start_key(), cur->Range().end_key(), next->RegionId(),
+                                          next->Range().start_key(), next->Range().end_key());
+        return Status::Aborted(msg);
+      }
+    }
   }
 
   struct DeleteRangeContext {
     std::string start;
-    bool with_start;
     std::string end;
-    bool with_end;
   };
-
-  auto meta_cache = stub_.GetMetaCache();
 
   std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
   std::unordered_map<int64_t, std::vector<DeleteRangeContext>> to_delete;
 
-  std::shared_ptr<Region> tmp;
-  Status got = meta_cache->LookupRegionByKey(start, tmp);
-  if (!got.IsOK()) {
-    return got;
-  }
-  CHECK_NOTNULL(tmp.get());
+  for (const auto& region : regions) {
+    const auto& range = region->Range();
+    auto start = (range.start_key() <= start_key ? start_key : range.start_key());
+    auto end = (range.end_key() <= end_key) ? range.end_key() : end_key;
 
-  std::string next;
-  bool delete_end_key = false;
+    auto iter = region_id_to_region.find(region->RegionId());
+    DCHECK(iter == region_id_to_region.end());
+    region_id_to_region.emplace(std::make_pair(region->RegionId(), region));
 
-  {
-    // process start key
-    auto iter = region_id_to_region.find(tmp->RegionId());
-    if (iter == region_id_to_region.end()) {
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-    }
-
-    if (end < tmp->Range().end_key()) {
-      to_delete[tmp->RegionId()].push_back({start, with_start, end, with_end});
-    } else if (end > tmp->Range().end_key()) {
-      to_delete[tmp->RegionId()].push_back({start, with_start, tmp->Range().end_key(), false});
-      next = tmp->Range().end_key();
-    } else {
-      CHECK_EQ(end, tmp->Range().end_key());
-      to_delete[tmp->RegionId()].push_back({start, with_start, end, false});
-      if (with_end) {
-        delete_end_key = true;
-      }
-    }
-  }
-
-  CHECK_NE(next, end);
-
-  {
-    // process others
-    while (!next.empty()) {
-      CHECK_NE(next, end);
-      CHECK(!delete_end_key);
-
-      got = meta_cache->LookupRegionByKey(next, tmp);
-      if (!got.IsOK()) {
-        return got;
-      }
-      CHECK_NOTNULL(tmp.get());
-
-      auto iter = region_id_to_region.find(tmp->RegionId());
-      DCHECK(iter == region_id_to_region.end());
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-
-      if (end < tmp->Range().end_key()) {
-        to_delete[tmp->RegionId()].push_back({next, true, end, with_end});
-        break;
-      } else if (end > tmp->Range().end_key()) {
-        to_delete[tmp->RegionId()].push_back({next, true, tmp->Range().end_key(), false});
-        next = tmp->Range().end_key();
-      } else {
-        CHECK_EQ(end, tmp->Range().end_key());
-        to_delete[tmp->RegionId()].push_back({next, true, end, false});
-        if (with_end) {
-          delete_end_key = true;
-        }
-        break;
-      }
-    }
+    to_delete[region->RegionId()].push_back({start, end});
   }
 
   DCHECK_EQ(region_id_to_region.size(), to_delete.size());
@@ -565,8 +543,8 @@ Status RawKV::RawKVImpl::DeleteRange(const std::string& start, const std::string
       range->set_start_key(delete_range.start);
       range->set_end_key(delete_range.end);
 
-      range_with_option->set_with_start(delete_range.with_start);
-      range_with_option->set_with_end(delete_range.with_end);
+      range_with_option->set_with_start(true);
+      range_with_option->set_with_end(false);
     }
 
     sub_batch_state.emplace_back(rpc.get(), region);
@@ -582,22 +560,12 @@ Status RawKV::RawKVImpl::DeleteRange(const std::string& start, const std::string
     thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchDeleteRange, this, &batch_state);
   }
 
-  int64_t tmp_delete_count = 0;
-  Status result;
-
-  // process end key
-  if (delete_end_key) {
-    Status delete_status = Delete(end);
-    if (delete_status.IsOK()) {
-      tmp_delete_count += 1;
-    } else {
-      result = delete_status;
-    }
-  }
-
   for (auto& thread : thread_pool) {
     thread.join();
   }
+
+  Status result;
+  int64_t tmp_delete_count = 0;
 
   for (auto& state : sub_batch_state) {
     if (!state.status.IsOK()) {

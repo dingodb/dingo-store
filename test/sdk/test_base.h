@@ -81,7 +81,6 @@ class TestBase : public ::testing::Test {
     meta_cache->MaybeAddRegion(RegionA2C());
     meta_cache->MaybeAddRegion(RegionC2E());
     meta_cache->MaybeAddRegion(RegionE2G());
-    meta_cache->MaybeAddRegion(RegionL2N());
   }
 };
 

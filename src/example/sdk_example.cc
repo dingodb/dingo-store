@@ -266,7 +266,7 @@ void RawKVExample() {
     }
 
     int64_t delete_count = 0;
-    result = raw_kv->DeleteRange("wb01", "wf01", delete_count, true, true);
+    result = raw_kv->DeleteRange("wb01", "wz01", delete_count);
     DINGO_LOG(INFO) << "raw_kv delete range:" << result.ToString();
 
     std::vector<dingodb::sdk::KVPair> tmp_batch_get_values;
@@ -322,11 +322,8 @@ void RawKVExample() {
   {
     // batch compare and set
     {
-      // pre clean
-      Status result = raw_kv->BatchDelete(keys);
-      DINGO_LOG(INFO) << "raw_kv batch_delete before batch_compare_and_set:" << result.ToString();
-
       // first batch_compare_and_set
+      Status result;
       std::vector<dingodb::sdk::KVPair> kvs;
       std::vector<std::string> expect_values;
 

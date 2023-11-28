@@ -84,10 +84,13 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
 
   Status BatchDelete(const std::vector<std::string>& keys);
 
-  // NOTE: start must < end
+  // delete key in [start_key, end_key)
   // output_param: delete_count
-  Status DeleteRange(const std::string& start, const std::string& end, int64_t& delete_count, bool with_start = true,
-                     bool with_end = false);
+  Status DeleteRangeNonContinuous(const std::string& start_key, const std::string& end_key, int64_t& delete_count);
+
+  // delete key in [start_key, end_key), but region between [start_key, end_key) must continuous 
+  // output_param: delete_count
+  Status DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& delete_count);
 
   // expected_value: empty means key not exist
   Status CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,

@@ -52,9 +52,7 @@ class RawKV::RawKVImpl {
 
   Status BatchDelete(const std::vector<std::string>& keys);
 
-  // TODO: process when region not exist
-  Status DeleteRange(const std::string& start, const std::string& end, bool with_start, bool with_end,
-                     int64_t& delete_count);
+  Status DeleteRange(const std::string& start_key, const std::string& end_key, bool continuous, int64_t& delete_count);
 
   // expected_value: empty means key not exist
   Status CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,
@@ -64,6 +62,7 @@ class RawKV::RawKVImpl {
   Status BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
                             std::vector<KeyOpState>& states);
 
+  // TODO: maybe enable concurrent
   Status Scan(const std::string& start_key, const std::string& end_key,  uint64_t limit, std::vector<KVPair>& kvs);
 
  private:

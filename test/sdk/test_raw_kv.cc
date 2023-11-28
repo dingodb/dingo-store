@@ -478,6 +478,17 @@ TEST_F(RawKVTest, DeleteRangeInOneRegion) {
   std::string start = "b";
   std::string end = "c";
 
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), start);
+            EXPECT_EQ(request.range_end(), end);
+
+            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+
+            return Status::OK();
+          });
+
   int64_t count = 100;
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
@@ -508,44 +519,21 @@ TEST_F(RawKVTest, DeleteRangeInOneRegion) {
   EXPECT_EQ(count, delete_count);
 }
 
-TEST_F(RawKVTest, DeleteRangeInOneRegionWithoutStartKey) {
-  std::string start = "b";
-  std::string end = "c";
-
-  int64_t count = 100;
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
-    auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
-    CHECK_NOTNULL(kv_rpc);
-
-    EXPECT_TRUE(kv_rpc->Request()->has_context());
-    auto context = kv_rpc->Request()->context();
-    EXPECT_TRUE(context.has_region_epoch());
-
-    auto range_with_option = kv_rpc->Request()->range();
-    const auto& range = range_with_option.range();
-
-    EXPECT_EQ(start, range.start_key());
-    EXPECT_EQ(end, range.end_key());
-
-    EXPECT_FALSE(range_with_option.with_start());
-    EXPECT_FALSE(range_with_option.with_end());
-
-    kv_rpc->MutableResponse()->set_delete_count(0);
-
-    return Status::OK();
-  });
-
-  int64_t delete_count;
-
-  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count, false).IsOK());
-  EXPECT_EQ(0, delete_count);
-}
-
 TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
   std::string start = "b";
   std::string end = "d";
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), start);
+            EXPECT_EQ(request.range_end(), end);
+
+            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
+
+            return Status::OK();
+          });
 
   int64_t count = 100;
 
@@ -560,16 +548,17 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
 
     auto range_with_option = kv_rpc->Request()->range();
     const auto& range = range_with_option.range();
+
     if (range.start_key() == start) {
       EXPECT_EQ(range.end_key(), "c");
-      EXPECT_TRUE(range_with_option.with_start());
-      EXPECT_FALSE(range_with_option.with_end());
+    } else if (range.start_key() == "c") {
+      EXPECT_EQ(range.end_key(), end);
+    } else {
+      EXPECT_TRUE(false);
     }
-    if (range.end_key() == end) {
-      EXPECT_EQ(range.start_key(), "c");
-      EXPECT_TRUE(range_with_option.with_start());
-      EXPECT_FALSE(range_with_option.with_end());
-    }
+
+    EXPECT_TRUE(range_with_option.with_start());
+    EXPECT_FALSE(range_with_option.with_end());
 
     kv_rpc->MutableResponse()->set_delete_count(count);
 
@@ -582,9 +571,22 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
   EXPECT_EQ(2 * count, delete_count);
 }
 
-TEST_F(RawKVTest, DeleteRangeInTwoRegionWithoutStartKey) {
-  std::string start = "b";
-  std::string end = "d";
+TEST_F(RawKVTest, DeleteRangeInThressRegion) {
+  std::string start = "a";
+  std::string end = "g";
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), start);
+            EXPECT_EQ(request.range_end(), end);
+
+            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
+            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
+
+            return Status::OK();
+          });
 
   int64_t count = 100;
 
@@ -599,134 +601,166 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegionWithoutStartKey) {
 
     auto range_with_option = kv_rpc->Request()->range();
     const auto& range = range_with_option.range();
+
     if (range.start_key() == start) {
       EXPECT_EQ(range.end_key(), "c");
-      EXPECT_FALSE(range_with_option.with_start());
-      EXPECT_FALSE(range_with_option.with_end());
-      kv_rpc->MutableResponse()->set_delete_count(0);
-    }
-    if (range.end_key() == end) {
-      EXPECT_EQ(range.start_key(), "c");
-      EXPECT_TRUE(range_with_option.with_start());
-      EXPECT_FALSE(range_with_option.with_end());
-      kv_rpc->MutableResponse()->set_delete_count(count);
-    }
-
-    return Status::OK();
-  });
-
-  int64_t delete_count;
-
-  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count, false).IsOK());
-  EXPECT_EQ(count, delete_count);
-}
-
-TEST_F(RawKVTest, DeleteRangeInThressRegionWithEndkey) {
-  std::string start = "b";
-  std::string end = "e";
-
-  int64_t count = 100;
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
-    auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
-    if (kv_rpc == nullptr) {
-      auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
-      CHECK_NOTNULL(kv_rpc);
-
-      EXPECT_TRUE(kv_rpc->Request()->has_context());
-      auto context = kv_rpc->Request()->context();
-      EXPECT_TRUE(context.has_region_epoch());
-
-      EXPECT_EQ(1, kv_rpc->MutableRequest()->keys_size());
-      EXPECT_EQ("e", kv_rpc->MutableRequest()->keys(0));
-
-      return Status::OK();
+    } else if (range.start_key() == "c") {
+      EXPECT_EQ(range.end_key(), "e");
+    } else if (range.start_key() == "e") {
+      EXPECT_EQ(range.end_key(), end);
     } else {
-      CHECK_NOTNULL(kv_rpc);
-
-      EXPECT_TRUE(kv_rpc->Request()->has_context());
-      auto context = kv_rpc->Request()->context();
-      EXPECT_TRUE(context.has_region_epoch());
-
-      auto range_with_option = kv_rpc->Request()->range();
-      const auto& range = range_with_option.range();
-      EXPECT_TRUE(range.start_key() == start || range.start_key() == "c");
-      if (range.start_key() == start) {
-        EXPECT_EQ(range.end_key(), "c");
-        EXPECT_TRUE(range_with_option.with_start());
-        EXPECT_FALSE(range_with_option.with_end());
-        kv_rpc->MutableResponse()->set_delete_count(count);
-      }
-      if (range.start_key() == "c") {
-        EXPECT_EQ(range.end_key(), "e");
-        EXPECT_TRUE(range_with_option.with_start());
-        EXPECT_FALSE(range_with_option.with_end());
-        kv_rpc->MutableResponse()->set_delete_count(count);
-      }
+      EXPECT_TRUE(false);
     }
+
+    EXPECT_TRUE(range_with_option.with_start());
+    EXPECT_FALSE(range_with_option.with_end());
+
+    kv_rpc->MutableResponse()->set_delete_count(count);
 
     return Status::OK();
   });
 
   int64_t delete_count;
 
-  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count, true, true).IsOK());
-  EXPECT_EQ(2 * count + 1, delete_count);
+  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count).IsOK());
+  EXPECT_EQ(3 * count, delete_count);
 }
 
 TEST_F(RawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
-  std::string start = "a";
-  std::string end = "e";
+  std::string start = "b";
+  std::string end = "f";
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), start);
+            EXPECT_EQ(request.range_end(), end);
+
+            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
+            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
+
+            return Status::OK();
+          });
 
   int64_t count = 100;
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
     (void)done;
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
-    if (kv_rpc == nullptr) {
-      auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
-      CHECK_NOTNULL(kv_rpc);
+    CHECK_NOTNULL(kv_rpc);
 
-      EXPECT_TRUE(kv_rpc->Request()->has_context());
-      auto context = kv_rpc->Request()->context();
-      EXPECT_TRUE(context.has_region_epoch());
+    EXPECT_TRUE(kv_rpc->Request()->has_context());
+    auto context = kv_rpc->Request()->context();
+    EXPECT_TRUE(context.has_region_epoch());
 
-      EXPECT_EQ(1, kv_rpc->MutableRequest()->keys_size());
-      EXPECT_EQ("e", kv_rpc->MutableRequest()->keys(0));
+    auto range_with_option = kv_rpc->Request()->range();
+    const auto& range = range_with_option.range();
 
-      return Status::OK();
+    if (range.start_key() == start) {
+      EXPECT_EQ(range.end_key(), "c");
+    } else if (range.start_key() == "c") {
+      EXPECT_EQ(range.end_key(), "e");
+    } else if (range.start_key() == "e") {
+      EXPECT_EQ(range.end_key(), end);
     } else {
-      CHECK_NOTNULL(kv_rpc);
-
-      EXPECT_TRUE(kv_rpc->Request()->has_context());
-      auto context = kv_rpc->Request()->context();
-      EXPECT_TRUE(context.has_region_epoch());
-
-      auto range_with_option = kv_rpc->Request()->range();
-      const auto& range = range_with_option.range();
-      EXPECT_TRUE(range.start_key() == start || range.start_key() == "c");
-      if (range.start_key() == start) {
-        EXPECT_EQ(range.end_key(), "c");
-        EXPECT_FALSE(range_with_option.with_start());
-        EXPECT_FALSE(range_with_option.with_end());
-        kv_rpc->MutableResponse()->set_delete_count(count);
-      }
-      if (range.start_key() == "c") {
-        EXPECT_EQ(range.end_key(), "e");
-        EXPECT_TRUE(range_with_option.with_start());
-        EXPECT_FALSE(range_with_option.with_end());
-        kv_rpc->MutableResponse()->set_delete_count(count);
-      }
+      EXPECT_TRUE(false);
     }
+
+    EXPECT_TRUE(range_with_option.with_start());
+    EXPECT_FALSE(range_with_option.with_end());
+
+    kv_rpc->MutableResponse()->set_delete_count(count);
 
     return Status::OK();
   });
 
   int64_t delete_count;
 
-  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count, false, true).IsOK());
-  EXPECT_EQ(2 * count + 1, delete_count);
+  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count).IsOK());
+  EXPECT_EQ(3 * count, delete_count);
+}
+
+TEST_F(RawKVTest, DeleteRangeDiscontinuous) {
+  std::string start = "b";
+  std::string end = "m";
+
+  int64_t count = 100;
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), start);
+            EXPECT_EQ(request.range_end(), end);
+
+            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
+            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
+            Region2ScanRegionInfo(RegionL2N(), response.add_regions());
+
+            return Status::OK();
+          });
+
+  int64_t delete_count;
+  EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count).IsAborted());
+}
+
+TEST_F(RawKVTest, DeleteRangeNonContinuous) {
+  std::string start = "b";
+  std::string end = "m";
+
+  int64_t count = 100;
+
+  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), start);
+            EXPECT_EQ(request.range_end(), end);
+
+            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
+            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
+            Region2ScanRegionInfo(RegionL2N(), response.add_regions());
+
+            return Status::OK();
+          });
+
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
+    (void)done;
+    auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
+    CHECK_NOTNULL(kv_rpc);
+
+    EXPECT_TRUE(kv_rpc->Request()->has_context());
+    auto context = kv_rpc->Request()->context();
+    EXPECT_TRUE(context.has_region_epoch());
+
+    auto range_with_option = kv_rpc->Request()->range();
+    const auto& range = range_with_option.range();
+
+    if (range.start_key() == start) {
+      EXPECT_EQ(range.end_key(), "c");
+    } else if (range.start_key() == "c") {
+      EXPECT_EQ(range.end_key(), "e");
+    } else if (range.start_key() == "e") {
+      EXPECT_EQ(range.end_key(), "g");
+    } else if (range.start_key() == "l") {
+      EXPECT_EQ(range.end_key(), end);
+    } else {
+      EXPECT_TRUE(false);
+    }
+
+    EXPECT_TRUE(range_with_option.with_start());
+    EXPECT_FALSE(range_with_option.with_end());
+
+    kv_rpc->MutableResponse()->set_delete_count(count);
+
+    return Status::OK();
+  });
+
+  int64_t delete_count;
+
+  EXPECT_TRUE(raw_kv->DeleteRangeNonContinuous(start, end, delete_count).IsOK());
+  EXPECT_EQ(4 * count, delete_count);
 }
 
 TEST_F(RawKVTest, CompareAndSet) {
