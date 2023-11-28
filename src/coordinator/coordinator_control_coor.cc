@@ -5075,7 +5075,7 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
             break;
           }
 
-          auto ret = AddRegionCmd(it_cmd.error().store_id(), 0, region_cmd, meta_increment);
+          auto ret = AddRegionCmd(it_cmd.error().store_id(), region_cmd.job_id(), region_cmd, meta_increment);
           if (!ret.ok()) {
             DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << store.id()
                              << " region_cmd_id=" << region_cmd.id();
