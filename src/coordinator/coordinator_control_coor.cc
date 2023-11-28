@@ -2930,14 +2930,29 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(int64_t region_id, in
     for (const auto& task : task_list.second.tasks()) {
       for (const auto& store_operation : task.store_operations()) {
         for (const auto& region_cmd : store_operation.region_cmds()) {
+          bool is_conflict = false;
           if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
-            DINGO_LOG(ERROR) << "ValidateTaskListConflict task_list "
-                                "conflict, region_id = "
-                             << region_id;
-            return butil::Status(pb::error::Errno::ETASK_LIST_CONFLICT,
-                                 "ValidateTaskListConflict task_list "
-                                 "conflict, region_id = " +
-                                     std::to_string(region_id));
+            is_conflict = true;
+          } else if (region_cmd.region_cmd_type() == pb::coordinator::CMD_MERGE) {
+            if (region_cmd.merge_request().source_region_id() == region_id ||
+                region_cmd.merge_request().source_region_id() == second_region_id ||
+                region_cmd.merge_request().target_region_id() == region_id ||
+                region_cmd.merge_request().target_region_id() == second_region_id) {
+              is_conflict = true;
+            }
+          } else if (region_cmd.region_cmd_type() == pb::coordinator::CMD_SPLIT) {
+            if (region_cmd.split_request().split_from_region_id() == region_id ||
+                region_cmd.split_request().split_from_region_id() == second_region_id ||
+                region_cmd.split_request().split_to_region_id() == region_id ||
+                region_cmd.split_request().split_to_region_id() == second_region_id) {
+              is_conflict = true;
+            }
+          }
+
+          if (is_conflict) {
+            std::string s = fmt::format("ValidateTaskListConflict task_list conflict, region_id = {}", region_id);
+            DINGO_LOG(ERROR) << s;
+            return butil::Status(pb::error::Errno::ETASK_LIST_CONFLICT, s);
           }
         }
       }
@@ -2960,20 +2975,36 @@ butil::Status CoordinatorControl::ValidateTaskListConflict(int64_t region_id, in
 
   for (const auto& store_operation : store_operation_map_temp) {
     for (auto region_cmd_id : store_operation.second.region_cmd_ids()) {
-      pb::coordinator_internal::RegionCmdInternal region_cmd;
-      auto ret = region_cmd_map_.Get(region_cmd_id, region_cmd);
+      pb::coordinator_internal::RegionCmdInternal region_cmd_internal;
+      auto ret = region_cmd_map_.Get(region_cmd_id, region_cmd_internal);
       if (ret < 0) {
         continue;
       }
+      const auto& region_cmd = region_cmd_internal.region_cmd();
 
-      if (region_cmd.region_cmd().region_id() == region_id || region_cmd.region_cmd().region_id() == second_region_id) {
-        DINGO_LOG(ERROR) << "ValidateTaskListConflict store_operation "
-                            "conflict, region_id = "
-                         << region_id;
-        return butil::Status(pb::error::Errno::ESTORE_OPERATION_CONFLICT,
-                             "ValidateTaskListConflict store_operation "
-                             "conflict, region_id = " +
-                                 std::to_string(region_id));
+      bool is_conflict = false;
+      if (region_cmd.region_id() == region_id || region_cmd.region_id() == second_region_id) {
+        is_conflict = true;
+      } else if (region_cmd.region_cmd_type() == pb::coordinator::CMD_MERGE) {
+        if (region_cmd.merge_request().source_region_id() == region_id ||
+            region_cmd.merge_request().source_region_id() == second_region_id ||
+            region_cmd.merge_request().target_region_id() == region_id ||
+            region_cmd.merge_request().target_region_id() == second_region_id) {
+          is_conflict = true;
+        }
+      } else if (region_cmd.region_cmd_type() == pb::coordinator::CMD_SPLIT) {
+        if (region_cmd.split_request().split_from_region_id() == region_id ||
+            region_cmd.split_request().split_from_region_id() == second_region_id ||
+            region_cmd.split_request().split_to_region_id() == region_id ||
+            region_cmd.split_request().split_to_region_id() == second_region_id) {
+          is_conflict = true;
+        }
+      }
+
+      if (is_conflict) {
+        std::string s = fmt::format("ValidateTaskListConflict store_operation conflict, region_id = {}", region_id);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::ESTORE_OPERATION_CONFLICT, s);
       }
     }
   }
