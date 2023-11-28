@@ -816,6 +816,8 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
   } else if (FLAGS_vector_index_type == "flat") {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+  } else if (FLAGS_vector_index_type == "bruteforce") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE);
   } else if (FLAGS_vector_index_type == "ivf_flat") {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
   } else if (FLAGS_vector_index_type == "ivf_pq") {
@@ -870,6 +872,10 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
     flat_index_parameter->set_dimension(FLAGS_dimension);
     flat_index_parameter->set_metric_type(metric_type);
+  } else if (FLAGS_vector_index_type == "bruteforce") {
+    auto* bruteforce_index_parameter = vector_index_parameter->mutable_bruteforce_parameter();
+    bruteforce_index_parameter->set_dimension(FLAGS_dimension);
+    bruteforce_index_parameter->set_metric_type(metric_type);
   } else if (FLAGS_vector_index_type == "ivf_flat") {
     auto* ivf_flat_index_parameter = vector_index_parameter->mutable_ivf_flat_parameter();
     ivf_flat_index_parameter->set_dimension(FLAGS_dimension);

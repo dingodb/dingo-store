@@ -56,6 +56,10 @@ class VectorIndexFactory {
 
   static std::shared_ptr<VectorIndex> NewIvfPq(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
                                                const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+
+  static std::shared_ptr<VectorIndex> NewBruteForce(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
+                                                    const pb::common::RegionEpoch& epoch,
+                                                    const pb::common::Range& range);
 };
 
 }  // namespace dingodb

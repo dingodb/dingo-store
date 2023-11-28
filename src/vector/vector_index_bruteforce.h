@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_VECTOR_INDEX_IVF_FLAT_H_  // NOLINT
-#define DINGODB_VECTOR_INDEX_IVF_FLAT_H_
+#ifndef DINGODB_VECTOR_INDEX_BRUTEFORCE_H_  // NOLINT
+#define DINGODB_VECTOR_INDEX_BRUTEFORCE_H_
 
 #include <array>
 #include <atomic>
@@ -27,13 +27,6 @@
 #include "bthread/mutex.h"
 #include "butil/status.h"
 #include "common/logging.h"
-#include "faiss/Index.h"
-#include "faiss/IndexFlat.h"
-#include "faiss/IndexIDMap.h"
-#include "faiss/IndexIVFFlat.h"
-#include "faiss/MetricType.h"
-#include "faiss/impl/IDSelector.h"
-#include "faiss/utils/distances.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -41,50 +34,27 @@
 
 namespace dingodb {
 
-// Filter vector id
-class IvfFlatIDSelector : public faiss::IDSelector {
+// VectorIndexBruteforce is a simple vector index implementation
+// which is used for testing and benchmarking.
+// In this vector index, we do not implement any index structure, any vector index add, del, search or range search
+// All of them are done by brute force, which is processed by VectorReader.
+class VectorIndexBruteforce : public VectorIndex {
  public:
-  explicit IvfFlatIDSelector(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}
-  ~IvfFlatIDSelector() override = default;
-  bool is_member(faiss::idx_t id) const override {  // NOLINT
-    if (filters_.empty()) {
-      return true;
-    }
-    for (const auto& filter : filters_) {
-      if (!filter->Check(id)) {
-        return false;
-      }
-    }
+  explicit VectorIndexBruteforce(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& ranges);
 
-    return true;
-  }
+  ~VectorIndexBruteforce() override;
 
- private:
-  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
-};
-
-class VectorIndexIvfFlat : public VectorIndex {
- public:
-  explicit VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                              const pb::common::RegionEpoch& epoch, const pb::common::Range& ranges);
-
-  ~VectorIndexIvfFlat() override;
-
-  VectorIndexIvfFlat(const VectorIndexIvfFlat& rhs) = delete;
-  VectorIndexIvfFlat& operator=(const VectorIndexIvfFlat& rhs) = delete;
-  VectorIndexIvfFlat(VectorIndexIvfFlat&& rhs) = delete;
-  VectorIndexIvfFlat& operator=(VectorIndexIvfFlat&& rhs) = delete;
+  VectorIndexBruteforce(const VectorIndexBruteforce& rhs) = delete;
+  VectorIndexBruteforce& operator=(const VectorIndexBruteforce& rhs) = delete;
+  VectorIndexBruteforce(VectorIndexBruteforce&& rhs) = delete;
+  VectorIndexBruteforce& operator=(VectorIndexBruteforce&& rhs) = delete;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
-  bool SupportSave() override;
 
-  // in FLAT index, add two vector with same id will cause data conflict
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
-  butil::Status AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
-
-  // not exist add. if exist update
   butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
 
   butil::Status Delete(const std::vector<int64_t>& delete_ids) override;
@@ -101,6 +71,7 @@ class VectorIndexIvfFlat : public VectorIndex {
 
   void LockWrite() override;
   void UnlockWrite() override;
+  bool SupportSave() override;
 
   int32_t GetDimension() override;
   pb::common::MetricType GetMetricType() override;
@@ -108,24 +79,16 @@ class VectorIndexIvfFlat : public VectorIndex {
   butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
+  butil::Status Train([[maybe_unused]] const std::vector<float>& train_datas) override { return butil::Status::OK(); }
+  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override {
+    return butil::Status::OK();
+  }
 
-  butil::Status Train(const std::vector<float>& train_datas) override;
-  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override;
-  bool NeedToRebuild() override;
-  bool NeedTrain() override { return true; }
-  bool IsTrained() override;
+  bool NeedToRebuild() override { return false; }
+
   bool NeedToSave(int64_t last_save_log_behind) override;
 
  private:
-  void Init();
-
-  bool DoIsTrained();
-
-  // train failed. reset
-  void Reset();
-
-  butil::Status AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_upsert);
-
   // Dimension of the elements
   faiss::idx_t dimension_;
 
@@ -133,24 +96,8 @@ class VectorIndexIvfFlat : public VectorIndex {
   pb::common::MetricType metric_type_;
 
   bthread_mutex_t mutex_;
-
-  // maybe 1 or vector_index_parameter.ivf_flat_parameter().ncentroids()
-  size_t nlist_;
-
-  // from  vector_index_parameter.ivf_flat_parameter().ncentroids()
-  size_t nlist_org_;
-
-  std::unique_ptr<faiss::Index> quantizer_;
-
-  std::unique_ptr<faiss::IndexIVFFlat> index_;
-
-  // normalize vector
-  bool normalize_;
-
-  // first  train data size
-  faiss::idx_t train_data_size_;
 };
 
 }  // namespace dingodb
 
-#endif  // DINGODB_VECTOR_INDEX_IVF_FLAT_H_  // NOLINT
+#endif  // DINGODB_VECTOR_INDEX_BRUTEFORCE_H_  // NOLINT

@@ -178,6 +178,7 @@ class VectorIndex {
   };
 
   virtual int32_t GetDimension() = 0;
+  virtual pb::common::MetricType GetMetricType() = 0;
   virtual butil::Status GetCount(int64_t& count);
   virtual butil::Status GetDeletedCount(int64_t& deleted_count);
   virtual butil::Status GetMemorySize(int64_t& memory_size);
@@ -374,6 +375,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   void DecSavingNum();
 
   int32_t GetDimension();
+  pb::common::MetricType GetMetricType();
   butil::Status GetCount(int64_t& count);
   butil::Status GetDeletedCount(int64_t& deleted_count);
   butil::Status GetMemorySize(int64_t& memory_size);

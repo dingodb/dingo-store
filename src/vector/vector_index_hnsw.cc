@@ -529,6 +529,10 @@ hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->
 
 int32_t VectorIndexHnsw::GetDimension() { return this->dimension_; }
 
+pb::common::MetricType VectorIndexHnsw::GetMetricType() {
+  return this->vector_index_parameter.hnsw_parameter().metric_type();
+}
+
 butil::Status VectorIndexHnsw::GetCount(int64_t& count) {
   // std::unique_lock<std::mutex> lock_table(this->hnsw_index_->label_lookup_lock);
   // count = this->hnsw_index_->label_lookup_.size();

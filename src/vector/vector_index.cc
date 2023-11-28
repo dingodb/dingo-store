@@ -383,6 +383,14 @@ int32_t VectorIndexWrapper::GetDimension() {
   return vector_index->GetDimension();
 }
 
+pb::common::MetricType VectorIndexWrapper::GetMetricType() {
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    return pb::common::MetricType::METRIC_TYPE_L2;
+  }
+  return vector_index->GetMetricType();
+}
+
 butil::Status VectorIndexWrapper::GetCount(int64_t& count) {
   auto vector_index = GetOwnVectorIndex();
   if (vector_index == nullptr) {

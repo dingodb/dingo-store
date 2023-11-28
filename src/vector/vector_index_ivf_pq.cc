@@ -264,6 +264,8 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
 
 int32_t VectorIndexIvfPq::GetDimension() { return this->dimension_; }
 
+pb::common::MetricType VectorIndexIvfPq::GetMetricType() { return this->metric_type_; }
+
 butil::Status VectorIndexIvfPq::GetCount(int64_t& count) {
   BAIDU_SCOPED_LOCK(mutex_);
   if (DoIsTrained()) {

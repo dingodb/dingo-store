@@ -61,6 +61,7 @@ DECLARE_bool(with_scalar_post_filter);
 DECLARE_int32(vector_ids_count);
 DECLARE_bool(key_is_hex);
 DECLARE_int64(ef_search);
+DECLARE_bool(bruteforce);
 
 namespace client {
 
@@ -450,6 +451,11 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
   if (FLAGS_ef_search > 0) {
     DINGO_LOG(INFO) << "ef_search=" << FLAGS_ef_search;
     request.mutable_parameter()->mutable_hnsw()->set_efsearch(FLAGS_ef_search);
+  }
+
+  if (FLAGS_bruteforce) {
+    DINGO_LOG(INFO) << "bruteforce=" << FLAGS_bruteforce;
+    request.mutable_parameter()->set_use_brute_force(FLAGS_bruteforce);
   }
 
   if (FLAGS_print_vector_search_delay) {

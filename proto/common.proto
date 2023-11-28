@@ -325,6 +325,7 @@ enum VectorIndexType {
   VECTOR_INDEX_TYPE_IVF_PQ = 3;
   VECTOR_INDEX_TYPE_HNSW = 4;
   VECTOR_INDEX_TYPE_DISKANN = 5;
+  VECTOR_INDEX_TYPE_BRUTEFORCE = 6;
 }
 
 enum MetricType {
@@ -383,6 +384,14 @@ message ScalarValue {
   ScalarFieldType field_type = 1;
   // scalar field, only one element in most cases
   repeated ScalarField fields = 2;
+}
+
+message CreateBruteForceParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
 }
 
 message CreateFlatParam {
@@ -480,6 +489,7 @@ message VectorIndexParameter {
     CreateIvfPqParam ivf_pq_parameter = 4;
     CreateHnswParam hnsw_parameter = 5;
     CreateDiskAnnParam diskann_parameter = 6;
+    CreateBruteForceParam bruteforce_parameter = 7;
   }
 }
 
@@ -615,6 +625,9 @@ message VectorSearchParameter {
 
   // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
   repeated int64 vector_ids = 24;
+
+  // use brute-force search
+  bool use_brute_force = 25;
 }
 
 enum ScalarIndexType {

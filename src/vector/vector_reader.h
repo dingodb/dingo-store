@@ -135,11 +135,25 @@ class VectorReader {
       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
       const std::vector<int64_t>& vector_ids);
 
-  static butil::Status SearchAndRangeSearchWrapper(
+  butil::Status SearchAndRangeSearchWrapper(
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, uint32_t topk,  // NOLINT
       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
+
+  butil::Status BruteForceSearch(VectorIndexWrapperPtr vector_index,
+                                 std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                 const pb::common::Range& region_range,
+                                 std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool reconstruct,
+                                 const pb::common::VectorSearchParameter& parameter,
+                                 std::vector<pb::index::VectorWithDistanceResult>& results);
+
+  butil::Status BruteForceRangeSearch(VectorIndexWrapperPtr vector_index,
+                                      std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                                      const pb::common::Range& region_range,
+                                      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+                                      bool reconstruct, const pb::common::VectorSearchParameter& parameter,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results);
 
   RawEngine::ReaderPtr reader_;
 };
