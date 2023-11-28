@@ -46,6 +46,7 @@ public class ColumnDefinition implements Column {
     @Setter
     private int state = 1;
 
+    @Setter
     private String comment;
 
     @Deprecated
