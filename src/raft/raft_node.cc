@@ -50,7 +50,8 @@ RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::P
       node_(new braft::Node(raft_group_name, peer_id)),
       fsm_(fsm),
       log_storage_(log_storage),
-      raw_engine_(raw_engine) {
+      raw_engine_(raw_engine),
+      disable_save_snapshot_(false) {
   DINGO_LOG(DEBUG) << fmt::format("[new.RaftNode][id({})]", node_id);
 }
 

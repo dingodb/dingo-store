@@ -40,7 +40,6 @@ TEST_F(StoreRegionMetaTest, AddRegion) {
   definition.set_id(1001);
   store_region_mata->AddRegion(dingodb::store::Region::New(definition));
   auto region = store_region_mata->GetRegion(1001);
-  if (region != nullptr) {
-    std::cout << "region id: " << region->Id() << std::endl;
-  }
+  EXPECT_NE(nullptr, region);
+  EXPECT_EQ(1001, region->Id());
 }
