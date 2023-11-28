@@ -86,9 +86,13 @@ Status RawKV::Delete(const std::string& key) { return impl_->Delete(key); }
 
 Status RawKV::BatchDelete(const std::vector<std::string>& keys) { return impl_->BatchDelete(keys); }
 
-Status RawKV::DeleteRange(const std::string& start, const std::string& end, int64_t& delete_count, bool with_start,
-                          bool with_end) {
-  return impl_->DeleteRange(start, end, with_start, with_end, delete_count);
+Status RawKV::DeleteRangeNonContinuous(const std::string& start_key, const std::string& end_key,
+                                       int64_t& delete_count) {
+  return impl_->DeleteRange(start_key, end_key, false, delete_count);
+}
+
+Status RawKV::DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& delete_count) {
+  return impl_->DeleteRange(start_key, end_key, true, delete_count);
 }
 
 Status RawKV::CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,
