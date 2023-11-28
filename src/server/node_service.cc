@@ -28,7 +28,6 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
-#include "coordinator/coordinator_closure.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"

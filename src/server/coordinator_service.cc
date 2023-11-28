@@ -33,7 +33,6 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
-#include "coordinator/coordinator_closure.h"
 #include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
@@ -128,7 +127,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
   }
 }
 
-void DoCreateExecutor(google::protobuf::RpcController *controller,
+void DoCreateExecutor(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::CreateExecutorRequest *request,
                       pb::coordinator::CreateExecutorResponse *response, google::protobuf::Closure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -155,13 +154,7 @@ void DoCreateExecutor(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CreateExecutorRequest, pb::coordinator::CreateExecutorResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CreateExecutorRequest, pb::coordinator::CreateExecutorResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -169,12 +162,11 @@ void DoCreateExecutor(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CreateExecutor Write failed:  executor_id=" << request->executor().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoDeleteExecutor(google::protobuf::RpcController *controller,
+void DoDeleteExecutor(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::DeleteExecutorRequest *request,
                       pb::coordinator::DeleteExecutorResponse *response, google::protobuf::Closure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -204,13 +196,7 @@ void DoDeleteExecutor(google::protobuf::RpcController *controller,
   }
   DINGO_LOG(INFO) << "DeleteExecutor success:  executor_id=" << request->executor().id();
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::DeleteExecutorRequest, pb::coordinator::DeleteExecutorResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::DeleteExecutorRequest, pb::coordinator::DeleteExecutorResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -218,12 +204,11 @@ void DoDeleteExecutor(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DeleteExecutor Write failed:  executor_id=" << request->executor().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoCreateExecutorUser(google::protobuf::RpcController *controller,
+void DoCreateExecutorUser(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::CreateExecutorUserRequest *request,
                           pb::coordinator::CreateExecutorUserResponse *response, google::protobuf::Closure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -257,14 +242,7 @@ void DoCreateExecutorUser(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CreateExecutorUserRequest,
-                     pb::coordinator::CreateExecutorUserResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CreateExecutorUserRequest, pb::coordinator::CreateExecutorUserResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -272,12 +250,11 @@ void DoCreateExecutorUser(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CreateExecutorUser Write failed:  executor_id=" << request->executor_user().user();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoUpdateExecutorUser(google::protobuf::RpcController *controller,
+void DoUpdateExecutorUser(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::UpdateExecutorUserRequest *request,
                           pb::coordinator::UpdateExecutorUserResponse *response, google::protobuf::Closure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -309,14 +286,7 @@ void DoUpdateExecutorUser(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::UpdateExecutorUserRequest,
-                     pb::coordinator::UpdateExecutorUserResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::UpdateExecutorUserRequest, pb::coordinator::UpdateExecutorUserResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -324,12 +294,11 @@ void DoUpdateExecutorUser(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "UpdateExecutorUser Write failed:  executor_id=" << request->executor_user().user();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoDeleteExecutorUser(google::protobuf::RpcController *controller,
+void DoDeleteExecutorUser(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::DeleteExecutorUserRequest *request,
                           pb::coordinator::DeleteExecutorUserResponse *response, google::protobuf::Closure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -360,14 +329,7 @@ void DoDeleteExecutorUser(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::DeleteExecutorUserRequest,
-                     pb::coordinator::DeleteExecutorUserResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::DeleteExecutorUserRequest, pb::coordinator::DeleteExecutorUserResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -375,7 +337,6 @@ void DoDeleteExecutorUser(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DeleteExecutorUser Write failed:  executor_id=" << request->executor_user().user();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
@@ -406,7 +367,7 @@ void DoGetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
   *(response->mutable_executor_user_map()) = executor_user_map;
 }
 
-void DoCreateStore(google::protobuf::RpcController *controller, const pb::coordinator::CreateStoreRequest *request,
+void DoCreateStore(google::protobuf::RpcController * /*controller*/, const pb::coordinator::CreateStoreRequest *request,
                    pb::coordinator::CreateStoreResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -437,13 +398,7 @@ void DoCreateStore(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CreateStoreRequest, pb::coordinator::CreateStoreResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -451,12 +406,11 @@ void DoCreateStore(google::protobuf::RpcController *controller, const pb::coordi
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CreateStore Write failed:  store_id=" << store_id << ", keyring=" << keyring;
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoDeleteStore(google::protobuf::RpcController *controller, const pb::coordinator::DeleteStoreRequest *request,
+void DoDeleteStore(google::protobuf::RpcController * /*controller*/, const pb::coordinator::DeleteStoreRequest *request,
                    pb::coordinator::DeleteStoreResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -478,7 +432,7 @@ void DoDeleteStore(google::protobuf::RpcController *controller, const pb::coordi
 
   // delete store
   int64_t const store_id = request->store_id();
-  std::string const keyring = request->keyring();
+  std::string const &keyring = request->keyring();
   auto ret = coordinator_control->DeleteStore(request->cluster_id(), store_id, keyring, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DeleteStore failed:  store_id=" << store_id << ", keyring=" << keyring;
@@ -492,13 +446,7 @@ void DoDeleteStore(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::DeleteStoreRequest, pb::coordinator::DeleteStoreResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::DeleteStoreRequest, pb::coordinator::DeleteStoreResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -506,12 +454,11 @@ void DoDeleteStore(google::protobuf::RpcController *controller, const pb::coordi
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DeleteStore Write failed:  store_id=" << store_id << ", keyring=" << keyring;
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoUpdateStore(google::protobuf::RpcController *controller, const pb::coordinator::UpdateStoreRequest *request,
+void DoUpdateStore(google::protobuf::RpcController * /*controller*/, const pb::coordinator::UpdateStoreRequest *request,
                    pb::coordinator::UpdateStoreResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -539,13 +486,7 @@ void DoUpdateStore(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::UpdateStoreRequest, pb::coordinator::UpdateStoreResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::UpdateStoreRequest, pb::coordinator::UpdateStoreResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -554,12 +495,11 @@ void DoUpdateStore(google::protobuf::RpcController *controller, const pb::coordi
     DINGO_LOG(ERROR) << "UpdateStore Write failed:  store_id=" << request->store_id()
                      << ", keyring=" << request->keyring();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoExecutorHeartbeat(google::protobuf::RpcController *controller,
+void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::ExecutorHeartbeatRequest *request,
                          pb::coordinator::ExecutorHeartbeatResponse *response, google::protobuf::Closure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -605,14 +545,7 @@ void DoExecutorHeartbeat(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>
-      *meta_closure =
-          new CoordinatorClosure<pb::coordinator::ExecutorHeartbeatRequest, pb::coordinator::ExecutorHeartbeatResponse>(
-              request, response, done_guard.release(), new_executormap_epoch, coordinator_control);
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -620,21 +553,23 @@ void DoExecutorHeartbeat(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "ExecutorHeartbeat Write failed:  executor_id=" << request->executor().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
+
+  auto *new_executormap = response->mutable_executormap();
+  coordinator_control->GetExecutorMap(*new_executormap);
+  response->set_executormap_epoch(new_executormap_epoch);
 }
 
-void DoStoreHeartbeat(google::protobuf::RpcController *controller,
+void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::StoreHeartbeatRequest *request,
                       pb::coordinator::StoreHeartbeatResponse *response, google::protobuf::Closure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Store Heartbeat Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
-
   if (!is_leader) {
+    DINGO_LOG(WARNING) << "Receive Store Heartbeat Request, IsLeader:" << is_leader
+                       << ", Request:" << request->DebugString();
     return coordinator_control->RedirectResponse(response);
   }
 
@@ -657,15 +592,6 @@ void DoStoreHeartbeat(google::protobuf::RpcController *controller,
 
   // update store map
   int const new_storemap_epoch = coordinator_control->UpdateStoreMap(request->store(), meta_increment);
-
-  // update region map
-  // std::vector<pb::common::Region> regions;
-  // for (const auto &x : request->regions()) {
-  //   regions.push_back(x);
-  // }
-
-  // call UpdateRegionMap
-  // int64_t const new_regionmap_epoch = this->coordinator_control_->UpdateRegionMap(regions, meta_increment);
 
   // update store metrics
   if (request->has_store_metrics()) {
@@ -690,13 +616,7 @@ void DoStoreHeartbeat(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::StoreHeartbeatRequest, pb::coordinator::StoreHeartbeatResponse>(
-          request, response, done_guard.release(), /*new_regionmap_epoch,*/ new_storemap_epoch, coordinator_control);
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -704,9 +624,13 @@ void DoStoreHeartbeat(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "StoreHeartbeat Write failed:  store_id=" << request->store().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
+
+  auto *new_storemap = response->mutable_storemap();
+  coordinator_control->GetStoreMap(*new_storemap);
+
+  response->set_storemap_epoch(new_storemap_epoch);
 }
 
 void DoGetStoreMap(google::protobuf::RpcController * /*controller*/, const pb::coordinator::GetStoreMapRequest *request,
@@ -977,7 +901,7 @@ void DoGetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
 }
 
 // Region services
-void DoCreateRegionId(google::protobuf::RpcController *controller,
+void DoCreateRegionId(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::CreateRegionIdRequest *request,
                       pb::coordinator::CreateRegionIdResponse *response, google::protobuf::Closure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -1018,12 +942,7 @@ void DoCreateRegionId(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CreateRegionIdRequest, pb::coordinator::CreateRegionIdResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CreateRegionIdRequest, pb::coordinator::CreateRegionIdResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> ctx = std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1031,7 +950,6 @@ void DoCreateRegionId(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CreateRegionId Write failed:  count=" << request->count();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 
@@ -1062,7 +980,8 @@ void DoQueryRegion(google::protobuf::RpcController * /*controller*/, const pb::c
   }
 }
 
-void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coordinator::CreateRegionRequest *request,
+void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
+                    const pb::coordinator::CreateRegionRequest *request,
                     pb::coordinator::CreateRegionResponse *response, google::protobuf::Closure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -1075,10 +994,10 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  std::string region_name = request->region_name();
-  std::string resource_tag = request->resource_tag();
+  const std::string &region_name = request->region_name();
+  const std::string &resource_tag = request->resource_tag();
   int64_t replica_num = request->replica_num();
-  pb::common::Range range = request->range();
+  const pb::common::Range &range = request->range();
   pb::common::RawEngine raw_engine = request->raw_engine();
   int64_t schema_id = request->schema_id();
   int64_t table_id = request->table_id();
@@ -1135,13 +1054,7 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CreateRegionRequest, pb::coordinator::CreateRegionResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CreateRegionRequest, pb::coordinator::CreateRegionResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1149,12 +1062,11 @@ void DoCreateRegion(google::protobuf::RpcController *controller, const pb::coord
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CreateRegion Write failed:  region_name=" << request->region_name();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoDropRegion(google::protobuf::RpcController *controller, const pb::coordinator::DropRegionRequest *request,
+void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::DropRegionRequest *request,
                   pb::coordinator::DropRegionResponse *response, google::protobuf::Closure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -1183,13 +1095,7 @@ void DoDropRegion(google::protobuf::RpcController *controller, const pb::coordin
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::DropRegionRequest, pb::coordinator::DropRegionResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::DropRegionRequest, pb::coordinator::DropRegionResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1197,12 +1103,11 @@ void DoDropRegion(google::protobuf::RpcController *controller, const pb::coordin
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DropRegion Write failed:  region_id=" << request->region_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoDropRegionPermanently(google::protobuf::RpcController *controller,
+void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
                              const pb::coordinator::DropRegionPermanentlyRequest *request,
                              pb::coordinator::DropRegionPermanentlyResponse *response, google::protobuf::Closure *done,
                              std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -1232,14 +1137,7 @@ void DoDropRegionPermanently(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::DropRegionPermanentlyRequest, pb::coordinator::DropRegionPermanentlyResponse>
-      *meta_closure = new CoordinatorClosure<pb::coordinator::DropRegionPermanentlyRequest,
-                                             pb::coordinator::DropRegionPermanentlyResponse>(request, response,
-                                                                                             done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1247,12 +1145,11 @@ void DoDropRegionPermanently(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DropRegionPermanently Write failed:  region_id=" << request->region_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoSplitRegion(google::protobuf::RpcController *controller, const pb::coordinator::SplitRegionRequest *request,
+void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::SplitRegionRequest *request,
                    pb::coordinator::SplitRegionResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -1271,7 +1168,7 @@ void DoSplitRegion(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  auto split_request = request->split_request();
+  const auto &split_request = request->split_request();
   bool store_create_region = request->split_request().store_create_region();
 
   auto ret = coordinator_control->SplitRegionWithTaskList(
@@ -1288,13 +1185,7 @@ void DoSplitRegion(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::SplitRegionRequest, pb::coordinator::SplitRegionResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::SplitRegionRequest, pb::coordinator::SplitRegionResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1303,12 +1194,11 @@ void DoSplitRegion(google::protobuf::RpcController *controller, const pb::coordi
     DINGO_LOG(ERROR) << "SplitRegion Write failed:  split_from_region_id="
                      << request->split_request().split_from_region_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoMergeRegion(google::protobuf::RpcController *controller, const pb::coordinator::MergeRegionRequest *request,
+void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::MergeRegionRequest *request,
                    pb::coordinator::MergeRegionResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -1327,7 +1217,7 @@ void DoMergeRegion(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  auto merge_request = request->merge_request();
+  const auto &merge_request = request->merge_request();
 
   auto ret = coordinator_control->MergeRegionWithTaskList(merge_request.source_region_id(),
                                                           merge_request.target_region_id(), meta_increment);
@@ -1342,13 +1232,7 @@ void DoMergeRegion(google::protobuf::RpcController *controller, const pb::coordi
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::MergeRegionRequest, pb::coordinator::MergeRegionResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::MergeRegionRequest, pb::coordinator::MergeRegionResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1357,12 +1241,11 @@ void DoMergeRegion(google::protobuf::RpcController *controller, const pb::coordi
     DINGO_LOG(ERROR) << "MergeRegion Write failed:  merge_from_region_id="
                      << request->merge_request().source_region_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoChangePeerRegion(google::protobuf::RpcController *controller,
+void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
                         const pb::coordinator::ChangePeerRegionRequest *request,
                         pb::coordinator::ChangePeerRegionResponse *response, google::protobuf::Closure *done,
                         std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -1382,7 +1265,7 @@ void DoChangePeerRegion(google::protobuf::RpcController *controller,
     return;
   }
 
-  auto change_peer_request = request->change_peer_request();
+  const auto &change_peer_request = request->change_peer_request();
   if (!change_peer_request.has_region_definition()) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
     return;
@@ -1412,14 +1295,7 @@ void DoChangePeerRegion(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::ChangePeerRegionRequest, pb::coordinator::ChangePeerRegionResponse>
-      *meta_closure =
-          new CoordinatorClosure<pb::coordinator::ChangePeerRegionRequest, pb::coordinator::ChangePeerRegionResponse>(
-              request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1428,12 +1304,11 @@ void DoChangePeerRegion(google::protobuf::RpcController *controller,
     DINGO_LOG(ERROR) << "ChangePeerRegion Write failed:  region_id="
                      << request->change_peer_request().region_definition().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoTransferLeaderRegion(google::protobuf::RpcController *controller,
+void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
                             const pb::coordinator::TransferLeaderRegionRequest *request,
                             pb::coordinator::TransferLeaderRegionResponse *response, google::protobuf::Closure *done,
                             std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -1469,14 +1344,7 @@ void DoTransferLeaderRegion(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::TransferLeaderRegionRequest, pb::coordinator::TransferLeaderRegionResponse>
-      *meta_closure = new CoordinatorClosure<pb::coordinator::TransferLeaderRegionRequest,
-                                             pb::coordinator::TransferLeaderRegionResponse>(request, response,
-                                                                                            done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1484,7 +1352,6 @@ void DoTransferLeaderRegion(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion Write failed:  region_id=" << request->region_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
@@ -1551,7 +1418,7 @@ void DoGetStoreOperation(google::protobuf::RpcController * /*controller*/,
   coordinator_control->GetStoreOperation(request->store_id(), *store_operation);
 }
 
-void DoCleanStoreOperation(google::protobuf::RpcController *controller,
+void DoCleanStoreOperation(google::protobuf::RpcController * /*controller*/,
                            const pb::coordinator::CleanStoreOperationRequest *request,
                            pb::coordinator::CleanStoreOperationResponse *response, google::protobuf::Closure *done,
                            std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -1581,14 +1448,7 @@ void DoCleanStoreOperation(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CleanStoreOperationRequest,
-                     pb::coordinator::CleanStoreOperationResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CleanStoreOperationRequest, pb::coordinator::CleanStoreOperationResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1596,12 +1456,11 @@ void DoCleanStoreOperation(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CleanStoreOperation Write failed:  store_id=" << request->store_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoAddStoreOperation(google::protobuf::RpcController *controller,
+void DoAddStoreOperation(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::AddStoreOperationRequest *request,
                          pb::coordinator::AddStoreOperationResponse *response, google::protobuf::Closure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -1615,7 +1474,7 @@ void DoAddStoreOperation(google::protobuf::RpcController *controller,
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  auto store_operation = request->store_operation();
+  const auto &store_operation = request->store_operation();
 
   auto ret = coordinator_control->AddStoreOperation(store_operation, true, meta_increment);
   if (!ret.ok()) {
@@ -1630,14 +1489,7 @@ void DoAddStoreOperation(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::AddStoreOperationRequest, pb::coordinator::AddStoreOperationResponse>
-      *meta_closure =
-          new CoordinatorClosure<pb::coordinator::AddStoreOperationRequest, pb::coordinator::AddStoreOperationResponse>(
-              request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1645,12 +1497,11 @@ void DoAddStoreOperation(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "AddStoreOperation Write failed:  store_id=" << request->store_operation().id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
 
-void DoRemoveStoreOperation(google::protobuf::RpcController *controller,
+void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
                             const pb::coordinator::RemoveStoreOperationRequest *request,
                             pb::coordinator::RemoveStoreOperationResponse *response, google::protobuf::Closure *done,
                             std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -1681,14 +1532,7 @@ void DoRemoveStoreOperation(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::RemoveStoreOperationRequest, pb::coordinator::RemoveStoreOperationResponse>
-      *meta_closure = new CoordinatorClosure<pb::coordinator::RemoveStoreOperationRequest,
-                                             pb::coordinator::RemoveStoreOperationResponse>(request, response,
-                                                                                            done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1697,7 +1541,6 @@ void DoRemoveStoreOperation(google::protobuf::RpcController *controller,
     DINGO_LOG(ERROR) << "RemoveStoreOperation Write failed:  store_id=" << request->store_id()
                      << ", region_cmd_id=" << request->region_cmd_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
@@ -1765,15 +1608,15 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
   }
 }
 
-void DoCleanTaskList(google::protobuf::RpcController *controller, const pb::coordinator::CleanTaskListRequest *request,
+void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
+                     const pb::coordinator::CleanTaskListRequest *request,
                      pb::coordinator::CleanTaskListResponse *response, google::protobuf::Closure *done,
                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Clean TaskList Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
-
   if (!is_leader) {
+    DINGO_LOG(WARNING) << "Receive Clean TaskList Request, IsLeader:" << is_leader
+                       << ", Request:" << request->DebugString();
     return coordinator_control->RedirectResponse(response);
   }
 
@@ -1794,13 +1637,7 @@ void DoCleanTaskList(google::protobuf::RpcController *controller, const pb::coor
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::CleanTaskListRequest, pb::coordinator::CleanTaskListResponse> *meta_closure =
-      new CoordinatorClosure<pb::coordinator::CleanTaskListRequest, pb::coordinator::CleanTaskListResponse>(
-          request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -1808,7 +1645,6 @@ void DoCleanTaskList(google::protobuf::RpcController *controller, const pb::coor
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "CleanTaskList Write failed:  task_list_id=" << request->task_list_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
@@ -2069,7 +1905,7 @@ void DoGetRangeRegionMap(google::protobuf::RpcController * /*controller*/,
   }
 }
 
-void DoUpdateGCSafePoint(google::protobuf::RpcController *controller,
+void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::UpdateGCSafePointRequest *request,
                          pb::coordinator::UpdateGCSafePointResponse *response, google::protobuf::Closure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
@@ -2099,15 +1935,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController *controller,
     return;
   }
 
-  // prepare for raft process
-  CoordinatorClosure<pb::coordinator::UpdateGCSafePointRequest, pb::coordinator::UpdateGCSafePointResponse>
-      *meta_closure =
-          new CoordinatorClosure<pb::coordinator::UpdateGCSafePointRequest, pb::coordinator::UpdateGCSafePointResponse>(
-              request, response, done_guard.release());
-
-  std::shared_ptr<Context> const ctx =
-      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), meta_closure);
-
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
 
   // this is a async operation will be block by closure
@@ -2115,7 +1943,6 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController *controller,
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "UpdateGCSafePoint Write failed:  gc_safe_point=" << request->safe_point();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    brpc::ClosureGuard done_guard(meta_closure);
     return;
   }
 }
