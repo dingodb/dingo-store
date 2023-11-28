@@ -137,8 +137,7 @@ class ChangeRegionTask : public TaskRunnable {
   static butil::Status ValidateChangeRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
                                             const pb::common::RegionDefinition& region_definition);
 
-  static butil::Status ChangeRegion(std::shared_ptr<Context> ctx,
-                                    const pb::common::RegionDefinition& region_definition);
+  static butil::Status ChangeRegion(std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command);
 
   std::shared_ptr<Context> ctx_;
   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd_;

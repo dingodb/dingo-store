@@ -291,6 +291,9 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   auto parent_region_id = split_request.split_from_region_id();
   auto child_region_id = split_request.split_to_region_id();
 
+  if (job_id == 0) {
+    return butil::Status(pb::error::EJOB_ID_EMPTY, "Job id is empty.");
+  }
   auto parent_region = store_region_meta->GetRegion(parent_region_id);
   if (parent_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
@@ -439,12 +442,15 @@ butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::Reg
   if (command.region_id() != merge_request.source_region_id()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param source_region_id must equal RegionCmd.region_id");
   }
+  if (command.job_id() == 0) {
+    return butil::Status(pb::error::EJOB_ID_EMPTY, "Job id is empty.");
+  }
 
   int64_t min_applied_log_id = 0;
   auto status = ValidateMergeRegion(store_region_meta, merge_request, min_applied_log_id);
   if (!status.ok()) {
-    DINGO_LOG(INFO) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}", command.id(),
-                                   merge_request.source_region_id(), merge_request.target_region_id(),
+    DINGO_LOG(INFO) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}",
+                                   command.job_id(), merge_request.source_region_id(), merge_request.target_region_id(),
                                    status.error_code(), status.error_str());
   }
 
@@ -638,7 +644,9 @@ butil::Status MergeRegionTask::MergeRegion() {
   assert(store_region_meta != nullptr);
 
   // Todo: forbid truncate raft log.
-
+  if (region_cmd_->job_id() == 0) {
+    return butil::Status(pb::error::EJOB_ID_EMPTY, "Job id is empty.");
+  }
   auto source_region = store_region_meta->GetRegion(merge_request.source_region_id());
   if (source_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND,
@@ -703,6 +711,10 @@ void MergeRegionTask::Run() {
 butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
+  if (command.job_id() == 0) {
+    return butil::Status(pb::error::EJOB_ID_EMPTY, "Job id is empty.");
+  }
+
   return ValidateChangeRegion(store_meta_manager, command.change_peer_request().region_definition());
 }
 
@@ -748,10 +760,15 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
 }
 
 butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
-                                             const pb::common::RegionDefinition& region_definition) {
+                                             std::shared_ptr<pb::coordinator::RegionCmd> command) {
+  const auto& region_definition = command->change_peer_request().region_definition();
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] change region, region definition: {}",
                                  region_definition.id(), region_definition.ShortDebugString());
+
+  if (command->job_id() == 0) {
+    return butil::Status(pb::error::EJOB_ID_EMPTY, "Job id is empty.");
+  }
 
   // Valiate region
   auto status = ValidateChangeRegion(store_meta_manager, region_definition);
@@ -778,7 +795,7 @@ butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
 }
 
 void ChangeRegionTask::Run() {
-  auto status = ChangeRegion(ctx_, region_cmd_->change_peer_request().region_definition());
+  auto status = ChangeRegion(ctx_, region_cmd_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] Change region failed, error: {}",
                                     region_cmd_->change_peer_request().region_definition().id(), status.error_str());
