@@ -1182,7 +1182,19 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           continue;
         }
 
+        if (region.region().definition().epoch().version() < old_region.definition().epoch().version()) {
+          DINGO_LOG(ERROR) << "ApplyMetaIncrement region UPDATE, [id=" << region.id()
+                           << "] failed, new epoch.version < old epoch.version";
+          continue;
+        }
+
         if (region.region().definition().range().start_key() != old_region.definition().range().start_key()) {
+          if (region.region().definition().epoch().version() == old_region.definition().epoch().version()) {
+            DINGO_LOG(ERROR) << "ApplyMetaIncrement region UPDATE, [id=" << region.id()
+                             << "] failed, new start_key != old start_key, but epoch.version is same";
+            continue;
+          }
+
           // update range_region_map_
           // range_region_map_.Erase(old_region.definition().range().start_key());
           bool need_delete = true;
@@ -1209,7 +1221,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         const auto& new_region_range = region.region().definition().range();
 
         if (new_region_range.start_key() < new_region_range.end_key()) {
-          /* range_region_map_.Put(new_region_range.start_key(), region.region().id()); */
           region_start_key_to_write.push_back(new_region_range.start_key());
           region_start_key_internal_to_write.push_back(region.region());
           DINGO_LOG(INFO) << "update range_region_map_ success, region_id=[" << region.region().id() << "], start_key=["
@@ -1311,7 +1322,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       DINGO_LOG(INFO) << "5.1 deleted_regions_size=" << meta_increment.deleted_regions_size();
     }
 
-    // BAIDU_SCOPED_LOCK(region_map_mutex_);
     for (int i = 0; i < meta_increment.deleted_regions_size(); i++) {
       const auto& region = meta_increment.deleted_regions(i);
       if (region.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
