@@ -42,17 +42,8 @@ StoreRpcController::StoreRpcController(const ClientStub& stub, Rpc& rpc, std::sh
 
 StoreRpcController::~StoreRpcController() = default;
 
-// TODO: refact
-Status StoreRpcController::Call(google::protobuf::Closure* done) {
-  CHECK(region_.get() != nullptr) << "region should not nullptr, please check";
-
-  do {
-    if (region_->IsStale()) {
-      std::string msg = fmt::format("region:{} is stale", region_->RegionId());
-      DINGO_LOG(INFO) << "store rpc fail, " << msg;
-      return Status::Incomplete(msg);
-    }
-
+Status StoreRpcController::PrepareRpc() {
+  if (NeedPickLeader()) {
     butil::EndPoint next_leader;
     if (!PickNextLeader(next_leader)) {
       std::string msg = fmt::format("rpc:{} no valid endpoint, region:{}", rpc_.Method(), region_->RegionId());
@@ -62,137 +53,8 @@ Status StoreRpcController::Call(google::protobuf::Closure* done) {
     CHECK(next_leader.ip != butil::IP_ANY);
     CHECK(next_leader.port != 0);
     rpc_.SetEndPoint(next_leader);
+  }
 
-    Status sent = PrepareAndSendRpc(done);
-
-    if (!sent.IsOK()) {
-      SetFailed(rpc_.GetEndPoint());
-      rpc_retry_times_++;
-      DINGO_LOG(WARNING) << "store rpc send fail, " << sent.ToString()
-                         << " endpoint:" << butil::endpoint2str(rpc_.GetEndPoint()).c_str()
-                         << " region:" << region_->RegionId();
-      continue;
-    }
-
-    CHECK(sent.IsOK());
-
-    const brpc::Controller* cntl = rpc_.Controller();
-    if (IsRpcFailed(cntl)) {
-      SetFailed(rpc_.GetEndPoint());
-      rpc_retry_times_++;
-
-      std::string msg = fmt::format(
-          "log_id:{} connect with store server fail. region:{} method:{} endpoint:{}, error_text:{}", cntl->log_id(),
-          region_->RegionId(), rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str(), cntl->ErrorText());
-
-      DINGO_LOG(WARNING) << msg;
-      continue;
-    } else {
-      auto error = GetResponseError(rpc_);
-      if (error.errcode() == pb::error::Errno::OK) {
-        return Status::OK();
-      } else if (error.errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
-        region_->MarkFollower(rpc_.GetEndPoint());
-        rpc_retry_times_++;
-
-        if (error.has_leader_location()) {
-          auto endpoint = Helper::LocationToEndPoint(error.leader_location());
-          if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
-            std::string msg =
-                fmt::format("log_id:{} region:{} method:{} endpoint:{} not leader, but leader hint:{} is invalid",
-                            cntl->log_id(), region_->RegionId(), rpc_.Method(),
-                            butil::endpoint2str(cntl->remote_side()).c_str(), butil::endpoint2str(endpoint).c_str());
-            DINGO_LOG(WARNING) << msg;
-          } else {
-            region_->MarkLeader(endpoint);
-
-            std::string msg =
-                fmt::format("log_id:{} region:{} method:{} endpoint:{} not leader, leader hint:{}", cntl->log_id(),
-                            region_->RegionId(), rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str(),
-                            butil::endpoint2str(endpoint).c_str());
-
-            DINGO_LOG(WARNING) << msg;
-          }
-        } else {
-          std::string msg =
-              fmt::format("log_id:{} region:{} method:{} endpoint:{}, not leader", cntl->log_id(), region_->RegionId(),
-                          rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str());
-
-          DINGO_LOG(WARNING) << msg;
-        }
-
-        continue;
-      } else if (error.errcode() == pb::error::EREGION_VERSION) {
-        stub_.GetMetaCache()->ClearRange(region_);
-
-        std::string error_msg =
-            fmt::format("error:{}, {}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
-
-        if (error.has_store_region_info()) {
-          auto region = ProcessStoreRegionInfo(error.store_region_info());
-          stub_.GetMetaCache()->MaybeAddRegion(region);
-
-          std::string msg = fmt::format("log_id:{} region:{} method:{} endpoint:{}, recive new version region:{}",
-                                        cntl->log_id(), region_->RegionId(), rpc_.Method(),
-                                        butil::endpoint2str(cntl->remote_side()).c_str(), region->ToString());
-
-          DINGO_LOG(WARNING) << msg << ", " << error_msg;
-        } else {
-          std::string msg =
-              fmt::format("log_id:{} region:{} method:{} endpoint:{}", cntl->log_id(), region_->RegionId(),
-                          rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str());
-
-          DINGO_LOG(WARNING) << msg << ", " << error_msg;
-        }
-
-        return Status::Incomplete(error_msg);
-      } else if (error.errcode() == pb::error::Errno::EREGION_NOT_FOUND) {
-        stub_.GetMetaCache()->ClearRange(region_);
-
-        std::string error_msg =
-            fmt::format("error:{}, {}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
-
-        std::string msg = fmt::format("log_id:{} region:{} method:{} endpoint:{}", cntl->log_id(), region_->RegionId(),
-                                      rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str());
-
-        DINGO_LOG(WARNING) << msg << ", " << error_msg;
-
-        return Status::Incomplete(error_msg);
-      } else if (error.errcode() == pb::error::Errno::EKEY_OUT_OF_RANGE) {
-        stub_.GetMetaCache()->ClearRange(region_);
-
-        std::string error_msg =
-            fmt::format("error:{}, {}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
-
-        std::string msg = fmt::format("log_id:{} region:{} method:{} endpoint:{}", cntl->log_id(), region_->RegionId(),
-                                      rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str());
-
-        DINGO_LOG(WARNING) << msg << ", " << error_msg;
-
-        return Status::Incomplete(error_msg);
-      } else {
-        // NOTE: other error we not clean cache, caller decide how to process
-        std::string error_msg =
-            fmt::format("error:{}, {}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
-
-        std::string msg = fmt::format("log_id:{} region:{} method:{} endpoint:{} ", cntl->log_id(), region_->RegionId(),
-                                      rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str());
-
-        DINGO_LOG(WARNING) << msg << ", " << error_msg;
-
-        return Status::Incomplete(error_msg);
-      }
-    }
-  } while (NeedRetry());
-
-  std::string msg = fmt::format("region:{} retry times:{} exceed RpcMaxRetry:{}", region_->RegionId(), rpc_retry_times_,
-                                kRpcMaxRetry);
-  DINGO_LOG(INFO) << "store rpc fail, " << msg;
-
-  return Status::Aborted(msg);
-}
-
-Status StoreRpcController::PrepareAndSendRpc(google::protobuf::Closure* done) {
   rpc_.RawMutableResponse()->Clear();
 
   rpc_.MutableController()->Reset();
@@ -200,7 +62,133 @@ Status StoreRpcController::PrepareAndSendRpc(google::protobuf::Closure* done) {
   rpc_.MutableController()->set_timeout_ms(kRpcTimeOutMs);
   rpc_.MutableController()->set_max_retry(kRpcCallMaxRetry);
 
-  return stub_.GetStoreRpcInteraction()->SendRpc(rpc_, done);
+  return Status::OK();
+}
+
+void StoreRpcController::DoCall(google::protobuf::Closure* done) {
+  CHECK(region_.get() != nullptr) << "region should not nullptr, please check";
+
+  if (region_->IsStale()) {
+    std::string msg = fmt::format("region:{} is stale", region_->RegionId());
+    DINGO_LOG(INFO) << "store rpc fail, " << msg;
+    status_ = Status::Incomplete(msg);
+    return;
+  }
+
+  Status prepare = PrepareRpc();
+  if (!prepare.IsOK()) {
+    status_ = prepare;
+    return;
+  }
+
+  Status sent = stub_.GetStoreRpcInteraction()->SendRpc(rpc_, done);
+
+  if (!sent.IsOK()) {
+    SetFailed(rpc_.GetEndPoint());
+    rpc_retry_times_++;
+    DINGO_LOG(WARNING) << "rpc send error, " << sent.ToString()
+                       << " endpoint:" << butil::endpoint2str(rpc_.GetEndPoint()).c_str()
+                       << " region:" << region_->RegionId() << ", status:" << sent.ToString();
+
+    status_ = Status::NetworkError(sent.ToString());
+    return;
+  }
+
+  const brpc::Controller* cntl = rpc_.Controller();
+  std::string base_msg = fmt::format("log_id:{} region:{} method:{} endpoint:{}", cntl->log_id(), region_->RegionId(),
+                                     rpc_.Method(), butil::endpoint2str(cntl->remote_side()).c_str());
+
+  if (IsRpcFailed(cntl)) {
+    SetFailed(rpc_.GetEndPoint());
+    DINGO_LOG(WARNING) << base_msg << ", connect with store server fail, error_text:" << cntl->ErrorText();
+    status_ = Status::NetworkError(cntl->ErrorText());
+    return;
+  }
+
+  auto error = GetResponseError(rpc_);
+
+  if (error.errcode() == pb::error::Errno::OK) {
+    status_ = Status::OK();
+  } else {
+    std::string error_msg =
+        fmt::format("error_code:{}, error_msg:{}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
+    base_msg.append(", " + error_msg);
+
+    if (error.errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
+      region_->MarkFollower(rpc_.GetEndPoint());
+      if (error.has_leader_location()) {
+        auto endpoint = Helper::LocationToEndPoint(error.leader_location());
+        if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
+          DINGO_LOG(WARNING) << base_msg << " not leader, but leader hint:" << butil::endpoint2str(endpoint).c_str()
+                             << " is invalid";
+        } else {
+          region_->MarkLeader(endpoint);
+          DINGO_LOG(WARNING) << base_msg << " not leader, leader hint:" << butil::endpoint2str(endpoint).c_str();
+        }
+      } else {
+        DINGO_LOG(WARNING) << base_msg << " not leader, no leader hint";
+      }
+      status_ = Status::NotLeader(error_msg);
+    } else if (error.errcode() == pb::error::EREGION_VERSION) {
+      stub_.GetMetaCache()->ClearRange(region_);
+      if (error.has_store_region_info()) {
+        auto region = ProcessStoreRegionInfo(error.store_region_info());
+        stub_.GetMetaCache()->MaybeAddRegion(region);
+        DINGO_LOG(WARNING) << base_msg << ", recive new version region:" << region->ToString();
+      } else {
+        DINGO_LOG(WARNING) << base_msg;
+      }
+      status_ = Status::Incomplete(error_msg);
+    } else if (error.errcode() == pb::error::Errno::EREGION_NOT_FOUND) {
+      stub_.GetMetaCache()->ClearRange(region_);
+      status_ = Status::Incomplete(error_msg);
+      DINGO_LOG(WARNING) << base_msg;
+    } else if (error.errcode() == pb::error::Errno::EKEY_OUT_OF_RANGE) {
+      stub_.GetMetaCache()->ClearRange(region_);
+      status_ = Status::Incomplete(error_msg);
+      DINGO_LOG(WARNING) << base_msg;
+    } else if (error.errcode() == pb::error::Errno::EREQUEST_FULL) {
+      status_ = Status::RemoteError(error_msg);
+      DINGO_LOG(WARNING) << base_msg;
+    } else {
+      // NOTE: other error we not clean cache, caller decide how to process
+      status_ = Status::Incomplete(error_msg);
+      DINGO_LOG(WARNING) << base_msg;
+    }
+  }
+}
+
+Status StoreRpcController::Call(google::protobuf::Closure* done) {
+  while (true) {
+    if (NeedDelay()) {
+      auto delay = DelayTimeMs();
+      DINGO_LOG(INFO) << "try to delay:" << delay << "ms";
+      (void)usleep(delay);
+    }
+
+    DoCall(done);
+
+    if (status_.IsOK()) {
+      return status_;
+    }
+
+    if (status_.IsNetworkError() || status_.IsRemoteError() || status_.IsNotLeader()) {
+      if (NeedRetry()) {
+        rpc_retry_times_++;
+        continue;
+      } else {
+        status_ = Status::Aborted("rpc retry times exceed");
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  DINGO_LOG(WARNING) << "store rpc fail, status:" << status_.ToString() << ", region:" << region_->RegionId()
+                     << ", retry_times:" << rpc_retry_times_ << ", max_retry_limit:" << kMaxRetry;
+
+  return status_;
 }
 
 bool StoreRpcController::IsRpcFailed(const brpc::Controller* cntl) { return cntl->Failed(); }
@@ -288,6 +276,12 @@ std::shared_ptr<Region> StoreRpcController::ProcessStoreRegionInfo(
 }
 
 bool StoreRpcController::NeedRetry() const { return this->rpc_retry_times_ < kRpcMaxRetry; }
+
+bool StoreRpcController::NeedDelay() const { return status_.IsRemoteError(); }
+
+bool StoreRpcController::NeedPickLeader() const { return !status_.IsRemoteError(); }
+
+int64_t StoreRpcController::DelayTimeMs() const { return rpc_.Controller()->timeout_ms(); }
 
 const pb::error::Error& StoreRpcController::GetResponseError(Rpc& rpc) {
   const auto* response = rpc.RawResponse();

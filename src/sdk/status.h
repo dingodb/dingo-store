@@ -18,6 +18,13 @@
 
 #include "common/slice.h"
 
+/// @brief Return the given status if it is not @c OK.
+#define DINGO_RETURN_NOT_OK(s)              \
+  do {                                      \
+    const ::dingodb::sdk::Status& _s = (s); \
+    if (!_s.IsOK()) return _s;              \
+  } while (0)
+
 namespace dingodb {
 namespace sdk {
 
@@ -87,9 +94,7 @@ class Status {
   static Status NotLeader(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kNotLeader, msg, msg2); }
 
   // Returns true iff the status indicates success.
-  bool IsOK() const {
-    return (state_ == nullptr);
-  }
+  bool IsOK() const { return (state_ == nullptr); }
 
   // Returns true iff the status indicates a NotFound error.
   bool IsNotFound() const { return GetCode() == kNotFound; }
@@ -159,9 +164,7 @@ class Status {
     kNotLeader = 18
   };
 
-  Code GetCode() const {
-    return (state_ == nullptr) ? kOk : static_cast<Code>(state_[4]);
-  }
+  Code GetCode() const { return (state_ == nullptr) ? kOk : static_cast<Code>(state_[4]); }
 
   Status(Code code, const Slice& msg, const Slice& msg2);
   static const char* CopyState(const char* s);
