@@ -47,11 +47,10 @@ static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 StoreServiceImpl::StoreServiceImpl() = default;
 
-static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request) {
+static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -60,7 +59,7 @@ static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest
   }
 
   std::vector<std::string_view> keys = {request->key()};
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -75,8 +74,14 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvGetRequest(request);
+  butil::Status status = ValidateKvGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -88,6 +93,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
@@ -124,11 +130,11 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request) {
+static butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatchGetRequest* request,
+                                               store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -141,7 +147,7 @@ static butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatch
     keys.push_back(key);
   }
 
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -156,8 +162,14 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvBatchGetRequest(request);
+  butil::Status status = ValidateKvBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -169,6 +181,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
@@ -204,9 +217,9 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request) {
+static butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
   }
@@ -216,7 +229,7 @@ static butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -236,8 +249,14 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateKvPutRequest(request);
+  auto status = ValidateKvPutRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -249,6 +268,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
@@ -276,11 +296,11 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request) {
+static butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatchPutRequest* request,
+                                               store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -293,7 +313,7 @@ static butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatch
     keys.push_back(kv.key());
   }
 
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -313,8 +333,14 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvBatchPutRequest(request);
+  butil::Status status = ValidateKvBatchPutRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -326,6 +352,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   status = storage->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
@@ -356,11 +383,11 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbsentRequest* request) {
+static butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPutIfAbsentRequest* request,
+                                                  store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -369,7 +396,7 @@ static butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPu
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -389,8 +416,14 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvPutIfAbsentRequest(request);
+  butil::Status status = ValidateKvPutIfAbsentRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -402,6 +435,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
@@ -435,11 +469,11 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   }
 }
 
-static butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request) {
+static butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store::KvBatchPutIfAbsentRequest* request,
+                                                       store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -452,7 +486,7 @@ static butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store:
     keys.push_back(kv.key());
   }
 
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -473,8 +507,14 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvBatchPutIfAbsentRequest(request);
+  butil::Status status = ValidateKvBatchPutIfAbsentRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -486,6 +526,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
@@ -523,11 +564,11 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   }
 }
 
-static butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDeleteRequest* request) {
+static butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBatchDeleteRequest* request,
+                                                  store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -540,7 +581,7 @@ static butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBa
     keys.push_back(key);
   }
 
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -556,8 +597,14 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateKvBatchDeleteRequest(request);
+  auto status = ValidateKvBatchDeleteRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -569,6 +616,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
   status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
@@ -601,11 +649,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
 
 static butil::Status ValidateKvDeleteRangeRequest(const pb::store::KvDeleteRangeRequest* request,
                                                   store::RegionPtr region, const pb::common::Range& req_range) {
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance().Id());
-  }
-
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
   }
@@ -636,8 +680,13 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
-
   auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
+
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvDeleteRangeRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -653,6 +702,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->KvDeleteRange(ctx, correction_range);
@@ -679,11 +729,11 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 }
 
-static butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::KvCompareAndSetRequest* request) {
+static butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::KvCompareAndSetRequest* request,
+                                                    store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -692,7 +742,7 @@ static butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::Kv
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -708,8 +758,14 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateKvCompareAndSetRequest(request);
+  auto status = ValidateKvCompareAndSetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -721,6 +777,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  // ctx->SetRawEngineType()
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
@@ -751,12 +808,11 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
   }
 }
 
-static butil::Status ValidateKvBatchCompareAndSetRequest(
-    const dingodb::pb::store::KvBatchCompareAndSetRequest* request) {
+static butil::Status ValidateKvBatchCompareAndSetRequest(const dingodb::pb::store::KvBatchCompareAndSetRequest* request,
+                                                         store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -774,7 +830,7 @@ static butil::Status ValidateKvBatchCompareAndSetRequest(
   for (const auto& kv : request->kvs()) {
     keys.push_back(kv.key());
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -790,8 +846,14 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateKvBatchCompareAndSetRequest(request);
+  auto status = ValidateKvBatchCompareAndSetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -803,6 +865,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
 
@@ -844,11 +907,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
 
 static butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScanBeginRequest* request,
                                                 store::RegionPtr region, const pb::common::Range& req_range) {
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region at server %lu", Server::GetInstance().Id());
-  }
-
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
   }
@@ -878,8 +937,13 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
-
   auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
+
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -895,6 +959,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
@@ -936,18 +1001,12 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request) {
+static butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvScanContinueRequest* request,
+                                                   store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
-  }
-
-  // Check is exist region.
-  if (!GET_STORE_REGION_META->IsExistRegion(request->context().region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
-                         request->context().region_id(), Server::GetInstance().Id());
   }
 
   if (request->scan_id().empty()) {
@@ -968,8 +1027,14 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvScanContinueRequest(request);
+  butil::Status status = ValidateKvScanContinueRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -981,6 +1046,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   status = storage->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
@@ -1017,18 +1083,12 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   }
 }
 
-static butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request) {
+static butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvScanReleaseRequest* request,
+                                                  store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
-  }
-
-  // Check is exist region.
-  if (!GET_STORE_REGION_META->IsExistRegion(request->context().region_id())) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu at server %lu",
-                         request->context().region_id(), Server::GetInstance().Id());
   }
 
   if (request->scan_id().empty()) {
@@ -1045,8 +1105,14 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateKvScanReleaseRequest(request);
+  butil::Status status = ValidateKvScanReleaseRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1058,6 +1124,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   status = storage->KvScanRelease(ctx, request->scan_id());
   if (!status.ok()) {
@@ -1088,11 +1155,10 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
 
 // txn
 
-static butil::Status ValidateTxnGetRequest(const dingodb::pb::store::TxnGetRequest* request) {
+static butil::Status ValidateTxnGetRequest(const dingodb::pb::store::TxnGetRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1101,7 +1167,7 @@ static butil::Status ValidateTxnGetRequest(const dingodb::pb::store::TxnGetReque
   }
 
   std::vector<std::string_view> keys = {request->key()};
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1116,8 +1182,14 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateTxnGetRequest(request);
+  butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1130,6 +1202,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::TxnGetRequest*>(request);
@@ -1165,11 +1238,7 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
 
 static butil::Status ValidateTxnScanRequest(const pb::store::TxnScanRequest* request, store::RegionPtr region,
                                             const pb::common::Range& req_range) {
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
-
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
   }
@@ -1199,8 +1268,13 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
-
   auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
+
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequest(request, region, uniform_range);
   if (!status.ok()) {
@@ -1217,6 +1291,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::common::KeyValue> kvs;
@@ -1257,11 +1332,11 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   }
 }
 
-static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store::TxnPessimisticLockRequest* request) {
+static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store::TxnPessimisticLockRequest* request,
+                                                       store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1309,7 +1384,7 @@ static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store:
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "op is not Lock");
     }
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1325,8 +1400,14 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnPessimisticLockRequest(request);
+  auto status = ValidateTxnPessimisticLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1339,6 +1420,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
@@ -1373,11 +1455,10 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
 }
 
 static butil::Status ValidateTxnPessimisticRollbackRequest(
-    const dingodb::pb::store::TxnPessimisticRollbackRequest* request) {
+    const dingodb::pb::store::TxnPessimisticRollbackRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1409,7 +1490,7 @@ static butil::Status ValidateTxnPessimisticRollbackRequest(
     }
     keys.push_back(key);
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1425,8 +1506,14 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnPessimisticRollbackRequest(request);
+  auto status = ValidateTxnPessimisticRollbackRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1439,6 +1526,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   status = storage->TxnPessimisticRollback(ctx, request->start_ts(), request->for_update_ts(),
                                            Helper::PbRepeatedToVector(request->keys()));
@@ -1466,11 +1554,11 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   }
 }
 
-static butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPrewriteRequest* request) {
+static butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPrewriteRequest* request,
+                                                store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1510,7 +1598,7 @@ static butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPre
     }
     keys.push_back(mutation.key());
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1525,8 +1613,14 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnPrewriteRequest(request);
+  auto status = ValidateTxnPrewriteRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1539,6 +1633,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
@@ -1587,11 +1682,11 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnCommitRequest(const dingodb::pb::store::TxnCommitRequest* request) {
+static butil::Status ValidateTxnCommitRequest(const dingodb::pb::store::TxnCommitRequest* request,
+                                              store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1619,7 +1714,7 @@ static butil::Status ValidateTxnCommitRequest(const dingodb::pb::store::TxnCommi
     }
     keys.push_back(key);
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1634,8 +1729,14 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnCommitRequest(request);
+  auto status = ValidateTxnCommitRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1648,6 +1749,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -1680,11 +1782,11 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::store::TxnCheckTxnStatusRequest* request) {
+static butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::store::TxnCheckTxnStatusRequest* request,
+                                                      store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1711,7 +1813,7 @@ static butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::store::
 
   std::vector<std::string_view> keys;
   keys.push_back(request->primary_key());
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1727,8 +1829,14 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnCheckTxnStatusRequest(request);
+  auto status = ValidateTxnCheckTxnStatusRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1741,6 +1849,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
                                       request->current_ts());
@@ -1768,11 +1877,11 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   }
 }
 
-static butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::TxnResolveLockRequest* request) {
+static butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::TxnResolveLockRequest* request,
+                                                   store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1791,7 +1900,7 @@ static butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::Txn
       }
       std::vector<std::string_view> keys;
       keys.push_back(key);
-      auto status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+      auto status = ServiceHelper::ValidateRegion(region, keys);
       if (!status.ok()) {
         return status;
       }
@@ -1814,8 +1923,14 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnResolveLockRequest(request);
+  auto status = ValidateTxnResolveLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1828,6 +1943,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -1860,11 +1976,11 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   }
 }
 
-static butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::store::TxnBatchGetRequest* request) {
+static butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::store::TxnBatchGetRequest* request,
+                                                store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1883,7 +1999,7 @@ static butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::store::TxnBat
     }
     keys.push_back(key);
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1898,8 +2014,14 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateTxnBatchGetRequest(request);
+  butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -1912,6 +2034,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -1951,11 +2074,11 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::store::TxnBatchRollbackRequest* request) {
+static butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::store::TxnBatchRollbackRequest* request,
+                                                     store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -1974,7 +2097,7 @@ static butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::store::T
     }
     keys.push_back(key);
   }
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1995,8 +2118,14 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnBatchRollbackRequest(request);
+  auto status = ValidateTxnBatchRollbackRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -2009,6 +2138,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -2041,11 +2171,11 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   }
 }
 
-static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnScanLockRequest* request) {
+static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnScanLockRequest* request,
+                                                store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -2077,7 +2207,7 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
   keys.push_back(request->start_key());
   keys.push_back(request->end_key());
 
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -2092,8 +2222,14 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateTxnScanLockRequest(request);
+  butil::Status status = ValidateTxnScanLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -2106,6 +2242,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::LockInfo> locks;
@@ -2139,11 +2276,11 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::store::TxnHeartBeatRequest* request) {
+static butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::store::TxnHeartBeatRequest* request,
+                                                 store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -2167,7 +2304,7 @@ static butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::store::TxnHe
   std::vector<std::string_view> keys;
   keys.push_back(request->primary_lock());
 
-  status = ServiceHelper::ValidateRegion(request->context().region_id(), keys);
+  status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
   }
@@ -2182,8 +2319,14 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnHeartBeatRequest(request);
+  auto status = ValidateTxnHeartBeatRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -2196,6 +2339,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl());
   if (!status.ok()) {
@@ -2222,11 +2366,10 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status ValidateTxnGcRequest(const dingodb::pb::store::TxnGcRequest* request) {
+static butil::Status ValidateTxnGcRequest(const dingodb::pb::store::TxnGcRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -2249,8 +2392,14 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnGcRequest(request);
+  auto status = ValidateTxnGcRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -2263,6 +2412,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   status = storage->TxnGc(ctx, request->safe_point_ts());
   if (!status.ok()) {
@@ -2274,12 +2424,6 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
 
 void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
-  auto status = ValidateTxnGcRequest(request);
-  if (!status.ok()) {
-    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    return;
-  }
-
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
@@ -2292,11 +2436,11 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
   }
 }
 
-static butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::TxnDeleteRangeRequest* request) {
+static butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::TxnDeleteRangeRequest* request,
+                                                   store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -2332,8 +2476,14 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  auto status = ValidateTxnDeleteRangeRequest(request);
+  auto status = ValidateTxnDeleteRangeRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -2346,6 +2496,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   status = storage->TxnDeleteRange(ctx, request->start_key(), request->end_key());
   if (!status.ok()) {
@@ -2371,11 +2522,11 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
   }
 }
 
-static butil::Status ValidateTxnDumpRequest(const dingodb::pb::store::TxnDumpRequest* request) {
+static butil::Status ValidateTxnDumpRequest(const dingodb::pb::store::TxnDumpRequest* request,
+                                            store::RegionPtr region) {
   // check if region_epoch is match
-  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), request->context().region_id());
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("ValidateRegionEpoch failed request: {} ", request->ShortDebugString());
     return status;
   }
 
@@ -2409,8 +2560,14 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
 
-  butil::Status status = ValidateTxnDumpRequest(request);
+  butil::Status status = ValidateTxnDumpRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
@@ -2423,6 +2580,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::TxnWriteKey> txn_write_keys;

@@ -699,10 +699,6 @@ int main(int argc, char *argv[]) {
   dingo_server.SetServerEndpoint(GetServerEndPoint(config));
   dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
 
-  if (!dingo_server.InitRawEngine()) {
-    DINGO_LOG(ERROR) << "InitRawEngine failed!";
-    return -1;
-  }
   if (!dingo_server.InitEngine()) {
     DINGO_LOG(ERROR) << "InitEngine failed!";
     return -1;

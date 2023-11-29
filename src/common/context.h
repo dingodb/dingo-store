@@ -92,6 +92,9 @@ class Context {
     return *this;
   }
 
+  void SetRawEngineType(pb::common::RawEngine raw_engine_type) { raw_engine_type_ = raw_engine_type; }
+  pb::common::RawEngine RawEngineType() { return raw_engine_type_; }
+
   Context& SetCfName(const std::string& cf_name) {
     cf_name_ = cf_name;
     return *this;
@@ -129,8 +132,15 @@ class Context {
   google::protobuf::Message* response_{nullptr};
 
   int64_t region_id_{0};
+  // RawEngine type
+  pb::common::RawEngine raw_engine_type_;
   // Column family name
   std::string cf_name_{};
+  // Region epoch
+  pb::common::RegionEpoch region_epoch_{};
+  // Transaction isolation level
+  pb::store::IsolationLevel isolation_level_{};
+
   // Rocksdb delete range in files
   bool delete_files_in_range_{false};
   // Flush data to persistence.
@@ -139,9 +149,6 @@ class Context {
   BthreadCondPtr cond_{nullptr};
   bthread_mutex_t cond_mutex_;
   butil::Status status_{};
-
-  pb::common::RegionEpoch region_epoch_{};
-  pb::store::IsolationLevel isolation_level_{};
 
   WriteCbFunc write_cb_{};
 

@@ -98,11 +98,11 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     *(tmp_region_metrics.mutable_region_definition()) = region_meta->Definition();
     tmp_region_metrics.set_snapshot_epoch_version(region_meta->SnapshotEpochVersion());
 
-    if ((region_meta->State() == pb::common::StoreRegionState::NORMAL ||
-         region_meta->State() == pb::common::StoreRegionState::STANDBY ||
-         region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
-         region_meta->State() == pb::common::StoreRegionState::MERGING) &&
-        raft_store_engine != nullptr) {
+    if (region_meta->State() == pb::common::StoreRegionState::NORMAL ||
+        region_meta->State() == pb::common::StoreRegionState::STANDBY ||
+        region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
+        region_meta->State() == pb::common::StoreRegionState::MERGING ||
+        region_meta->State() == pb::common::StoreRegionState::TOMBSTONE) {
       auto raft_node = raft_store_engine->GetNode(region_meta->Id());
       if (raft_node != nullptr) {
         *(tmp_region_metrics.mutable_braft_status()) = (*raft_node->GetStatus());

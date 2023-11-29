@@ -38,14 +38,6 @@ void ServiceHelper::SetError(pb::error::Error* error, int errcode, const std::st
 
 void ServiceHelper::SetError(pb::error::Error* error, const std::string& errmsg) { error->set_errmsg(errmsg); }
 
-butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, int64_t region_id) {
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
-  }
-  return ServiceHelper::ValidateRegionEpoch(req_epoch, region);
-}
-
 butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region) {
   if (region->Epoch().conf_version() != req_epoch.conf_version() || region->Epoch().version() != req_epoch.version()) {
     return butil::Status(pb::error::Errno::EREGION_VERSION,
@@ -190,10 +182,7 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   return butil::Status();
 }
 
-butil::Status ServiceHelper::ValidateRegion(int64_t region_id, const std::vector<std::string_view>& keys) {
-  auto store_region_meta = GET_STORE_REGION_META;
-  auto region = store_region_meta->GetRegion(region_id);
-
+butil::Status ServiceHelper::ValidateRegion(store::RegionPtr region, const std::vector<std::string_view>& keys) {
   auto status = ValidateRegionState(region);
   if (!status.ok()) {
     return status;

@@ -563,8 +563,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   auto raft_node = raft_store_engine->GetNode(vector_index_id);
   if (raft_node == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found raft node, skip this build.",
-                                    vector_index_id);
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.build][index_id({})][trace({})] not found raft node, skip this build.", vector_index_id, trace);
     return nullptr;
   }
 
@@ -573,15 +573,6 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     vector_index->SetApplyLogId(raft_status->known_applied_index());
   }
 
-  std::shared_ptr<RawEngine> raw_engine = raft_node->GetRawEngine();
-  if (raw_engine == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] not found raw engine, skip this build.",
-                                    vector_index_id);
-    return nullptr;
-  }
-
-  // std::string start_key = VectorCodec::FillVectorDataPrefix(range.start_key());
-  // std::string end_key = VectorCodec::FillVectorDataPrefix(range.end_key());
   const std::string& start_key = range.start_key();
   const std::string& end_key = range.end_key();
 
@@ -595,6 +586,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   IteratorOptions options;
   options.upper_bound = end_key;
 
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
   auto iter = raw_engine->Reader()->NewIterator(Constant::kVectorDataCF, options);
 
   // Note: This is iterated 2 times for the following reasons:

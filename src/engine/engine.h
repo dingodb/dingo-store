@@ -40,7 +40,7 @@
 
 namespace dingodb {
 
-class Engine {
+class Engine : public std::enable_shared_from_this<Engine> {
   using Errno = pb::error::Errno;
 
  public:
@@ -52,7 +52,7 @@ class Engine {
   virtual std::string GetName() = 0;
   virtual pb::common::StorageEngine GetID() = 0;
 
-  virtual std::shared_ptr<RawEngine> GetRawEngineByRegion(int64_t region_id) = 0;
+  virtual std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type) = 0;
 
   virtual std::shared_ptr<Snapshot> GetSnapshot() = 0;
   virtual butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, int64_t region_id, bool force) = 0;
@@ -103,6 +103,8 @@ class Engine {
     struct Context {
       int64_t partition_id{};
       int64_t region_id{};
+
+      pb::common::RawEngine raw_engine_type;
 
       pb::common::Range region_range;
 
@@ -197,12 +199,12 @@ class Engine {
     virtual butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) = 0;
   };
 
-  virtual std::shared_ptr<Reader> NewReader(int64_t region_id) = 0;
-  virtual std::shared_ptr<Writer> NewWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) = 0;
-  virtual std::shared_ptr<VectorReader> NewVectorReader(int64_t region_id) = 0;
+  virtual std::shared_ptr<Reader> NewReader(pb::common::RawEngine type) = 0;
+  virtual std::shared_ptr<Writer> NewWriter(pb::common::RawEngine type) = 0;
+  virtual std::shared_ptr<VectorReader> NewVectorReader(pb::common::RawEngine type) = 0;
 
-  virtual std::shared_ptr<TxnReader> NewTxnReader(int64_t region_id) = 0;
-  virtual std::shared_ptr<TxnWriter> NewTxnWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) = 0;
+  virtual std::shared_ptr<TxnReader> NewTxnReader(pb::common::RawEngine type) = 0;
+  virtual std::shared_ptr<TxnWriter> NewTxnWriter(pb::common::RawEngine type) = 0;
 
   //  This is used by RaftStoreEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.

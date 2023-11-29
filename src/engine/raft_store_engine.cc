@@ -60,6 +60,10 @@ RaftStoreEngine::RaftStoreEngine(std::shared_ptr<RawEngine> rocks_engine, std::s
 
 RaftStoreEngine::~RaftStoreEngine() = default;
 
+std::shared_ptr<RaftStoreEngine> RaftStoreEngine::GetSelfPtr() {
+  return std::dynamic_pointer_cast<RaftStoreEngine>(shared_from_this());
+}
+
 bool RaftStoreEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
 
 // Clean region raft directory
@@ -106,7 +110,8 @@ bool RaftStoreEngine::Recover() {
     if (region->State() == pb::common::StoreRegionState::NORMAL ||
         region->State() == pb::common::StoreRegionState::STANDBY ||
         region->State() == pb::common::StoreRegionState::SPLITTING ||
-        region->State() == pb::common::StoreRegionState::MERGING) {
+        region->State() == pb::common::StoreRegionState::MERGING ||
+        region->State() == pb::common::StoreRegionState::TOMBSTONE) {
       auto raft_meta = store_raft_meta->GetRaftMeta(region->Id());
       if (raft_meta == nullptr) {
         DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] recover raft meta not found.", region->Id());
@@ -169,33 +174,20 @@ std::string RaftStoreEngine::GetName() { return pb::common::StorageEngine_Name(G
 
 pb::common::StorageEngine RaftStoreEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_RAFT_STORE; }
 
-std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngineByRegion(int64_t region_id) {
-  auto raft_node = raft_node_manager->GetNode(region_id);
-  if (raft_node == nullptr) {
-    return nullptr;
+std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine(pb::common::RawEngine type) {
+  if (type == pb::common::RawEngine::RAW_ENG_ROCKSDB) {
+    return raw_rocks_engine;
+  } else if (type == pb::common::RawEngine::RAW_ENG_BDB) {
+    return raw_bdb_engine;
   }
 
-  auto raw_engine = raft_node->GetRawEngine();
-  if (raw_engine == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] raft node raw engine is null.", region_id);
-  }
-
-  return raw_engine;
+  DINGO_LOG(FATAL) << "[raft.engine] unknown raw engine type.";
 }
 
 butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
-  std::shared_ptr<RawEngine> raw_engine = nullptr;
-  if (region->Definition().raw_engine() == pb::common::RawEngine::RAW_ENG_ROCKSDB) {
-    raw_engine = raw_rocks_engine;
-  } else if (region->Definition().raw_engine() == pb::common::RawEngine::RAW_ENG_BDB) {
-    raw_engine = raw_bdb_engine;
-  } else {
-    DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] raw engine type not support, raw_engine_type is {}.",
-                                    region->Id(), pb::common::RawEngine_Name(region->Definition().raw_engine()));
-  }
-
+  std::shared_ptr<RawEngine> raw_engine = GetRawEngine(region->GetRawEngineType());
   // Build StateMachine
   auto state_machine = std::make_shared<StoreStateMachine>(raw_engine, region, parameter.raft_meta,
                                                            parameter.region_metrics, parameter.listeners);
@@ -212,7 +204,7 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
 
   // Build RaftNode
   auto node = std::make_shared<RaftNode>(region->Id(), region->Name(), braft::PeerId(parameter.raft_endpoint),
-                                         state_machine, log_storage, raw_engine);
+                                         state_machine, log_storage);
 
   if (node->Init(region, Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), parameter.raft_path,
                  parameter.election_timeout_ms) != 0) {
@@ -248,12 +240,9 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->id(), max_segment_size);
   Server::GetInstance().GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
 
-  auto raw_engine = Server::GetInstance().GetSystemRawEngine();
-
   std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
-  auto const node =
-      std::make_shared<RaftNode>(region->id(), meta_raft_name, braft::PeerId(Server::GetInstance().RaftEndpoint()),
-                                 state_machine, log_storage, raw_engine);
+  auto const node = std::make_shared<RaftNode>(
+      region->id(), meta_raft_name, braft::PeerId(Server::GetInstance().RaftEndpoint()), state_machine, log_storage);
 
   // Build RaftNode
   if (node->Init(nullptr, Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
@@ -462,12 +451,8 @@ butil::Status RaftStoreEngine::Reader::KvCount(std::shared_ptr<Context> ctx, con
   return reader_->KvCount(ctx->CfName(), start_key, end_key, count);
 }
 
-std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(int64_t region_id) {
-  auto region_raw_engine = GetRawEngineByRegion(region_id);
-  if (BAIDU_UNLIKELY(region_raw_engine == nullptr)) {
-    return nullptr;
-  }
-  return std::make_shared<RaftStoreEngine::Reader>(region_raw_engine->Reader());
+std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::Reader>(GetRawEngine(type)->Reader());
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
@@ -516,20 +501,12 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
                                                search_time_us);
 }
 
-std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(int64_t region_id) {
-  auto region_raw_engine = GetRawEngineByRegion(region_id);
-  if (BAIDU_UNLIKELY(region_raw_engine == nullptr)) {
-    return nullptr;
-  }
-  return std::make_shared<RaftStoreEngine::VectorReader>(region_raw_engine->Reader());
+std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::VectorReader>(GetRawEngine(type)->Reader());
 }
 
-std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader(int64_t region_id) {
-  auto region_raw_engine = GetRawEngineByRegion(region_id);
-  if (BAIDU_UNLIKELY(region_raw_engine == nullptr)) {
-    return nullptr;
-  }
-  return std::make_shared<RaftStoreEngine::TxnReader>(region_raw_engine);
+std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::TxnReader>(GetRawEngine(type));
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
@@ -555,14 +532,8 @@ butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /
                                        range.end_key(), limit, lock_infos);
 }
 
-std::shared_ptr<Engine::TxnWriter> RaftStoreEngine::NewTxnWriter(int64_t region_id,
-                                                                 std::shared_ptr<Engine> raft_engine) {
-  auto region_raw_engine = GetRawEngineByRegion(region_id);
-  if (BAIDU_UNLIKELY(region_raw_engine == nullptr)) {
-    return nullptr;
-  }
-  return std::make_shared<RaftStoreEngine::TxnWriter>(region_raw_engine,
-                                                      std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine));
+std::shared_ptr<Engine::TxnWriter> RaftStoreEngine::NewTxnWriter(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
 }
 
 butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
@@ -625,13 +596,8 @@ butil::Status RaftStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, in
   return TxnEngineHelper::Gc(txn_writer_raw_engine_, raft_engine_, ctx, safe_point_ts);
 }
 
-std::shared_ptr<Engine::Writer> RaftStoreEngine::NewWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) {
-  auto region_raw_region = GetRawEngineByRegion(region_id);
-  if (BAIDU_UNLIKELY(region_raw_region == nullptr)) {
-    return nullptr;
-  }
-  return std::make_shared<RaftStoreEngine::Writer>(region_raw_region,
-                                                   std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine));
+std::shared_ptr<Engine::Writer> RaftStoreEngine::NewWriter(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::Writer>(GetRawEngine(type), GetSelfPtr());
 }
 
 butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,

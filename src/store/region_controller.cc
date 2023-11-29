@@ -187,7 +187,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
     return status;
   }
 
-  auto region_raw_engine = Server::GetInstance().GetRawEngineByRegion(region_id);
+  auto region_raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
   if (region_raw_engine == nullptr) {
     DINGO_LOG(FATAL) << fmt::format("[control.region][region({})] delete region, delete data, raw engine is null",
                                     region_id);

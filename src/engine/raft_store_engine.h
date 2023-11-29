@@ -76,13 +76,15 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   RaftStoreEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine);
   ~RaftStoreEngine() override;
 
+  std::shared_ptr<RaftStoreEngine> GetSelfPtr();
+
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
 
   std::string GetName() override;
   pb::common::StorageEngine GetID() override;
 
-  std::shared_ptr<RawEngine> GetRawEngineByRegion(int64_t region_id) override;
+  std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type) override;
 
   butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) override;
   butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region, std::shared_ptr<MetaControl> meta_control,
@@ -122,8 +124,6 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     RawEngine::ReaderPtr reader_;
   };
 
-  std::shared_ptr<Engine::Reader> NewReader(int64_t region_id) override;
-
   class Writer : public Engine::Writer {
    public:
     Writer(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RaftStoreEngine> raft_engine)
@@ -141,8 +141,6 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     std::shared_ptr<RawEngine> writer_raw_engine_;
     std::shared_ptr<RaftStoreEngine> raft_engine_;
   };
-
-  std::shared_ptr<Engine::Writer> NewWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) override;
 
   // Vector reader
   class VectorReader : public Engine::VectorReader {
@@ -224,9 +222,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     std::shared_ptr<RaftStoreEngine> raft_engine_;
   };
 
-  std::shared_ptr<Engine::VectorReader> NewVectorReader(int64_t region_id) override;
-  std::shared_ptr<Engine::TxnReader> NewTxnReader(int64_t region_id) override;
-  std::shared_ptr<Engine::TxnWriter> NewTxnWriter(int64_t region_id, std::shared_ptr<Engine> raft_engine) override;
+  std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
+  std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
+  std::shared_ptr<Engine::VectorReader> NewVectorReader(pb::common::RawEngine type) override;
+  std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
+  std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
 
  protected:
   std::shared_ptr<RawEngine> raw_rocks_engine;  // RocksDB, the system engine, for meta and data
