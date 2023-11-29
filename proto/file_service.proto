@@ -14,29 +14,36 @@
 
 syntax = "proto3";
 
+import "common.proto";
+
 package dingodb.pb.fileservice;
 
 option java_package = "io.dingodb.fileservice";
 option cc_generic_services = true;
 
 message GetFileRequest {
-  int64 reader_id = 1;
-  string filename = 2;
-  int64 offset = 3;
-  int64 size = 4;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 reader_id = 2;
+  string filename = 3;
+  int64 offset = 4;
+  int64 size = 5;
 }
 
 message GetFileResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
   // Data is in attachment
-  bool eof = 1;
-  int64 read_size = 2;
+  bool eof = 2;
+  int64 read_size = 3;
 }
 
 message CleanFileReaderRequest {
-  int64 reader_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 reader_id = 2;
 }
 
-message CleanFileReaderResponse {}
+message CleanFileReaderResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+}
 
 service FileService {
   rpc GetFile(GetFileRequest) returns (GetFileResponse);

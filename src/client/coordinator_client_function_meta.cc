@@ -465,6 +465,8 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
+  request.mutable_request_info()->set_request_id(1024);
+
   auto status = coordinator_interaction->SendRequest("CreateTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();

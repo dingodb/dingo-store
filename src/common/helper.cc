@@ -51,6 +51,7 @@
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "butil/strings/string_split.h"
+#include "butil/time.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "common/role.h"
@@ -640,6 +641,29 @@ void Helper::SetPbMessageError(butil::Status status, google::protobuf::Message* 
   // error_ref->SetEnumValue(error, errcode_field, status.error_code());
   // const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
   // error_ref->SetString(error, errmsg_field, status.error_str());
+}
+
+void Helper::SetPbMessageResponseInfo(google::protobuf::Message* message, int64_t elapsed_time_ns) {
+  if (BAIDU_UNLIKELY(message == nullptr)) {
+    return;
+  }
+  const google::protobuf::Reflection* reflection = message->GetReflection();
+  const google::protobuf::Descriptor* desc = message->GetDescriptor();
+
+  const google::protobuf::FieldDescriptor* response_info_field = desc->FindFieldByName("response_info");
+  if (BAIDU_UNLIKELY(response_info_field == nullptr)) {
+    DINGO_LOG(ERROR) << "SetPbMessageError error_field is nullptr";
+    return;
+  }
+  if (BAIDU_UNLIKELY(response_info_field->message_type()->full_name() != "dingodb.pb.common.ResponseInfo")) {
+    DINGO_LOG(ERROR)
+        << "SetPbMessageError field->message_type()->full_name() is not pb::common::ResponseInfo, its_type="
+        << response_info_field->message_type()->full_name();
+    return;
+  }
+  pb::common::ResponseInfo* response_info =
+      dynamic_cast<pb::common::ResponseInfo*>(reflection->MutableMessage(message, response_info_field));
+  response_info->mutable_time_info()->set_total_rpc_time_ns(elapsed_time_ns);
 }
 
 std::string Helper::MessageToJsonString(const google::protobuf::Message& message) {

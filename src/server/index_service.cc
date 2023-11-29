@@ -400,6 +400,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
+  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
 
@@ -495,6 +496,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
+  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
 
@@ -1086,6 +1088,7 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
+  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1206,6 +1209,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
+  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1478,6 +1482,7 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
+  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1853,6 +1858,7 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
+  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());

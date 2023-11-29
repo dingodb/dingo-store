@@ -156,6 +156,7 @@ void DoCreateExecutor(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -198,6 +199,7 @@ void DoDeleteExecutor(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -244,6 +246,7 @@ void DoCreateExecutorUser(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -288,6 +291,7 @@ void DoUpdateExecutorUser(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -331,6 +335,7 @@ void DoDeleteExecutorUser(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -400,6 +405,7 @@ void DoCreateStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -448,6 +454,7 @@ void DoDeleteStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -488,6 +495,7 @@ void DoUpdateStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -547,6 +555,7 @@ void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -618,6 +627,7 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -944,6 +954,7 @@ void DoCreateRegionId(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1056,6 +1067,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1097,6 +1109,7 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1139,6 +1152,7 @@ void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1187,6 +1201,7 @@ void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1234,6 +1249,7 @@ void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1297,6 +1313,7 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1346,6 +1363,7 @@ void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1450,6 +1468,7 @@ void DoCleanStoreOperation(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1491,6 +1510,7 @@ void DoAddStoreOperation(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1534,6 +1554,7 @@ void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1639,6 +1660,7 @@ void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1937,6 +1959,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));

@@ -278,30 +278,36 @@ message TableIdWithPartIds {
 }
 
 message GetSchemasRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message GetSchemasResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated Schema schemas = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated Schema schemas = 3;
 }
 
 message GetSchemaRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message GetSchemaResponse {
-  dingodb.pb.error.Error error = 1;
-  Schema schema = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  Schema schema = 3;
 }
 
 message GetSchemaByNameRequest {
-  string schema_name = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string schema_name = 2;
 }
 
 message GetSchemaByNameResponse {
-  dingodb.pb.error.Error error = 1;
-  Schema schema = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  Schema schema = 3;
 }
 
 message TableDefinitionWithId {
@@ -315,206 +321,250 @@ message IndexDefinitionWithId {
 }
 
 message GetTablesBySchemaRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message GetTablesBySchemaResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated TableDefinitionWithId table_definition_with_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TableDefinitionWithId table_definition_with_ids = 3;
 }
 
 message GetIndexesRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message GetIndexesResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated IndexDefinitionWithId index_definition_with_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated IndexDefinitionWithId index_definition_with_ids = 3;
 }
 
 message GetTablesCountRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message GetTablesCountResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 tables_count = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 tables_count = 3;
 }
 
 message GetIndexesCountRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message GetIndexesCountResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 indexes_count = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 indexes_count = 3;
 }
 
 message GetTableRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message GetTableResponse {
-  dingodb.pb.error.Error error = 1;
-  TableDefinitionWithId table_definition_with_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TableDefinitionWithId table_definition_with_id = 3;
 }
 
 message GetIndexRequest {
-  DingoCommonId index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
 }
 
 message GetIndexResponse {
-  dingodb.pb.error.Error error = 1;
-  IndexDefinitionWithId index_definition_with_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  IndexDefinitionWithId index_definition_with_id = 3;
 }
 
 message GetTableByNameRequest {
-  DingoCommonId schema_id = 1;
-  string table_name = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  string table_name = 3;
 }
 
 message GetTableByNameResponse {
-  dingodb.pb.error.Error error = 1;
-  TableDefinitionWithId table_definition_with_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TableDefinitionWithId table_definition_with_id = 3;
 }
 
 message GetIndexByNameRequest {
-  DingoCommonId schema_id = 1;
-  string index_name = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  string index_name = 3;
 }
 
 message GetIndexByNameResponse {
-  dingodb.pb.error.Error error = 1;
-  IndexDefinitionWithId index_definition_with_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  IndexDefinitionWithId index_definition_with_id = 3;
 }
 
 message GetTableRangeRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message GetTableRangeResponse {
-  dingodb.pb.error.Error error = 1;
-  TableRange table_range = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TableRange table_range = 3;
 }
 
 message GetIndexRangeRequest {
-  DingoCommonId index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
 }
 
 message GetIndexRangeResponse {
-  dingodb.pb.error.Error error = 1;
-  IndexRange index_range = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  IndexRange index_range = 3;
 }
 
 message GetTableMetricsRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message GetTableMetricsResponse {
-  dingodb.pb.error.Error error = 1;
-  TableMetricsWithId table_metrics = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TableMetricsWithId table_metrics = 3;
 }
 
 message GetIndexMetricsRequest {
-  DingoCommonId index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
 }
 
 message GetIndexMetricsResponse {
-  dingodb.pb.error.Error error = 1;
-  IndexMetricsWithId index_metrics = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  IndexMetricsWithId index_metrics = 3;
 }
 
 message CreateTableIdRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message CreateTableIdResponse {
-  dingodb.pb.error.Error error = 1;
-  DingoCommonId table_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  DingoCommonId table_id = 3;
 }
 
 message CreateTableIdsRequest {
-  DingoCommonId schema_id = 1;
-  int64 count = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  int64 count = 3;
 }
 
 message CreateTableIdsResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated DingoCommonId table_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated DingoCommonId table_ids = 3;
 }
 
 message CreateIndexIdRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message CreateIndexIdResponse {
-  dingodb.pb.error.Error error = 1;
-  DingoCommonId index_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  DingoCommonId index_id = 3;
 }
 
 message CreateTableRequest {
-  DingoCommonId schema_id = 1;
-  DingoCommonId table_id = 2;
-  TableDefinition table_definition = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  DingoCommonId table_id = 3;
+  TableDefinition table_definition = 4;
 }
 
 message CreateTableResponse {
-  dingodb.pb.error.Error error = 1;
-  DingoCommonId table_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  DingoCommonId table_id = 3;
 }
 
 message CreateIndexRequest {
-  DingoCommonId schema_id = 1;
-  DingoCommonId index_id = 2;
-  IndexDefinition index_definition = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  DingoCommonId index_id = 3;
+  IndexDefinition index_definition = 4;
 }
 
 message CreateIndexResponse {
-  dingodb.pb.error.Error error = 1;
-  DingoCommonId index_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  DingoCommonId index_id = 3;
 }
 
 message UpdateIndexRequest {
-  DingoCommonId index_id = 1;
-  IndexDefinition new_index_definition = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
+  IndexDefinition new_index_definition = 3;
 }
 
 message UpdateIndexResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message CreateSchemaRequest {
-  DingoCommonId parent_schema_id = 1;
-  string schema_name = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId parent_schema_id = 2;
+  string schema_name = 3;
 }
 
 message CreateSchemaResponse {
-  dingodb.pb.error.Error error = 1;
-  Schema schema = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  Schema schema = 3;
 }
 
 message DropSchemaRequest {
-  DingoCommonId schema_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
 }
 
 message DropSchemaResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message DropTableRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message DropTableResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message DropIndexRequest {
-  DingoCommonId index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
 }
 
 message DropIndexResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message TableIncrement {
@@ -522,136 +572,165 @@ message TableIncrement {
   int64 start_id = 2;
 }
 
-message GetAutoIncrementsRequest {}
+message GetAutoIncrementsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+}
 
 message GetAutoIncrementsResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated TableIncrement table_increments = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TableIncrement table_increments = 3;
 }
 
 message GetAutoIncrementRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message GetAutoIncrementResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 start_id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 start_id = 3;
 }
 
 message CreateAutoIncrementRequest {
-  DingoCommonId table_id = 1;
-  int64 start_id = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
+  int64 start_id = 3;
 }
 
 message CreateAutoIncrementResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message UpdateAutoIncrementRequest {
-  DingoCommonId table_id = 1;
-  int64 start_id = 2;
-  bool force = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
+  int64 start_id = 3;
+  bool force = 4;
 }
 
 message UpdateAutoIncrementResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message GenerateAutoIncrementRequest {
-  DingoCommonId table_id = 1;
-  int64 count = 2;
-  uint32 auto_increment_increment = 3;
-  uint32 auto_increment_offset = 4;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
+  int64 count = 3;
+  uint32 auto_increment_increment = 4;
+  uint32 auto_increment_offset = 5;
 }
 
 message GenerateAutoIncrementResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 start_id = 2;
-  int64 end_id = 3;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 start_id = 3;
+  int64 end_id = 4;
 }
 
 message DeleteAutoIncrementRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message DeleteAutoIncrementResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 // generate table id, vector index id and scalar index id
 message GenerateTableIdsRequest {
-  DingoCommonId schema_id = 1;
-  TableWithPartCount count = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  TableWithPartCount count = 3;
 }
 
 message GenerateTableIdsResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated TableIdWithPartIds ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TableIdWithPartIds ids = 3;
 }
 
 // create table, vector index and scalar index
 message CreateTablesRequest {
-  DingoCommonId schema_id = 1;
-  repeated TableDefinitionWithId table_definition_with_ids = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId schema_id = 2;
+  repeated TableDefinitionWithId table_definition_with_ids = 3;
 }
 
 message CreateTablesResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated DingoCommonId table_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated DingoCommonId table_ids = 3;
 }
 
 message UpdateTablesRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   TableDefinitionWithId table_definition_with_id = 2;
 }
 
 message UpdateTablesResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message AddIndexOnTableRequest {
-  DingoCommonId table_id = 1;                          // this is the table_id to add index
-  TableDefinitionWithId table_definition_with_id = 2;  // this is the index to be added
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;                          // this is the table_id to add index
+  TableDefinitionWithId table_definition_with_id = 3;  // this is the index to be added
 }
 
 message AddIndexOnTableResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message DropIndexOnTableRequest {
-  DingoCommonId table_id = 1;  // this is the table_id to drop index
-  DingoCommonId index_id = 2;  // this is the index_id to be dropped
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;  // this is the table_id to drop index
+  DingoCommonId index_id = 3;  // this is the index_id to be dropped
 }
 
 message DropIndexOnTableResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 // get assigned table definition, including vector index and scalar index
 message GetTablesRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message GetTablesResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated TableDefinitionWithId table_definition_with_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TableDefinitionWithId table_definition_with_ids = 3;
 }
 
 // drop table, vector index and scalar index
 message DropTablesRequest {
-  repeated DingoCommonId table_ids = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  repeated DingoCommonId table_ids = 2;
 }
 
 message DropTablesResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message SwitchAutoSplitRequest {
-  DingoCommonId table_id = 1;
-  bool auto_split = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
+  bool auto_split = 3;
 }
 
 message SwitchAutoSplitResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 enum TsoOpType {
@@ -668,65 +747,77 @@ message TsoTimestamp {
 }
 
 message TsoRequest {
-  TsoOpType op_type = 1;
-  int64 count = 2;
-  TsoTimestamp current_timestamp = 3;
-  int64 save_physical = 4;
-  bool force = 5;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  TsoOpType op_type = 2;
+  int64 count = 3;
+  TsoTimestamp current_timestamp = 4;
+  int64 save_physical = 5;
+  bool force = 6;
 };
 
 message TsoResponse {
-  TsoOpType op_type = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
-  TsoTimestamp start_timestamp = 3;
-  int64 count = 4;
-  int64 save_physical = 5;
-  int64 system_time = 6;
-  string leader = 7;
+  TsoOpType op_type = 3;
+  TsoTimestamp start_timestamp = 4;
+  int64 count = 5;
+  int64 save_physical = 6;
+  int64 system_time = 7;
+  string leader = 8;
 };
 
 message GetDeletedTableRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message GetDeletedTableResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated TableDefinitionWithId table_definition_with_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TableDefinitionWithId table_definition_with_ids = 3;
 }
 
 message CleanDeletedTableRequest {
-  DingoCommonId table_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId table_id = 2;
 }
 
 message CleanDeletedTableResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message GetDeletedIndexRequest {
-  DingoCommonId index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
 }
 
 message GetDeletedIndexResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated TableDefinitionWithId table_definition_with_ids = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TableDefinitionWithId table_definition_with_ids = 3;
 }
 
 message CleanDeletedIndexRequest {
-  DingoCommonId index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DingoCommonId index_id = 2;
 }
 
 message CleanDeletedIndexResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message HelloRequest {
-  int64 hello = 1;
-  bool get_memory_info = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 hello = 2;
+  bool get_memory_info = 3;
 }
 
 message HelloResponse {
-  dingodb.pb.error.Error error = 1;
-  dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 3;
 }
 
 service MetaService {

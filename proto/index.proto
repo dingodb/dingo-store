@@ -24,41 +24,46 @@ option java_package = "io.dingodb.index";
 option cc_generic_services = true;
 
 message VectorAddRequest {
-  dingodb.pb.store.Context context = 1;
-  repeated dingodb.pb.common.VectorWithId vectors = 2;
-  bool replace_deleted = 3;
-  bool is_update = 4;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  repeated dingodb.pb.common.VectorWithId vectors = 3;
+  bool replace_deleted = 4;
+  bool is_update = 5;
 }
 
 message VectorAddResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // return the execution status of each key
   // key_states[index] = true, add success
   // key_states[index] = false, add failed
-  repeated bool key_states = 2;
+  repeated bool key_states = 3;
 }
 
 message VectorBatchQueryRequest {
-  dingodb.pb.store.Context context = 1;
-  repeated int64 vector_ids = 2;
-  bool without_vector_data = 3;       // Default false, if true, response without vector data.
-  bool without_scalar_data = 4;       // Default false, if true, response without scalar data.
-  repeated string selected_keys = 5;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  repeated int64 vector_ids = 3;
+  bool without_vector_data = 4;       // Default false, if true, response without vector data.
+  bool without_scalar_data = 5;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 6;  // If without_scalar_data is false, selected_keys is used to select scalar data,
                                       // if this parameter is null, all scalar data will be returned.
-  bool without_table_data = 6;        // Default false, if true, response without table data.
+  bool without_table_data = 7;        // Default false, if true, response without table data.
 }
 
 message VectorBatchQueryResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.VectorWithId vectors = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.VectorWithId vectors = 3;
 }
 
 message VectorScanQueryRequest {
-  dingodb.pb.store.Context context = 1;
-  int64 vector_id_start = 2;
-  bool is_reverse_scan = 3;
-  int64 max_scan_count = 4;  // the max count user want to scan
-  int64 vector_id_end = 5;   // the end id of scan, if is_reverse_scan is true, vector_id_end must be less than
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  int64 vector_id_start = 3;
+  bool is_reverse_scan = 4;
+  int64 max_scan_count = 5;  // the max count user want to scan
+  int64 vector_id_end = 6;   // the end id of scan, if is_reverse_scan is true, vector_id_end must be less than
                              // vector_id_start, if is_reverse_scan is false, vector_id_end must be greater than
                              // vector_id_start
                              // the real range is [start, end], include start and end
@@ -76,23 +81,27 @@ message VectorScanQueryRequest {
 }
 
 message VectorScanQueryResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.VectorWithId vectors = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.VectorWithId vectors = 3;
 }
 
 message VectorGetRegionMetricsRequest {
-  dingodb.pb.store.Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
 }
 
 message VectorGetRegionMetricsResponse {
-  dingodb.pb.error.Error error = 1;
-  dingodb.pb.common.VectorIndexMetrics metrics = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.VectorIndexMetrics metrics = 3;
 }
 
 message VectorSearchRequest {
-  dingodb.pb.store.Context context = 1;
-  dingodb.pb.common.VectorSearchParameter parameter = 2;
-  repeated dingodb.pb.common.VectorWithId vector_with_ids = 3;  // this field is used for batch search
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  dingodb.pb.common.VectorSearchParameter parameter = 3;
+  repeated dingodb.pb.common.VectorWithId vector_with_ids = 4;  // this field is used for batch search
 }
 
 message VectorWithDistanceResult {
@@ -100,31 +109,36 @@ message VectorWithDistanceResult {
 }
 
 message VectorSearchResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated VectorWithDistanceResult batch_results = 2;  // this field is used for batch search
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated VectorWithDistanceResult batch_results = 3;  // this field is used for batch search
 }
 
 message VectorDeleteRequest {
-  dingodb.pb.store.Context context = 1;
-  repeated int64 ids = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  repeated int64 ids = 3;
 }
 
 message VectorDeleteResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // return the execution status of each key
   // key_states[index] = true, delete success
   // key_states[index] = false, key not exist
-  repeated bool key_states = 2;
+  repeated bool key_states = 3;
 }
 
 message VectorGetBorderIdRequest {
-  dingodb.pb.store.Context context = 1;
-  bool get_min = 2;  // if true, get min id, else get max id
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  bool get_min = 3;  // if true, get min id, else get max id
 }
 
 message VectorGetBorderIdResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 id = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 id = 3;
 }
 
 enum AlgorithmType {
@@ -134,20 +148,22 @@ enum AlgorithmType {
 }
 
 message VectorCalcDistanceRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+
   // which library algorithm to use
-  AlgorithmType algorithm_type = 1;
+  AlgorithmType algorithm_type = 2;
 
   // must be valid
-  dingodb.pb.common.MetricType metric_type = 2;
+  dingodb.pb.common.MetricType metric_type = 3;
 
   // target vector arrays . empty do nothing. no error.
-  repeated dingodb.pb.common.Vector op_left_vectors = 3;
+  repeated dingodb.pb.common.Vector op_left_vectors = 4;
 
   // source vector arrays . empty do nothing. no error.
-  repeated dingodb.pb.common.Vector op_right_vectors = 4;
+  repeated dingodb.pb.common.Vector op_right_vectors = 5;
 
   // whether to return the normalized result.
-  bool is_return_normlize = 5;
+  bool is_return_normlize = 6;
 }
 
 message VectorDistance {
@@ -155,53 +171,58 @@ message VectorDistance {
 }
 
 message VectorCalcDistanceResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 
   // return normalized result if is_return_normlize is true
-  repeated dingodb.pb.common.Vector op_left_vectors = 2;
+  repeated dingodb.pb.common.Vector op_left_vectors = 3;
 
   // return normalized result if is_return_normlize is true
-  repeated dingodb.pb.common.Vector op_right_vectors = 3;
+  repeated dingodb.pb.common.Vector op_right_vectors = 4;
 
   // num distance values = op_left_vectors *  op_right_vectors
-  repeated VectorDistance distances = 4;
+  repeated VectorDistance distances = 5;
 }
 
 // vector.id > 0: exact query
 // vector.id == 0: similarity search with vector.vector
 message VectorSearchDebugRequest {
-  dingodb.pb.store.Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
 
-  dingodb.pb.common.VectorWithId vector = 2;
-  dingodb.pb.common.VectorSearchParameter parameter = 3;
-  repeated dingodb.pb.common.VectorWithId vector_with_ids = 4;  // this field is used for batch search
+  dingodb.pb.common.VectorWithId vector = 3;
+  dingodb.pb.common.VectorSearchParameter parameter = 4;
+  repeated dingodb.pb.common.VectorWithId vector_with_ids = 5;  // this field is used for batch search
 }
 
 message VectorSearchDebugResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.VectorWithDistance results = 2;
-  repeated VectorWithDistanceResult batch_results = 3;  // this field is used for batch search
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.VectorWithDistance results = 3;
+  repeated VectorWithDistanceResult batch_results = 4;  // this field is used for batch search
 
   // scalar scan time unit  microsecond 10 -6 s
-  int64 deserialization_id_time_us = 4;
+  int64 deserialization_id_time_us = 5;
 
   // scalar scan time unit  microsecond 10 -6 s
-  int64 scan_scalar_time_us = 5;
+  int64 scan_scalar_time_us = 6;
 
   // search  vector unit  microsecond 10 -6 s
-  int64 search_time_us = 6;
+  int64 search_time_us = 7;
 }
 
 message VectorCountRequest {
-  dingodb.pb.store.Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
   // [vector_id_start, vector_id_end)
-  int64 vector_id_start = 2;  // default region range start_key
-  int64 vector_id_end = 3;    // default region range end_key, not include
+  int64 vector_id_start = 3;  // default region range start_key
+  int64 vector_id_end = 4;    // default region range end_key, not include
 }
 
 message VectorCountResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 count = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 count = 3;
 }
 
 message VectorGetParameter {
@@ -214,16 +235,18 @@ message VectorGetParameter {
 }
 
 message HelloRequest {
-  dingodb.pb.store.Context context = 1;
-  bool get_region_metrics = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  bool get_region_metrics = 3;
 }
 
 message HelloResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-  int64 region_count = 2;
-  int64 region_leader_count = 3;
-  repeated dingodb.pb.common.RegionMetrics region_metrics = 4;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 region_count = 3;
+  int64 region_leader_count = 4;
+  repeated dingodb.pb.common.RegionMetrics region_metrics = 5;
 }
 
 service IndexService {

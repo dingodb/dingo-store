@@ -180,6 +180,7 @@ class Helper {
   static std::string HexToString(const std::string& hex_str);
 
   static void SetPbMessageError(butil::Status status, google::protobuf::Message* message);
+  static void SetPbMessageResponseInfo(google::protobuf::Message* message, int64_t elapsed_time_ns);
 
   template <typename T>
   static void SetPbMessageErrorLeader(const pb::node::NodeInfo& node_info, T* message) {

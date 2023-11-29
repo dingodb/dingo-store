@@ -158,6 +158,7 @@ void DoLeaseRevoke(google::protobuf::RpcController* /*controller*/, const pb::ve
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kKvRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -211,6 +212,7 @@ void DoLeaseGrant(google::protobuf::RpcController* /*controller*/, const pb::ver
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kKvRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -257,6 +259,7 @@ void DoLeaseRenew(google::protobuf::RpcController* /*controller*/, const pb::ver
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kKvRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -525,6 +528,7 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller*>(controller), nullptr, response);
   ctx->SetRegionId(Constant::kKvRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -585,6 +589,7 @@ void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(nullptr, nullptr, response);
   ctx->SetRegionId(Constant::kKvRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
