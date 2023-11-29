@@ -128,9 +128,8 @@ message TableDefinition {
   int64 ttl = 3;
   int64 auto_increment = 4;
   string create_sql = 5;
-  string comment = 6;
-  string charset = 7;
-  string collate = 8;
+  string charset = 6;
+  string collate = 7;
   PartitionRule table_partition = 20;
   uint32 replica = 21;
   dingodb.pb.common.Engine engine = 22;
@@ -141,6 +140,7 @@ message TableDefinition {
   int64 create_timestamp = 50;
   int64 update_timestamp = 51;
   int64 delete_timestamp = 52;
+  string comment = 53;
 }
 
 // IndexDefinition is for vector/scalar index

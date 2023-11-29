@@ -106,7 +106,6 @@ public class EntityConversion {
         List<Meta.ColumnDefinition> columnDefinitions = table.getColumns().stream()
                 .map(EntityConversion::mapping)
                 .collect(Collectors.toList());
-
         return Meta.TableDefinition.newBuilder()
                 .setName(table.getName().toUpperCase())
                 .setVersion(table.getVersion())
@@ -119,9 +118,9 @@ public class EntityConversion {
                 .putAllProperties(table.getProperties() == null ? new HashMap() : table.getProperties())
                 .setCreateSql(Parameters.cleanNull(table.getCreateSql(), ""))
                 .setIndexParameter(Optional.mapOrGet(table.getIndexParameter(), EntityConversion::mapping, () -> Common.IndexParameter.newBuilder().build()))
-                .setComment(table.getComment())
-                .setCharset(table.getCharset())
-                .setCollate(table.getCollate())
+                .setComment(Parameters.cleanNull(table.getComment(), ""))
+                .setCharset(Parameters.cleanNull(table.getCharset(), "utf8"))
+                .setCollate(Parameters.cleanNull(table.getCollate(), "utf8_bin"))
                 .build();
     }
 
@@ -143,8 +142,8 @@ public class EntityConversion {
                 .createSql(tableDefinition.getCreateSql())
                 .indexParameter(Optional.mapOrNull(tableDefinition.getIndexParameter(), EntityConversion::mapping))
                 .comment(tableDefinition.getComment())
-                .charset(tableDefinition.getCharset())
-                .collate(tableDefinition.getCollate())
+                .charset(Parameters.cleanNull(tableDefinition.getCharset(), "utf8"))
+                .collate(Parameters.cleanNull(tableDefinition.getCollate(), "utf8_bin"))
                 .build();
     }
 
@@ -179,7 +178,7 @@ public class EntityConversion {
                 .primary(definition.getIndexOfKey())
                 .defaultValue(definition.getDefaultVal())
                 .isAutoIncrement(definition.getIsAutoIncrement())
-                .state(definition.getState())
+                .state(definition.getState() == 0 ? 1 : definition.getState())
                 .comment(definition.getComment())
                 .build();
     }
@@ -886,8 +885,8 @@ public class EntityConversion {
                 .setIndexOfKey(column.getPrimary())
                 .setSqlType(column.getType())
                 .setIsAutoIncrement(column.isAutoIncrement())
-                .setState(column.getState())
-                .setComment(column.getComment())
+                .setState(column.getState() == 0 ? 1 : column.getState())
+                .setComment(Parameters.cleanNull(column.getComment(), ""))
                 .build();
     }
     
