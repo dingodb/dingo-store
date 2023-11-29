@@ -318,8 +318,12 @@ butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Co
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(ctx->region_id);
-  status = reader->VectorBatchQuery(ctx, vector_with_ids);
+  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorBatchQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
@@ -339,8 +343,12 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(ctx->region_id);
-  status = reader->VectorBatchSearch(ctx, results);
+  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorBatchSearch(ctx, results);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
@@ -360,8 +368,12 @@ butil::Status Storage::VectorGetBorderId(int64_t region_id, const pb::common::Ra
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(region_id);
-  status = reader->VectorGetBorderId(region_range, get_min, vector_id);
+  auto vector_reader = engine_->NewVectorReader(region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
   if (!status.ok()) {
     return status;
   }
@@ -376,8 +388,12 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(ctx->region_id);
-  status = reader->VectorScanQuery(ctx, vector_with_ids);
+  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorScanQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     return status;
   }
@@ -393,8 +409,12 @@ butil::Status Storage::VectorGetRegionMetrics(int64_t region_id, const pb::commo
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(region_id);
-  status = reader->VectorGetRegionMetrics(region_id, region_range, vector_index_wrapper, region_metrics);
+  auto vector_reader = engine_->NewVectorReader(region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index_wrapper, region_metrics);
   if (!status.ok()) {
     return status;
   }
@@ -408,8 +428,12 @@ butil::Status Storage::VectorCount(int64_t region_id, const pb::common::Range& r
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(region_id);
-  status = reader->VectorCount(range, count);
+  auto vector_reader = engine_->NewVectorReader(region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorCount(range, count);
   if (!status.ok()) {
     return status;
   }
@@ -501,9 +525,13 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
     return status;
   }
 
-  auto reader = engine_->NewVectorReader(ctx->region_id);
-  status =
-      reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us, search_time_us);
+  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+  status = vector_reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us,
+                                                 search_time_us);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found

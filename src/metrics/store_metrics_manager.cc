@@ -388,8 +388,10 @@ bool StoreRegionMetrics::CollectMetrics() {
     // vector index
     bool vector_index_has_data = false;
     auto vector_index_wrapper = region->VectorIndexWrapper();
-    if (vector_index_wrapper != nullptr) {
-      if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index_wrapper->Type()) {
+    auto vector_reader = engine_->NewVectorReader(region->Id());
+
+    if (vector_index_wrapper != nullptr && vector_reader != nullptr) {
+      if (BAIDU_UNLIKELY(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index_wrapper->Type())) {
         region_metrics->SetVectorIndexType(vector_index_wrapper->Type());
 
         int64_t current_count = 0;
@@ -400,14 +402,12 @@ bool StoreRegionMetrics::CollectMetrics() {
         vector_index_wrapper->GetDeletedCount(deleted_count);
         region_metrics->SetVectorDeletedCount(deleted_count);
 
-        auto reader = engine_->NewVectorReader(region->Id());
         int64_t max_id = 0;
-
-        reader->VectorGetBorderId(region->Range(), false, max_id);
+        vector_reader->VectorGetBorderId(region->Range(), false, max_id);
         region_metrics->SetVectorMaxId(max_id);
 
         int64_t min_id = 0;
-        reader->VectorGetBorderId(region->Range(), true, min_id);
+        vector_reader->VectorGetBorderId(region->Range(), true, min_id);
         region_metrics->SetVectorMinId(min_id);
 
         int64_t total_memory_usage = 0;
