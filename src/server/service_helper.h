@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 
+#include "butil/compiler_specific.h"
 #include "butil/endpoint.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -30,6 +31,9 @@
 #include "server/server.h"
 
 namespace dingodb {
+
+DECLARE_int64(service_helper_store_min_log_elapse);
+DECLARE_int64(service_helper_coordinator_min_log_elapse);
 
 // Handle service request in execute queue.
 class ServiceTask : public TaskRunnable {
@@ -52,7 +56,7 @@ class ServiceClosure : public google::protobuf::Closure {
  public:
   ServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request, U* response)
       : method_name_(method_name), done_(done), request_(request), response_(response) {
-    start_time_ = Helper::TimestampMs();
+    start_time_ = Helper::TimestampNs();
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
@@ -135,7 +139,7 @@ void ServiceClosure<T, U>::Run() {
   std::unique_ptr<ServiceClosure<T, U>> self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -146,14 +150,28 @@ void ServiceClosure<T, U>::Run() {
                                                          request_->context().region_id(), response_->error().errmsg()));
     }
 
-    DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}", method_name_,
-                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    DINGO_LOG(ERROR) << fmt::format(
+        "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
+        request_->request_info().request_id(), elapsed_time,
+        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   } else {
-    DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}", method_name_,
-                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_helper_store_min_log_elapse)) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+          request_->request_info().request_id(), elapsed_time,
+          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    } else {
+      DINGO_LOG(DEBUG) << fmt::format(
+          "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+          request_->request_info().request_id(), elapsed_time,
+          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    }
   }
+
+  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
 }
 
 template <>
@@ -162,17 +180,31 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
       self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
 
   if (response_->error().errcode() != 0) {
-    DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}", method_name_,
-                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    DINGO_LOG(ERROR) << fmt::format(
+        "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
+        request_->request_info().request_id(), elapsed_time,
+        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   } else {
-    DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}", method_name_,
-                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_helper_store_min_log_elapse)) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+          request_->request_info().request_id(), elapsed_time,
+          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    } else {
+      DINGO_LOG(DEBUG) << fmt::format(
+          "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+          request_->request_info().request_id(), elapsed_time,
+          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    }
   }
+
+  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
 }
 
 // Wrapper brpc service closure for log.
@@ -182,7 +214,7 @@ class CoordinatorServiceClosure : public google::protobuf::Closure {
   CoordinatorServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request,
                             U* response)
       : method_name_(method_name), done_(done), request_(request), response_(response) {
-    start_time_ = Helper::TimestampMs();
+    start_time_ = Helper::TimestampNs();
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
@@ -204,7 +236,7 @@ void CoordinatorServiceClosure<T, U>::Run() {
   std::unique_ptr<CoordinatorServiceClosure<T, U>> self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampMs() - start_time_;
+  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -214,14 +246,28 @@ void CoordinatorServiceClosure<T, U>::Run() {
                                                          response_->error().errmsg()));
     }
 
-    DINGO_LOG(ERROR) << fmt::format("[service.{}][elapsed({})] Request failed, response: {} request: {}", method_name_,
-                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    DINGO_LOG(ERROR) << fmt::format(
+        "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
+        request_->request_info().request_id(), elapsed_time,
+        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   } else {
-    DINGO_LOG(DEBUG) << fmt::format("[service.{}][elapsed({})] Request finish, response: {} request: {}", method_name_,
-                                    elapsed_time, response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_helper_coordinator_min_log_elapse)) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+          request_->request_info().request_id(), elapsed_time,
+          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    } else {
+      DINGO_LOG(DEBUG) << fmt::format(
+          "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+          request_->request_info().request_id(), elapsed_time,
+          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    }
   }
+
+  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
 }
 
 }  // namespace dingodb

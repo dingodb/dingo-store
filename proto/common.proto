@@ -829,3 +829,15 @@ enum CoordinatorServiceType {
   ServiceTypeAutoIncrement = 2;
   ServiceTypeVersion = 3;
 }
+
+message RequestInfo {
+  int64 request_id = 1;
+}
+
+message TimeInfo {
+  int64 total_rpc_time_ns = 1;
+}
+
+message ResponseInfo {
+  TimeInfo time_info = 1;
+}

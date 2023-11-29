@@ -22,126 +22,152 @@ package dingodb.pb.store;
 option java_package = "io.dingodb.store";
 option cc_generic_services = true;
 
+enum IsolationLevel {
+  InvalidIsolationLevel = 0;  // this is just a placeholder, not a valid isolation level
+  SnapshotIsolation = 1;
+  ReadCommitted = 2;
+}
+
 message Context {
   int64 region_id = 1;
   dingodb.pb.common.RegionEpoch region_epoch = 2;
-  IsolationLevel isolation_level = 7;
+  IsolationLevel isolation_level = 3;
 }
 
 message KvGetRequest {
-  Context context = 1;
-  bytes key = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  bytes key = 3;
 }
 
 message KvGetResponse {
-  dingodb.pb.error.Error error = 1;
-  bytes value = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  bytes value = 3;
 }
 
 message KvBatchGetRequest {
-  Context context = 1;
-  repeated bytes keys = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  repeated bytes keys = 3;
 }
 
 message KvBatchGetResponse {
-  dingodb.pb.error.Error error = 1;
-  repeated dingodb.pb.common.KeyValue kvs = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.KeyValue kvs = 3;
 }
 
 message KvPutRequest {
-  Context context = 1;
-  dingodb.pb.common.KeyValue kv = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  dingodb.pb.common.KeyValue kv = 3;
 }
 
 message KvPutResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message KvBatchPutRequest {
-  Context context = 1;
-  repeated dingodb.pb.common.KeyValue kvs = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  repeated dingodb.pb.common.KeyValue kvs = 3;
 }
 
 message KvBatchPutResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message KvPutIfAbsentRequest {
-  Context context = 1;
-  dingodb.pb.common.KeyValue kv = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  dingodb.pb.common.KeyValue kv = 3;
 }
 
 message KvPutIfAbsentResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // key_state = true, update success
   // key_state = false, update failed
-  bool key_state = 2;
+  bool key_state = 3;
 }
 
 message KvBatchPutIfAbsentRequest {
-  Context context = 1;
-  repeated dingodb.pb.common.KeyValue kvs = 2;
-  bool is_atomic = 3;
-}
-
-message KvBatchPutIfAbsentResponse {
-  dingodb.pb.error.Error error = 1;
-  // return the execution status of each key
-  // key_states[index] = true, update success
-  // key_states[index] = false, update failed
-  repeated bool key_states = 2;
-}
-
-message KvBatchDeleteRequest {
-  Context context = 1;
-  repeated bytes keys = 2;
-}
-
-message KvBatchDeleteResponse {
-  dingodb.pb.error.Error error = 1;
-  // return the execution status of each key
-  // key_states[index] = true, delete success
-  // key_states[index] = false, key not exist
-  repeated bool key_states = 2;
-}
-
-message KvDeleteRangeRequest {
-  Context context = 1;
-  dingodb.pb.common.RangeWithOptions range = 2;
-}
-
-message KvDeleteRangeResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 delete_count = 2;
-}
-
-message KvCompareAndSetRequest {
-  Context context = 1;
-  dingodb.pb.common.KeyValue kv = 2;
-  // empty means key not exist
-  bytes expect_value = 3;
-}
-
-message KvCompareAndSetResponse {
-  dingodb.pb.error.Error error = 1;
-  // key_state = true, update success
-  // key_state = false, update failed
-  bool key_state = 2;
-}
-
-message KvBatchCompareAndSetRequest {
-  Context context = 1;
-  repeated dingodb.pb.common.KeyValue kvs = 2;
-  // empty means key not exist
-  repeated bytes expect_values = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  repeated dingodb.pb.common.KeyValue kvs = 3;
   bool is_atomic = 4;
 }
 
-message KvBatchCompareAndSetResponse {
-  dingodb.pb.error.Error error = 1;
+message KvBatchPutIfAbsentResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  // return the execution status of each key
+  // key_states[index] = true, update success
+  // key_states[index] = false, update failed
+  repeated bool key_states = 3;
+}
+
+message KvBatchDeleteRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  repeated bytes keys = 3;
+}
+
+message KvBatchDeleteResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  // return the execution status of each key
+  // key_states[index] = true, delete success
+  // key_states[index] = false, key not exist
+  repeated bool key_states = 3;
+}
+
+message KvDeleteRangeRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  dingodb.pb.common.RangeWithOptions range = 3;
+}
+
+message KvDeleteRangeResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 delete_count = 3;
+}
+
+message KvCompareAndSetRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  dingodb.pb.common.KeyValue kv = 3;
+  // empty means key not exist
+  bytes expect_value = 4;
+}
+
+message KvCompareAndSetResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // key_state = true, update success
   // key_state = false, update failed
-  repeated bool key_states = 2;
+  bool key_state = 3;
+}
+
+message KvBatchCompareAndSetRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  repeated dingodb.pb.common.KeyValue kvs = 3;
+  // empty means key not exist
+  repeated bytes expect_values = 4;
+  bool is_atomic = 5;
+}
+
+message KvBatchCompareAndSetResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  // key_state = true, update success
+  // key_state = false, update failed
+  repeated bool key_states = 3;
 }
 
 // aggregation type
@@ -228,11 +254,12 @@ message Coprocessor {
 }
 
 message KvScanBeginRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // region id
-  Context context = 1;
+  Context context = 2;
 
   // prefix start_key end_key with mode
-  dingodb.pb.common.RangeWithOptions range = 2;
+  dingodb.pb.common.RangeWithOptions range = 3;
 
   // The maximum number of requests keys per request
   // limit = 0 means only scan_id is returned and no data is returned
@@ -240,74 +267,73 @@ message KvScanBeginRequest {
   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
-  int64 max_fetch_cnt = 3;
+  int64 max_fetch_cnt = 4;
 
   // is it just to get the key
-  bool key_only = 4;
+  bool key_only = 5;
 
   // whether to automatically release resources
   // after reading all the data, the default is false,
   // and the default is automatically released
-  bool disable_auto_release = 5;
+  bool disable_auto_release = 6;
 
   // Whether to enable operator pushdown, enabled by default (false: means enabled, true: means disabled)
-  bool disable_coprocessor = 6;
+  bool disable_coprocessor = 7;
 
   // coprocessor
-  Coprocessor coprocessor = 7;
+  Coprocessor coprocessor = 8;
 }
 
 message KvScanBeginResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 
   // uniquely identifies this scan
-  bytes scan_id = 2;
+  bytes scan_id = 3;
 
   // return key value pair. if kvs.size == 0 means no data
-  repeated dingodb.pb.common.KeyValue kvs = 3;
+  repeated dingodb.pb.common.KeyValue kvs = 4;
 }
 
 message KvScanContinueRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // region id
-  Context context = 1;
+  Context context = 2;
 
   // uniquely identifies this scan
-  bytes scan_id = 2;
+  bytes scan_id = 3;
 
   // The maximum number of requests keys per request
   // If max_fetch_cnt > 0, it means to return scan_id and data. Note that in this way, the return will be slower because
   // the data needs to be prepared For example: max_fetch_cnt = 10000, which means that the maximum number of kv items
   // in this request is 10000, which is just a suggested value. If the maximum number of kv items in the server is 1000,
   // The data returned each time is only 1000 pieces of data. Note: only the maximum number of kv pairs per request
-  int64 max_fetch_cnt = 3;
+  int64 max_fetch_cnt = 4;
 }
 
 message KvScanContinueResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 
   // return key value pair. if kvs.size == 0 means no data
-  repeated dingodb.pb.common.KeyValue kvs = 2;
+  repeated dingodb.pb.common.KeyValue kvs = 3;
 }
 
 message KvScanReleaseRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // region id
-  Context context = 1;
+  Context context = 2;
 
   // uniquely identifies this scan
-  bytes scan_id = 2;
+  bytes scan_id = 3;
 }
 
 message KvScanReleaseResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-}
-
-enum IsolationLevel {
-  InvalidIsolationLevel = 0;  // this is just a placeholder, not a valid isolation level
-  SnapshotIsolation = 1;
-  ReadCommitted = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 enum Action {
@@ -421,40 +447,43 @@ message TxnResultInfo {
 
 // TxnGet do point-lookup a value for key in the transaction with start_ts
 message TxnGetRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // the key client want to do get
-  bytes key = 2;
+  bytes key = 3;
   // the start_ts of the get transaction, store will return the value of the key when commit_ts < start_ts
-  int64 start_ts = 3;
+  int64 start_ts = 4;
 }
 
 message TxnGetResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // A value could not be retrieved due to the state of the database for the
   // requested key.
   // the txn_result is one of the following:
   // 1. LockInfo: Read conflict with key which is locked by another transaction. The client should backoff or cleanup
   // the lock then retry.
   // 2. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
   // for store table/index region:
   // The value associated with the key, if not found, is empty and error is NOT_FOUND
   // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
-  bytes value = 3;
+  bytes value = 4;
   // for vector index region:
   // The vector value associated with the key, if not found, is empty and error is NOT_FOUND
   // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
-  dingodb.pb.common.VectorWithId vector = 4;
+  dingodb.pb.common.VectorWithId vector = 5;
   // True if the key does not exist in the database.
-  // bool not_found = 5;
+  // bool not_found = 6;
 }
 
 // TxnScan fetches values for a range of keys in the transaction with start_ts.
 message TxnScanRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // prefix start_key end_key with mode
-  dingodb.pb.common.RangeWithOptions range = 2;
+  dingodb.pb.common.RangeWithOptions range = 3;
 
   // The maximum number of results to return.
   uint32 limit = 4;
@@ -473,44 +502,47 @@ message TxnScanRequest {
 // after resolve lock.
 message TxnScanResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // This txn_result exists when some key is locked but we cannot check locks of
   // all keys. In this case, `kvs` should be empty and the client should redo
   // scanning all the keys after resolving the lock.
   // the txn_result is one of the following:
   // 1. LockInfo: Read conflict with key which is locked by another transaction.
   // 2. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
   // for store table/index region, kvs is the return value of the scan request
-  repeated dingodb.pb.common.KeyValue kvs = 3;
+  repeated dingodb.pb.common.KeyValue kvs = 4;
   // for vector index region, vectors is the return value of the scan request
-  repeated dingodb.pb.common.VectorWithId vectors = 4;
+  repeated dingodb.pb.common.VectorWithId vectors = 5;
   // if scan is not finished, has_more is true, otherwise false
-  bool has_more = 5;
+  bool has_more = 6;
   // the last iteratered key of this scan response.
   // if end_key is null, means scan do not successfully iterate any key.
-  bytes end_key = 6;
+  bytes end_key = 7;
 }
 
 // Lock a set of keys to prepare to write to them.
 message TxnPessimisticLockRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // In this case every `Op` of the mutations must be `PessimisticLock`.
-  repeated Mutation mutations = 2;
-  bytes primary_lock = 3;
-  uint64 start_ts = 4;
+  repeated Mutation mutations = 3;
+  bytes primary_lock = 4;
+  uint64 start_ts = 5;
   // the lock's ttl is timestamp in milisecond, it's the absolute timestamp when the lock is expired.
-  uint64 lock_ttl = 5;
+  uint64 lock_ttl = 6;
   // Each locking command in a pessimistic transaction has its own timestamp oracle.
   // If locking fails, then the corresponding SQL statement can be retried with a later timestamp oracle, Executor does
   // not need to retry the whole transaction. The name comes from the `SELECT ... FOR UPDATE` SQL statement which is a
   // locking read. Each `SELECT ... FOR UPDATE` in a transaction will be assigned its own timestamp oracle.
-  uint64 for_update_ts = 6;
+  uint64 for_update_ts = 7;
 }
 
 message TxnPessimisticLockResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // if there are many keys can't be locked, there will be many txn_result, each txn_result is for one key
   // the txn_result is one of the following:
   // 1. LockInfo: lock meet a lock and can't proceed, the lock is returned
@@ -519,21 +551,23 @@ message TxnPessimisticLockResponse {
   //    2.2 PessimisticRetry: a lock acquisition request waits for a lock and awakes, or meets a newer version of data,
   //                           let Executor retry.
   //    2.3 SelfRolledBack: the transaction itself has been rolled back when it tries to prewrite.
-  repeated TxnResultInfo txn_result = 2;
+  repeated TxnResultInfo txn_result = 3;
 }
 
 // Unlock keys locked using `TxnPessimisticLockRequest`.
 message TxnPessimisticRollbackRequest {
-  Context context = 1;
-  uint64 start_ts = 2;
-  uint64 for_update_ts = 3;
-  repeated bytes keys = 4;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  uint64 start_ts = 3;
+  uint64 for_update_ts = 4;
+  repeated bytes keys = 5;
 }
 
 message TxnPessimisticRollbackResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-  repeated TxnResultInfo txn_result = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TxnResultInfo txn_result = 3;
 }
 
 message TxnPrewriteRequest {
@@ -564,38 +598,40 @@ message TxnPrewriteRequest {
     bytes extra_data = 2;
   }
 
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // The data to be written to the database.
-  repeated Mutation mutations = 2;
+  repeated Mutation mutations = 3;
   // The primary lock of the transaction is setup by client
-  bytes primary_lock = 3;
+  bytes primary_lock = 4;
   // Identifies the transaction being written.
-  int64 start_ts = 4;
+  int64 start_ts = 5;
   // the lock's ttl is timestamp in milisecond.
-  int64 lock_ttl = 5;
+  int64 lock_ttl = 6;
   // the number of keys involved in the transaction
-  int64 txn_size = 6;
+  int64 txn_size = 7;
   // When the transaction involves only one region, it's possible to commit the
   // transaction directly with 1PC protocol.
-  bool try_one_pc = 7;  // NOT IMPLEMENTED
+  bool try_one_pc = 8;  // NOT IMPLEMENTED
   // The max commit ts is reserved for limiting the commit ts of 1PC, which can be used to avoid inconsistency with
   // schema change. This field is unused now.
-  int64 max_commit_ts = 8;  // NOT IMPLEMENTED
+  int64 max_commit_ts = 9;  // NOT IMPLEMENTED
 
   // for pessimistic transaction
   // check if the keys is locked by pessimistic transaction
-  repeated PessimisticCheck pessimistic_checks = 9;
+  repeated PessimisticCheck pessimistic_checks = 10;
   // fo pessimistic transaction
   // for_update_ts constriants that should be checked when prewriting a pessimistic transaction.
-  repeated ForUpdateTsCheck for_update_ts_checks = 10;
+  repeated ForUpdateTsCheck for_update_ts_checks = 11;
   // for both pessimistic and optimistic transaction
   // the extra_data executor want to store in lock
-  repeated LockExtraData lock_extra_datas = 11;
+  repeated LockExtraData lock_extra_datas = 12;
 }
 
 message TxnPrewriteResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // for prewrite, txn_result will be one of the following:
   // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
   // 2. WriteConflict: Write conflict with key which is already written after start_ts
@@ -605,29 +641,31 @@ message TxnPrewriteResponse {
   // for success prewrite, txn_result is empty
   // for failure prewrite, txn_result is not empty
   // if there is a WriteConflict in txn_result, client should backoff or cleanup the lock then retry
-  repeated TxnResultInfo txn_result = 2;
+  repeated TxnResultInfo txn_result = 3;
   // if there is PutIfAbsent in mutation, and if there is key conflict, the conflict key will be returned
-  repeated AlreadyExist keys_already_exist = 3;
+  repeated AlreadyExist keys_already_exist = 4;
   // When the transaction is successfully committed with 1PC protocol, this
   // field will be set to the commit ts of the transaction. Otherwise, if dingo-store
   // failed to commit it with 1PC or the transaction is not 1PC, the value will
   // be 0.
-  int64 one_pc_commit_ts = 4;  // NOT IMPLEMENTED
+  int64 one_pc_commit_ts = 5;  // NOT IMPLEMENTED
 }
 
 message TxnCommitRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // The start_ts of the transaction.
-  int64 start_ts = 2;
+  int64 start_ts = 3;
   // The commit_ts of transaction. Must be greater than `start_ts`.
-  int64 commit_ts = 3;
+  int64 commit_ts = 4;
   // All keys in the transaction to be committed.
-  repeated bytes keys = 4;
+  repeated bytes keys = 5;
 }
 
 message TxnCommitResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. LockInfo: Commit meets a lock and can't proceed, the lock is returned
   // 2. TxnNotFound: if committing a key but not found its lock, the lock may be cleaned up by gc or resolved by. If
@@ -635,9 +673,9 @@ message TxnCommitResponse {
   // Executor can think its lock is resolved, and continue to commit.
   // 3. WriteConflict: SelfRolledBack: the transaction itself has been rolled back when it tries to commit.
   // 4. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
   // The commit_ts of the transaction.
-  int64 commit_ts = 3;
+  int64 commit_ts = 4;
 }
 
 // CheckTxnStatusRequest checks the status of a transaction.
@@ -645,66 +683,72 @@ message TxnCommitResponse {
 // If the TTL of the transaction is exhausted, abort that transaction and inform the caller.
 // Otherwise, returns the TTL information for the transaction.
 message TxnCheckTxnStatusRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // Primary key and lock ts together to locate the primary lock of a transaction.
-  bytes primary_key = 2;
+  bytes primary_key = 3;
   // Starting timestamp oracle of the transaction being checked.
-  int64 lock_ts = 3;
+  int64 lock_ts = 4;
   // The start timestamp oracle of the transaction which this request is part of.
-  int64 caller_start_ts = 4;
+  int64 caller_start_ts = 5;
   // The client must specify the current time to dingo-store using this timestamp oracle.
   // It is used to check TTL timeouts. It may be inaccurate.
-  int64 current_ts = 5;
+  int64 current_ts = 6;
 }
 
 message TxnCheckTxnStatusResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. PrimaryMismatch: CheckTxnStatus is sent to a lock that's not the primary.
   // 2. TxnNotFound: Txn not found when checking txn status.
   // 3. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
   // Three kinds of transaction status:
   //   locked: lock_ttl > 0
   //   committed: commit_ts > 0
   //   rollbacked: lock_ttl = 0 && commit_ts = 0
-  int64 lock_ttl = 3;
+  int64 lock_ttl = 4;
   // if the transaction of the lock is committed, the commit_ts is returned
-  int64 commit_ts = 4;
+  int64 commit_ts = 5;
   // The action performed by dingo-store (and why if the action is to rollback).
-  Action action = 5;
-  LockInfo lock_info = 6;
+  Action action = 6;
+  LockInfo lock_info = 7;
 }
 
 // For all keys locked by the transaction identified by `start_ts`, either
 // commit or rollback the transaction and unlock the key.
 message TxnResolveLockRequest {
-  Context context = 1;
-  int64 start_ts = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  int64 start_ts = 3;
   // `commit_ts == 0` means the transaction was rolled back.
   // `commit_ts > 0` means the transaction was committed at the given timestamp oracle.
-  int64 commit_ts = 3;
+  int64 commit_ts = 4;
   // Only resolve specified keys.
-  repeated bytes keys = 4;
+  repeated bytes keys = 5;
 }
 
 message TxnResolveLockResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // now the txn_result is not used, maybe used in the future
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
 }
 
 message TxnBatchGetRequest {
-  Context context = 1;
-  repeated bytes keys = 2;
-  int64 start_ts = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  repeated bytes keys = 3;
+  int64 start_ts = 4;
 }
 
 message TxnBatchGetResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 
   // This txn_result exists when some key is locked but we cannot check locks of
   // all keys. In this case, `kvs` should be empty and the client should redo
@@ -713,97 +757,105 @@ message TxnBatchGetResponse {
   // 1. LockInfo: Read conflict with key which is locked by another transaction. The client should backoff or cleanup
   // the lock then retry.
   // 2. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
 
   // for store table/index region:
   // When some key is locked but we cannot check locks of
   // all keys. In this case, `kvs` should be empty and the client should redo
   // batch get all the keys after resolving the lock.
-  repeated dingodb.pb.common.KeyValue kvs = 3;
+  repeated dingodb.pb.common.KeyValue kvs = 4;
 
   // for vector index region:
   // When some key is locked but we cannot check locks of
   // all keys. In this case, `vectors` should be empty and the client should redo
   // batch get all the keys after resolving the lock.
-  repeated dingodb.pb.common.VectorWithId vectors = 4;
+  repeated dingodb.pb.common.VectorWithId vectors = 5;
 }
 
 // Rollback a prewritten transaction. This will remove the preliminary data from
 // the database, unlock locks, and leave a rollback tombstone.
 message TxnBatchRollbackRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // Identify the transaction to be rolled back.
-  int64 start_ts = 2;
+  int64 start_ts = 3;
   // The keys to rollback.
-  repeated bytes keys = 3;
+  repeated bytes keys = 4;
 }
 
 message TxnBatchRollbackResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. LockInfo: Commit meets a lock and can't proceed, the lock is returned
   // 2. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
 }
 
 // Scan the database for locks. Used at the start of the GC process to find all
 // old locks.
 message TxnScanLockRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // Returns all locks with a start timestamp oracle before `max_ts`, not include `max_ts`.
-  int64 max_ts = 2;
+  int64 max_ts = 3;
   // The inclusive lowerbound for scanning, can't be empty.
-  bytes start_key = 3;
+  bytes start_key = 4;
   // The exclusive upperbound for scanning, can't be empty.
   bytes end_key = 5;
   // The maximum number of locks to return.
-  uint32 limit = 4;
+  uint32 limit = 6;
 }
 
 message TxnScanLockResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-  TxnResultInfo txn_result = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TxnResultInfo txn_result = 3;
   // Info on all locks found by the scan.
-  repeated LockInfo locks = 3;
+  repeated LockInfo locks = 4;
 }
 
 // Update the lock_ttl of a large transaction to
 // prevent it from been killed.
 message TxnHeartBeatRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // The key of the lock to update.
-  bytes primary_lock = 2;
+  bytes primary_lock = 3;
   // Start timestamp oracle of the large transaction.
-  int64 start_ts = 3;
+  int64 start_ts = 4;
   // The new TTL the sender would like.
   // The advise_lock_ttl is the timestamp of milisecond.
-  int64 advise_lock_ttl = 4;
+  int64 advise_lock_ttl = 5;
 }
 
 message TxnHeartBeatResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. PrimaryMismatch: Heartbeat is sent to a lock that's not the primary.
   // 2. TxnNotFound: Txn not found when heartbeat.
   // 3. otherwise, txn_result is empty
-  TxnResultInfo txn_result = 2;
+  TxnResultInfo txn_result = 3;
   // The TTL actually set on the requested lock.
-  int64 lock_ttl = 3;
+  int64 lock_ttl = 4;
 }
 
 // Request dingo-store to garbage collect all non-current data older than `safe_point_ts`.
 message TxnGcRequest {
-  Context context = 1;
-  int64 safe_point_ts = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  int64 safe_point_ts = 3;
 }
 
 message TxnGcResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-  TxnResultInfo txn_result = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TxnResultInfo txn_result = 3;
 }
 
 // Delete a range of data from dingo-store.
@@ -812,14 +864,16 @@ message TxnGcResponse {
 // specifying an older timestamp oracle.
 // the range is [start_key, end_key)
 message TxnDeleteRangeRequest {
-  Context context = 1;
-  bytes start_key = 2;
-  bytes end_key = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  bytes start_key = 3;
+  bytes end_key = 4;
 }
 
 message TxnDeleteRangeResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message TxnDataKey {
@@ -849,47 +903,51 @@ message TxnWriteValue {
 }
 
 message TxnDumpRequest {
-  Context context = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
   // the range is [start_key, end_key)
-  bytes start_key = 2;
-  bytes end_key = 3;
+  bytes start_key = 3;
+  bytes end_key = 4;
   // the range is [start_ts, end_ts)
   // if start_ts == 0, means start from the beginning
   // if int64_MAX, means end to the end
-  int64 start_ts = 4;
-  int64 end_ts = 5;
+  int64 start_ts = 5;
+  int64 end_ts = 6;
 }
 
 message TxnDumpResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-  TxnResultInfo txn_result = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  TxnResultInfo txn_result = 3;
 
   // data key: raw_key | start_ts
-  repeated TxnDataKey data_keys = 3;
+  repeated TxnDataKey data_keys = 4;
   // data value: raw_value
-  repeated TxnDataValue data_values = 4;
+  repeated TxnDataValue data_values = 5;
   // lock key: raw_key | lock_ver
-  repeated TxnLockKey lock_keys = 5;
+  repeated TxnLockKey lock_keys = 6;
   // lock value: LockInfo
-  repeated TxnLockValue lock_values = 6;
+  repeated TxnLockValue lock_values = 7;
   // write key: raw_key | commit_ts
-  repeated TxnWriteKey write_keys = 7;
+  repeated TxnWriteKey write_keys = 8;
   // write value: WriteInfo
-  repeated TxnWriteValue write_values = 8;
+  repeated TxnWriteValue write_values = 9;
 }
 
 message HelloRequest {
-  Context context = 1;
-  bool get_region_metrics = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Context context = 2;
+  bool get_region_metrics = 3;
 }
 
 message HelloResponse {
   // error code
-  dingodb.pb.error.Error error = 1;
-  int64 region_count = 2;
-  int64 region_leader_count = 3;
-  repeated dingodb.pb.common.RegionMetrics region_metrics = 4;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 region_count = 3;
+  int64 region_leader_count = 4;
+  repeated dingodb.pb.common.RegionMetrics region_metrics = 5;
 }
 
 service StoreService {

@@ -25,81 +25,99 @@ option java_package = "io.dingodb.debug";
 option cc_generic_services = true;
 
 message AddRegionRequest {
-  dingodb.pb.common.RegionDefinition region = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.common.RegionDefinition region = 2;
 }
 
 message AddRegionResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message ChangeRegionRequest {
-  dingodb.pb.common.RegionDefinition region = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.common.RegionDefinition region = 2;
 }
 
 message ChangeRegionResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message MergeRegionRequest {
-  int64 source_region_id = 1;
-  dingodb.pb.common.RegionEpoch source_region_epoch = 2;
-  int64 target_region_id = 3;
-  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 source_region_id = 2;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 3;
+  int64 target_region_id = 4;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 5;
 }
 
 message MergeRegionResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message DestroyRegionRequest {
-  int64 region_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
 }
 
 message DestroyRegionResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message SnapshotRequest {
-  int64 region_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
 }
 
 message SnapshotResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message TransferLeaderRequest {
-  int64 region_id = 1;
-  dingodb.pb.common.Peer peer = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+  dingodb.pb.common.Peer peer = 3;
 }
 
 message TransferLeaderResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message SnapshotVectorIndexRequest {
-  int64 vector_index_id = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
 }
 
 message SnapshotVectorIndexResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message TriggerVectorIndexSnapshotRequest {
-  int64 vector_index_id = 1;
-  string type = 2;  // install or pull
-  dingodb.pb.common.Location location = 3;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+  string type = 3;  // install or pull
+  dingodb.pb.common.Location location = 4;
 }
 
 message TriggerVectorIndexSnapshotResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message CompactRequest {
-  string cf_name = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string cf_name = 2;
 }
 
 message CompactResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 enum DebugType {
@@ -118,8 +136,9 @@ enum DebugType {
 }
 
 message DebugRequest {
-  DebugType type = 1;  // debug type
-  repeated int64 region_ids = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DebugType type = 2;  // debug type
+  repeated int64 region_ids = 3;
 }
 
 message DebugResponse {
@@ -163,7 +182,7 @@ message DebugResponse {
   message RegionChange {
     repeated dingodb.pb.store_internal.RegionChangeRecord records = 1;
   }
-  
+
   message RawVectorIndexState {
     int64 id = 1;
     dingodb.pb.common.VectorIndexType type = 2;
@@ -196,16 +215,18 @@ message DebugResponse {
     repeated VectorIndexMetricsEntry entries = 1;
   }
 
-  RegionMetaStat region_meta_stat = 1;
-  RegionMetaDetails region_meta_details = 2;
-  RegionControlCommand region_control_command = 3;
-  RaftMeta raft_meta = 4;
-  RegionExecutor region_executor = 5;
-  RegionMetrics region_metrics = 6;
-  FileReader file_reader = 7;
-  RegionActualMetrics region_actual_metrics = 8;
-  StoreMetrics store_metrics = 9;
-  RegionChange region_change_record = 10;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+
+  RegionMetaStat region_meta_stat = 2;
+  RegionMetaDetails region_meta_details = 3;
+  RegionControlCommand region_control_command = 4;
+  RaftMeta raft_meta = 5;
+  RegionExecutor region_executor = 6;
+  RegionMetrics region_metrics = 7;
+  FileReader file_reader = 8;
+  RegionActualMetrics region_actual_metrics = 9;
+  StoreMetrics store_metrics = 10;
+  RegionChange region_change_record = 11;
   VectorIndexMetrics vector_index_metrics = 100;
 }
 

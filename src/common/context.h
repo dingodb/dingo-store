@@ -74,6 +74,12 @@ class Context {
     return *this;
   }
 
+  int64_t RequestId() const { return request_id_; }
+  Context& SetRequestId(int64_t region_id) {
+    request_id_ = region_id;
+    return *this;
+  }
+
   pb::common::RegionEpoch RegionEpoch() const { return region_epoch_; }
   Context& SetRegionEpoch(const pb::common::RegionEpoch& region_epoch) {
     region_epoch_ = region_epoch;
@@ -138,6 +144,9 @@ class Context {
   pb::store::IsolationLevel isolation_level_{};
 
   WriteCbFunc write_cb_{};
+
+  // The request_id is set by the client, use this id to trace the request.
+  int64_t request_id_{0};
 };
 
 using ContextPtr = std::shared_ptr<Context>;

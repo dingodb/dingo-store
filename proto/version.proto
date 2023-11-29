@@ -20,22 +20,26 @@ message VersionId {
 }
 
 message GetCurrVersionRequest {
-  VersionId verId = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  VersionId verId = 2;
 }
 
 message GetCurrVersionResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 version = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 version = 3;
 }
 
 message GetNewVersionRequest {
-  VersionId verId = 1;
-  int64 version = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  VersionId verId = 2;
+  int64 version = 3;
 }
 
 message GetNewVersionResponse {
-  dingodb.pb.error.Error error = 1;
-  int64 version = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 version = 3;
 }
 
 // kv
@@ -75,21 +79,22 @@ message ResponseHeader {
 }
 
 message RangeRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // key is the first key for the range. If range_end is not given, the request only looks up key.
-  bytes key = 1;
+  bytes key = 2;
   // range_end is the upper bound on the requested range [key, range_end).
   // If range_end is '\0', the range is all keys >= key.
   // If range_end is key plus one (e.g., "aa"+1 == "ab", "a\xff"+1 == "b"),
   // then the range request gets all keys prefixed with key.
   // If both key and range_end are '\0', then the range request returns all keys.
-  bytes range_end = 2;
+  bytes range_end = 3;
   // limit is a limit on the number of keys returned for the request. When limit is set to 0,
   // it is treated as no limit.
-  int64 limit = 3;
+  int64 limit = 4;
   // revision is the point-in-time of the key-value store to use for the range.
   // If revision is less or equal to zero, the range is over the newest key-value store.
   // If the revision has been compacted, ErrCompacted is returned as a response.
-  int64 revision = 4;  // NOT IMPLEMENTED
+  int64 revision = 5;  // NOT IMPLEMENTED
 
   // serializable sets the range request to use serializable member-local reads.
   // Range requests are linearizable by default; linearizable requests have higher
@@ -123,171 +128,191 @@ message RangeRequest {
 }
 
 message RangeResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // kvs is the list of key-value pairs matched by the range request.
   // kvs is empty when count is requested.
-  repeated Kv kvs = 3;
+  repeated Kv kvs = 4;
   // more indicates if there are more keys to return in the requested range.
-  bool more = 4;
+  bool more = 5;
   // count is set to the number of keys within the range when requested.
-  int64 count = 5;
+  int64 count = 6;
 }
 
 message PutRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // key_value is the key and value, to put into the key-value store.
-  dingodb.pb.common.KeyValue key_value = 1;
+  dingodb.pb.common.KeyValue key_value = 2;
 
   // lease is the lease ID to associate with the key in the key-value store. A lease
   // value of 0 indicates no lease.
-  int64 lease = 2;
+  int64 lease = 3;
 
   // If need_prev_kv is set, gets the previous key-value pair before changing it.
   // The previous key-value pair will be returned in the put response.
-  bool need_prev_kv = 3;
+  bool need_prev_kv = 4;
 
   // If ignore_value is set, updates the key using its current value.
   // Returns an error if the key does not exist.
-  bool ignore_value = 4;
+  bool ignore_value = 5;
 
   // If ignore_lease is set, updates the key using its current lease.
   // Returns an error if the key does not exist.
-  bool ignore_lease = 5;
+  bool ignore_lease = 6;
 }
 
 message PutResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // if prev_kv is set in the request, the previous key-value pair will be returned.
-  Kv prev_kv = 3;
+  Kv prev_kv = 4;
 }
 
 message DeleteRangeRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // key is the first key to delete in the range.
-  bytes key = 1;
+  bytes key = 2;
   // range_end is the key following the last key to delete for the range [key, range_end).
   // If range_end is not given, the range is defined to contain only the key argument.
   // If range_end is one bit larger than the given key, then the range is all the keys
   // with the prefix (the given key).
   // If range_end is '\0', the range is all keys greater than or equal to the key argument.
-  bytes range_end = 2;
+  bytes range_end = 3;
 
   // If need_prev_kv is set, gets the previous key-value pairs before deleting it.
   // The previous key-value pairs will be returned in the delete response.
-  bool need_prev_kv = 3;
+  bool need_prev_kv = 4;
 }
 
 message DeleteRangeResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // deleted is the number of keys deleted by the delete range request.
-  int64 deleted = 3;
+  int64 deleted = 4;
   // if prev_kv is set in the request, the previous key-value pairs will be returned.
-  repeated Kv prev_kvs = 4;
+  repeated Kv prev_kvs = 5;
 }
 
 message CompactionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // key is the first key to compact in the range.
-  bytes key = 1;
+  bytes key = 2;
   // range_end is the key following the last key to compact for the range [key, range_end).
   // If range_end is not given, the range is defined to contain only the key argument.
   // If range_end is one bit larger than the given key, then the range is all the keys
   // with the prefix (the given key).
   // If range_end is '\0', the range is all keys greater than or equal to the key argument.
-  bytes range_end = 2;
+  bytes range_end = 3;
 
   // the revision smaller than compact_revision will be compacted
-  int64 compact_revision = 3;
+  int64 compact_revision = 4;
 }
 
 message CompactionResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
-  int64 compaction_count = 3;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
+  int64 compaction_count = 4;
 }
 
 // lease
 message LeaseGrantRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // TTL is the advisory time-to-live in seconds. Expired lease will return -1.
-  int64 TTL = 1;
+  int64 TTL = 2;
   // ID is the requested ID for the lease. If ID is set to 0, the lessor chooses an ID.
-  int64 ID = 2;
+  int64 ID = 3;
 }
 
 message LeaseGrantResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // ID is the lease ID for the granted lease.
-  int64 ID = 3;
+  int64 ID = 4;
   // TTL is the server chosen lease time-to-live in seconds.
-  int64 TTL = 4;
+  int64 TTL = 5;
 }
 
 message LeaseRevokeRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // ID is the lease ID to revoke. When the ID is revoked, all associated keys will be deleted.
-  int64 ID = 1;
+  int64 ID = 2;
 }
 
 message LeaseRevokeResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
 }
 
 message LeaseRenewRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // ID is the lease ID for the lease to keep alive.
-  int64 ID = 1;
+  int64 ID = 2;
 }
 
 message LeaseRenewResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // ID is the lease ID from the keep alive request.
-  int64 ID = 3;
+  int64 ID = 4;
   // TTL is the new time-to-live for the lease.
-  int64 TTL = 4;
+  int64 TTL = 5;
 }
 
 message LeaseQueryRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // ID is the lease ID for the lease.
-  int64 ID = 1;
+  int64 ID = 2;
   // keys is true to query all the keys attached to this lease.
-  bool keys = 2;
+  bool keys = 3;
 }
 
 message LeaseQueryResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // ID is the lease ID from the keep alive request.
-  int64 ID = 3;
+  int64 ID = 4;
   // TTL is the remaining TTL in seconds for the lease; the lease will expire in under TTL+1 seconds.
-  int64 TTL = 4;
+  int64 TTL = 5;
   // GrantedTTL is the initial granted time in seconds upon lease creation/renewal.
-  int64 grantedTTL = 5;
+  int64 grantedTTL = 6;
   // Keys is the list of keys attached to this lease.
-  repeated bytes keys = 6;
+  repeated bytes keys = 7;
 }
 
-message ListLeasesRequest {}
+message ListLeasesRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+}
 
 message LeaseStatus {
   int64 ID = 1;
 }
 
 message ListLeasesResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
-  repeated LeaseStatus leases = 3;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
+  repeated LeaseStatus leases = 4;
 }
 
 // watch
 message WatchRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
   // request_union is a request to either create a new watcher or cancel an existing watcher.
   oneof request_union {
-    WatchCreateRequest create_request = 1;      // NOT IMPLEMENTED
-    WatchCancelRequest cancel_request = 2;      // NOT IMPLEMENTED
-    WatchProgressRequest progress_request = 3;  // NOT IMPLEMENTED
-    OneTimeWatchRequest one_time_request =
-        4;  // This is a one time watch request, only support watch a single key, not support range_end
+    WatchCreateRequest create_request = 2;      // NOT IMPLEMENTED
+    WatchCancelRequest cancel_request = 3;      // NOT IMPLEMENTED
+    WatchProgressRequest progress_request = 4;  // NOT IMPLEMENTED
+
+    // This is a one time watch request, only support watch a single key, not support range_end
+    OneTimeWatchRequest one_time_request = 5;
   }
 }
 
@@ -370,20 +395,21 @@ message WatchCancelRequest {
 message WatchProgressRequest {}
 
 message WatchResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
   // watch_id is the ID of the watcher that corresponds to the response.
-  int64 watch_id = 3;  // NOT IMPLEMENTED
+  int64 watch_id = 4;  // NOT IMPLEMENTED
 
   // created is set to true if the response is for a create watch request.
   // The client should record the watch_id and expect to receive events for
   // the created watcher from the same stream.
   // All events sent to the created watcher will attach with the same watch_id.
-  bool created = 4;  // NOT IMPLEMENTED
+  bool created = 5;  // NOT IMPLEMENTED
 
   // canceled is set to true if the response is for a cancel watch request.
   // No further events will be sent to the canceled watcher.
-  bool canceled = 5;  // NOT IMPLEMENTED
+  bool canceled = 6;  // NOT IMPLEMENTED
 
   // compact_revision is set to the minimum index if a watcher tries to watch
   // at a compacted index.
@@ -393,19 +419,20 @@ message WatchResponse {
   //
   // The client should treat the watcher as canceled and should not try to create any
   // watcher with the same start_revision again.
-  int64 compact_revision = 6;  // NOT IMPLEMENTED
+  int64 compact_revision = 7;  // NOT IMPLEMENTED
 
   // cancel_reason indicates the reason for canceling the watcher.
-  string cancel_reason = 7;  // NOT IMPLEMENTED
+  string cancel_reason = 8;  // NOT IMPLEMENTED
 
   // framgment is true if large watch response was split over multiple responses.
-  bool fragment = 8;  // NOT IMPLEMENTED
+  bool fragment = 9;  // NOT IMPLEMENTED
 
   repeated Event events = 11;
 }
 
 message GetRawKvIndexRequest {
-  bytes key = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  bytes key = 2;
 }
 
 message KvIndexInternal {
@@ -421,9 +448,10 @@ message KvIndexInternal {
 }
 
 message GetRawKvIndexResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
-  KvIndexInternal kvIndex = 3;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
+  KvIndexInternal kvIndex = 4;
 }
 
 message RevisionInternal {
@@ -447,23 +475,27 @@ message KvRevInternal {
 }
 
 message GetRawKvRevRequest {
-  RevisionInternal revision = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  RevisionInternal revision = 2;
 }
 
 message GetRawKvRevResponse {
-  dingodb.pb.error.Error error = 1;
-  ResponseHeader header = 2;
-  KvRevInternal kvRev = 3;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  ResponseHeader header = 3;
+  KvRevInternal kvRev = 4;
 }
 
 message HelloRequest {
-  int64 hello = 1;
-  bool get_memory_info = 2;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 hello = 2;
+  bool get_memory_info = 3;
 }
 
 message HelloResponse {
-  dingodb.pb.error.Error error = 1;
-  dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 3;
 }
 
 service VersionService {

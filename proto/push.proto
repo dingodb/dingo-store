@@ -14,6 +14,7 @@
 
 syntax = "proto3";
 
+import "common.proto";
 import "coordinator.proto";
 import "error.proto";
 
@@ -23,26 +24,31 @@ option java_package = "io.dingodb.coordinator";
 option cc_generic_services = true;
 
 message PushHeartbeatRequest {
-  dingodb.pb.coordinator.StoreHeartbeatResponse heartbeat_response = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.coordinator.StoreHeartbeatResponse heartbeat_response = 2;
 }
 
 message PushHeartbeatResponse {
-  dingodb.pb.error.Error error = 1;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message RegionCmdResult {
-  dingodb.pb.error.Error error = 1;
-  int64 region_cmd_id = 2;
-  dingodb.pb.coordinator.RegionCmdType region_cmd_type = 3;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 region_cmd_id = 3;
+  dingodb.pb.coordinator.RegionCmdType region_cmd_type = 4;
 }
 
 message PushStoreOperationRequest {
-  dingodb.pb.coordinator.StoreOperation store_operation = 1;
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.coordinator.StoreOperation store_operation = 2;
 }
 
 message PushStoreOperationResponse {
-  dingodb.pb.error.Error error = 1;  // if this is OK, ignore region_cmd_results, else check every region_cmd_result
-  repeated RegionCmdResult region_cmd_results = 2;
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;  // if this is OK, ignore region_cmd_results, else check every region_cmd_result
+  repeated RegionCmdResult region_cmd_results = 3;
 }
 
 service PushService {
