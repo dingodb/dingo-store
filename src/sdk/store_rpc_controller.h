@@ -41,9 +41,11 @@ class StoreRpcController {
   virtual bool IsRpcFailed(const brpc::Controller* cntl);
 
  private:
+  void DoCall(google::protobuf::Closure* done);
+
   bool PickNextLeader(butil::EndPoint& leader);
 
-  Status PrepareAndSendRpc(google::protobuf::Closure* done = nullptr);
+  Status PrepareRpc();
 
   bool Failed(const butil::EndPoint& addr);
 
@@ -52,6 +54,12 @@ class StoreRpcController {
   std::shared_ptr<Region> ProcessStoreRegionInfo(const dingodb::pb::error::StoreRegionInfo& store_region_info);
 
   bool NeedRetry() const;
+
+  bool NeedDelay() const;
+
+  bool NeedPickLeader() const;
+
+  int64_t DelayTimeMs() const;
 
   static const pb::error::Error& GetResponseError(Rpc& rpc);
 
@@ -63,6 +71,8 @@ class StoreRpcController {
 
   std::set<butil::EndPoint> failed_addrs_;
   int next_replica_index_;
+
+  Status status_;
 };
 
 }  // namespace sdk

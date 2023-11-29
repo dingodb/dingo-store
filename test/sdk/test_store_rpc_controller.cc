@@ -347,6 +347,73 @@ TEST_F(StoreRpcControllerTest, KeyOutOfRange) {
   EXPECT_TRUE(region->IsStale());
 }
 
+TEST_F(StoreRpcControllerTest, RequestFull) {
+  std::string key = "d";
+
+  KvPutRpc rpc;
+  auto* kv = rpc.MutableRequest()->mutable_kv();
+  kv->set_key(key);
+  kv->set_value("pong");
+
+  std::shared_ptr<Region> region;
+  Status got = meta_cache->LookupRegionByKey(key, region);
+  EXPECT_TRUE(got.IsOK());
+  EXPECT_FALSE(region->IsStale());
+
+  MockStoreRpcController controller(*stub, rpc, region);
+
+  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
+
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
+    (void)done;
+    auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
+    CHECK_NOTNULL(kv_put_rpc);
+    auto* response = kv_put_rpc->MutableResponse();
+    response->mutable_error()->set_errcode(pb::error::EREQUEST_FULL);
+    return Status::OK();
+  });
+
+  Status call = controller.Call();
+  EXPECT_TRUE(call.IsAborted());
+
+  EXPECT_FALSE(region->IsStale());
+}
+
+TEST_F(StoreRpcControllerTest, RequestFullThenSuccess) {
+  KvGetRpc rpc;
+  std::string key = "d";
+  rpc.MutableRequest()->set_key(key);
+  std::shared_ptr<Region> region;
+  Status got = meta_cache->LookupRegionByKey(key, region);
+  EXPECT_TRUE(got.IsOK());
+  EXPECT_FALSE(region->IsStale());
+
+  StoreRpcController controller(*stub, rpc, region);
+
+  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+        (void)done;
+        auto* kv_rpc = dynamic_cast<KvGetRpc*>(&rpc);
+        CHECK_NOTNULL(kv_rpc);
+
+        auto* response = kv_rpc->MutableResponse();
+        response->mutable_error()->set_errcode(pb::error::EREQUEST_FULL);
+        return Status::OK();
+      })
+      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+        (void)done;
+        auto* kv_rpc = dynamic_cast<KvGetRpc*>(&rpc);
+        CHECK_NOTNULL(kv_rpc);
+        kv_rpc->MutableResponse()->set_value("pong");
+        return Status::OK();
+      });
+
+  Status call = controller.Call();
+  EXPECT_TRUE(call.IsOK());
+
+  EXPECT_EQ(rpc.Response()->value(), "pong");
+}
+
 TEST_F(StoreRpcControllerTest, OtherErrorCode) {
   std::string key = "d";
 
