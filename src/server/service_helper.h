@@ -84,7 +84,6 @@ class ServiceHelper {
   static void SetError(pb::error::Error* error, int errcode, const std::string& errmsg);
   static void SetError(pb::error::Error* error, const std::string& errmsg);
 
-  static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, int64_t region_id);
   static butil::Status ValidateRegionEpoch(const pb::common::RegionEpoch& req_epoch, store::RegionPtr region);
   static butil::Status GetStoreRegionInfo(int64_t region_id, pb::error::Error* error);
   static butil::Status GetStoreRegionInfo(store::RegionPtr region, pb::error::Error* error);
@@ -92,7 +91,7 @@ class ServiceHelper {
   static butil::Status ValidateRange(const pb::common::Range& range);
   static butil::Status ValidateKeyInRange(const pb::common::Range& range, const std::vector<std::string_view>& keys);
   static butil::Status ValidateRangeInRange(const pb::common::Range& region_range, const pb::common::Range& req_range);
-  static butil::Status ValidateRegion(int64_t region_id, const std::vector<std::string_view>& keys);
+  static butil::Status ValidateRegion(store::RegionPtr region, const std::vector<std::string_view>& keys);
   static butil::Status ValidateIndexRegion(store::RegionPtr region, const std::vector<int64_t>& vector_ids);
   static butil::Status ValidateClusterReadOnly();
 };

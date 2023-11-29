@@ -30,6 +30,7 @@
 #include "engine/write_data.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -84,7 +85,7 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
   if (!status.ok()) {
     return status;
   }
-  auto reader = engine_->NewReader(ctx->RegionId());
+  auto reader = engine_->NewReader(ctx->RawEngineType());
   if (reader == nullptr) {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
   }
@@ -109,12 +110,7 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
 }
 
 butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
-  // auto status = ValidateLeader(ctx->RegionId());
-  // if (!status.ok()) {
-  //   return status;
-  // }
-
-  auto writer = engine_->NewWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
   }
@@ -128,12 +124,7 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb:
 
 butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                      bool is_atomic, std::vector<bool>& key_states) {
-  // auto status = ValidateLeader(ctx->RegionId());
-  // if (!status.ok()) {
-  //   return status;
-  // }
-
-  auto writer = engine_->NewWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
   }
@@ -146,12 +137,7 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
 }
 
 butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
-  // auto status = ValidateLeader(ctx->RegionId());
-  // if (!status.ok()) {
-  //   return status;
-  // }
-
-  auto writer = engine_->NewWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
   }
@@ -164,12 +150,7 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
 }
 
 butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
-  // auto status = ValidateLeader(ctx->RegionId());
-  // if (!status.ok()) {
-  //   return status;
-  // }
-
-  auto writer = engine_->NewWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
   }
@@ -184,12 +165,7 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
 butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                        const std::vector<std::string>& expect_values, bool is_atomic,
                                        std::vector<bool>& key_states) {
-  // auto status = ValidateLeader(ctx->RegionId());
-  // if (!status.ok()) {
-  //   return status;
-  // }
-
-  auto writer = engine_->NewWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
   }
@@ -214,12 +190,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
   ScanManager& manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.CreateScan(scan_id);
 
-  auto raw_engine = engine_->GetRawEngineByRegion(region_id);
-  if (raw_engine == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("raw_engine is nullptr, region_id : {}", region_id);
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "raw_engine is nullptr");
-  }
-
+  auto raw_engine = engine_->GetRawEngine(ctx->RawEngineType());
   status = scan->Open(*scan_id, raw_engine, cf_name);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", *scan_id);
@@ -318,7 +289,7 @@ butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Co
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
+  auto vector_reader = engine_->NewVectorReader(ctx->raw_engine_type);
   if (vector_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
@@ -343,7 +314,7 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
+  auto vector_reader = engine_->NewVectorReader(ctx->raw_engine_type);
   if (vector_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
@@ -361,19 +332,14 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
   return butil::Status();
 }
 
-butil::Status Storage::VectorGetBorderId(int64_t region_id, const pb::common::Range& region_range, bool get_min,
-                                         int64_t& vector_id) {
-  auto status = ValidateLeader(region_id);
+butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t& vector_id) {
+  auto status = ValidateLeader(region->Id());
   if (!status.ok()) {
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(region_id);
-  if (vector_reader == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region_id);
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
-  }
-  status = vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
+  auto vector_reader = engine_->NewVectorReader(region->GetRawEngineType());
+  status = vector_reader->VectorGetBorderId(region->Range(), get_min, vector_id);
   if (!status.ok()) {
     return status;
   }
@@ -388,11 +354,7 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
-  if (vector_reader == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
-  }
+  auto vector_reader = engine_->NewVectorReader(ctx->raw_engine_type);
   status = vector_reader->VectorScanQuery(ctx, vector_with_ids);
   if (!status.ok()) {
     return status;
@@ -401,20 +363,15 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
   return butil::Status();
 }
 
-butil::Status Storage::VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
-                                              VectorIndexWrapperPtr vector_index_wrapper,
+butil::Status Storage::VectorGetRegionMetrics(store::RegionPtr region, VectorIndexWrapperPtr vector_index_wrapper,
                                               pb::common::VectorIndexMetrics& region_metrics) {
-  auto status = ValidateLeader(region_id);
+  auto status = ValidateLeader(region->Id());
   if (!status.ok()) {
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(region_id);
-  if (vector_reader == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region_id);
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
-  }
-  status = vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index_wrapper, region_metrics);
+  auto vector_reader = engine_->NewVectorReader(region->GetRawEngineType());
+  status = vector_reader->VectorGetRegionMetrics(region->Id(), region->Range(), vector_index_wrapper, region_metrics);
   if (!status.ok()) {
     return status;
   }
@@ -422,17 +379,13 @@ butil::Status Storage::VectorGetRegionMetrics(int64_t region_id, const pb::commo
   return butil::Status();
 }
 
-butil::Status Storage::VectorCount(int64_t region_id, const pb::common::Range& range, int64_t& count) {
-  auto status = ValidateLeader(region_id);
+butil::Status Storage::VectorCount(store::RegionPtr region, pb::common::Range range, int64_t& count) {
+  auto status = ValidateLeader(region->Id());
   if (!status.ok()) {
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(region_id);
-  if (vector_reader == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region_id);
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
-  }
+  auto vector_reader = engine_->NewVectorReader(region->GetRawEngineType());
   status = vector_reader->VectorCount(range, count);
   if (!status.ok()) {
     return status;
@@ -525,11 +478,7 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
     return status;
   }
 
-  auto vector_reader = engine_->NewVectorReader(ctx->region_id);
-  if (vector_reader == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
-  }
+  auto vector_reader = engine_->NewVectorReader(ctx->raw_engine_type);
   status = vector_reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us,
                                                  search_time_us);
   if (!status.ok()) {
@@ -556,7 +505,7 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
   DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << ", start_ts: " << start_ts
                   << ", kvs size : " << kvs.size() << " txn_result_info : " << txn_result_info.ShortDebugString();
 
-  auto reader = engine_->NewTxnReader(ctx->RegionId());
+  auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
@@ -587,7 +536,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
                   << " is_reverse: " << is_reverse << " txn_result_info: " << txn_result_info.ShortDebugString()
                   << " kvs size: " << kvs.size() << " has_more: " << has_more << " end_key: " << end_key;
 
-  auto reader = engine_->NewTxnReader(ctx->RegionId());
+  auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
@@ -617,7 +566,7 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
   DINGO_LOG(INFO) << "TxnPessimisticLock mutations size : " << mutations.size() << " primary_lock : " << primary_lock
                   << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -640,7 +589,7 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int6
   DINGO_LOG(INFO) << "TxnPessimisticRollback start_ts : " << start_ts << " for_update_ts : " << for_update_ts
                   << " keys size : " << keys.size();
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -668,7 +617,7 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
                   << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
                   << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -692,7 +641,7 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts,
   DINGO_LOG(INFO) << "TxnCommit start_ts : " << start_ts << " commit_ts : " << commit_ts
                   << " keys size : " << keys.size();
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -715,7 +664,7 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
   DINGO_LOG(INFO) << "TxnCheckTxnStatus primary_key : " << primary_key << " lock_ts : " << lock_ts
                   << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -738,7 +687,7 @@ butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t star
   DINGO_LOG(INFO) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
                   << " keys size : " << keys.size();
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -760,7 +709,7 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
 
   DINGO_LOG(INFO) << "TxnBatchRollback keys size : " << keys.size() << ", start_ts: " << start_ts;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -789,7 +738,7 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
   range.set_start_key(start_key);
   range.set_end_key(end_key);
 
-  auto reader = engine_->NewTxnReader(ctx->RegionId());
+  auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
@@ -812,7 +761,7 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
   DINGO_LOG(INFO) << "TxnHeartBeat primary_lock : " << primary_lock << " start_ts : " << start_ts
                   << " advise_lock_ttl : " << advise_lock_ttl;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -833,7 +782,7 @@ butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts
 
   DINGO_LOG(INFO) << "TxnGc safe_point_ts : " << safe_point_ts;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -855,7 +804,7 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
 
   DINGO_LOG(INFO) << "TxnDeleteRange start_key : " << start_key << " end_key : " << end_key;
 
-  auto writer = engine_->NewTxnWriter(ctx->RegionId(), engine_);
+  auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "writer is nullptr");
@@ -887,17 +836,17 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   DINGO_LOG(INFO) << "TxnDump data start_key: " << Helper::StringToHex(Helper::EncodeTxnKey(start_key, end_ts))
                   << " end_key: " << Helper::StringToHex(Helper::EncodeTxnKey(end_key, start_ts));
 
-  auto data_reader = engine_->NewReader(ctx->RegionId());
+  auto data_reader = engine_->NewReader(ctx->RawEngineType());
   if (data_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("data_reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "data_reader is nullptr");
   }
-  auto lock_reader = engine_->NewReader(ctx->RegionId());
+  auto lock_reader = engine_->NewReader(ctx->RawEngineType());
   if (lock_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("lock_reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "lock_reader is nullptr");
   }
-  auto write_reader = engine_->NewReader(ctx->RegionId());
+  auto write_reader = engine_->NewReader(ctx->RawEngineType());
   if (write_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("write_reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "write_reader is nullptr");

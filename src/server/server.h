@@ -64,9 +64,6 @@ class Server {
   // Init directory
   bool InitDirectory();
 
-  // Init raw storage engines;
-  bool InitRawEngine();
-
   // Init storage engines;
   bool InitEngine();
 
@@ -133,8 +130,7 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr();
 
   std::shared_ptr<Engine> GetEngine();
-  std::shared_ptr<RawEngine> GetSystemRawEngine();
-  std::shared_ptr<RawEngine> GetRawEngineByRegion(int64_t region_id);
+  std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type);
 
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
 
@@ -219,8 +215,6 @@ class Server {
 
   // All store engine, include MemEngine/RaftStoreEngine/RocksEngine
   std::shared_ptr<Engine> raft_engine_;
-  std::shared_ptr<RawEngine> raw_rocks_engine_;
-  std::shared_ptr<RawEngine> raw_bdb_engine_;
 
   // Meta reader
   std::shared_ptr<MetaReader> meta_reader_;

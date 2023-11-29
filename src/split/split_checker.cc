@@ -480,7 +480,7 @@ void PreSplitCheckTask::PreSplitCheck() {
       continue;
     }
 
-    auto raw_engine = Server::GetInstance().GetRawEngineByRegion(region->Id());
+    auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
     if (raw_engine == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get raw_engine failed, skip this region.",
                                       region->Id());

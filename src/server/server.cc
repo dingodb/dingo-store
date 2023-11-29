@@ -182,38 +182,32 @@ bool Server::InitDirectory() {
   return true;
 }
 
-bool Server::InitRawEngine() {
+bool Server::InitEngine() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // init rocksdb
-  raw_rocks_engine_ = std::make_shared<RawRocksEngine>();
-  if (!raw_rocks_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  auto raw_rocks_engine = std::make_shared<RawRocksEngine>();
+  if (!raw_rocks_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
     return false;
   }
 
-  meta_reader_ = std::make_shared<MetaReader>(raw_rocks_engine_);
-  meta_writer_ = std::make_shared<MetaWriter>(raw_rocks_engine_);
+  meta_reader_ = std::make_shared<MetaReader>(raw_rocks_engine);
+  meta_writer_ = std::make_shared<MetaWriter>(raw_rocks_engine);
 
   // init bdb
-  raw_bdb_engine_ = std::make_shared<RawBdbEngine>();
-  if (!raw_bdb_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  auto raw_bdb_engine = std::make_shared<RawBdbEngine>();
+  if (!raw_bdb_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init RawBdbEngine Failed with Config[" << config->ToString();
     return false;
   }
-
-  return true;
-}
-
-bool Server::InitEngine() {
-  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // cooridnator
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     // 1.init CoordinatorController
     coordinator_control_ =
-        std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_rocks_engine_),
-                                             std::make_shared<MetaWriter>(raw_rocks_engine_), raw_rocks_engine_);
+        std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_rocks_engine),
+                                             std::make_shared<MetaWriter>(raw_rocks_engine), raw_rocks_engine);
 
     if (!coordinator_control_->Recover()) {
       DINGO_LOG(ERROR) << "coordinator_control_->Recover Failed";
@@ -225,14 +219,14 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine_, raw_bdb_engine_);
+    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
 
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(raft_engine_);
 
     // 2.init KvController
-    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(raw_rocks_engine_),
-                                              std::make_shared<MetaWriter>(raw_rocks_engine_), raw_rocks_engine_);
+    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(raw_rocks_engine),
+                                              std::make_shared<MetaWriter>(raw_rocks_engine), raw_rocks_engine);
 
     if (!kv_control_->Recover()) {
       DINGO_LOG(ERROR) << "kv_control_->Recover Failed";
@@ -275,7 +269,7 @@ bool Server::InitEngine() {
     tso_control_->SetKvEngine(raft_engine_);
 
   } else {
-    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine_, raw_bdb_engine_);
+    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
       return false;
@@ -362,8 +356,7 @@ bool Server::InitStorage() {
 }
 
 bool Server::InitStoreMetaManager() {
-  store_meta_manager_ = std::make_shared<StoreMetaManager>(std::make_shared<MetaReader>(raw_rocks_engine_),
-                                                           std::make_shared<MetaWriter>(raw_rocks_engine_));
+  store_meta_manager_ = std::make_shared<StoreMetaManager>(meta_reader_, meta_writer_);
   return store_meta_manager_->Init();
 }
 
@@ -562,15 +555,12 @@ bool Server::InitRegionController() {
 }
 
 bool Server::InitRegionCommandManager() {
-  region_command_manager_ = std::make_shared<RegionCommandManager>(std::make_shared<MetaReader>(raw_rocks_engine_),
-                                                                   std::make_shared<MetaWriter>(raw_rocks_engine_));
+  region_command_manager_ = std::make_shared<RegionCommandManager>(meta_reader_, meta_writer_);
   return region_command_manager_->Init();
 }
 
 bool Server::InitStoreMetricsManager() {
-  store_metrics_manager_ =
-      std::make_shared<StoreMetricsManager>(raw_rocks_engine_, std::make_shared<MetaReader>(raw_rocks_engine_),
-                                            std::make_shared<MetaWriter>(raw_rocks_engine_), raft_engine_);
+  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(meta_reader_, meta_writer_, raft_engine_);
   return store_metrics_manager_->Init();
 }
 
@@ -696,14 +686,9 @@ std::shared_ptr<Engine> Server::GetEngine() {
   return raft_engine_;
 }
 
-std::shared_ptr<RawEngine> Server::GetSystemRawEngine() {
-  assert(raw_rocks_engine_ != nullptr);
-  return raw_rocks_engine_;
-}
-
-std::shared_ptr<RawEngine> Server::GetRawEngineByRegion(int64_t region_id) {
+std::shared_ptr<RawEngine> Server::GetRawEngine(pb::common::RawEngine type) {
   assert(raft_engine_ != nullptr);
-  return raft_engine_->GetRawEngineByRegion(region_id);
+  return raft_engine_->GetRawEngine(type);
 }
 
 std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {

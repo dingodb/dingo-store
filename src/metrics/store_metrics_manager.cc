@@ -199,7 +199,8 @@ std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
                                  Helper::StringToHex(region->Range().end_key()));
   IteratorOptions options;
   options.upper_bound = region->Range().end_key();
-  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->Seek(region->Range().start_key());
 
   if (!iter->Valid()) {
@@ -216,7 +217,8 @@ std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
                                  Helper::StringToHex(region->Range().end_key()));
   IteratorOptions options;
   options.lower_bound = region->Range().start_key();
-  auto iter = raw_engine_->Reader()->NewIterator(Constant::kStoreDataCF, options);
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
   iter->SeekForPrev(region->Range().end_key());
 
   if (!iter->Valid()) {
@@ -229,7 +231,8 @@ std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
 
 int64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
   int64_t count = 0;
-  raw_engine_->Reader()->KvCount(Constant::kStoreDataCF, region->Range().start_key(), region->Range().end_key(), count);
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+  raw_engine->Reader()->KvCount(Constant::kStoreDataCF, region->Range().start_key(), region->Range().end_key(), count);
 
   return count;
 }
@@ -256,9 +259,10 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
     region_sizes.push_back(std::make_pair(region->Id(), 0));
   }
 
+  auto raw_engine = Server::GetInstance().GetRawEngine(regions[0]->GetRawEngineType());
   auto column_family_names = Helper::GetColumnFamilyNamesExecptMetaByRole();
   for (const auto& name : column_family_names) {
-    auto sizes = raw_engine_->GetApproximateSizes(name, ranges);
+    auto sizes = raw_engine->GetApproximateSizes(name, ranges);
     for (int i = 0; i < sizes.size(); ++i) {
       region_sizes[i].second += sizes[i];
     }
@@ -295,7 +299,8 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
-  std::vector<store::RegionPtr> need_collect_regions;
+  std::vector<store::RegionPtr> need_collect_rocks_regions;
+  std::vector<store::RegionPtr> need_collect_bdb_regions;
   for (const auto& region_metrics : region_metricses) {
     auto raft_meta = store_raft_meta->GetRaftMeta(region_metrics->Id());
     if (raft_meta == nullptr) {
@@ -309,32 +314,57 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
     if (region->State() != pb::common::NORMAL) {
       continue;
     }
-    need_collect_regions.push_back(region);
-  }
-
-  if (need_collect_regions.empty()) {
-    return false;
-  }
-
-  // Get approximate size
-  int64_t start_time = Helper::TimestampMs();
-  auto batch_regions = GenBatchRegion(need_collect_regions);
-  for (auto& regions : batch_regions) {
-    auto region_sizes = GetRegionApproximateSize(regions);
-    for (auto& item : region_sizes) {
-      int64_t region_id = item.first;
-      int64_t size = item.second;
-
-      auto region_metrics = GetMetrics(region_id);
-      if (region_metrics != nullptr) {
-        region_metrics->SetRegionSize(size);
-      }
+    if (region->GetRawEngineType() == pb::common::RAW_ENG_ROCKSDB) {
+      need_collect_rocks_regions.push_back(region);
+    } else if (region->GetRawEngineType() == pb::common::RAW_ENG_BDB) {
+      need_collect_bdb_regions.push_back(region);
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format(
-      "[metrics.region][region(*)] get region approximate size tatal size({}) batch size({}) elapsed time[{} ms]",
-      need_collect_regions.size(), batch_regions.size(), Helper::TimestampMs() - start_time);
+  // Get approximate size rocksdb
+  if (!need_collect_rocks_regions.empty()) {
+    int64_t start_time = Helper::TimestampMs();
+    auto batch_regions = GenBatchRegion(need_collect_rocks_regions);
+    for (auto& regions : batch_regions) {
+      auto region_sizes = GetRegionApproximateSize(regions);
+      for (auto& item : region_sizes) {
+        int64_t region_id = item.first;
+        int64_t size = item.second;
+
+        auto region_metrics = GetMetrics(region_id);
+        if (region_metrics != nullptr) {
+          region_metrics->SetRegionSize(size);
+        }
+      }
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[metrics.region] get rocksdb region approximate size tatal size({}) batch size({}) elapsed time[{} ms]",
+        need_collect_rocks_regions.size(), batch_regions.size(), Helper::TimestampMs() - start_time);
+  }
+
+  // Get approximate size bdb
+  if (!need_collect_bdb_regions.empty()) {
+    int64_t start_time = Helper::TimestampMs();
+    auto batch_regions = GenBatchRegion(need_collect_bdb_regions);
+    for (auto& regions : batch_regions) {
+      auto region_sizes = GetRegionApproximateSize(regions);
+      for (auto& item : region_sizes) {
+        int64_t region_id = item.first;
+        int64_t size = item.second;
+
+        auto region_metrics = GetMetrics(region_id);
+        if (region_metrics != nullptr) {
+          region_metrics->SetRegionSize(size);
+        }
+      }
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[metrics.region] get bdb region approximate size tatal size({}) batch size({}) elapsed time[{} ms]",
+        need_collect_bdb_regions.size(), batch_regions.size(), Helper::TimestampMs() - start_time);
+  }
+
   return true;
 }
 
@@ -388,7 +418,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     // vector index
     bool vector_index_has_data = false;
     auto vector_index_wrapper = region->VectorIndexWrapper();
-    auto vector_reader = engine_->NewVectorReader(region->Id());
+    auto vector_reader = engine_->NewVectorReader(region->GetRawEngine());
 
     if (vector_index_wrapper != nullptr && vector_reader != nullptr) {
       if (BAIDU_UNLIKELY(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index_wrapper->Type())) {

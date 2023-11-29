@@ -67,6 +67,8 @@ class Region {
   const std::string& Name() const { return inner_region_.definition().name(); }
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
+  pb::common::RawEngine GetRawEngine() { return inner_region_.definition().raw_engine(); }
+
   pb::common::RegionEpoch Epoch(bool lock = true);
   std::string EpochToString();
   void SetEpochVersionAndRange(int64_t version, const pb::common::Range& range);

@@ -120,15 +120,13 @@ class Storage {
                                  std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                   std::vector<pb::index::VectorWithDistanceResult>& results);
-  butil::Status VectorGetBorderId(int64_t region_id, const pb::common::Range& region_range, bool get_min,
-                                  int64_t& vector_id);
+  butil::Status VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t& vector_id);
   butil::Status VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
-  butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
-                                       VectorIndexWrapperPtr vector_index_wrapper,
+  butil::Status VectorGetRegionMetrics(store::RegionPtr region, VectorIndexWrapperPtr vector_index_wrapper,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
-  butil::Status VectorCount(int64_t region_id, const pb::common::Range& range, int64_t& count);
+  butil::Status VectorCount(store::RegionPtr region, pb::common::Range range, int64_t& count);
 
   static butil::Status VectorCalcDistance(
       const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
