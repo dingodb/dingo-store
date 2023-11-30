@@ -217,7 +217,7 @@ class Constant {
 
   static constexpr int32_t kVectorIndexTaskRunningNumExpectValue = 6;
 
-  static constexpr int32_t kPullVectorIndexSnapshotMinApplyLogId = 66;
+  static constexpr int64_t kPullVectorIndexSnapshotMinApplyLogId = 66;
 
   static constexpr uint32_t kLogPrintMaxLength = 256;
 

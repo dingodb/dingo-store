@@ -242,19 +242,33 @@ void LoadOrBuildVectorIndexTask::Run() {
   // Pull snapshot from peers.
   // New region don't pull snapshot, directly build.
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
-  if (raft_meta != nullptr && raft_meta->applied_index() > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
+  int64_t applied_index = -1;
+  if (raft_meta != nullptr) {
+    applied_index = raft_meta->applied_index();
+  }
+
+  if (applied_index > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][region({})][trace({})] pull last snapshot from peers.",
                                    vector_index_wrapper_->Id(), trace_);
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
-    if (!status.ok()) {
-      if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
-          status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot failed, error: {}",
-            vector_index_wrapper_->Id(), trace_, status.error_str());
-      }
+    if (!status.ok() && status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
+        status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot failed, errcode: {}, "
+          "errmsg: {}",
+          vector_index_wrapper_->Id(), trace_, pb::error::Errno_Name(status.error_code()), status.error_str());
+    } else {
+      DINGO_LOG(INFO) << fmt::format(
+          "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot done, errcode: {}, "
+          "errmsg: {}",
+          vector_index_wrapper_->Id(), trace_, pb::error::Errno_Name(status.error_code()), status.error_str());
     }
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.loadorbuild][region({})][trace({})] do not pull vector index last snapshot from peers, "
+        "applied_index: {} ",
+        vector_index_wrapper_->Id(), trace_, applied_index);
   }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuilding vector index {}", region->Id()));
