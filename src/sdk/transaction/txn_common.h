@@ -12,35 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_ADMIN_TOOL_H_
-#define DINGODB_SDK_ADMIN_TOOL_H_
+#ifndef DINGODB_SDK_TRANSACTION_COMMON_H_
+#define DINGODB_SDK_TRANSACTION_COMMON_H_
 
-#include "sdk/coordinator_proxy.h"
+#include <cstdint>
+
+#include "glog/logging.h"
+#include "proto/meta.pb.h"
+#include "proto/store.pb.h"
+#include "sdk/client.h"
 
 namespace dingodb {
 namespace sdk {
 
-class AdminTool {
- public:
-  AdminTool(const AdminTool&) = delete;
-  const AdminTool& operator=(const AdminTool&) = delete;
-
-  explicit AdminTool(std::shared_ptr<CoordinatorProxy> coordinator_proxy);
-
-  ~AdminTool() = default;
-
-  Status GetCurrentTsoTimeStamp(pb::meta::TsoTimestamp& tso_timestamp);
-
-  Status GetCurrentTimeStamp(int64_t& timestamp);
-
-  Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
-
-  Status DropRegion(int64_t region_id);
-
- private:
-  std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
-};
+static pb::store::IsolationLevel TransactionIsolation2IsolationLevel(TransactionIsolation isolation) {
+  switch (isolation) {
+    case kSnapshotIsolation:
+      return pb::store::IsolationLevel::SnapshotIsolation;
+    case kReadCommitted:
+      return pb::store::IsolationLevel::ReadCommitted;
+    default:
+      CHECK(false) << "unknow isolation:" << isolation;
+  }
+}
 
 }  // namespace sdk
 }  // namespace dingodb
-#endif  // DINGODB_SDK_ADMIN_TOOL_H_
+#endif  // DINGODB_SDK_TRANSACTION_COMMON_H_

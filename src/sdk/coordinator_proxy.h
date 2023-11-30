@@ -38,6 +38,7 @@ class CoordinatorProxy {
   // Region
   virtual Status QueryRegion(const pb::coordinator::QueryRegionRequest& request,
                               pb::coordinator::QueryRegionResponse& response);
+
   virtual Status CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                               pb::coordinator::CreateRegionResponse& response);
 

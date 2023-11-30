@@ -40,4 +40,6 @@ const int64_t kPrefetchRegionCount = 3;
 
 const int64_t kCoordinatorInteractionMaxRetry = 3;
 
+const int64_t kTxnOpMaxRetry = 2;
+
 #endif  // DINGODB_SDK_PARAM_CONFIG_H_

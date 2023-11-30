@@ -12,6 +12,9 @@ add_library(sdk
     status.cc
     store_rpc_controller.cc
     store_rpc.cc
+    transaction/txn_buffer.cc
+    transaction/txn_impl.cc
+    transaction/txn_lock_resolver.cc
     # TODO: use libary
     ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
     ${PROJECT_SOURCE_DIR}/src/common/role.cc

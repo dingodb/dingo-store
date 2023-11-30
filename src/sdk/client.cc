@@ -34,6 +34,7 @@
 #include "sdk/raw_kv_impl.h"
 #include "sdk/region_creator_internal_data.h"
 #include "sdk/status.h"
+#include "sdk/transaction/txn_impl.h"
 
 namespace dingodb {
 namespace sdk {
@@ -95,6 +96,26 @@ Status Client::NewRawKV(RawKV** raw_kv) {
     *raw_kv = tmp.get();
     tmp.reset();
   }
+  return s;
+}
+
+Status Client::NewTransaction(const TransactionOptions& options, std::shared_ptr<Transaction>& txn) {
+  std::shared_ptr<Transaction> tmp(new Transaction(new Transaction::TxnImpl(*data_->stub, options)));
+  Status s = tmp->Begin();
+  if (s.IsOK()) {
+    txn = std::move(tmp);
+  }
+  return s;
+}
+
+Status Client::NewTransaction(const TransactionOptions& options, Transaction** txn) {
+  std::shared_ptr<Transaction> tmp;
+  Status s = NewTransaction(options, tmp);
+  if (s.ok()) {
+    *txn = tmp.get();
+    tmp.reset();
+  }
+
   return s;
 }
 
@@ -169,6 +190,38 @@ Status RawKV::BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vect
 Status RawKV::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs) {
   return impl_->Scan(start_key, end_key, limit, kvs);
 }
+
+Transaction::Transaction(TxnImpl* impl) : impl_(impl) {}
+
+Transaction::~Transaction() { impl_.reset(nullptr); }
+
+Status Transaction::Begin() { return impl_->Begin(); }
+
+Status Transaction::Get(const std::string& key, std::string& value) { return impl_->Get(key, value); }
+
+Status Transaction::BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& kvs) {
+  return impl_->BatchGet(keys, kvs);
+}
+
+Status Transaction::Put(const std::string& key, const std::string& value) { return impl_->Put(key, value); }
+
+Status Transaction::BatchPut(const std::vector<KVPair>& kvs) { return impl_->BatchPut(kvs); }
+
+Status Transaction::PutIfAbsent(const std::string& key, const std::string& value) {
+  return impl_->PutIfAbsent(key, value);
+}
+
+Status Transaction::BatchPutIfAbsent(const std::vector<KVPair>& kvs) { return impl_->BatchPutIfAbsent(kvs); }
+
+Status Transaction::Delete(const std::string& key) { return impl_->Delete(key); }
+
+Status Transaction::BatchDelete(const std::vector<std::string>& keys) { return impl_->BatchDelete(keys); }
+
+Status Transaction::PreCommit() { return impl_->PreCommit(); }
+
+Status Transaction::Commit() { return impl_->Commit(); }
+
+Status Transaction::Rollback() { return impl_->Rollback(); }
 
 RegionCreator::RegionCreator(Data* data) : data_(data) {}
 

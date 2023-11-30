@@ -15,9 +15,18 @@
 #ifndef DINGODB_SDK_COMMON_H_
 #define DINGODB_SDK_COMMON_H_
 
+#include "glog/logging.h"
+#include "proto/meta.pb.h"
 #include "proto/store.pb.h"
+#include "sdk/client.h"
+
+static const int64_t kPhysicalShiftBits = 18;
+static const int64_t kLogicalMask = (1 << kPhysicalShiftBits) - 1;
+
 namespace dingodb {
 namespace sdk {
+
+static int64_t Tso2Timestamp(pb::meta::TsoTimestamp tso) { return (tso.physical() << kPhysicalShiftBits) + tso.logical(); }
 
 // if a == b, return 0
 // if a < b, return 1
@@ -49,6 +58,16 @@ static void FillRpcContext(pb::store::Context& context, const int64_t region_id,
   context.set_region_id(region_id);
   auto* to_fill = context.mutable_region_epoch();
   *to_fill = epoch;
+}
+
+static void FillRpcContext(pb::store::Context& context, const int64_t region_id, const pb::common::RegionEpoch& epoch,
+                           const pb::store::IsolationLevel isolation) {
+  context.set_region_id(region_id);
+
+  auto* to_fill = context.mutable_region_epoch();
+  *to_fill = epoch;
+
+  context.set_isolation_level(isolation);
 }
 
 }  // namespace sdk

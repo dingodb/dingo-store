@@ -42,7 +42,7 @@ class RawKVTest : public TestBase {
 
   void SetUp() override {
     TestBase::SetUp();
-    Status kv = NewRawKV(raw_kv);
+    Status kv = client->NewRawKV(raw_kv);
     CHECK(kv.IsOK());
   }
 

@@ -110,9 +110,8 @@ void StoreRpcController::DoCall(google::protobuf::Closure* done) {
   if (error.errcode() == pb::error::Errno::OK) {
     status_ = Status::OK();
   } else {
-    std::string error_msg =
-        fmt::format("error_code:{}, error_msg:{}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
-    base_msg.append(", " + error_msg);
+    base_msg.append(
+        fmt::format(", error_code:{}, error_msg:{}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg()));
 
     if (error.errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
       region_->MarkFollower(rpc_.GetEndPoint());
@@ -128,7 +127,7 @@ void StoreRpcController::DoCall(google::protobuf::Closure* done) {
       } else {
         DINGO_LOG(WARNING) << base_msg << " not leader, no leader hint";
       }
-      status_ = Status::NotLeader(error_msg);
+      status_ = Status::NotLeader(error.errcode(), error.errmsg());
     } else if (error.errcode() == pb::error::EREGION_VERSION) {
       stub_.GetMetaCache()->ClearRange(region_);
       if (error.has_store_region_info()) {
@@ -138,21 +137,21 @@ void StoreRpcController::DoCall(google::protobuf::Closure* done) {
       } else {
         DINGO_LOG(WARNING) << base_msg;
       }
-      status_ = Status::Incomplete(error_msg);
+      status_ = Status::Incomplete(error.errcode(), error.errmsg());
     } else if (error.errcode() == pb::error::Errno::EREGION_NOT_FOUND) {
       stub_.GetMetaCache()->ClearRange(region_);
-      status_ = Status::Incomplete(error_msg);
+      status_ = Status::Incomplete(error.errcode(), error.errmsg());
       DINGO_LOG(WARNING) << base_msg;
     } else if (error.errcode() == pb::error::Errno::EKEY_OUT_OF_RANGE) {
       stub_.GetMetaCache()->ClearRange(region_);
-      status_ = Status::Incomplete(error_msg);
+      status_ = Status::Incomplete(error.errcode(), error.errmsg());
       DINGO_LOG(WARNING) << base_msg;
     } else if (error.errcode() == pb::error::Errno::EREQUEST_FULL) {
-      status_ = Status::RemoteError(error_msg);
+      status_ = Status::RemoteError(error.errcode(), error.errmsg());
       DINGO_LOG(WARNING) << base_msg;
     } else {
       // NOTE: other error we not clean cache, caller decide how to process
-      status_ = Status::Incomplete(error_msg);
+      status_ = Status::Incomplete(error.errcode(), error.errmsg());
       DINGO_LOG(WARNING) << base_msg;
     }
   }

@@ -66,7 +66,11 @@ void RawKV::RawKVImpl::ProcessSubBatchGet(SubBatchState* sub) {
   Status call = controller.Call();
   if (call.IsOK()) {
     for (const auto& kv : rpc->Response()->kvs()) {
-      sub->result_kvs.push_back({kv.key(), kv.value()});
+      if (!kv.value().empty()) {
+        sub->result_kvs.push_back({kv.key(), kv.value()});
+      } else {
+        VLOG(1) << "Ignore kv key:" << kv.key() << " because value is empty";
+      }
     }
   }
   sub->status = call;

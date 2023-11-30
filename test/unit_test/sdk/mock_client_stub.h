@@ -28,12 +28,11 @@ class MockClientStub final : public ClientStub {
   ~MockClientStub() override = default;
 
   MOCK_METHOD(std::shared_ptr<CoordinatorProxy>, GetCoordinatorProxy, (), (const, override));
-
   MOCK_METHOD(std::shared_ptr<MetaCache>, GetMetaCache, (), (const, override));
-
   MOCK_METHOD(std::shared_ptr<RpcInteraction>, GetStoreRpcInteraction, (), (const, override));
-
   MOCK_METHOD(std::shared_ptr<RegionScannerFactory>, GetRegionScannerFactory, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<AdminTool>, GetAdminTool, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<TxnLockResolver>, GetTxnLockResolver, (), (const, override));
 };
 
 }  // namespace sdk
