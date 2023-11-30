@@ -156,7 +156,7 @@ class Constant {
 
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 
-  static const uint32_t kBuildVectorIndexBatchSize = 8192;
+  static const uint32_t kBuildVectorIndexBatchSize = 32768;
 
   static constexpr int32_t kCreateIvfFlatParamNcentroids = 2048;
   static constexpr int32_t kSearchIvfFlatParamNprobe = 80;

@@ -610,6 +610,9 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
   auto iter = raw_engine->Reader()->NewIterator(Constant::kVectorDataCF, options);
+  if (iter == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[vector_index.build][index_id({})] NewIterator failed.", vector_index_id);
+  }
 
   // Note: This is iterated 2 times for the following reasons:
   // ivf_flat must train first before adding data
@@ -659,28 +662,25 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     if ((count + 1) % Constant::kBuildVectorIndexBatchSize == 0) {
       int64_t upsert_start_time = Helper::TimestampMs();
 
-      vector_index->Upsert(vectors);
+      vector_index->Add(vectors);
 
       upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
       vectors.clear();
 
-      // yield, for other bthread run.
-      bthread_yield();
-    }
-
-    // Print build progress
-    if ((count + 1) % (Constant::kBuildVectorIndexBatchSize * 10) == 0) {
       DINGO_LOG(INFO) << fmt::format(
           "[vector_index.build][index_id({})][trace({})] Build vector index progress, parallel({}) count({}) elapsed "
           "time({}/{}ms)",
           vector_index_id, trace, vector_index->WriteOpParallelNum(), count, upsert_use_time,
           Helper::TimestampMs() - start_time);
+
+      // yield, for other bthread run.
+      bthread_yield();
     }
   }
 
   if (!vectors.empty()) {
     int64_t upsert_start_time = Helper::TimestampMs();
-    vector_index->Upsert(vectors);
+    vector_index->Add(vectors);
     upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
   }
 
