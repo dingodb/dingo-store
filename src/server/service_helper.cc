@@ -14,6 +14,7 @@
 
 #include "server/service_helper.h"
 
+#include <cassert>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -49,25 +50,9 @@ butil::Status ServiceHelper::ValidateRegionEpoch(const pb::common::RegionEpoch& 
   return butil::Status::OK();
 }
 
-butil::Status ServiceHelper::GetStoreRegionInfo(int64_t region_id, pb::error::Error* error) {
-  if (error == nullptr) {
-    return butil::Status(pb::error::EINTERNAL, "Error is nullptr");
-  }
-  if (error->errcode() != pb::error::EREGION_VERSION) {
-    return butil::Status(pb::error::EINTERNAL, "Not need set store region info");
-  }
-
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region %lu", region_id);
-  }
-  return GetStoreRegionInfo(region, error);
-}
-
 butil::Status ServiceHelper::GetStoreRegionInfo(store::RegionPtr region, pb::error::Error* error) {
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
-  }
+  assert(region != nullptr);
+
   if (error == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Error is nullptr");
   }
