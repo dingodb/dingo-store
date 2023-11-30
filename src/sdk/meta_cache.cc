@@ -22,8 +22,8 @@ namespace sdk {
 
 using pb::coordinator::ScanRegionInfo;
 
-MetaCache::MetaCache(std::shared_ptr<CoordinatorInteraction> coordinator_interaction)
-    : coordinator_interaction_(std::move(coordinator_interaction)) {}
+MetaCache::MetaCache(std::shared_ptr<CoordiantorProxy> coordinator_proxy)
+    : coordinator_proxy_(std::move(coordinator_proxy)) {}
 
 MetaCache::~MetaCache() = default;
 
@@ -178,6 +178,11 @@ Status MetaCache::SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<
   }
 
   return ProcessScanRegionsByKeyResponse(response, region);
+}
+
+Status MetaCache::SendScanRegionsRequest(const pb::coordinator::ScanRegionsRequest& request,
+                                         pb::coordinator::ScanRegionsResponse& response) {
+  return coordinator_proxy_->ScanRegions(request, response);
 }
 
 Status MetaCache::ProcessScanRegionsByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,

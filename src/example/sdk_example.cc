@@ -21,10 +21,10 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "coordinator/coordinator_interaction.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
+#include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/status.h"
 
@@ -34,7 +34,10 @@ using dingodb::sdk::Status;
 
 DEFINE_string(coordinator_url, "", "coordinator url");
 
+// TODO: remove
 static std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
+
+static std::shared_ptr<dingodb::sdk::CoordiantorProxy> coordinator_proxy;
 
 void CreateRegion(std::string name, std::string start_key, std::string end_key, int replicas = 3) {
   CHECK(!name.empty()) << "name should not empty";
@@ -53,13 +56,13 @@ void CreateRegion(std::string name, std::string start_key, std::string end_key, 
 
   DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
 
-  auto status2 = coordinator_interaction->SendRequest("CreateRegion", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status2;
+  auto status2 = coordinator_proxy->CreateRegion(request, response);
+  DINGO_LOG(INFO) << "SendRequest status:" << status2.ToString();
   DINGO_LOG(INFO) << response.DebugString();
 }
 
 void MetaCacheExample() {
-  auto meta_cache = std::make_shared<MetaCache>(coordinator_interaction);
+  auto meta_cache = std::make_shared<MetaCache>(coordinator_proxy);
 
   std::shared_ptr<Region> region;
   Status got = meta_cache->LookupRegionByKey("wb", region);
@@ -269,6 +272,9 @@ void RawKVExample() {
     result = raw_kv->DeleteRange("wb01", "wz01", delete_count);
     DINGO_LOG(INFO) << "raw_kv delete range:" << result.ToString();
 
+    result = raw_kv->DeleteRangeNonContinuous("wb01", "wz01", delete_count);
+    DINGO_LOG(INFO) << "raw_kv delete range non continuous:" << result.ToString();
+
     std::vector<dingodb::sdk::KVPair> tmp_batch_get_values;
     result = raw_kv->BatchGet(keys, tmp_batch_get_values);
     DINGO_LOG(INFO) << "raw_kv batch_get after delete_range:" << result.ToString();
@@ -477,6 +483,13 @@ int main(int argc, char* argv[]) {
   if (!coordinator_interaction->InitByNameService(
           FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
     DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coordinator_url;
+    return -1;
+  }
+
+  coordinator_proxy = std::make_shared<dingodb::sdk::CoordiantorProxy>();
+  Status open = coordinator_proxy->Open(FLAGS_coordinator_url);
+  if (!open.IsOK()) {
+    DINGO_LOG(ERROR) << "Fail to open coordinator_proxy, please check parameter --url=" << FLAGS_coordinator_url;
     return -1;
   }
 

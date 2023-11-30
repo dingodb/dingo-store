@@ -12,28 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_TEST_MOCK_META_CACHE_H_
-#define DINGODB_SDK_TEST_MOCK_META_CACHE_H_
+#ifndef DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_
+#define DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_
 
-#include "fmt/core.h"
+#include "coordinator_proxy.h"
 #include "gmock/gmock.h"
-#include "meta_cache.h"
 
 namespace dingodb {
 namespace sdk {
 
-class MockMetaCache final : public MetaCache {
+class MockCoordinatorProxy final : public CoordiantorProxy {
  public:
-  explicit MockMetaCache(std::shared_ptr<CoordinatorInteraction> coordinator_interaction)
-      : MetaCache(coordinator_interaction) {}
+  explicit MockCoordinatorProxy() = default;
 
-  ~MockMetaCache() override = default;
+  ~MockCoordinatorProxy() override = default;
 
-  MOCK_METHOD(Status, SendScanRegionsRequest,
+  MOCK_METHOD(Status, Open, (std::string naming_service_url), (override));
+
+  MOCK_METHOD(Status, CreateRegion,
+              (const pb::coordinator::CreateRegionRequest& request, pb::coordinator::CreateRegionResponse& response),
+              (override));
+
+  MOCK_METHOD(Status, ScanRegions,
               (const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response),
               (override));
 };
 
 }  // namespace sdk
+
 }  // namespace dingodb
-#endif  // DINGODB_SDK_TEST_MOCK_META_CACHE_H_
+#endif  // DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_

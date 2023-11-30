@@ -56,7 +56,7 @@ Status Client::Init(std::string naming_service_url) {
 
 Status Client::NewRawKV(std::shared_ptr<RawKV>& raw_kv) {
   std::shared_ptr<RawKV> ret(new RawKV(new RawKV::RawKVImpl(impl_->GetStub())));
-  raw_kv = ret;
+  raw_kv = std::move(ret);
   return Status::OK();
 }
 

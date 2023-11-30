@@ -17,9 +17,9 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "sdk/meta_cache.h"
+#include "sdk/region_scanner_impl.h"
 #include "sdk/rpc_interaction.h"
 #include "sdk/status.h"
-#include "sdk/region_scanner_impl.h"
 
 namespace dingodb {
 
@@ -30,32 +30,8 @@ ClientStub::ClientStub() = default;
 ClientStub::~ClientStub() = default;
 
 Status ClientStub::Open(std::string naming_service_url) {
-  coordinator_interaction_ = std::make_shared<dingodb::CoordinatorInteraction>();
-  if (!coordinator_interaction_->InitByNameService(
-          naming_service_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
-    std::string msg =
-        fmt::format("Fail to init coordinator_interaction, please check parameter --url={}", naming_service_url);
-    DINGO_LOG(ERROR) << msg;
-    return Status::Uninitialized(msg);
-  }
-
-  coordinator_interaction_meta_ = std::make_shared<dingodb::CoordinatorInteraction>();
-  if (!coordinator_interaction_meta_->InitByNameService(naming_service_url,
-                                                        dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
-    std::string msg =
-        fmt::format("Fail to init coordinator_interaction_meta, please check parameter --url={}", naming_service_url);
-    DINGO_LOG(ERROR) << msg;
-    return Status::Uninitialized(msg);
-  }
-
-  coordinator_interaction_version_ = std::make_shared<dingodb::CoordinatorInteraction>();
-  if (!coordinator_interaction_version_->InitByNameService(
-          naming_service_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeVersion)) {
-    std::string msg = fmt::format("Fail to init coordinator_interaction_version, please check parameter --url={}",
-                                  naming_service_url);
-    DINGO_LOG(ERROR) << msg;
-    return Status::Uninitialized(msg);
-  }
+  coordinator_proxy_ = std::make_shared<CoordiantorProxy>();
+  DINGO_RETURN_NOT_OK(coordinator_proxy_->Open(naming_service_url));
 
   // TODO: pass use gflag or add options
   brpc::ChannelOptions options;
@@ -64,7 +40,7 @@ Status ClientStub::Open(std::string naming_service_url) {
   options.connect_timeout_ms = 3000;
   store_rpc_interaction_.reset(new RpcInteraction(options));
 
-  meta_cache_.reset(new MetaCache(coordinator_interaction_));
+  meta_cache_.reset(new MetaCache(coordinator_proxy_));
 
   region_scanner_factory_.reset(new RegionScannerFactoryImpl());
 

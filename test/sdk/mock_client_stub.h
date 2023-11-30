@@ -27,12 +27,7 @@ class MockClientStub final : public ClientStub {
 
   ~MockClientStub() override = default;
 
-  MOCK_METHOD(std::shared_ptr<dingodb::CoordinatorInteraction>, GetCoordinatorInteraction, (), (const, override));
-
-  MOCK_METHOD(std::shared_ptr<dingodb::CoordinatorInteraction>, GetCoordinatorInteractionMeta, (), (const, override));
-
-  MOCK_METHOD(std::shared_ptr<dingodb::CoordinatorInteraction>, GetCoordinatorInteractionVersion, (),
-              (const, override));
+  MOCK_METHOD(std::shared_ptr<CoordiantorProxy>, GetCoordinatorProxy, (), (const, override));
 
   MOCK_METHOD(std::shared_ptr<MetaCache>, GetMetaCache, (), (const, override));
 

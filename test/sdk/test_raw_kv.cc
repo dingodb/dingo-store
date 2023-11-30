@@ -478,7 +478,7 @@ TEST_F(RawKVTest, DeleteRangeInOneRegion) {
   std::string start = "b";
   std::string end = "c";
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), start);
@@ -523,7 +523,7 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
   std::string start = "b";
   std::string end = "d";
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), start);
@@ -575,7 +575,7 @@ TEST_F(RawKVTest, DeleteRangeInThressRegion) {
   std::string start = "a";
   std::string end = "g";
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), start);
@@ -630,7 +630,7 @@ TEST_F(RawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
   std::string start = "b";
   std::string end = "f";
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), start);
@@ -687,7 +687,7 @@ TEST_F(RawKVTest, DeleteRangeDiscontinuous) {
 
   int64_t count = 100;
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), start);
@@ -711,7 +711,7 @@ TEST_F(RawKVTest, DeleteRangeNonContinuous) {
 
   int64_t count = 100;
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), start);
@@ -967,7 +967,7 @@ TEST_F(RawKVTest, ScanNotFoundRegion) {
 }
 
 TEST_F(RawKVTest, ScanLookUpRegionFail) {
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*coordinator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "x");
