@@ -224,8 +224,8 @@ bool ScanContext::IsRecyclable() {
       if (ScanState::kAllowImmediateRecycling == state_ || ScanState::kError == state_ ||
           ScanState::kBegunTimeout == state_ || ScanState::kContinuedTimeout == state_ ||
           ScanState::kReleasedTimeout == state_) {
-        std::string s = fmt::format("Recycle Immediate  state : {} {} now : {}", static_cast<int>(state_),
-                                    GetScanState(state_), Helper::NowTime());
+        std::string s = fmt::format("Recycle Immediate state: {} {} now: {} scan_id: {}", static_cast<int>(state_),
+                                    GetScanState(state_), Helper::NowTime(), scan_id_);
         DINGO_LOG(INFO) << s;
         ret = true;
         break;
@@ -237,8 +237,8 @@ bool ScanContext::IsRecyclable() {
         std::string last_time_ms_str;
         last_time_ms_str = Helper::FormatMsTime(last_time_ms_.count(), "%Y-%m-%d %H:%M:%S");
         std::string s =
-            fmt::format("Recycle Next Loop  state : {} {} now : {}  last_time : {}", static_cast<int>(state_),
-                        GetScanState(state_), Helper::NowTime(), last_time_ms_str);
+            fmt::format("Recycle Next Loop state: {} {} now: {} last_time: {} scan_id: {}", static_cast<int>(state_),
+                        GetScanState(state_), Helper::NowTime(), last_time_ms_str, scan_id_);
         DINGO_LOG(INFO) << s;
         state_ = ScanState::kAllowImmediateRecycling;
         ret = true;
