@@ -103,7 +103,7 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
   BAIDU_SCOPED_LOCK(mutex_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("ivf flat not train. train first.");
-    DINGO_LOG(ERROR) << s;
+    DINGO_LOG(WARNING) << s;
     return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
   }
 

@@ -84,7 +84,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   butil::Status status = ValidateKvGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -172,7 +172,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   butil::Status status = ValidateKvBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -259,7 +259,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   auto status = ValidateKvPutRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -343,7 +343,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   butil::Status status = ValidateKvBatchPutRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -426,7 +426,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   butil::Status status = ValidateKvPutIfAbsentRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -517,7 +517,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   butil::Status status = ValidateKvBatchPutIfAbsentRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -607,7 +607,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   auto status = ValidateKvBatchDeleteRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -692,7 +692,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   if (!status.ok()) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-      ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+      ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     }
     return;
   }
@@ -768,7 +768,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   auto status = ValidateKvCompareAndSetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -856,7 +856,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   auto status = ValidateKvBatchCompareAndSetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -949,7 +949,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   if (!status.ok()) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-      ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+      ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     }
     return;
   }
@@ -1037,7 +1037,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   butil::Status status = ValidateKvScanContinueRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1115,7 +1115,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   butil::Status status = ValidateKvScanReleaseRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1192,7 +1192,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1280,7 +1280,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   if (!status.ok()) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-      ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+      ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     }
     return;
   }
@@ -1410,7 +1410,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   auto status = ValidateTxnPessimisticLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1516,7 +1516,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   auto status = ValidateTxnPessimisticRollbackRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1623,7 +1623,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   auto status = ValidateTxnPrewriteRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1739,7 +1739,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   auto status = ValidateTxnCommitRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1839,7 +1839,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   auto status = ValidateTxnCheckTxnStatusRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1933,7 +1933,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   auto status = ValidateTxnResolveLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2024,7 +2024,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2128,7 +2128,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   auto status = ValidateTxnBatchRollbackRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2232,7 +2232,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   butil::Status status = ValidateTxnScanLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2329,7 +2329,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   auto status = ValidateTxnHeartBeatRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2402,7 +2402,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   auto status = ValidateTxnGcRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2486,7 +2486,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   auto status = ValidateTxnDeleteRangeRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -2570,7 +2570,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
   butil::Status status = ValidateTxnDumpRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 

@@ -103,7 +103,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   butil::Status status = ValidateVectorBatchQueryRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -236,7 +236,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   butil::Status status = ValidateVectorSearchRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -400,7 +400,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   auto status = ValidateVectorAddRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -496,7 +496,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
   auto status = ValidateVectorDeleteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -568,7 +568,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
   butil::Status status = ValidateVectorGetBorderIdRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -656,7 +656,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   butil::Status status = ValidateVectorScanQueryRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -756,7 +756,7 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
   butil::Status status = ValidateVectorGetRegionMetricsRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -865,7 +865,7 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
   butil::Status status = ValidateVectorCountRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -990,7 +990,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
   butil::Status status = ValidateVectorSearchDebugRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1090,7 +1090,7 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1207,7 +1207,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
       return;
     }
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1475,7 +1475,7 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
   auto status = ValidateTxnPrewriteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 
@@ -1850,7 +1850,7 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    ServiceHelper::GetStoreRegionInfo(region_id, response->mutable_error());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
 

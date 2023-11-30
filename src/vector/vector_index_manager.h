@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/helper.h"
 #include "common/safe_map.h"
 #include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
@@ -35,7 +36,9 @@ namespace dingodb {
 class RebuildVectorIndexTask : public TaskRunnable {
  public:
   RebuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id, const std::string& trace)
-      : vector_index_wrapper_(vector_index_wrapper), force_(job_id > 0), job_id_(job_id), trace_(trace) {}
+      : vector_index_wrapper_(vector_index_wrapper), force_(job_id > 0), job_id_(job_id), trace_(trace) {
+    start_time_ = Helper::TimestampMs();
+  }
   ~RebuildVectorIndexTask() override = default;
 
   std::string Type() override { return "REBUILD_VECTOR_INDEX"; }
@@ -47,13 +50,16 @@ class RebuildVectorIndexTask : public TaskRunnable {
   bool force_;
   int64_t job_id_{0};
   std::string trace_;
+  int64_t start_time_;
 };
 
 // Save vector index task
 class SaveVectorIndexTask : public TaskRunnable {
  public:
   SaveVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, const std::string& trace)
-      : vector_index_wrapper_(vector_index_wrapper), trace_(trace) {}
+      : vector_index_wrapper_(vector_index_wrapper), trace_(trace) {
+    start_time_ = Helper::TimestampMs();
+  }
   ~SaveVectorIndexTask() override = default;
 
   std::string Type() override { return "SAVE_VECTOR_INDEX"; }
@@ -63,6 +69,7 @@ class SaveVectorIndexTask : public TaskRunnable {
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
   std::string trace_;
+  int64_t start_time_;
 };
 
 // Load or build vector index task
@@ -73,7 +80,9 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
       : vector_index_wrapper_(vector_index_wrapper),
         is_temp_hold_vector_index_(is_temp_hold_vector_index),
         job_id_(job_id),
-        trace_(trace) {}
+        trace_(trace) {
+    start_time_ = Helper::TimestampMs();
+  }
   ~LoadOrBuildVectorIndexTask() override = default;
 
   std::string Type() override { return "LOADORBUILD_VECTOR_INDEX"; }
@@ -85,6 +94,7 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
   bool is_temp_hold_vector_index_;
   int64_t job_id_;
   std::string trace_;
+  int64_t start_time_;
 };
 
 // Manage vector index, e.g. build/rebuild/save/load vector index.
