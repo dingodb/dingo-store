@@ -3,6 +3,7 @@ add_library(sdk
     client_impl.cc
     client_stub.cc
     client.cc
+    coordinator_proxy.cc
     meta_cache.cc
     raw_kv_impl.cc
     region_scanner_impl.cc

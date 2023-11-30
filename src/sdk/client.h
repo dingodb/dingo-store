@@ -88,7 +88,7 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
   // output_param: delete_count
   Status DeleteRangeNonContinuous(const std::string& start_key, const std::string& end_key, int64_t& delete_count);
 
-  // delete key in [start_key, end_key), but region between [start_key, end_key) must continuous 
+  // delete key in [start_key, end_key), but region between [start_key, end_key) must continuous
   // output_param: delete_count
   Status DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& delete_count);
 
@@ -101,7 +101,7 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
                             std::vector<KeyOpState>& states);
 
   // limit: 0 means no limit, will scan all key in [start_key, end_key)
-  Status Scan(const std::string& start_key, const std::string& end_key,  uint64_t limit, std::vector<KVPair>& kvs);
+  Status Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs);
 
  private:
   friend class Client;

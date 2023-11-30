@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mock_meta_cache.h"
-
+#include "coordinator_proxy.h"
 #include "gtest/gtest.h"
+#include "meta_cache.h"
+#include "mock_coordinator_proxy.h"
 #include "test_common.h"
 
 namespace dingodb {
@@ -22,19 +23,20 @@ namespace sdk {
 class MetaCacheTest : public testing::Test {
  protected:
   void SetUp() override {
-    auto coordinator_interaction = std::make_shared<CoordinatorInteraction>();
-    meta_cache = std::make_shared<MockMetaCache>(coordinator_interaction);
+    cooridnator_proxy = std::make_shared<MockCoordinatorProxy>();
+    meta_cache = std::make_shared<MetaCache>(cooridnator_proxy);
   }
 
   void TearDown() override { meta_cache.reset(); }
 
-  std::shared_ptr<MockMetaCache> meta_cache;  // NOLINT
+  std::shared_ptr<MockCoordinatorProxy> cooridnator_proxy;
+  std::shared_ptr<MetaCache> meta_cache;
 };
 
 TEST_F(MetaCacheTest, LookupRegionByKey) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
@@ -54,7 +56,7 @@ TEST_F(MetaCacheTest, LookupRegionByKey) {
 TEST_F(MetaCacheTest, ClearRange) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
@@ -87,7 +89,7 @@ TEST_F(MetaCacheTest, ClearRange) {
 TEST_F(MetaCacheTest, AddRegion) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "b");
@@ -353,7 +355,7 @@ TEST_F(MetaCacheTest, StaleRegion) {
 }
 
 TEST_F(MetaCacheTest, LookupRegionBetweenRangeNotFound) {
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "a");
@@ -368,7 +370,7 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangeNotFound) {
 
 TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromRemote) {
   auto region = RegionA2C();
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "a");
@@ -390,7 +392,7 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromCache) {
   auto region = RegionA2C();
   meta_cache->MaybeAddRegion(region);
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest).Times(0);
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions).Times(0);
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
@@ -405,7 +407,7 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangePrefetch) {
   auto a2c = RegionA2C();
   auto e2g = RegionE2G();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "a");
@@ -434,7 +436,7 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangePrefetch) {
 TEST_F(MetaCacheTest, LookupRegionBetweenRangeNoPreetch) {
   auto a2c = RegionA2C();
 
-  EXPECT_CALL(*meta_cache, SendScanRegionsRequest)
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
       .WillOnce(
           [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
             EXPECT_EQ(request.key(), "a");

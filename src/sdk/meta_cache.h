@@ -23,9 +23,9 @@
 #include <vector>
 
 #include "butil/status.h"
-#include "coordinator/coordinator_interaction.h"
 #include "fmt/core.h"
 #include "proto/coordinator.pb.h"
+#include "sdk/coordinator_proxy.h"
 #include "sdk/region.h"
 #include "sdk/status.h"
 
@@ -37,9 +37,9 @@ class MetaCache {
   MetaCache(const MetaCache&) = delete;
   const MetaCache& operator=(const MetaCache&) = delete;
 
-  explicit MetaCache(std::shared_ptr<CoordinatorInteraction> coordinator_interaction);
+  explicit MetaCache(std::shared_ptr<CoordiantorProxy> coordinator_proxy);
 
-  virtual ~MetaCache();
+  ~MetaCache();
 
   Status LookupRegionByKey(const std::string& key, std::shared_ptr<Region>& region);
 
@@ -68,23 +68,14 @@ class MetaCache {
 
   void Dump();
 
- protected:
-  virtual Status SendScanRegionsRequest(const pb::coordinator::ScanRegionsRequest& request,
-                                        pb::coordinator::ScanRegionsResponse& response) {
-    butil::Status rpc_status = coordinator_interaction_->SendRequest("ScanRegions", request, response);
-    if (!rpc_status.ok()) {
-      std::string msg = fmt::format("send ScanRegions request fail: code: {}, msg:{}", rpc_status.error_code(),
-                                    rpc_status.error_cstr());
-      return Status::NetworkError(msg);
-    }
-    return Status::OK();
-  }
-
  private:
   // TODO: backoff when region not ready
   Status SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<Region>& region);
 
   Status FastLookUpRegionByKeyUnlocked(const std::string& key, std::shared_ptr<Region>& region);
+
+  Status SendScanRegionsRequest(const pb::coordinator::ScanRegionsRequest& request,
+                                pb::coordinator::ScanRegionsResponse& response);
 
   Status ProcessScanRegionsByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,
                                          std::shared_ptr<Region>& region);
@@ -106,7 +97,7 @@ class MetaCache {
 
   static bool NeedUpdateRegion(const std::shared_ptr<Region>& old_region, const std::shared_ptr<Region>& new_region);
 
-  std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
+  std::shared_ptr<CoordiantorProxy> coordinator_proxy_;
 
   mutable std::shared_mutex rw_lock_;
   std::unordered_map<int64_t, std::shared_ptr<Region>> region_by_id_;

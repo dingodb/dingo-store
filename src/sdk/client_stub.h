@@ -18,7 +18,7 @@
 #include <memory>
 #include <vector>
 
-#include "coordinator/coordinator_interaction.h"
+#include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
 #include "sdk/rpc_interaction.h"
@@ -34,17 +34,7 @@ class ClientStub {
 
   Status Open(std::string naming_service_url);
 
-  virtual std::shared_ptr<dingodb::CoordinatorInteraction> GetCoordinatorInteraction() const {
-    return coordinator_interaction_;
-  }
-
-  virtual std::shared_ptr<dingodb::CoordinatorInteraction> GetCoordinatorInteractionMeta() const {
-    return coordinator_interaction_meta_;
-  }
-
-  virtual std::shared_ptr<dingodb::CoordinatorInteraction> GetCoordinatorInteractionVersion() const {
-    return coordinator_interaction_version_;
-  }
+  virtual std::shared_ptr<CoordiantorProxy> GetCoordinatorProxy() const { return coordinator_proxy_; }
 
   virtual std::shared_ptr<MetaCache> GetMetaCache() const { return meta_cache_; }
 
@@ -53,9 +43,7 @@ class ClientStub {
   virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const { return region_scanner_factory_; }
 
  private:
-  std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_;
-  std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta_;
-  std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_version_;
+  std::shared_ptr<CoordiantorProxy> coordinator_proxy_;
 
   std::shared_ptr<MetaCache> meta_cache_;
 
