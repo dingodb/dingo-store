@@ -103,7 +103,7 @@ public class ClusterServiceClient {
           int regionState = region.getStateValue();
           long createTime = region.getCreateTimestamp();
           long deleteTime = region.getDeletedTimestamp();
-          return new InternalRegion(regionType, regionState, createTime, deleteTime, followers);
+          return new InternalRegion(regionState, regionType, createTime, deleteTime, followers);
     }
 
 }
