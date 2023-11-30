@@ -829,6 +829,8 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
     VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch) {
   assert(vector_index_wrapper != nullptr);
 
+  int64_t start_time_ms = Helper::TimestampMs();
+
   int64_t vector_index_id = vector_index_wrapper->Id();
   auto snapshot_set = vector_index_wrapper->SnapshotSet();
 
@@ -892,6 +894,10 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   // set vector_index apply log id
   vector_index->SetSnapshotLogId(last_snapshot->SnapshotLogId());
   vector_index->SetApplyLogId(last_snapshot->SnapshotLogId());
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.load_snapshot][index_id({})] Load vector index snapshot snapshot_{:020} elapsed time {}ms",
+      vector_index_id, last_snapshot->SnapshotLogId(), Helper::TimestampMs() - start_time_ms);
 
   return vector_index;
 }
