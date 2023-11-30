@@ -35,10 +35,9 @@
   }                                                                                                             \
   bool Is##NAME() const { return code_ == (CODE); }
 
+static const int32_t kNone =0;
 namespace dingodb {
 namespace sdk {
-
-const static int32_t kNone = 0;
 
 class Status {
  public:
@@ -74,10 +73,11 @@ class Status {
   DECLARE_ERROR_STATUS(ConfigurationError, kConfigurationError);
   DECLARE_ERROR_STATUS(Incomplete, kIncomplete);
   DECLARE_ERROR_STATUS(NotLeader, kNotLeader);
-  DECLARE_ERROR_STATUS(LockConflict, kLockConflict);
-  DECLARE_ERROR_STATUS(WriteConflict, kWriteConflict);
+  DECLARE_ERROR_STATUS(TxnLockConflict, kTxnLockConflict);
+  DECLARE_ERROR_STATUS(TxnWriteConflict, kTxnWriteConflict);
   DECLARE_ERROR_STATUS(TxnNotFound, kTxnNotFound);
-  DECLARE_ERROR_STATUS(PrimaryMismatch, kPrimaryMismatch);
+  DECLARE_ERROR_STATUS(TxnPrimaryMismatch, kTxnPrimaryMismatch);
+  DECLARE_ERROR_STATUS(TxnRolledBack, kTxnRolledBack);
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
@@ -104,10 +104,11 @@ class Status {
     kConfigurationError = 16,
     kIncomplete = 17,
     kNotLeader = 18,
-    kLockConflict = 19,
-    kWriteConflict = 20,
+    kTxnLockConflict = 19,
+    kTxnWriteConflict = 20,
     kTxnNotFound = 21,
-    kPrimaryMismatch = 22,
+    kTxnPrimaryMismatch = 22,
+    kTxnRolledBack = 23,
   };
 
   Status(Code code, int32_t p_errno, const Slice& msg, const Slice& msg2);

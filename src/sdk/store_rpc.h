@@ -52,6 +52,16 @@ DECLARE_STORE_RPC(KvScanBegin);
 DECLARE_STORE_RPC(KvScanContinue);
 DECLARE_STORE_RPC(KvScanRelease);
 
+DECLARE_STORE_RPC(TxnGet);
+DECLARE_STORE_RPC(TxnBatchGet);
+DECLARE_STORE_RPC(TxnPrewrite);
+DECLARE_STORE_RPC(TxnCommit);
+DECLARE_STORE_RPC(TxnBatchRollback);
+
+DECLARE_STORE_RPC(TxnHeartBeat);
+DECLARE_STORE_RPC(TxnCheckTxnStatus);
+DECLARE_STORE_RPC(TxnResolveLock);
+
 }  // namespace sdk
 }  // namespace dingodb
 #endif  // DINGODB_SDK_STORE_RPC_H_

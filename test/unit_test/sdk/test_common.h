@@ -17,12 +17,16 @@
 #define DINGODB_SDK_TEST_TEST_COMMON_H_
 
 #include <string>
+#include <type_traits>
 
 #include "butil/endpoint.h"
 #include "fmt/core.h"
 #include "meta_cache.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/meta.pb.h"
+#include "proto/store.pb.h"
+#include "tso_control.h"
 
 namespace dingodb {
 
@@ -176,6 +180,50 @@ static void Region2StoreRegionInfo(const std::shared_ptr<Region>& region,
     auto* location = peer->mutable_server_location();
     *location = Helper::EndPointToLocation(r.end_point);
   }
+}
+
+static pb::store::LockInfo PrepareLockInfo() {
+  pb::store::LockInfo lock_info;
+  lock_info.set_primary_lock("a0000000");
+  lock_info.set_lock_ts(1);
+  lock_info.set_lock_ttl(INT64_MAX);
+  lock_info.set_txn_size(1);
+  lock_info.set_lock_type(pb::store::Op::Put);
+
+  return lock_info;
+}
+
+static bool LockInfoEqual(const pb::store::LockInfo& a, const pb::store::LockInfo& b) {
+  if (a.primary_lock() != b.primary_lock()) {
+    return false;
+  }
+
+  if (a.key() != b.key()) {
+    return false;
+  }
+
+  if (a.lock_ts() != b.lock_ts()) {
+    return false;
+  }
+
+  if (a.lock_type() != b.lock_type()) {
+    return false;
+  }
+
+  return true;
+}
+
+static pb::meta::TsoTimestamp CurrentFakeTso() {
+  static int64_t init_logic = 0;
+
+  pb::meta::TsoTimestamp fake_tso;
+  int64_t ct = ClockRealtimeMs();
+  fake_tso.set_physical(ct);
+  fake_tso.set_logical(init_logic);
+
+  init_logic += 10;
+
+  return fake_tso;
 }
 
 }  // namespace sdk

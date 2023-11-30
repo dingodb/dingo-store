@@ -18,11 +18,13 @@
 #include <memory>
 #include <vector>
 
+#include "glog/logging.h"
 #include "sdk/admin_tool.h"
 #include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
 #include "sdk/rpc_interaction.h"
+#include "sdk/transaction/txn_lock_resolver.h"
 
 namespace dingodb {
 namespace sdk {
@@ -35,26 +37,43 @@ class ClientStub {
 
   Status Open(std::string naming_service_url);
 
-  virtual std::shared_ptr<CoordinatorProxy> GetCoordinatorProxy() const { return coordinator_proxy_; }
+  virtual std::shared_ptr<CoordinatorProxy> GetCoordinatorProxy() const {
+    DCHECK_NOTNULL(coordinator_proxy_.get());
+    return coordinator_proxy_;
+  }
 
-  virtual std::shared_ptr<MetaCache> GetMetaCache() const { return meta_cache_; }
+  virtual std::shared_ptr<MetaCache> GetMetaCache() const {
+    DCHECK_NOTNULL(meta_cache_.get());
+    return meta_cache_;
+  }
 
-  virtual std::shared_ptr<RpcInteraction> GetStoreRpcInteraction() const { return store_rpc_interaction_; }
+  virtual std::shared_ptr<RpcInteraction> GetStoreRpcInteraction() const {
+    DCHECK_NOTNULL(store_rpc_interaction_.get());
+    return store_rpc_interaction_;
+  }
 
-  virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const { return region_scanner_factory_; }
+  virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const {
+    DCHECK_NOTNULL(region_scanner_factory_.get());
+    return region_scanner_factory_;
+  }
 
-  virtual std::shared_ptr<AdminTool> GetAdminTool() const { return admin_tool_; }
+  virtual std::shared_ptr<AdminTool> GetAdminTool() const {
+    DCHECK_NOTNULL(admin_tool_.get());
+    return admin_tool_;
+  }
+
+  virtual std::shared_ptr<TxnLockResolver> GetTxnLockResolver() const {
+    DCHECK_NOTNULL(txn_lock_resolver_.get());
+    return txn_lock_resolver_;
+  }
 
  private:
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
-
   std::shared_ptr<MetaCache> meta_cache_;
-
   std::shared_ptr<RpcInteraction> store_rpc_interaction_;
-
   std::shared_ptr<RegionScannerFactory> region_scanner_factory_;
-
   std::shared_ptr<AdminTool> admin_tool_;
+  std::shared_ptr<TxnLockResolver> txn_lock_resolver_;
 };
 
 }  // namespace sdk

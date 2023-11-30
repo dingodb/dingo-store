@@ -12,35 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_ADMIN_TOOL_H_
-#define DINGODB_SDK_ADMIN_TOOL_H_
+#ifndef DINGODB_SDK_TEST_MOCK_TXN_RESOLVER_H_
+#define DINGODB_SDK_TEST_MOCK_TXN_RESOLVER_H_
 
-#include "sdk/coordinator_proxy.h"
+#include "client_stub.h"
+#include "gmock/gmock.h"
+#include "status.h"
+#include "transaction/txn_lock_resolver.h"
 
 namespace dingodb {
 namespace sdk {
 
-class AdminTool {
+class MockTxnLockResolver final : public TxnLockResolver {
  public:
-  AdminTool(const AdminTool&) = delete;
-  const AdminTool& operator=(const AdminTool&) = delete;
+  explicit MockTxnLockResolver(const ClientStub& stub) : sdk::TxnLockResolver(stub){};
 
-  explicit AdminTool(std::shared_ptr<CoordinatorProxy> coordinator_proxy);
+  ~MockTxnLockResolver() override = default;
 
-  ~AdminTool() = default;
-
-  Status GetCurrentTsoTimeStamp(pb::meta::TsoTimestamp& tso_timestamp);
-
-  Status GetCurrentTimeStamp(int64_t& timestamp);
-
-  Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
-
-  Status DropRegion(int64_t region_id);
-
- private:
-  std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
+  MOCK_METHOD(Status, ResolveLock, (const pb::store::LockInfo& lock_info, int64_t caller_start_ts), (override));
 };
 
 }  // namespace sdk
 }  // namespace dingodb
-#endif  // DINGODB_SDK_ADMIN_TOOL_H_
+
+#endif  // DINGODB_SDK_TEST_MOCK_TXN_RESOLVER_H_

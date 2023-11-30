@@ -29,12 +29,24 @@ class MockCoordinatorProxy final : public CoordinatorProxy {
 
   MOCK_METHOD(Status, Open, (std::string naming_service_url), (override));
 
+  MOCK_METHOD(Status, QueryRegion,
+              (const pb::coordinator::QueryRegionRequest& request, pb::coordinator::QueryRegionResponse& response),
+              (override));
+
   MOCK_METHOD(Status, CreateRegion,
               (const pb::coordinator::CreateRegionRequest& request, pb::coordinator::CreateRegionResponse& response),
               (override));
 
+  MOCK_METHOD(Status, DropRegion,
+              (const pb::coordinator::DropRegionRequest& request, pb::coordinator::DropRegionResponse& response),
+              (override));
+
   MOCK_METHOD(Status, ScanRegions,
               (const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response),
+              (override));
+
+  MOCK_METHOD(Status, TsoService,
+              (const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response),
               (override));
 };
 

@@ -29,6 +29,8 @@ namespace sdk {
 class RawKV;
 class RegionCreator;
 class TestBase;
+class TransactionOptions;
+class Transaction;
 
 /// @brief Callers must keep client valid in it's lifetime in order to interact with the cluster,
 class Client : public std::enable_shared_from_this<Client> {
@@ -46,6 +48,10 @@ class Client : public std::enable_shared_from_this<Client> {
   // NOTE:: Caller must delete *raw_kv when it is no longer needed.
   Status NewRawKV(RawKV** raw_kv);
 
+  Status NewTransaction(const TransactionOptions& options, std::shared_ptr<Transaction>& txn);
+  // NOTE:: Caller must delete *txn when it is no longer needed.
+  Status NewTransaction(const TransactionOptions& options, Transaction** txn);
+
   Status NewRegionCreator(std::shared_ptr<RegionCreator>& creator);
   // NOTE:: Caller must delete *raw_kv when it is no longer needed.
   Status NewRegionCreator(RegionCreator** creator);
@@ -58,6 +64,7 @@ class Client : public std::enable_shared_from_this<Client> {
 
  private:
   friend class RawKV;
+  friend class TestBase;
 
   Client();
 
@@ -122,13 +129,69 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
 
  private:
   friend class Client;
-  friend class TestBase;
 
   // own
   class RawKVImpl;
   std::unique_ptr<RawKVImpl> impl_;
 
   explicit RawKV(RawKVImpl* impl);
+};
+
+enum TransactionKind : uint8_t { kOptimistic, kPessimistic };
+
+enum TransactionIsolation : uint8_t { kSnapshotIsolation, kReadCommitted };
+
+struct TransactionOptions {
+  TransactionKind kind;
+  TransactionIsolation isolation;
+  uint32_t keep_alive_ms;
+};
+
+class Transaction : public std::enable_shared_from_this<Transaction> {
+ public:
+  Transaction(const Transaction&) = delete;
+  const Transaction& operator=(const Transaction&) = delete;
+
+  ~Transaction();
+
+  Status Get(const std::string& key, std::string& value);
+
+  Status BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& kvs);
+
+  Status Put(const std::string& key, const std::string& value);
+
+  Status BatchPut(const std::vector<KVPair>& kvs);
+
+  Status PutIfAbsent(const std::string& key, const std::string& value);
+
+  Status BatchPutIfAbsent(const std::vector<KVPair>& kvs);
+
+  Status Delete(const std::string& key);
+
+  Status BatchDelete(const std::vector<std::string>& keys);
+
+  // If return status is ok, then call Commit
+  // else try to precommit or rollback depends on status code
+  Status PreCommit();
+
+  // NOTE: Caller should first call PreCommit, when PreCommit success then call Commit
+  // If return status is ok or rolledback, txn is end
+  // other status, caller should retry
+  Status Commit();
+
+  Status Rollback();
+
+ private:
+  friend class Client;
+  friend class TestBase;
+
+  Status Begin();
+
+  // own
+  class TxnImpl;
+  std::unique_ptr<TxnImpl> impl_;
+
+  explicit Transaction(TxnImpl* impl);
 };
 
 class RegionCreator {
@@ -145,7 +208,7 @@ class RegionCreator {
   RegionCreator& SetReplicaNum(int64_t num);
 
   /// Wait for the region to be fully created before returning.
-  /// If not called, defaults to @c true.
+  /// If not called, defaults to true.
   RegionCreator& Wait(bool wait);
 
   // TODO: support resource_tag/schema_id/table_id/index_id/part_id/store_ids/region_type
@@ -155,14 +218,12 @@ class RegionCreator {
   /// when wait is true, the out_region_id will be set and status maybe ok or not,
   /// so caller should check out_region_id is set or not
   Status Create(int64_t& out_region_id);
-
- private:
+private:
   friend class Client;
 
   // own
   class Data;
   std::unique_ptr<Data> data_;
-
   explicit RegionCreator(Data* data);
 };
 

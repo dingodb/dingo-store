@@ -99,17 +99,20 @@ std::string Status::ToString() const {
       case kNotLeader:
         type = "NotLeader";
         break;
-      case kLockConflict:
-        type = "LockConflict";
+      case kTxnLockConflict:
+        type = "TxnLockConflict";
         break;
-      case kWriteConflict:
-        type = "WriteConflict";
+      case kTxnWriteConflict:
+        type = "TxnWriteConflict";
         break;
       case kTxnNotFound:
         type = "TxnNotFound";
         break;
-      case kPrimaryMismatch:
-        type = "PrimaryMismatch";
+      case kTxnPrimaryMismatch:
+        type = "TxnPrimaryMismatch";
+        break;
+      case kTxnRolledBack:
+        type = "TxnRolledBack";
         break;
       default:
         std::string tmp = fmt::format("Unknown code({}):", static_cast<int>(code_));

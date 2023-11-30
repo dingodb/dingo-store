@@ -43,5 +43,15 @@ DEFINE_STORE_RPC(KvScanBegin);
 DEFINE_STORE_RPC(KvScanContinue);
 DEFINE_STORE_RPC(KvScanRelease);
 
+DEFINE_STORE_RPC(TxnGet);
+DEFINE_STORE_RPC(TxnBatchGet);
+DEFINE_STORE_RPC(TxnPrewrite);
+DEFINE_STORE_RPC(TxnCommit);
+DEFINE_STORE_RPC(TxnBatchRollback);
+
+DEFINE_STORE_RPC(TxnHeartBeat);
+DEFINE_STORE_RPC(TxnCheckTxnStatus);
+DEFINE_STORE_RPC(TxnResolveLock);
+
 }  // namespace sdk
 }  // namespace dingodb
