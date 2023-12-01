@@ -104,7 +104,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
       int64_t partition_id{};
       int64_t region_id{};
 
-      pb::common::RawEngine raw_engine_type;
+      pb::common::RawEngine raw_engine_type{pb::common::RAW_ENG_ROCKSDB};
 
       pb::common::Range region_range;
 

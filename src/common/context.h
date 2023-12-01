@@ -133,7 +133,7 @@ class Context {
 
   int64_t region_id_{0};
   // RawEngine type
-  pb::common::RawEngine raw_engine_type_;
+  pb::common::RawEngine raw_engine_type_{pb::common::RAW_ENG_ROCKSDB};
   // Column family name
   std::string cf_name_{};
   // Region epoch
