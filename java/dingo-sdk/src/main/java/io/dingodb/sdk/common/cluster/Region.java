@@ -28,4 +28,6 @@ public interface Region {
     public long deleteTime();
 
     public List<Location> followers();
+
+    public Location leader();
 }
