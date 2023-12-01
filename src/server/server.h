@@ -145,7 +145,7 @@ class Server {
   // Shortcut
   store::RegionPtr GetRegion(int64_t region_id);
   std::vector<store::RegionPtr> GetAllAliveRegion();
-  StoreRaftMeta::RaftMetaPtr GetRaftMeta(int64_t region_id);
+  store::RaftMetaPtr GetRaftMeta(int64_t region_id);
 
   std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager();
   std::shared_ptr<CrontabManager> GetCrontabManager();

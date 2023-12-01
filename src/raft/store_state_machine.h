@@ -41,8 +41,7 @@ struct SnapshotContext;
 //                           on_apply
 class StoreStateMachine : public BaseStateMachine {
  public:
-  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
-                             std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
+  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
                              store::RegionMetricsPtr region_metrics,
                              std::shared_ptr<EventListenerCollection> listeners);
   ~StoreStateMachine() override;
@@ -80,7 +79,7 @@ class StoreStateMachine : public BaseStateMachine {
   int64_t applied_term_;
   int64_t applied_index_;
   int64_t last_snapshot_index_;
-  std::shared_ptr<pb::store_internal::RaftMeta> raft_meta_;
+  store::RaftMetaPtr raft_meta_;
 
   store::RegionMetricsPtr region_metrics_;
 

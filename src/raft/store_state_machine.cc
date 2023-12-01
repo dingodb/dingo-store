@@ -40,8 +40,7 @@ const int kSaveAppliedIndexStep = 10;
 namespace dingodb {
 
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
-                                     std::shared_ptr<pb::store_internal::RaftMeta> raft_meta,
-                                     store::RegionMetricsPtr region_metrics,
+                                     store::RaftMetaPtr raft_meta, store::RegionMetricsPtr region_metrics,
                                      std::shared_ptr<EventListenerCollection> listeners)
     : raw_engine_(engine),
       region_(region),
@@ -49,8 +48,8 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
       raft_meta_(raft_meta),
       region_metrics_(region_metrics),
       listeners_(listeners),
-      applied_term_(raft_meta->term()),
-      applied_index_(raft_meta->applied_index()),
+      applied_term_(raft_meta->Term()),
+      applied_index_(raft_meta->AppliedId()),
       last_snapshot_index_(0) {
   bthread_mutex_init(&apply_mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.StoreStateMachine][id({})]", str_node_id_);
@@ -165,8 +164,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     // If operation is idempotent, it's ok.
     // If not, must be stored with the data.
     if (applied_index_ % kSaveAppliedIndexStep == 0) {
-      raft_meta_->set_term(applied_term_);
-      raft_meta_->set_applied_index(applied_index_);
+      raft_meta_->SetTermAndAppliedId(applied_term_, applied_index_);
       Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
   }
@@ -218,8 +216,7 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
       StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
 
       if (applied_index_ % kSaveAppliedIndexStep == 0) {
-        raft_meta_->set_term(applied_term_);
-        raft_meta_->set_applied_index(applied_index_);
+        raft_meta_->SetTermAndAppliedId(applied_term_, applied_index_);
         Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
       }
 
@@ -351,8 +348,7 @@ int StoreStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
     last_snapshot_index_ = meta.last_included_index();
 
     if (raft_meta_ != nullptr) {
-      raft_meta_->set_term(meta.last_included_term());
-      raft_meta_->set_applied_index(meta.last_included_index());
+      raft_meta_->SetTermAndAppliedId(meta.last_included_term(), meta.last_included_index());
       Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
   }

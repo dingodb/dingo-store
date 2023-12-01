@@ -50,7 +50,7 @@ class RaftControlAble {
     int64_t log_max_segment_size;
     std::string log_path;
 
-    std::shared_ptr<pb::store_internal::RaftMeta> raft_meta;
+    store::RaftMetaPtr raft_meta;
     store::RegionMetricsPtr region_metrics;
     std::shared_ptr<EventListenerCollection> listeners;
   };

@@ -39,6 +39,7 @@
 #include "engine/write_data.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
@@ -144,7 +145,7 @@ bool RaftStoreEngine::Recover() {
                                             region->Id());
           continue;
         }
-        raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
+        raft_meta = store::RaftMata::New(region->Id());
         store_raft_meta->UpdateRaftMeta(raft_meta);
         parameter.raft_meta = raft_meta;
         parameter.is_restart = false;

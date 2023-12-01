@@ -281,6 +281,64 @@ int64_t Region::LastChangeJobId() {
   return inner_region_.last_change_job_id();
 }
 
+RaftMata::RaftMata(int64_t region_id) {
+  raft_meta_.set_region_id(region_id);
+  raft_meta_.set_term(0);
+  raft_meta_.set_applied_index(0);
+  bthread_mutex_init(&mutex_, nullptr);
+  DINGO_LOG(DEBUG) << fmt::format("[new.RaftMata][id({})]", region_id);
+}
+
+RaftMata::~RaftMata() {
+  DINGO_LOG(DEBUG) << fmt::format("[delete.RaftMata][id({})]", RegionId());
+  bthread_mutex_destroy(&mutex_);
+}
+
+std::shared_ptr<RaftMata> RaftMata::New(int64_t region_id) { return std::make_shared<RaftMata>(region_id); }
+
+int64_t RaftMata::RegionId() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return raft_meta_.region_id();
+}
+
+int64_t RaftMata::Term() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return raft_meta_.term();
+}
+
+int64_t RaftMata::AppliedId() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return raft_meta_.applied_index();
+}
+
+void RaftMata::SetTermAndAppliedId(int64_t term, int64_t applied_id) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  raft_meta_.set_term(term);
+  raft_meta_.set_applied_index(applied_id);
+}
+
+std::string RaftMata::Serialize() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return raft_meta_.SerializeAsString();
+}
+
+void RaftMata::DeSerialize(const std::string& data) {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  raft_meta_.ParsePartialFromArray(data.data(), data.size());
+}
+
+pb::store_internal::RaftMeta RaftMata::InnerRaftMeta() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return raft_meta_;
+}
+
 }  // namespace store
 
 RegionChangeRecorder::RegionChangeRecorder(MetaReaderPtr meta_reader, MetaWriterPtr meta_writer)
@@ -959,33 +1017,25 @@ bool StoreRaftMeta::Init() {
   return true;
 }
 
-StoreRaftMeta::RaftMetaPtr StoreRaftMeta::NewRaftMeta(int64_t region_id) {
-  auto raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
-  raft_meta->set_region_id(region_id);
-  raft_meta->set_term(0);
-  raft_meta->set_applied_index(0);
-  return raft_meta;
-}
-
-void StoreRaftMeta::AddRaftMeta(RaftMetaPtr raft_meta) {
+void StoreRaftMeta::AddRaftMeta(store::RaftMetaPtr raft_meta) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    DINGO_LOG(INFO) << fmt::format("[raft.meta][region({})] Add raft meta.", raft_meta->region_id());
-    if (raft_metas_.find(raft_meta->region_id()) != raft_metas_.end()) {
-      DINGO_LOG(WARNING) << fmt::format("[raft.meta][region({})] raft meta already exist!", raft_meta->region_id());
+    DINGO_LOG(INFO) << fmt::format("[raft.meta][region({})] Add raft meta.", raft_meta->RegionId());
+    if (raft_metas_.find(raft_meta->RegionId()) != raft_metas_.end()) {
+      DINGO_LOG(WARNING) << fmt::format("[raft.meta][region({})] raft meta already exist!", raft_meta->RegionId());
       return;
     }
 
-    raft_metas_.insert(std::make_pair(raft_meta->region_id(), raft_meta));
+    raft_metas_.insert(std::make_pair(raft_meta->RegionId(), raft_meta));
   }
 
   meta_writer_->Put(TransformToKv(raft_meta));
 }
 
-void StoreRaftMeta::UpdateRaftMeta(RaftMetaPtr raft_meta) {
+void StoreRaftMeta::UpdateRaftMeta(store::RaftMetaPtr raft_meta) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
-    raft_metas_.insert_or_assign(raft_meta->region_id(), raft_meta);
+    raft_metas_.insert_or_assign(raft_meta->RegionId(), raft_meta);
   }
 
   meta_writer_->Put(TransformToKv(raft_meta));
@@ -1007,7 +1057,7 @@ void StoreRaftMeta::DeleteRaftMeta(int64_t region_id) {
   meta_writer_->Delete(GenKey(region_id));
 }
 
-StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(int64_t region_id) {
+store::RaftMetaPtr StoreRaftMeta::GetRaftMeta(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = raft_metas_.find(region_id);
   if (it == raft_metas_.end()) {
@@ -1018,22 +1068,9 @@ StoreRaftMeta::RaftMetaPtr StoreRaftMeta::GetRaftMeta(int64_t region_id) {
   return it->second;
 }
 
-pb::store_internal::RaftMeta StoreRaftMeta::GetRaftMetaValue(int64_t region_id) {
+std::vector<store::RaftMetaPtr> StoreRaftMeta::GetAllRaftMeta() {
   BAIDU_SCOPED_LOCK(mutex_);
-  pb::store_internal::RaftMeta raft_meta;
-  auto it = raft_metas_.find(region_id);
-  if (it == raft_metas_.end()) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.meta][region({})] raft meta not exist!", region_id);
-    return raft_meta;
-  }
-
-  raft_meta = *it->second;
-  return raft_meta;
-}
-
-std::vector<StoreRaftMeta::RaftMetaPtr> StoreRaftMeta::GetAllRaftMeta() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
+  std::vector<store::RaftMetaPtr> raft_metas;
   for (auto& [_, raft_meta] : raft_metas_) {
     raft_metas.push_back(raft_meta);
   }
@@ -1042,10 +1079,10 @@ std::vector<StoreRaftMeta::RaftMetaPtr> StoreRaftMeta::GetAllRaftMeta() {
 }
 
 std::shared_ptr<pb::common::KeyValue> StoreRaftMeta::TransformToKv(std::any obj) {
-  auto raft_meta = std::any_cast<RaftMetaPtr>(obj);
+  auto raft_meta = std::any_cast<store::RaftMetaPtr>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
-  kv->set_key(GenKey(raft_meta->region_id()));
-  kv->set_value(raft_meta->SerializeAsString());
+  kv->set_key(GenKey(raft_meta->RegionId()));
+  kv->set_value(raft_meta->Serialize());
 
   return kv;
 }
@@ -1054,8 +1091,8 @@ void StoreRaftMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
     int64_t region_id = ParseRegionId(kv.key());
-    RaftMetaPtr raft_meta = std::make_shared<pb::store_internal::RaftMeta>();
-    raft_meta->ParsePartialFromArray(kv.value().data(), kv.value().size());
+    auto raft_meta = store::RaftMata::New(region_id);
+    raft_meta->DeSerialize(kv.value());
     raft_metas_.insert_or_assign(region_id, raft_meta);
   }
 }

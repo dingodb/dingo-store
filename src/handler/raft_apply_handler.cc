@@ -377,7 +377,7 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
     return nullptr;
   }
 
-  auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
+  auto raft_meta = store::RaftMata::New(region->Id());
   Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
