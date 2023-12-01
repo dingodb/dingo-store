@@ -338,7 +338,7 @@ public class EntityConversion {
             return null;
         }
         SCHEMA.setIsKey(true);
-	SCHEMA.setAllowNull(false);
+        SCHEMA.setAllowNull(false);
         DingoKeyValueCodec codec = new DingoKeyValueCodec(id, Collections.singletonList(SCHEMA));
         List<PartitionDetail> details = partition.getPartitionsList().stream()
                 .map(Meta.Partition::getRange)

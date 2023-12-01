@@ -18,6 +18,7 @@ package io.dingodb.sdk.service.store;
 
 import com.google.protobuf.ByteString;
 import io.dingodb.common.Common;
+import io.dingodb.meta.Meta;
 import io.dingodb.sdk.common.Context;
 import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
@@ -309,8 +310,17 @@ public class StoreServiceClient {
             DingoCommonId tableId,
             DingoCommonId regionId
     ) {
-        return getStoreConnector(tableId, regionId).exec(
-            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.errorToStrategyFunc
-        );
+        String stack = stack(CURRENT_STACK + 1);
+        try {
+            return getStoreConnector(tableId, regionId).exec(
+                stack, function, retryTimes, ErrorCodeUtils.errorToStrategyFunc
+            );
+        } catch (Exception e) {
+            log.error(
+                "Call [{}] exec error, table id: [{}], region id: [{}], msg: [{}].",
+                stack, tableId, regionId, e.getMessage()
+            );
+            throw e;
+        }
     }
 }

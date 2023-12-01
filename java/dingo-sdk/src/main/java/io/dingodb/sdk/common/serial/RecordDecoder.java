@@ -35,9 +35,12 @@ public class RecordDecoder {
 
     private void checkPrefix(Buf buf) {
         // TODO for 0.7.1 check default namespace 'r' for not txn region
-        if (buf.read() != 'r') {
-            throw new RuntimeException("Namespace not support, please check data or upgrade.");
+        if (buf.peek() != 'r') {
+            throw new RuntimeException(
+                "Namespace not support, please check data or upgrade, data: " + Arrays.toString(buf.getBytes())
+            );
         }
+        buf.read();
 
         long keyId = buf.readLong();
         if (keyId != id) {
@@ -123,7 +126,9 @@ public class RecordDecoder {
 
         // TODO for 0.7.1 check namespace 'r' for not txn region
         if (keyPrefixBuf.peek() != 0 && keyPrefixBuf.read() != 'r') {
-            throw new RuntimeException("Namespace not support, please check data or upgrade.");
+            throw new RuntimeException(
+                "Namespace not support, please check data or upgrade, data: " + Arrays.toString(keyPrefix)
+            );
         }
 
         if (keyPrefixBuf.readLong() != id) {
