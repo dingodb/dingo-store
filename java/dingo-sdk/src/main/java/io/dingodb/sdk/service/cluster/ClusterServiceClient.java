@@ -19,6 +19,7 @@ package io.dingodb.sdk.service.cluster;
 import io.dingodb.common.Common;
 import io.dingodb.coordinator.Coordinator;
 import io.dingodb.coordinator.CoordinatorServiceGrpc;
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.cluster.Executor;
 import io.dingodb.sdk.common.cluster.InternalRegion;
@@ -99,11 +100,17 @@ public class ClusterServiceClient {
           List<Location> followers = peerList.stream().filter(p -> p.getStoreId() != leaderStoreId)
                   .map(peer -> mapping(peer.getRaftLocation()))
                   .collect(Collectors.toList());
+          Location leader = peerList.stream()
+                  .filter(p -> p.getStoreId() == leaderStoreId)
+                  .map(peer -> mapping(peer.getRaftLocation()))
+                  .findAny()
+                  .orElseThrow(() -> new DingoClientException("Not found region leader"));
+
           int regionType = region.getRegionTypeValue();
           int regionState = region.getStateValue();
           long createTime = region.getCreateTimestamp();
           long deleteTime = region.getDeletedTimestamp();
-          return new InternalRegion(regionState, regionType, createTime, deleteTime, followers);
+          return new InternalRegion(regionState, regionType, createTime, deleteTime, followers, leader);
     }
 
 }

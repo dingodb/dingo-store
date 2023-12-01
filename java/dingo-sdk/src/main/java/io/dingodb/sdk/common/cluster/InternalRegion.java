@@ -28,16 +28,20 @@ public class InternalRegion implements Region {
     public long deleteTime;
     public List<Location> followers;
 
+    public Location leader;
+
     public InternalRegion(int regionState,
                           int regionType,
                           long createTime,
                           long deleteTime,
-                          List<Location> followers) {
+                          List<Location> followers,
+                          Location leader) {
         this.regionState = regionState;
         this.regionType = regionType;
         this.createTime = createTime;
         this.deleteTime = deleteTime;
         this.followers = followers;
+        this.leader = leader;
     }
 
     @Override
@@ -63,5 +67,10 @@ public class InternalRegion implements Region {
     @Override
     public List<Location> followers() {
         return followers;
+    }
+
+    @Override
+    public Location leader() {
+        return leader;
     }
 }
