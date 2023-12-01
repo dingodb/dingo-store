@@ -268,8 +268,17 @@ public class IndexServiceClient {
             int retryTimes,
             DingoCommonId indexId,
             DingoCommonId regionId) {
-        return getIndexStoreConnector(indexId, regionId).exec(
-            stack(CURRENT_STACK + 1), function, retryTimes, ErrorCodeUtils.errorToStrategyFunc
-        );
+        String stack = stack(CURRENT_STACK + 1);
+        try {
+            return getIndexStoreConnector(indexId, regionId).exec(
+                stack, function, retryTimes, ErrorCodeUtils.errorToStrategyFunc
+            );
+        } catch (Exception e) {
+            log.error(
+                "Call [{}] exec error, index id: [{}], region id: [{}], msg: [{}].",
+                stack, indexId, regionId, e.getMessage()
+            );
+            throw e;
+        }
     }
 }
