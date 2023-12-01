@@ -15,6 +15,7 @@
 #include "vector/vector_index_manager.h"
 
 #include <atomic>
+#include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -46,6 +47,8 @@
 #include "vector/vector_index_factory.h"
 #include "vector/vector_index_snapshot.h"
 #include "vector/vector_index_snapshot_manager.h"
+
+DEFINE_int64(catchup_log_min_gap, 8, "catch up log min gap");
 
 namespace dingodb {
 
@@ -323,16 +326,13 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.load][index_id({})][trace({})] Load vector index from snapshot success, will ReplayWal",
         vector_index_id, trace);
-    auto status = ReplayWalToVectorIndex(new_vector_index, new_vector_index->ApplyLogId() + 1, INT64_MAX);
+
+    auto status =
+        CatchUpLogToVectorIndex(vector_index_wrapper, new_vector_index, fmt::format("LOAD.SNAPSHOT-{}", trace));
     if (status.ok()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.load][index_id({})][trace({})] ReplayWal success, log_id {} elapsed time({}ms)",
+          "[vector_index.load][index_id({})][trace({})] Catch up log success, log_id {} elapsed time({}ms)",
           vector_index_id, trace, new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
-
-      // Switch vector index.
-      vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("LOAD.SNAPSHOT-{}", trace));
-      vector_index_wrapper->SetBuildSuccess();
-
       return status;
     }
   }
@@ -461,6 +461,11 @@ butil::Status VectorIndexManager::ParallelLoadOrBuildVectorIndex(std::vector<sto
 butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_index, int64_t start_log_id,
                                                          int64_t end_log_id) {
   assert(vector_index != nullptr);
+
+  if (start_log_id >= end_log_id) {
+    return butil::Status();
+  }
+
   DINGO_LOG(INFO) << fmt::format("[vector_index.replaywal][index_id({})] replay wal log({}-{})", vector_index->Id(),
                                  start_log_id, end_log_id);
 
@@ -752,27 +757,57 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
       vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
       Helper::TimestampMs() - start_time);
 
-  start_time = Helper::TimestampMs();
-  // first ground replay wal
-  auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, INT64_MAX);
+  auto status = CatchUpLogToVectorIndex(vector_index_wrapper, vector_index, fmt::format("REBUILD-{}", trace));
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.rebuild][index_id({})][trace({})] ReplayWal failed first-round, log_id {}", vector_index_id,
-        trace, vector_index->ApplyLogId());
-    vector_index_wrapper->SetRebuildError();
-    return butil::Status(pb::error::Errno::EINTERNAL, "ReplayWal failed first-round");
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] Catch up log failed.",
+                                      vector_index_id, trace);
+    return status;
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.rebuild][index_id({}_v{})][trace({})] ReplayWal success first-round, log_id {} elapsed time: {}ms",
-      vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
-      Helper::TimestampMs() - start_time);
+      "[vector_index.rebuild][index_id({}_v{})][trace({})] Rebuild vector index success, elapsed time: {}ms.",
+      vector_index_id, vector_index_wrapper->Version(), trace, Helper::TimestampMs() - start_time);
 
-  // Check vector index is stop
-  if (vector_index_wrapper->IsStop()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] vector index is stop.",
-                                      vector_index_id, trace);
-    return butil::Status();
+  return butil::Status();
+}
+
+butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                                          std::shared_ptr<VectorIndex> vector_index,
+                                                          const std::string& trace) {
+  assert(vector_index_wrapper != nullptr);
+  assert(vector_index != nullptr);
+
+  int64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t start_time = Helper::TimestampMs();
+
+  // Get raft meta
+  auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
+  if (raft_meta != nullptr) {
+    return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "Not found raft meta.");
+  }
+
+  for (int i = i;; ++i) {
+    int64_t start_log_id = vector_index->ApplyLogId() + 1;
+    int64_t end_log_id = raft_meta->AppliedId();
+    if (end_log_id - start_log_id < FLAGS_catchup_log_min_gap) {
+      break;
+    }
+    auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
+    if (!status.ok()) {
+      vector_index_wrapper->SetRebuildError();
+      return butil::Status(pb::error::Errno::EINTERNAL,
+                           fmt::format("Catch up {}-round({}-{}) failed", i, start_log_id, end_log_id));
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[vector_index.catchup][index_id({})][trace({})] Catch up {}-round({}-{}) success.",
+                                   vector_index_id, trace, i, start_log_id, end_log_id);
+
+    // Check vector index is stop
+    if (vector_index_wrapper->IsStop()) {
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.catchup][index_id({})][trace({})] vector index is stop.",
+                                        vector_index_id, trace);
+      return butil::Status();
+    }
   }
 
   // switch vector index, stop write vector index.
@@ -783,27 +818,16 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
     start_time = Helper::TimestampMs();
     // second ground replay wal
-    status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, INT64_MAX);
+    auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, raft_meta->AppliedId());
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "[vector_index.rebuild][index_id({})][trace({})] ReplayWal failed catch-up round, log_id {}", vector_index_id,
-          trace, vector_index->ApplyLogId());
       vector_index_wrapper->SetRebuildError();
       return status;
     }
 
-    DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.rebuild][index_id({}_v{})][trace({})] ReplayWal success catch-up round, log_id {} elapsed time: "
-        "{}ms",
-        vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
-        Helper::TimestampMs() - start_time);
-
-    vector_index_wrapper->UpdateVectorIndex(vector_index, fmt::format("REBUILD-{}", trace));
+    vector_index_wrapper->UpdateVectorIndex(vector_index, trace);
     vector_index_wrapper->SetRebuildSuccess();
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuild][index_id({}_v{})][trace({})] Rebuild vector index success",
-                                 vector_index_id, vector_index_wrapper->Version(), trace);
   return butil::Status();
 }
 
