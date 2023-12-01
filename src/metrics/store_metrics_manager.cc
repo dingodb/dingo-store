@@ -373,7 +373,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     if (raft_meta == nullptr) {
       continue;
     }
-    int64_t applied_index = raft_meta->applied_index();
+    int64_t applied_index = raft_meta->AppliedId();
     if (applied_index != 0 && region_metrics->LastLogIndex() >= applied_index) {
       continue;
     }

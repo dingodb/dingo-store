@@ -34,6 +34,7 @@
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "meta/store_meta_manager.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -105,7 +106,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   parameter.log_path = config->GetString("raft.log_path");
 
-  auto raft_meta = StoreRaftMeta::NewRaftMeta(region->Id());
+  auto raft_meta = store::RaftMata::New(region->Id());
   parameter.raft_meta = raft_meta;
   parameter.region_metrics = region_metrics;
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();

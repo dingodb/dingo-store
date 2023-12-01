@@ -732,7 +732,7 @@ std::vector<store::RegionPtr> Server::GetAllAliveRegion() {
   return GetStoreMetaManager()->GetStoreRegionMeta()->GetAllAliveRegion();
 }
 
-StoreRaftMeta::RaftMetaPtr Server::GetRaftMeta(int64_t region_id) {
+store::RaftMetaPtr Server::GetRaftMeta(int64_t region_id) {
   return GetStoreMetaManager()->GetStoreRaftMeta()->GetRaftMeta(region_id);
 }
 

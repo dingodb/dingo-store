@@ -397,7 +397,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
   } else if (request->type() == pb::debug::DebugType::STORE_RAFT_META) {
     auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
 
-    std::vector<StoreRaftMeta::RaftMetaPtr> raft_metas;
+    std::vector<store::RaftMetaPtr> raft_metas;
     if (request->region_ids().empty()) {
       raft_metas = store_raft_meta->GetAllRaftMeta();
     } else {
@@ -410,7 +410,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
     }
 
     for (auto& raft_meta : raft_metas) {
-      *(response->mutable_raft_meta()->add_raft_metas()) = (*raft_meta);
+      *(response->mutable_raft_meta()->add_raft_metas()) = raft_meta->InnerRaftMeta();
     }
 
   } else if (request->type() == pb::debug::DebugType::STORE_REGION_EXECUTOR) {

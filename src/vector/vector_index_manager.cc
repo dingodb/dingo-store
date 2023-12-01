@@ -244,7 +244,7 @@ void LoadOrBuildVectorIndexTask::Run() {
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
   int64_t applied_index = -1;
   if (raft_meta != nullptr) {
-    applied_index = raft_meta->applied_index();
+    applied_index = raft_meta->AppliedId();
   }
 
   if (applied_index > Constant::kPullVectorIndexSnapshotMinApplyLogId) {

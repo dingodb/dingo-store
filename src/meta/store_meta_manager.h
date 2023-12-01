@@ -139,6 +139,30 @@ class Region {
 
 using RegionPtr = std::shared_ptr<Region>;
 
+class RaftMata {
+ public:
+  RaftMata(int64_t region_id);
+  ~RaftMata();
+
+  static std::shared_ptr<RaftMata> New(int64_t region_id);
+
+  int64_t RegionId();
+  int64_t Term();
+  int64_t AppliedId();
+  void SetTermAndAppliedId(int64_t term, int64_t applied_id);
+
+  std::string Serialize();
+  void DeSerialize(const std::string& data);
+
+  pb::store_internal::RaftMeta InnerRaftMeta();
+
+ private:
+  bthread_mutex_t mutex_;
+  pb::store_internal::RaftMeta raft_meta_;
+};
+
+using RaftMetaPtr = std::shared_ptr<RaftMata>;
+
 }  // namespace store
 
 class RegionChangeRecorder : public TransformKvAble {
@@ -284,19 +308,14 @@ class StoreRaftMeta : public TransformKvAble {
   StoreRaftMeta(const StoreRaftMeta&) = delete;
   void operator=(const StoreRaftMeta&) = delete;
 
-  using RaftMetaPtr = std::shared_ptr<pb::store_internal::RaftMeta>;
-
   bool Init();
 
-  static RaftMetaPtr NewRaftMeta(int64_t region_id);
-
-  void AddRaftMeta(RaftMetaPtr raft_meta);
-  void UpdateRaftMeta(RaftMetaPtr raft_meta);
+  void AddRaftMeta(store::RaftMetaPtr raft_meta);
+  void UpdateRaftMeta(store::RaftMetaPtr raft_meta);
   void SaveRaftMeta(int64_t region_id);
   void DeleteRaftMeta(int64_t region_id);
-  RaftMetaPtr GetRaftMeta(int64_t region_id);
-  pb::store_internal::RaftMeta GetRaftMetaValue(int64_t region_id);
-  std::vector<RaftMetaPtr> GetAllRaftMeta();
+  store::RaftMetaPtr GetRaftMeta(int64_t region_id);
+  std::vector<store::RaftMetaPtr> GetAllRaftMeta();
 
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
@@ -309,7 +328,7 @@ class StoreRaftMeta : public TransformKvAble {
 
   bthread_mutex_t mutex_;
 
-  using RaftMetaMap = std::map<int64_t, RaftMetaPtr>;
+  using RaftMetaMap = std::map<int64_t, store::RaftMetaPtr>;
   RaftMetaMap raft_metas_;
 };
 
