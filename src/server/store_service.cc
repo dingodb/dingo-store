@@ -777,7 +777,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
-  // ctx->SetRawEngineType()
+  ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);

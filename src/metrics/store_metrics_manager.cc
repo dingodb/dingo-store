@@ -296,17 +296,11 @@ std::vector<std::vector<store::RegionPtr>> GenBatchRegion(std::vector<store::Reg
 
 bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
   auto store_region_meta = GET_STORE_REGION_META;
-  auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
   std::vector<store::RegionPtr> need_collect_rocks_regions;
   std::vector<store::RegionPtr> need_collect_bdb_regions;
   for (const auto& region_metrics : region_metricses) {
-    auto raft_meta = store_raft_meta->GetRaftMeta(region_metrics->Id());
-    if (raft_meta == nullptr) {
-      continue;
-    }
-
     auto region = store_region_meta->GetRegion(region_metrics->Id());
     if (region == nullptr) {
       continue;
