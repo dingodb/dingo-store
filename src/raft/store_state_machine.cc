@@ -156,6 +156,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
     applied_term_ = iter.term();
     applied_index_ = iter.index();
+    raft_meta_->SetTermAndAppliedId(applied_term_, applied_index_);
 
     // bvar metrics
     StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
@@ -164,7 +165,6 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     // If operation is idempotent, it's ok.
     // If not, must be stored with the data.
     if (applied_index_ % kSaveAppliedIndexStep == 0) {
-      raft_meta_->SetTermAndAppliedId(applied_term_, applied_index_);
       Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
     }
   }
@@ -199,9 +199,6 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
           entry.index(), applied_index_,
           raft_cmd->requests().empty() ? "" : pb::raft::CmdType_Name(raft_cmd->requests().at(0).cmd_type()));
 
-      applied_term_ = entry.term();
-      applied_index_ = entry.index();
-
       auto event = std::make_shared<SmApplyEvent>();
       event->region = region_;
       event->engine = raw_engine_;
@@ -212,11 +209,15 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
 
       DispatchEvent(EventType::kSmApply, event);
 
+      applied_term_ = entry.term();
+      applied_index_ = entry.index();
+
+      raft_meta_->SetTermAndAppliedId(applied_term_, applied_index_);
+
       // bvar metrics
       StoreBvarMetrics::GetInstance().IncApplyCountPerSecond(str_node_id_);
 
       if (applied_index_ % kSaveAppliedIndexStep == 0) {
-        raft_meta_->SetTermAndAppliedId(applied_term_, applied_index_);
         Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->UpdateRaftMeta(raft_meta_);
       }
 

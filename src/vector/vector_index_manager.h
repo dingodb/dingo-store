@@ -158,7 +158,9 @@ class VectorIndexManager {
   // Invoke when server starting.
   static std::shared_ptr<VectorIndex> BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
                                                        const std::string& trace);
-
+  // Catch up vector index.
+  static butil::Status CatchUpLogToVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
+                                               std::shared_ptr<VectorIndex> vector_index, const std::string& trace);
   // Replay log to vector index.
   static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, int64_t start_log_id,
                                               int64_t end_log_id);
