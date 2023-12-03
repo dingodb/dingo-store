@@ -308,14 +308,16 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   to_region->SetParentId(from_region->Id());
 
+  // Note: full heartbeat do not report region metrics when the region is in SPLITTING or MERGING
+  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
+
   // set child region version/range/state
   store_region_meta->UpdateEpochVersionAndRange(to_region, to_region->Epoch().version() + 1, to_range, "split child");
-  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
 
   // set parent region version/range/state
   store_region_meta->UpdateEpochVersionAndRange(from_region, from_region->Epoch().version() + 1, from_range,
                                                 "split parent");
-  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Doing raft snapshot");
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
@@ -665,10 +667,9 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   // Get source region definition.
   auto source_region_definition = source_region->Definition();
   // Set source region epoch/range.
-  auto new_range = source_region_definition.range();
-  new_range.set_start_key(Helper::GenMaxStartKey());
   int64_t new_version = source_region_definition.epoch().version() + 1;
-  store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, new_range, "merge source");
+  store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, source_region_definition.range(),
+                                                "merge source");
 
   FAIL_POINT("before_launch_commit_merge");
 
@@ -748,27 +749,43 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     actual_apply_log_count = state_machine->CatchUpApplyLog(Helper::PbRepeatedToVector(request.entries()));
   }
 
-  // Set source region TOMBSTONE state
-  store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
-
   FAIL_POINT("before_commit_merge_modify_epoch");
 
-  // Set target region range and epoch
-  // range: source range + target range
-  // epoch: max(source_epoch, target_epoch) + 1
-  pb::common::Range new_range;
-  // left(source region) right(target_region)
-  if (request.source_region_range().end_key() == target_region->Range().start_key()) {
-    new_range.set_start_key(request.source_region_range().start_key());
-    new_range.set_end_key(target_region->Range().end_key());
-  } else {
-    // left(target region) right(source region)
-    new_range.set_start_key(target_region->Range().start_key());
-    new_range.set_end_key(request.source_region_range().end_key());
-  }
-  int64_t new_version = std::max(request.source_region_epoch().version(), target_region->Epoch().version()) + 1;
+  store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::MERGING);
+  store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::MERGING);
 
-  store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range, "merge target");
+  {
+    // Set target region range and epoch
+    // range: source range + target range
+    // epoch: max(source_epoch, target_epoch) + 1
+    pb::common::Range new_range;
+    // left(source region) right(target_region)
+    if (request.source_region_range().end_key() == target_region->Range().start_key()) {
+      new_range.set_start_key(request.source_region_range().start_key());
+      new_range.set_end_key(target_region->Range().end_key());
+    } else {
+      // left(target region) right(source region)
+      new_range.set_start_key(target_region->Range().start_key());
+      new_range.set_end_key(request.source_region_range().end_key());
+    }
+    int64_t new_version = std::max(request.source_region_epoch().version(), target_region->Epoch().version()) + 1;
+
+    store_region_meta->UpdateEpochVersionAndRange(target_region, new_version, new_range, "merge target");
+  }
+
+  {
+    // Set source region
+    // range: [0xFFFFFFF, source_region.end_key)
+    // epoch: source_epoch + 1
+    int64_t new_version = source_region->Epoch().version() + 1;
+    pb::common::Range new_range = source_region->Range();
+    new_range.set_start_key(Helper::GenMaxStartKey());
+    store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, new_range, "merge source");
+  }
+
+  // Set source region TOMBSTONE state
+  store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
+  store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::NORMAL);
 
   // Do snapshot
   LaunchAyncSaveSnapshot(target_region);
