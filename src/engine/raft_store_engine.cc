@@ -145,7 +145,7 @@ bool RaftStoreEngine::Recover() {
                                             region->Id());
           continue;
         }
-        raft_meta = store::RaftMata::New(region->Id());
+        raft_meta = store::RaftMeta::New(region->Id());
         store_raft_meta->UpdateRaftMeta(raft_meta);
         parameter.raft_meta = raft_meta;
         parameter.is_restart = false;

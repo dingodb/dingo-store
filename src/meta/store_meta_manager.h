@@ -139,12 +139,12 @@ class Region {
 
 using RegionPtr = std::shared_ptr<Region>;
 
-class RaftMata {
+class RaftMeta {
  public:
-  RaftMata(int64_t region_id);
-  ~RaftMata();
+  RaftMeta(int64_t region_id);
+  ~RaftMeta();
 
-  static std::shared_ptr<RaftMata> New(int64_t region_id);
+  static std::shared_ptr<RaftMeta> New(int64_t region_id);
 
   int64_t RegionId();
   int64_t Term();
@@ -161,7 +161,7 @@ class RaftMata {
   pb::store_internal::RaftMeta raft_meta_;
 };
 
-using RaftMetaPtr = std::shared_ptr<RaftMata>;
+using RaftMetaPtr = std::shared_ptr<RaftMeta>;
 
 }  // namespace store
 
