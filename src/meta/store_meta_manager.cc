@@ -281,7 +281,7 @@ int64_t Region::LastChangeJobId() {
   return inner_region_.last_change_job_id();
 }
 
-RaftMata::RaftMata(int64_t region_id) {
+RaftMeta::RaftMeta(int64_t region_id) {
   raft_meta_.set_region_id(region_id);
   raft_meta_.set_term(0);
   raft_meta_.set_applied_index(0);
@@ -289,51 +289,51 @@ RaftMata::RaftMata(int64_t region_id) {
   DINGO_LOG(DEBUG) << fmt::format("[new.RaftMata][id({})]", region_id);
 }
 
-RaftMata::~RaftMata() {
+RaftMeta::~RaftMeta() {
   DINGO_LOG(DEBUG) << fmt::format("[delete.RaftMata][id({})]", RegionId());
   bthread_mutex_destroy(&mutex_);
 }
 
-std::shared_ptr<RaftMata> RaftMata::New(int64_t region_id) { return std::make_shared<RaftMata>(region_id); }
+std::shared_ptr<RaftMeta> RaftMeta::New(int64_t region_id) { return std::make_shared<RaftMeta>(region_id); }
 
-int64_t RaftMata::RegionId() {
+int64_t RaftMeta::RegionId() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   return raft_meta_.region_id();
 }
 
-int64_t RaftMata::Term() {
+int64_t RaftMeta::Term() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   return raft_meta_.term();
 }
 
-int64_t RaftMata::AppliedId() {
+int64_t RaftMeta::AppliedId() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   return raft_meta_.applied_index();
 }
 
-void RaftMata::SetTermAndAppliedId(int64_t term, int64_t applied_id) {
+void RaftMeta::SetTermAndAppliedId(int64_t term, int64_t applied_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   raft_meta_.set_term(term);
   raft_meta_.set_applied_index(applied_id);
 }
 
-std::string RaftMata::Serialize() {
+std::string RaftMeta::Serialize() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   return raft_meta_.SerializeAsString();
 }
 
-void RaftMata::DeSerialize(const std::string& data) {
+void RaftMeta::DeSerialize(const std::string& data) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   raft_meta_.ParsePartialFromArray(data.data(), data.size());
 }
 
-pb::store_internal::RaftMeta RaftMata::InnerRaftMeta() {
+pb::store_internal::RaftMeta RaftMeta::InnerRaftMeta() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   return raft_meta_;
@@ -1091,7 +1091,7 @@ void StoreRaftMeta::TransformFromKv(const std::vector<pb::common::KeyValue>& kvs
   BAIDU_SCOPED_LOCK(mutex_);
   for (const auto& kv : kvs) {
     int64_t region_id = ParseRegionId(kv.key());
-    auto raft_meta = store::RaftMata::New(region_id);
+    auto raft_meta = store::RaftMeta::New(region_id);
     raft_meta->DeSerialize(kv.value());
     raft_metas_.insert_or_assign(region_id, raft_meta);
   }
