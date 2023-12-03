@@ -86,6 +86,12 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     }
   }
   for (const auto& region_meta : region_metas) {
+    if (region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
+        region_meta->State() == pb::common::StoreRegionState::MERGING) {
+      DINGO_LOG(WARNING) << fmt::format("[heartbeat.store][region({})] region state({}) not suit heartbeat.",
+                                        region_meta->Id(), pb::common::StoreRegionState_Name(region_meta->State()));
+      continue;
+    }
     pb::common::RegionMetrics tmp_region_metrics;
     auto metrics = region_metrics->GetMetrics(region_meta->Id());
     if (metrics != nullptr) {
@@ -100,8 +106,6 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
 
     if (region_meta->State() == pb::common::StoreRegionState::NORMAL ||
         region_meta->State() == pb::common::StoreRegionState::STANDBY ||
-        region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
-        region_meta->State() == pb::common::StoreRegionState::MERGING ||
         region_meta->State() == pb::common::StoreRegionState::TOMBSTONE) {
       auto raft_node = raft_store_engine->GetNode(region_meta->Id());
       if (raft_node != nullptr) {

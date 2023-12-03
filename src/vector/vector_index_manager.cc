@@ -114,8 +114,9 @@ void RebuildVectorIndexTask::Run() {
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuilded vector index {}", region->Id()));
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.rebuild][index_id({}_v{})][trace({})] rebuild vector index failed, error {}",
-        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
+        "[vector_index.rebuild][index_id({}_v{})][trace({})] rebuild vector index failed, error: {} {}.",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_,
+        pb::error::Errno_Name(status.error_code()), status.error_str());
     return;
   }
 
@@ -125,8 +126,9 @@ void RebuildVectorIndexTask::Run() {
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saved vector index {} failed", region->Id()));
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save][index_id({}_v{})][trace({})] save vector index failed, error {}",
-        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
+        "[vector_index.save][index_id({}_v{})][trace({})] save vector index failed, error: {} {}.",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_,
+        pb::error::Errno_Name(status.error_code()), status.error_str());
   }
 
   vector_index_wrapper_->SetIsTempHoldVectorIndex(false);
@@ -326,13 +328,16 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.load][index_id({})][trace({})] Load vector index from snapshot success, will ReplayWal",
         vector_index_id, trace);
-
-    auto status =
-        CatchUpLogToVectorIndex(vector_index_wrapper, new_vector_index, fmt::format("LOAD.SNAPSHOT-{}", trace));
+    auto status = ReplayWalToVectorIndex(new_vector_index, new_vector_index->ApplyLogId() + 1, INT64_MAX);
     if (status.ok()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.load][index_id({})][trace({})] Catch up log success, log_id {} elapsed time({}ms)",
+          "[vector_index.load][index_id({})][trace({})] ReplayWal success, log_id {} elapsed time({}ms)",
           vector_index_id, trace, new_vector_index->ApplyLogId(), Helper::TimestampMs() - start_time);
+
+      // Switch vector index.
+      vector_index_wrapper->UpdateVectorIndex(new_vector_index, fmt::format("LOAD.SNAPSHOT-{}", trace));
+      vector_index_wrapper->SetBuildSuccess();
+
       return status;
     }
   }
@@ -759,8 +764,9 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
   auto status = CatchUpLogToVectorIndex(vector_index_wrapper, vector_index, fmt::format("REBUILD-{}", trace));
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] Catch up log failed.",
-                                      vector_index_id, trace);
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.rebuild][index_id({})][trace({})] Catch up log failed, error: {} {}.", vector_index_id, trace,
+        pb::error::Errno_Name(status.error_code()), status.error_str());
     return status;
   }
 
@@ -782,8 +788,8 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
 
   // Get raft meta
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
-  if (raft_meta != nullptr) {
-    return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "Not found raft meta.");
+  if (raft_meta == nullptr) {
+    return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found raft meta.");
   }
 
   for (int i = i;; ++i) {
