@@ -47,6 +47,7 @@
 #include "vector/vector_index_snapshot_manager.h"
 
 DEFINE_int64(merge_committed_log_gap, 16, "merge commited log gap");
+DEFINE_int32(init_election_timeout_ms, 1000, "init election timeout");
 
 namespace dingodb {
 
@@ -102,7 +103,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
 
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   parameter.raft_path = config->GetString("raft.path");
-  parameter.election_timeout_ms = 200;
+  parameter.election_timeout_ms = FLAGS_init_election_timeout_ms;
   parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   parameter.log_path = config->GetString("raft.log_path");
 
