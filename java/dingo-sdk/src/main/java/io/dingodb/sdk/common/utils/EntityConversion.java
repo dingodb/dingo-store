@@ -35,6 +35,7 @@ import io.dingodb.sdk.common.cluster.InternalCoordinator;
 import io.dingodb.sdk.common.cluster.InternalExecutor;
 import io.dingodb.sdk.common.cluster.InternalExecutorMap;
 import io.dingodb.sdk.common.cluster.InternalExecutorUser;
+import io.dingodb.sdk.common.cluster.InternalRegion;
 import io.dingodb.sdk.common.cluster.InternalStore;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
@@ -904,6 +905,36 @@ public class EntityConversion {
                 mapping(store.getServerLocation()),
                 mapping(store.getRaftLocation())
         );
+    }
+
+    public static InternalRegion mapping(Common.Region region) {
+        long leaderStoreId = region.getLeaderStoreId();
+        List<Common.Peer> peerList = region.getDefinition().getPeersList();
+        List<Location> followers = null;
+        Location leader = null;
+        if (peerList != null && peerList.size() > 0) {
+            followers = peerList.stream().filter(p -> p.getStoreId() != leaderStoreId)
+                    .map(peer -> mapping(peer.getRaftLocation()))
+                    .collect(Collectors.toList());
+            leader = peerList.stream()
+                    .filter(p -> p.getStoreId() == leaderStoreId)
+                    .map(peer -> mapping(peer.getRaftLocation()))
+                    .findAny()
+                    .orElseThrow(() -> new DingoClientException("Not found region leader"));
+        }
+        int regionType = region.getRegionTypeValue();
+        int regionState = region.getStateValue();
+        long createTime = region.getCreateTimestamp();
+        long deleteTime = region.getDeletedTimestamp();
+        return new InternalRegion(
+                region.getId(),
+                regionState,
+                regionType,
+                createTime,
+                deleteTime,
+                followers,
+                leader,
+                leaderStoreId);
     }
 
 }

@@ -88,29 +88,26 @@ public class ClusterServiceClient {
     	          .collect(Collectors.toList());        
     }
 
+    public List<io.dingodb.sdk.common.cluster.Region> getRegionMap(long epoch) {
+         Coordinator.GetRegionMapRequest req = Coordinator.GetRegionMapRequest
+                 .newBuilder()
+                 .setEpoch(0)
+                 .build();
+         Coordinator.GetRegionMapResponse response = connector.exec(stub -> stub.getRegionMap(req));
+         return response.getRegionmap()
+                 .getRegionsList()
+                 .stream()
+                 .map(EntityConversion::mapping)
+                 .collect(Collectors.toList());
+    }
+
     public io.dingodb.sdk.common.cluster.Region queryRegion(long regionId) {
           Coordinator.QueryRegionRequest req = Coordinator.QueryRegionRequest.newBuilder()
                  .setRegionId(regionId)
                  .build();
 
           Coordinator.QueryRegionResponse response = connector.exec(stub -> stub.queryRegion(req));
-          Common.Region region = response.getRegion();
-          long leaderStoreId = region.getLeaderStoreId();
-          List<Common.Peer> peerList = region.getDefinition().getPeersList();
-          List<Location> followers = peerList.stream().filter(p -> p.getStoreId() != leaderStoreId)
-                  .map(peer -> mapping(peer.getRaftLocation()))
-                  .collect(Collectors.toList());
-          Location leader = peerList.stream()
-                  .filter(p -> p.getStoreId() == leaderStoreId)
-                  .map(peer -> mapping(peer.getRaftLocation()))
-                  .findAny()
-                  .orElseThrow(() -> new DingoClientException("Not found region leader"));
-
-          int regionType = region.getRegionTypeValue();
-          int regionState = region.getStateValue();
-          long createTime = region.getCreateTimestamp();
-          long deleteTime = region.getDeletedTimestamp();
-          return new InternalRegion(regionState, regionType, createTime, deleteTime, followers, leader);
+          return EntityConversion.mapping(response.getRegion());
     }
 
 }

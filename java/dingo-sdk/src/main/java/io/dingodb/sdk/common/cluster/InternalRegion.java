@@ -21,6 +21,7 @@ import io.dingodb.sdk.common.Location;
 import java.util.List;
 
 public class InternalRegion implements Region {
+    public long regionId;
     public int regionState;
 
     public int regionType;
@@ -29,19 +30,29 @@ public class InternalRegion implements Region {
     public List<Location> followers;
 
     public Location leader;
+    public long leaderStoreId;
 
-    public InternalRegion(int regionState,
+    public InternalRegion(long regionId,
+                          int regionState,
                           int regionType,
                           long createTime,
                           long deleteTime,
                           List<Location> followers,
-                          Location leader) {
+                          Location leader,
+                          long leaderStoreId) {
+        this.regionId = regionId;
         this.regionState = regionState;
         this.regionType = regionType;
         this.createTime = createTime;
         this.deleteTime = deleteTime;
         this.followers = followers;
         this.leader = leader;
+        this.leaderStoreId = leaderStoreId;
+    }
+
+    @Override
+    public long regionId() {
+        return regionId;
     }
 
     @Override
@@ -72,5 +83,10 @@ public class InternalRegion implements Region {
     @Override
     public Location leader() {
         return leader;
+    }
+
+    @Override
+    public long leaderStoreId() {
+        return leaderStoreId;
     }
 }
