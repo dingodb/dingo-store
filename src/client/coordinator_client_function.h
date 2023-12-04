@@ -94,6 +94,7 @@ void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 // task list
 void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // meta service functions
 void SendMetaHello(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

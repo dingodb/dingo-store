@@ -1466,7 +1466,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         auto ret1 = schema_map_.Get(table.table().schema_id(), schema_to_update);
 
         if (ret1 > 0) {
-          // according to the doc, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
           new_schema = schema_to_update;
 
@@ -1714,14 +1713,62 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
 
       } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto ret = task_list_meta_->Put(task_list.id(), task_list.task_list());
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
-                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        if (!task_list.is_partial_update()) {
+          auto ret = task_list_meta_->Put(task_list.id(), task_list.task_list());
+          if (!ret.ok()) {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
+                             << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+          } else {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
+          }
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
-        }
+          // partial update
+          bool is_updated = false;
+          pb::coordinator::TaskList task_list_temp;
+          int ret = task_list_map_.Get(task_list.id(), task_list_temp);
+          if (ret > 0) {
+            for (int i = 0; i < task_list_temp.tasks_size(); i++) {
+              auto* task_ptr = task_list_temp.mutable_tasks(i);
 
+              for (int j = 0; j < task_ptr->store_operations_size(); j++) {
+                auto* store_operation_ptr = task_ptr->mutable_store_operations(j);
+
+                for (int k = 0; k < store_operation_ptr->region_cmds_size(); k++) {
+                  auto* region_cmd_ptr = store_operation_ptr->mutable_region_cmds(k);
+
+                  for (const auto& region_cmd_status_update : task_list.region_cmds_status()) {
+                    if (region_cmd_ptr->id() == region_cmd_status_update.region_cmd_id()) {
+                      region_cmd_ptr->set_status(region_cmd_status_update.status());
+                      *region_cmd_ptr->mutable_error() = region_cmd_status_update.error();
+                      is_updated = true;
+                      DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, partial update, [id=" << task_list.id()
+                                      << "], region_cmd_id=" << region_cmd_ptr->id()
+                                      << " status from: " << region_cmd_ptr->status()
+                                      << ", to: " << region_cmd_status_update.status()
+                                      << " error from: " << region_cmd_ptr->error().ShortDebugString()
+                                      << ", to: " << region_cmd_status_update.error().ShortDebugString()
+                                      << ", region_cmd: " << region_cmd_ptr->ShortDebugString();
+                    }
+                  }
+                }
+              }
+            }
+
+            if (is_updated) {
+              auto ret1 = task_list_meta_->Put(task_list.id(), task_list_temp);
+              if (!ret1.ok()) {
+                DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
+                                 << "], errcode: " << ret1.error_code() << ", errmsg: " << ret1.error_str()
+                                 << ", task_list_temp: " << task_list_temp.ShortDebugString();
+              } else {
+                DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
+              }
+            }
+          } else {
+            DINGO_LOG(ERROR) << " UPDATE task_list apply illegal task_list_id=" << task_list.id()
+                             << " task_list_id=" << task_list.id() << ", task_list: " << task_list.ShortDebugString();
+          }
+        }
       } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         auto ret = task_list_meta_->Erase(task_list.id());
         if (!ret.ok()) {
@@ -1809,7 +1856,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         auto ret1 = schema_map_.Get(index.table().schema_id(), schema_to_update);
 
         if (ret1 > 0) {
-          // according to the doc, we must use CopyFrom for protobuf message data structure here
           pb::coordinator_internal::SchemaInternal new_schema;
           new_schema = schema_to_update;
 
