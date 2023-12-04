@@ -64,6 +64,9 @@ class VectorIndexHnsw : public VectorIndex {
 
   ~VectorIndexHnsw() override;
 
+  static uint32_t CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dimension, int64_t nlinks);
+  static butil::Status CheckAndSetHnswParameter(pb::common::CreateHnswParam& hnsw_parameter);
+
   VectorIndexHnsw(const VectorIndexHnsw& rhs) = delete;
   VectorIndexHnsw& operator=(const VectorIndexHnsw& rhs) = delete;
   VectorIndexHnsw(VectorIndexHnsw&& rhs) = delete;
@@ -124,6 +127,7 @@ class VectorIndexHnsw : public VectorIndex {
   bthread_mutex_t mutex_;
 
   uint32_t user_max_elements_;
+  uint32_t actual_max_elements_;
 
   // normalize vector
   bool normalize_;

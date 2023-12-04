@@ -848,8 +848,8 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
 
   if (FLAGS_vector_index_type == "hnsw") {
-    if (FLAGS_max_elements == 0) {
-      DINGO_LOG(WARNING) << "max_elements is empty";
+    if (FLAGS_max_elements < 0) {
+      DINGO_LOG(WARNING) << "max_elements is negative";
       return;
     }
     if (FLAGS_efconstruction == 0) {

@@ -42,6 +42,7 @@
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
+#include "vector/vector_index_hnsw.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -67,9 +68,9 @@ DEFINE_int32(
     "region down after secondes, will not update region info if no state change and (now - last_update_time) > "
     "region_down_after_secondes");
 
-DEFINE_int64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
+DECLARE_int64(max_hnsw_memory_size_of_region);
 
-DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
+DECLARE_int32(max_hnsw_nlinks_of_region);
 
 DEFINE_int32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
 
@@ -1698,18 +1699,11 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==
         pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      auto dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
-      auto max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
-      auto nlinks = new_index_parameter.vector_index_parameter().hnsw_parameter().nlinks();
-
-      auto max_elements_limit =
-          Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, dimension, nlinks);
-      if (max_elements > max_elements_limit) {
-        DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
-                           << max_elements << ", max_elements_limit=" << max_elements_limit
-                           << ", dimension=" << dimension;
-        new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(
-            max_elements_limit);
+      auto* hnsw_parameter = new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
+      auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region hnsw parameter is not legal, ret=" << ret1;
+        return ret1;
       }
     }
   }
@@ -1860,18 +1854,11 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
     // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
     if (new_index_parameter.vector_index_parameter().vector_index_type() ==
         pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      auto dimension = new_index_parameter.vector_index_parameter().hnsw_parameter().dimension();
-      auto max_elements = new_index_parameter.vector_index_parameter().hnsw_parameter().max_elements();
-      auto nlinks = new_index_parameter.vector_index_parameter().hnsw_parameter().nlinks();
-
-      auto max_elements_limit =
-          Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, dimension, nlinks);
-      if (max_elements > max_elements_limit) {
-        DINGO_LOG(WARNING) << "CreateRegion max_elements is too large, will reduce max_elements, max_elements="
-                           << max_elements << ", max_elements_limit=" << max_elements_limit
-                           << ", dimension=" << dimension;
-        new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter()->set_max_elements(
-            max_elements_limit);
+      auto* hnsw_parameter = new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
+      auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region hnsw parameter is not legal, ret=" << ret1;
+        return ret1;
       }
     }
   }
