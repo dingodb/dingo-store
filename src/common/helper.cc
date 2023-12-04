@@ -705,8 +705,8 @@ void Helper::GetServerLocation(const pb::common::Location& raft_location, pb::co
   // validate raft_location
   // TODO: how to support ipv6
   if (raft_location.host().length() <= 0 || raft_location.port() <= 0) {
-    DINGO_LOG(ERROR) << "GetServiceLocation illegal raft_location=" << raft_location.host() << ":"
-                     << raft_location.port();
+    DINGO_LOG(WARNING) << "GetServiceLocation illegal raft_location=" << raft_location.host() << ":"
+                       << raft_location.port();
     return;
   }
 
