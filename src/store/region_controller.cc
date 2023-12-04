@@ -426,6 +426,32 @@ void SplitRegionTask::Run() {
                                     region_cmd_->split_request().split_from_region_id(),
                                     region_cmd_->split_request().split_to_region_id(),
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
+
+    // update region_cmd_status to coordinator
+    auto coordinatro_interaction = Server::GetInstance().GetCoordinatorInteraction();
+    if (coordinatro_interaction == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, coordinator interaction is null",
+                                      region_cmd_->split_request().split_from_region_id(),
+                                      region_cmd_->split_request().split_to_region_id());
+    } else {
+      pb::coordinator::UpdateRegionCmdStatusRequest request;
+      pb::coordinator::UpdateRegionCmdStatusResponse response;
+
+      request.set_task_list_id(region_cmd_->job_id());
+      request.set_region_cmd_id(region_cmd_->id());
+      request.set_status(pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+      request.mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+      request.mutable_error()->set_errmsg(status.error_str());
+
+      status = coordinatro_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[split.spliting][region({}->{})] Split failed, update region cmd status to coordinator failed, error: {} "
+            "{}",
+            region_cmd_->split_request().split_from_region_id(), region_cmd_->split_request().split_to_region_id(),
+            pb::error::Errno_Name(status.error_code()), status.error_str());
+      }
+    }
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -698,6 +724,32 @@ void MergeRegionTask::Run() {
                                     region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
                                     region_cmd_->merge_request().target_region_id(),
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
+
+    // update region_cmd_status to coordinator
+    auto coordinatro_interaction = Server::GetInstance().GetCoordinatorInteraction();
+    if (coordinatro_interaction == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, coordinator interaction is null",
+                                      region_cmd_->split_request().split_from_region_id(),
+                                      region_cmd_->split_request().split_to_region_id());
+    } else {
+      pb::coordinator::UpdateRegionCmdStatusRequest request;
+      pb::coordinator::UpdateRegionCmdStatusResponse response;
+
+      request.set_task_list_id(region_cmd_->job_id());
+      request.set_region_cmd_id(region_cmd_->id());
+      request.set_status(pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+      request.mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+      request.mutable_error()->set_errmsg(status.error_str());
+
+      status = coordinatro_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[merge.merging][region({}->{})] merge failed, update region cmd status to coordinator failed, error: {} "
+            "{}",
+            region_cmd_->merge_request().source_region_id(), region_cmd_->merge_request().target_region_id(),
+            pb::error::Errno_Name(status.error_code()), status.error_str());
+      }
+    }
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(

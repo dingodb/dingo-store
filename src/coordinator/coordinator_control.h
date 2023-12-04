@@ -733,34 +733,47 @@ class CoordinatorControl : public MetaControl {
   bool LoadMetaFromSnapshotFile(
       pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;  // for raft fsm
 
-  void GetTaskList(butil::FlatMap<int64_t, pb::coordinator::TaskList> &task_lists);
+  butil::Status UpdateRegionCmdStatus(int64_t task_list_id, int64_t region_cmd_id,
+                                      pb::coordinator::RegionCmdStatus status, pb::error::Error error,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  void GetTaskListAll(butil::FlatMap<int64_t, pb::coordinator::TaskList> &task_lists);
+  void GetTaskList(int64_t task_list_id, pb::coordinator::TaskList &task_list);
 
   pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddCreateTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                            const pb::common::RegionDefinition &region_definition);
-  static void AddDeleteTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
-  static void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                                     const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer> &peers);
+  void AddCreateTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                     const pb::common::RegionDefinition &region_definition,
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddDeleteTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                     pb::coordinator::StoreOperation *store_operation,
+                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddDeleteTaskWithCheck(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                              const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer> &peers,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
   // void AddPurgeTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
   //                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddChangePeerTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                                const pb::common::RegionDefinition &region_definition);
-  static void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                                    const pb::common::Peer &new_leader_peer);
-  static void AddMergeTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t merge_from_region_id,
-                           int64_t merge_to_region_id);
-  static void AddSplitTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                           int64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region);
+  void AddChangePeerTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                         const pb::common::RegionDefinition &region_definition,
+                         pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                             const pb::common::Peer &new_leader_peer,
+                             pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddMergeTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t merge_from_region_id,
+                    int64_t merge_to_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddSplitTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                    int64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region,
+                    pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckSplitResultTask(pb::coordinator::TaskList *task_list, int64_t split_to_region_id);
   static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
-  static void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
+  void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                              pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckStoreRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
   static void AddCheckMergeResultTask(pb::coordinator::TaskList *task_list, int64_t merge_to_region_id,
                                       const pb::common::Range &range);
   static void AddCheckTombstoneRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
 
-  static void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, int64_t store_id,
-                                            int64_t region_id);
+  void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, int64_t store_id,
+                                     int64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // check if task in task_lis can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine

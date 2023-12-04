@@ -269,10 +269,18 @@ message MetaIncrementAutoIncrement {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementRegionCmdStatus {
+  int64 region_cmd_id = 1;
+  dingodb.pb.coordinator.RegionCmdStatus status = 2;
+  dingodb.pb.error.Error error = 3;
+}
+
 message MetaIncrementTaskList {
   int64 id = 1;  // this is task list id
   dingodb.pb.coordinator.TaskList task_list = 2;
   MetaIncrementOpType op_type = 3;
+  bool is_partial_update = 4;
+  repeated MetaIncrementRegionCmdStatus region_cmds_status = 5;
 }
 
 // lease

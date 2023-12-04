@@ -67,6 +67,7 @@ DEFINE_int64(start_region_cmd_id, 0, "start_region_cmd_id");
 DEFINE_int64(end_region_cmd_id, 0, "end_region_cmd_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
+DEFINE_int64(task_list_id, 0, "task_list_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
 DEFINE_int32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
@@ -128,6 +129,9 @@ DEFINE_int64(ttl, 0, "ttl");
 DEFINE_bool(auto_split, false, "auto split");
 DEFINE_string(engine, "rocksdb", "engine type for table and index, [rocksdb, bdb]");
 DEFINE_string(raw_engine, "", "engine type for table and index, [rocksdb, bdb]");
+DEFINE_int64(status, 0, "status");
+DEFINE_int64(errcode, -1, "errcode");
+DEFINE_string(errmsg, "", "errmsg");
 
 DEFINE_string(alg_type, "faiss", "use alg type. such as faiss or hnsw");
 DEFINE_string(metric_type, "L2", "metric type. such as L2 or IP or cosine");
@@ -706,6 +710,8 @@ int CoordinatorSender() {
     SendGetTaskList(coordinator_interaction);
   } else if (FLAGS_method == "CleanTaskList") {
     SendCleanTaskList(coordinator_interaction);
+  } else if (FLAGS_method == "UpdateRegionCmdStatus") {
+    SendUpdateRegionCmdStatus(coordinator_interaction);
   } else if (FLAGS_method == "CleanStoreOperation") {
     SendCleanStoreOperation(coordinator_interaction);
   } else if (FLAGS_method == "AddStoreOperation") {

@@ -51,10 +51,14 @@ DECLARE_int64(peer_add_store_id);
 DECLARE_int64(peer_del_store_id);
 DECLARE_int64(store_id);
 DECLARE_int64(region_id);
+DECLARE_int64(task_list_id);
 DECLARE_int64(region_cmd_id);
 DECLARE_string(store_ids);
 DECLARE_int64(index);
 DECLARE_string(state);
+DECLARE_int64(status);
+DECLARE_int64(errcode);
+DECLARE_string(errmsg);
 DECLARE_bool(is_force);
 DECLARE_int64(count);
 DECLARE_bool(store_create_region);
@@ -1776,9 +1780,17 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   dingodb::pb::coordinator::GetTaskListRequest request;
   dingodb::pb::coordinator::GetTaskListResponse response;
 
+  if (!FLAGS_id.empty()) {
+    request.set_task_list_id(std::stoll(FLAGS_id));
+  }
+
   auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  DINGO_LOG(INFO) << "error: " << response.error().ShortDebugString();
+
+  for (const auto& task_list : response.task_lists()) {
+    DINGO_LOG(INFO) << "task_list_id=" << task_list.id() << " task_list is " << task_list.DebugString();
+  }
 }
 
 void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1889,6 +1901,46 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   request.set_safe_point(FLAGS_safe_point);
 
   auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
+  dingodb::pb::coordinator::UpdateRegionCmdStatusResponse response;
+
+  if (FLAGS_task_list_id <= 0) {
+    DINGO_LOG(ERROR) << "task_list_id is empty";
+    return;
+  }
+
+  if (FLAGS_region_cmd_id <= 0) {
+    DINGO_LOG(ERROR) << "region_cmd_id is empty";
+    return;
+  }
+
+  if (FLAGS_status == 0) {
+    DINGO_LOG(ERROR) << "status is empty, must be 1 [DONE] or 2 [FAIL]";
+    return;
+  }
+
+  if (FLAGS_errcode < 0) {
+    DINGO_LOG(ERROR) << "errcode is empty";
+    return;
+  }
+
+  if (FLAGS_errmsg.empty()) {
+    DINGO_LOG(ERROR) << "errmsg is empty";
+    return;
+  }
+
+  request.set_task_list_id(FLAGS_task_list_id);
+  request.set_region_cmd_id(FLAGS_region_cmd_id);
+  request.set_status(static_cast<dingodb::pb::coordinator::RegionCmdStatus>(FLAGS_status));
+  request.mutable_error()->set_errcode(static_cast<dingodb::pb::error::Errno>(FLAGS_errcode));
+  request.mutable_error()->set_errmsg(FLAGS_errmsg);
+
+  auto status = coordinator_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }

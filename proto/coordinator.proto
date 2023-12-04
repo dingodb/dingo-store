@@ -203,8 +203,9 @@ message RegionCmd {
     DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
   }
 
-  bool is_notify = 40;          // store need to notify coordinator when this cmd is done
-  RegionCmdStatus status = 50;  // the status of this cmd
+  bool is_notify = 40;                // store need to notify coordinator when this cmd is done
+  RegionCmdStatus status = 50;        // the status of this cmd
+  dingodb.pb.error.Error error = 51;  // the error of this cmd
 }
 
 // StoreOperation
@@ -692,6 +693,8 @@ message GetRegionCmdResponse {
 message GetTaskListRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   int64 cluster_id = 2;
+  int64 task_list_id = 3;
+  bool get_task_list_id_only = 4;
 }
 
 message GetTaskListResponse {
@@ -706,6 +709,19 @@ message CleanTaskListRequest {
 }
 
 message CleanTaskListResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message UpdateRegionCmdStatusRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 task_list_id = 2;            // the task_list_id of the region_cmd to update
+  int64 region_cmd_id = 3;           // the region_cmd_id to update
+  RegionCmdStatus status = 4;        // If status is STATUS_FAIL, error is required
+  dingodb.pb.error.Error error = 5;  // The error of this region cmd
+}
+
+message UpdateRegionCmdStatusResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
 }
@@ -1007,6 +1023,7 @@ service CoordinatorService {
   // TaskList
   rpc GetTaskList(GetTaskListRequest) returns (GetTaskListResponse);
   rpc CleanTaskList(CleanTaskListRequest) returns (CleanTaskListResponse);
+  rpc UpdateRegionCmdStatus(UpdateRegionCmdStatusRequest) returns (UpdateRegionCmdStatusResponse);
 
   // RaftControl
   rpc RaftControl(RaftControlRequest) returns (RaftControlResponse);

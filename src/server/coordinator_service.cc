@@ -1616,15 +1616,31 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
     return coordinator_control->RedirectResponse(response);
   }
 
-  butil::FlatMap<int64_t, pb::coordinator::TaskList> task_lists;
-  task_lists.init(100);
-  coordinator_control->GetTaskList(task_lists);
+  if (request->task_list_id() == 0) {
+    butil::FlatMap<int64_t, pb::coordinator::TaskList> task_lists;
+    task_lists.init(100);
+    coordinator_control->GetTaskListAll(task_lists);
 
-  for (const auto &it : task_lists) {
-    auto *new_task_list = response->add_task_lists();
-    *new_task_list = it.second;
-    for (int i = 0; i < new_task_list->tasks_size(); ++i) {
-      new_task_list->mutable_tasks(i)->set_step(i);
+    if (request->get_task_list_id_only()) {
+      for (const auto &it : task_lists) {
+        auto *new_task_list = response->add_task_lists();
+        new_task_list->set_id(it.first);
+      }
+    } else {
+      for (const auto &it : task_lists) {
+        auto *new_task_list = response->add_task_lists();
+        *new_task_list = it.second;
+        for (int i = 0; i < new_task_list->tasks_size(); ++i) {
+          new_task_list->mutable_tasks(i)->set_step(i);
+        }
+      }
+    }
+  } else {
+    pb::coordinator::TaskList task_list;
+    coordinator_control->GetTaskList(request->task_list_id(), task_list);
+    *response->add_task_lists() = task_list;
+    for (int i = 0; i < task_list.tasks_size(); ++i) {
+      response->mutable_task_lists(0)->mutable_tasks(i)->set_step(i);
     }
   }
 }
@@ -1994,6 +2010,50 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
   response->set_safe_point(gc_safe_point);
 
   DINGO_LOG(INFO) << "Response GetGCSafePoint Request:" << response->ShortDebugString();
+}
+
+void DoUpdateRegionCmdStatus(google::protobuf::RpcController * /*controller*/,
+                             const pb::coordinator::UpdateRegionCmdStatusRequest *request,
+                             pb::coordinator::UpdateRegionCmdStatusResponse *response, google::protobuf::Closure *done,
+                             std::shared_ptr<CoordinatorControl> coordinator_control,
+                             std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(INFO) << "Receive UpdateRegionCmdStatus Request:" << request->ShortDebugString();
+
+  auto is_leader = coordinator_control->IsLeader();
+  if (!is_leader) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  auto ret = coordinator_control->UpdateRegionCmdStatus(request->task_list_id(), request->region_cmd_id(),
+                                                        request->status(), request->error(), meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "UpdateRegionCmdStatus failed, task_list_id:" << request->task_list_id()
+                     << ", region_cmd_id:" << request->region_cmd_id() << ", status:" << request->status()
+                     << ", errcode:" << pb::error::Errno_Name(ret.error_code()) << ", errmsg:" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "UpdateRegionCmdStatus Write failed:  task_list_id=" << request->task_list_id()
+                     << ", region_cmd_id=" << request->region_cmd_id();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
 }
 
 void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *controller,
@@ -3188,6 +3248,42 @@ void CoordinatorServiceImpl::GetGCSafePoint(google::protobuf::RpcController *con
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void CoordinatorServiceImpl::UpdateRegionCmdStatus(google::protobuf::RpcController *controller,
+                                                   const pb::coordinator::UpdateRegionCmdStatusRequest *request,
+                                                   pb::coordinator::UpdateRegionCmdStatusResponse *response,
+                                                   google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive UpdateRegionCmdStatus Request:" << request->ShortDebugString();
+
+  auto is_leader = coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+  if (request->task_list_id() <= 0) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "task_list_id is illegal");
+    return;
+  }
+  if (request->region_cmd_id() <= 0) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "region_cmd_id is illegal");
+    return;
+  }
+  if (request->status() == pb::coordinator::RegionCmdStatus::STATUS_DONE) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "status is empty");
+    return;
+  }
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoUpdateRegionCmdStatus(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
   }
 }
 

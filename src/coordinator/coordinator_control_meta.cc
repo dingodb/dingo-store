@@ -1288,7 +1288,7 @@ butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_i
           store_operation.set_id(peer.store_id());
 
           auto* region_cmd = store_operation.add_region_cmds();
-          region_cmd->set_id(region_id);
+          region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
           region_cmd->set_create_timestamp(butil::gettimeofday_ms());
           region_cmd->set_region_id(region_id);
           region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_UPDATE_DEFINITION);
@@ -2657,7 +2657,7 @@ butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t tab
 
     // send region_cmd to update auto_split
     pb::coordinator::RegionCmd region_cmd;
-    // region_cmd.set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd.set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd.set_region_id(region_id);
     region_cmd.set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SWITCH_SPLIT);
     region_cmd.set_create_timestamp(butil::gettimeofday_ms());
