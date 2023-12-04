@@ -78,23 +78,6 @@ int SmSnapshotLoadEventListener::OnEvent(std::shared_ptr<Event> event) {
   return 0;
 }
 
-// Launch save raft snapshot
-static void LaunchSaveRaftSnapshot(store::RegionPtr region) {
-  auto engine = Server::GetInstance().GetEngine();
-  if (engine != nullptr) {
-    auto ctx = std::make_shared<Context>();
-    ctx->SetRegionId(region->Id());
-    ctx->SetRegionEpoch(region->Epoch());
-    auto status = engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(region->Id()));
-    if (!status.ok()) {
-      if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
-        DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({})] launch save raft snapshot failed, error: {}",
-                                        region->Id(), status.error_str());
-      }
-    }
-  }
-}
-
 int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStartEvent>(event);
   auto region = the_event->region;
@@ -109,19 +92,6 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
   }
 
   auto store_region_meta = GET_STORE_REGION_META;
-  if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
-    if (store_region_meta != nullptr) {
-      store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
-    }
-
-    DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] child do snapshot", region->ParentId(),
-                                   region->Id());
-    // do child region snapshot
-    // because of child region is new create, no raft log, so don't directly save snapshot.
-    // commit a raft log, then save raft snapshot in state machine.
-    LaunchSaveRaftSnapshot(region);
-  }
-
   // Update region meta
   if (store_region_meta != nullptr) {
     store_region_meta->UpdateLeaderId(region, Server::GetInstance().Id());
@@ -220,12 +190,6 @@ int SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
   }
 
   auto store_region_meta = GET_STORE_REGION_META;
-  if (region->SplitStrategy() == pb::raft::POST_CREATE_REGION && region->State() == pb::common::STANDBY) {
-    if (store_region_meta != nullptr) {
-      store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
-    }
-  }
-
   // Update region meta
   if (store_region_meta != nullptr) {
     store_region_meta->UpdateLeaderId(region, 0);

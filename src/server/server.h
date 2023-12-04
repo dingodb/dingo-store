@@ -277,6 +277,10 @@ class Server {
 
 #define GET_STORE_REGION_META Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()
 
+#define ADD_RAFT_META Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta
+
+#define ADD_REGION_METRICS Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics
+
 }  // namespace dingodb
 
 #endif  // DINGODB_STORE_SERVER_H_
