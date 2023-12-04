@@ -417,13 +417,13 @@ butil::Status SplitRegionTask::SplitRegion() {
 }
 
 void SplitRegionTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] Run split region, details: {}",
-                                 region_cmd_->split_request().split_from_region_id(),
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] Run split region, details: {}",
+                                 region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
                                  region_cmd_->split_request().split_to_region_id(), region_cmd_->ShortDebugString());
   auto status = SplitRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, error: {} {}",
-                                    region_cmd_->split_request().split_from_region_id(),
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][job_id({}).region({}->{})] Split failed, error: {} {}",
+                                    region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
                                     region_cmd_->split_request().split_to_region_id(),
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
 

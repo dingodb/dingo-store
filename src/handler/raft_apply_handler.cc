@@ -41,6 +41,8 @@
 #include "server/server.h"
 #include "vector/codec.h"
 
+DECLARE_int32(init_election_timeout_ms);
+
 namespace dingodb {
 
 int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
@@ -247,49 +249,48 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   if (request.epoch().version() != from_region->Epoch().version()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[split.spliting][region({}->{})] region version changed, split version({}) region version({})",
-        request.from_region_id(), request.to_region_id(), request.epoch().version(), from_region->Epoch().version());
+        "[split.spliting][job_id({}).region({}->{})] region version changed, split version({}) region version({})",
+        request.job_id(), request.from_region_id(), request.to_region_id(), request.epoch().version(),
+        from_region->Epoch().version());
     return false;
   }
 
   auto to_region = store_region_meta->GetRegion(request.to_region_id());
   if (to_region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] child region not found", request.from_region_id(),
-                                    request.to_region_id());
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] child region not found",
+                                    request.job_id(), request.from_region_id(), request.to_region_id());
     return false;
   }
 
   if (to_region->State() != pb::common::StoreRegionState::STANDBY) {
-    DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] child region state is not standby",
-                                      from_region->Id(), to_region->Id());
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] child region state is not standby",
+                                    request.job_id(), from_region->Id(), to_region->Id());
     return false;
   }
   if (from_region->Range().start_key() >= from_region->Range().end_key()) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[split.spliting][region({}->{})] from region invalid range [{}-{})", from_region->Id(), to_region->Id(),
-        Helper::StringToHex(from_region->Range().start_key()), Helper::StringToHex(from_region->Range().end_key()));
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] from region invalid range [{}-{})",
+                                    request.job_id(), from_region->Id(), to_region->Id(),
+                                    Helper::StringToHex(from_region->Range().start_key()),
+                                    Helper::StringToHex(from_region->Range().end_key()));
     return false;
   }
   if (request.split_key() < from_region->Range().start_key() || request.split_key() > from_region->Range().end_key()) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[split.spliting][region({}->{})] from region invalid split key {} region range: [{}-{})", from_region->Id(),
-        to_region->Id(), Helper::StringToHex(request.split_key()),
+    DINGO_LOG(FATAL) << fmt::format(
+        "[split.spliting][job_id({}).region({}->{})] from region invalid split key {} region range: [{}-{})",
+        request.job_id(), from_region->Id(), to_region->Id(), Helper::StringToHex(request.split_key()),
         Helper::StringToHex(from_region->Range().start_key()), Helper::StringToHex(from_region->Range().end_key()));
     return false;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] begin split, term({}) log_id({})", from_region->Id(),
-                                 to_region->Id(), term_id, log_id);
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.spliting][job_id({}).region({}->{})] split, term({}) log_id({}) split_key({}) epoch({}) parent "
+      "region({}/{})",
+      request.job_id(), from_region->Id(), to_region->Id(), term_id, log_id, Helper::StringToHex(request.split_key()),
+      Helper::RegionEpochToString(request.epoch()), from_region->EpochToString(), from_region->RangeToString());
 
   // temporary disable split/merge/change_peer, avoid overlap change.
   store_region_meta->UpdateTemporaryDisableChange(from_region, true);
   store_region_meta->UpdateTemporaryDisableChange(to_region, true);
-
-  DINGO_LOG(INFO) << fmt::format(
-      "[split.spliting][region({}->{})] pre from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
-      to_region->Id(), Helper::StringToHex(from_region->Range().start_key()),
-      Helper::StringToHex(from_region->Range().end_key()), Helper::StringToHex(to_region->Range().start_key()),
-      Helper::StringToHex(to_region->Range().end_key()));
 
   pb::common::Range to_range;
   // child range
@@ -300,11 +301,6 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   pb::common::Range from_range;
   from_range.set_start_key(request.split_key());
   from_range.set_end_key(from_region->Range().end_key());
-
-  DINGO_LOG(INFO) << fmt::format(
-      "[split.spliting][region({}->{})] post from region range[{}-{}] to region range[{}-{}]", from_region->Id(),
-      to_region->Id(), Helper::StringToHex(from_range.start_key()), Helper::StringToHex(from_range.end_key()),
-      Helper::StringToHex(to_range.start_key()), Helper::StringToHex(to_range.end_key()));
 
   to_region->SetParentId(from_region->Id());
 
@@ -319,15 +315,20 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateEpochVersionAndRange(from_region, from_region->Epoch().version() + 1, from_range,
                                                 "split parent");
 
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.spliting][job_id({}).region({}->{})] splited, child region({}/{}) parent region({}/{})", request.job_id(),
+      from_region->Id(), to_region->Id(), to_region->EpochToString(), to_region->RangeToString(),
+      from_region->EpochToString(), from_region->RangeToString());
+
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Doing raft snapshot");
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", from_region->Id(),
-                                 to_region->Id());
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] parent do snapshot", request.job_id(),
+                                 from_region->Id(), to_region->Id());
 
   // Do parent region snapshot
   LaunchAyncSaveSnapshot(from_region);
 
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] child do snapshot", from_region->Id(),
-                                 to_region->Id());
+  DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] child do snapshot", request.job_id(),
+                                 from_region->Id(), to_region->Id());
   // Do child region snapshot
   LaunchAyncSaveSnapshot(to_region);
 
@@ -337,8 +338,8 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     if (vector_index != nullptr) {
       to_region->VectorIndexWrapper()->SetShareVectorIndex(vector_index);
     } else {
-      DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({}->{})] split region get vector index failed.",
-                                        from_region->Id(), to_region->Id());
+      DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] not found parent vector index.",
+                                     request.job_id(), from_region->Id(), to_region->Id());
     }
 
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
@@ -350,6 +351,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   // update StoreRegionState to NORMAL
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
+
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Applied SplitRequest");
@@ -357,43 +359,31 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   return true;
 }
 
-store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition, int64_t parent_region_id) {  // NOLINT
+store::RegionPtr CreateNewRegion(std::shared_ptr<RaftStoreEngine> raft_store_engine,
+                                 std::shared_ptr<RaftNode> parent_node, const pb::common::RegionDefinition &definition,
+                                 int64_t parent_region_id) {  // NOLINT
   store::RegionPtr region = store::Region::New(definition);
-  region->SetState(pb::common::STANDBY);
+  region->SetState(pb::common::SPLITTING);
   region->SetSplitStrategy(pb::raft::POST_CREATE_REGION);
   region->SetParentId(parent_region_id);
 
-  auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
-
-  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
-  if (raft_store_engine == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Not found raft store engine.", parent_region_id,
-                                    region->Id());
-    return nullptr;
-  }
-
-  auto parent_node = raft_store_engine->GetNode(parent_region_id);
-  if (parent_node == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Not found raft node.", parent_region_id,
-                                    region->Id());
-    return nullptr;
-  }
-
   auto raft_meta = store::RaftMeta::New(region->Id());
-  Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
-  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  ADD_RAFT_META(raft_meta);
 
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
   RaftControlAble::AddNodeParameter parameter;
   parameter.role = GetRole();
   parameter.is_restart = false;
   parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
   parameter.raft_path = config->GetString("raft.path");
-  parameter.election_timeout_ms = parent_node->IsLeader() ? 200 : 10 * 1000;
+  parameter.election_timeout_ms =
+      parent_node->IsLeader() ? FLAGS_init_election_timeout_ms : 30 * FLAGS_init_election_timeout_ms;
   parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
   parameter.log_path = config->GetString("raft.log_path");
 
   parameter.raft_meta = raft_meta;
+  auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
   parameter.region_metrics = region_metrics;
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   parameter.listeners = listener_factory->Build();
@@ -405,8 +395,9 @@ store::RegionPtr CreateNewRegion(const pb::common::RegionDefinition &definition,
     return nullptr;
   }
 
-  Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+  ADD_REGION_METRICS(region_metrics);
   GET_STORE_REGION_META->AddRegion(region);
+
   Server::GetInstance().GetRegionController()->RegisterExecutor(region->Id());
 
   return region;
@@ -419,88 +410,127 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   int64_t parent_region_id = request.from_region_id();
   int64_t child_region_id = request.to_region_id();
 
+  ADD_REGION_CHANGE_RECORD(request);
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Appling SplitRequest");
+
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_store_engine == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] Not found raft store engine.",
+                                    request.job_id(), parent_region_id, child_region_id);
+    return false;
+  }
+  auto parent_node = raft_store_engine->GetNode(parent_region_id);
+  if (parent_node == nullptr) {
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] Not found raft node.",
+                                    request.job_id(), parent_region_id, child_region_id);
+    return false;
+  }
+
+  // Update last_change_cmd_id
+  store_region_meta->UpdateLastChangeJobId(parent_region, request.job_id());
+
   if (request.epoch().version() != parent_region->Epoch().version()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[split.spliting][region({}->{})] region version changed, split version({}) region version({})",
-        parent_region_id, child_region_id, request.epoch().version(), parent_region->Epoch().version());
+        "[split.spliting][job_id({}).region({}->{})] region version changed, split version({}) region version({})",
+        request.job_id(), parent_region_id, child_region_id, request.epoch().version(),
+        parent_region->Epoch().version());
     return false;
   }
 
   auto old_range = parent_region->Range();
 
   if (old_range.start_key() >= old_range.end_key()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] from region invalid range [{}-{})",
-                                    parent_region_id, child_region_id, Helper::StringToHex(old_range.start_key()),
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] from region invalid range [{}-{})",
+                                    request.job_id(), parent_region_id, child_region_id,
+                                    Helper::StringToHex(old_range.start_key()),
                                     Helper::StringToHex(old_range.end_key()));
     return false;
   }
 
   if (request.split_key() < old_range.start_key() || request.split_key() > old_range.end_key()) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[split.spliting][region({}->{})] from region invalid split key {} region range: [{}-{})", parent_region_id,
-        child_region_id, Helper::StringToHex(request.split_key()), Helper::StringToHex(old_range.start_key()),
-        Helper::StringToHex(old_range.end_key()));
+    DINGO_LOG(FATAL) << fmt::format(
+        "[split.spliting][job_id({}).region({}->{})] from region invalid split key {} region range: [{}-{})",
+        request.job_id(), parent_region_id, child_region_id, Helper::StringToHex(request.split_key()),
+        Helper::StringToHex(old_range.start_key()), Helper::StringToHex(old_range.end_key()));
     return false;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] begin split, term({}) log_id({})", parent_region_id,
-                                 child_region_id, term_id, log_id);
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.spliting][job_id({}).region({}->{})] split, term({}) log_id({}) split_key({}) epoch({}) parent "
+      "region({}/{})",
+      request.job_id(), parent_region->Id(), child_region_id, term_id, log_id, Helper::StringToHex(request.split_key()),
+      Helper::RegionEpochToString(request.epoch()), parent_region->EpochToString(), parent_region->RangeToString());
+
+  // Set region state spliting
+  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::SPLITTING);
 
   // temporary disable split, avoid overlap change.
   store_region_meta->UpdateTemporaryDisableChange(parent_region, true);
 
-  pb::common::Range child_range;
-  // Set child range
-  child_range.set_start_key(old_range.start_key());
-  child_range.set_end_key(request.split_key());
-
-  // Create child region
+  // Set child region definition
   pb::common::RegionDefinition definition = parent_region->Definition();
   definition.set_id(child_region_id);
   definition.set_name(fmt::format("{}_{}", definition.name(), child_region_id));
   definition.mutable_epoch()->set_conf_version(1);
-  definition.mutable_epoch()->set_version(1);
+  definition.mutable_epoch()->set_version(2);
+  pb::common::Range child_range;
+  child_range.set_start_key(old_range.start_key());
+  child_range.set_end_key(request.split_key());
   *(definition.mutable_range()) = child_range;
 
-  auto child_region = CreateNewRegion(definition, parent_region->Id());
+  auto child_region = CreateNewRegion(raft_store_engine, parent_node, definition, parent_region->Id());
   if (child_region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] create child region failed.", parent_region_id,
+    DINGO_LOG(FATAL) << fmt::format("[split.spliting][region({}->{})] create child region failed.", parent_region_id,
                                     child_region_id);
     return false;
   }
 
   child_region->SetParentId(parent_region->Id());
 
-  // Set parent range
+  // Set parent/child range/epoch
   pb::common::Range parent_range;
   parent_range.set_start_key(request.split_key());
   parent_range.set_end_key(old_range.end_key());
-
-  DINGO_LOG(INFO) << fmt::format(
-      "[split.spliting][region({}->{})] from region range[{}-{}] to region range[{}-{}]", parent_region_id,
-      child_region_id, Helper::StringToHex(parent_range.start_key()), Helper::StringToHex(parent_range.end_key()),
-      Helper::StringToHex(child_range.start_key()), Helper::StringToHex(child_range.end_key()));
-  // Set region state spliting
-  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::SPLITTING);
-  store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::SPLITTING);
-
-  // Increase region version
-  store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range,
-                                                "split child");
   store_region_meta->UpdateEpochVersionAndRange(parent_region, parent_region->Epoch().version() + 1, parent_range,
                                                 "split parent");
+  // store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range,
+  //                                               "child parent");
 
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] parent do snapshot", parent_region_id,
-                                 child_region_id);
-  // Do parent region snapshot
+  DINGO_LOG(INFO) << fmt::format(
+      "[split.spliting][job_id({}).region({}->{})] splited, child region({}/{}) parent region({}/{})", request.job_id(),
+      parent_region->Id(), child_region->Id(), child_region->EpochToString(), child_region->RangeToString(),
+      parent_region->EpochToString(), parent_region->RangeToString());
+
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Doing raft snapshot");
+  // Do region snapshot
   LaunchAyncSaveSnapshot(parent_region);
 
   // Set do snapshot when bootstrap
   store_region_meta->UpdateNeedBootstrapDoSnapshot(child_region, true);
 
+  if (parent_region->Type() == pb::common::INDEX_REGION) {
+    // Set child share vector index
+    auto vector_index = parent_region->VectorIndexWrapper()->GetOwnVectorIndex();
+    if (vector_index != nullptr) {
+      child_region->VectorIndexWrapper()->SetShareVectorIndex(vector_index);
+    } else {
+      DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] not found parent vector index.",
+                                     request.job_id(), parent_region->Id(), child_region->Id());
+    }
+
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
+    // Rebuild vector index
+    VectorIndexManager::LaunchRebuildVectorIndex(child_region->VectorIndexWrapper(), request.job_id(), "child split");
+    VectorIndexManager::LaunchRebuildVectorIndex(parent_region->VectorIndexWrapper(), request.job_id(), "parent split");
+  }
+
   // update to NORMAL after save snapshot in SplitClosure::Run
   store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
+  store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::NORMAL);
+
   Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
+
+  ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Applied SplitRequest");
 
   return true;
 }
@@ -606,7 +636,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   auto target_region = store_region_meta->GetRegion(request.target_region_id());
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][job_id({}).region({}/{})] Apply PrepareMerge, source_region({}/{}/log[{},{})) "
+      "[merge.merging][job_id({}).region({}/{})] Appling PrepareMerge, source_region({}/{}/log[{},{})) "
       "target_region({}/{})",
       request.job_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
       source_region->RangeToString(), request.min_applied_log_id(), log_id,
@@ -683,7 +713,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch CommitMerge finish");
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][job_id({}).region({}/{})] Apply PrepareMerge finish, source_region({}/{}/log[{},{})) "
+      "[merge.merging][job_id({}).region({}/{})] Applied PrepareMerge, source_region({}/{}/log[{},{})) "
       "target_region({}/{}) elapsed_time({})",
       request.job_id(), source_region->Id(), request.target_region_id(), source_region->EpochToString(),
       source_region->RangeToString(), request.min_applied_log_id(), log_id,
@@ -724,7 +754,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   auto source_region = store_region_meta->GetRegion(request.source_region_id());
   if (source_region == nullptr) {
     DINGO_LOG(FATAL) << fmt::format(
-        "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge, source region is nullptr.", request.job_id(),
+        "[merge.merging][job_id({}).region({}/{})] Appling CommitMerge, source region is nullptr.", request.job_id(),
         request.source_region_id(), target_region->Id());
     return 0;
   }
@@ -818,7 +848,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   Heartbeat::TriggerStoreHeartbeat({request.source_region_id(), target_region->Id()}, true);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge finish, source_region({}/{}/{}/{}) "
+      "[merge.merging][job_id({}).region({}/{})] Applied CommitMerge, source_region({}/{}/{}/{}) "
       "target_region({}/{}) elapsed_time({}).",
       request.job_id(), request.source_region_id(), target_region->Id(),
       Helper::RegionEpochToString(request.source_region_epoch()), Helper::RangeToString(request.source_region_range()),
