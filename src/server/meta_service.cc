@@ -33,6 +33,7 @@
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/service_helper.h"
+#include "vector/vector_index_hnsw.h"
 
 namespace dingodb {
 
@@ -1183,27 +1184,13 @@ void DoCreateIndex(google::protobuf::RpcController * /*controller*/, const pb::m
       pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     auto *hnsw_parameter =
         table_definition.mutable_index_parameter()->mutable_vector_index_parameter()->mutable_hnsw_parameter();
-    if (hnsw_parameter->dimension() <= 0) {
-      DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, hnsw dimension is too small, dimension="
-                       << hnsw_parameter->dimension();
-      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-      response->mutable_error()->set_errmsg("hnsw dimension is too small");
+    auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret1.error_code()
+                       << ", error str=" << ret1.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+      response->mutable_error()->set_errmsg(ret1.error_str());
       return;
-    }
-    auto max_elements_limit = Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region,
-                                                              hnsw_parameter->dimension(), hnsw_parameter->nlinks());
-    if (hnsw_parameter->max_elements() > max_elements_limit) {
-      DINGO_LOG(WARNING) << "CreateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
-                         << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
-                         << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
-                         << ", max elements in this dimention=" << max_elements_limit;
-      hnsw_parameter->set_max_elements(max_elements_limit);
-    }
-
-    if (hnsw_parameter->nlinks() > FLAGS_max_hnsw_nlinks_of_region) {
-      DINGO_LOG(WARNING) << "CreateIndex warning in meta_service, hnsw nlinks is too big, nlinks="
-                         << hnsw_parameter->nlinks() << ", max_nlinks=" << FLAGS_max_hnsw_nlinks_of_region;
-      hnsw_parameter->set_nlinks(FLAGS_max_hnsw_nlinks_of_region);
     }
   }
 
@@ -1323,28 +1310,13 @@ void DoUpdateIndex(google::protobuf::RpcController * /*controller*/, const pb::m
       pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     auto *hnsw_parameter =
         table_definition.mutable_index_parameter()->mutable_vector_index_parameter()->mutable_hnsw_parameter();
-    if (hnsw_parameter->dimension() <= 0) {
-      DINGO_LOG(ERROR) << "UpdateIndex failed in meta_service, hnsw dimension is too small, dimension="
-                       << hnsw_parameter->dimension();
-      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-      response->mutable_error()->set_errmsg("hnsw dimension is too small");
-    }
-    auto max_elements_limit = Helper::CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region,
-                                                              hnsw_parameter->dimension(), hnsw_parameter->nlinks());
-    if (hnsw_parameter->max_elements() > max_elements_limit) {
-      DINGO_LOG(ERROR) << "UpdateIndex warning in meta_service, hnsw max_elements is too big, max_elements="
-                       << hnsw_parameter->max_elements() << ", dimension=" << hnsw_parameter->dimension()
-                       << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
-                       << ", max elements in this dimention=" << max_elements_limit;
-      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-      response->mutable_error()->set_errmsg("hnsw max_elements is too big");
-    }
-
-    if (hnsw_parameter->nlinks() > FLAGS_max_hnsw_nlinks_of_region) {
-      DINGO_LOG(ERROR) << "UpdateIndex warning in meta_service, hnsw nlinks is too big, nlinks="
-                       << hnsw_parameter->nlinks() << ", max_nlinks=" << FLAGS_max_hnsw_nlinks_of_region;
-      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-      response->mutable_error()->set_errmsg("hnsw nlinks is too big");
+    auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "UpdateIndex failed in meta_service, error code=" << ret1.error_code()
+                       << ", error str=" << ret1.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+      response->mutable_error()->set_errmsg(ret1.error_str());
+      return;
     }
   }
 

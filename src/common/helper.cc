@@ -1645,26 +1645,6 @@ butil::Status Helper::ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRa
   return butil::Status();
 }
 
-// calc hnsw count from memory
-uint32_t Helper::CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dimension, int64_t nlinks) {
-  // size_links_level0_ = maxM0_ * sizeof(tableint) + sizeof(linklistsizeint);
-  int64_t size_links_level0 = nlinks * 2 + sizeof(int64_t) + sizeof(int64_t);
-
-  // int64_t size_data_per_element_ = size_links_level0_ + data_size_ + sizeof(labeltype);
-  int64_t size_data_per_element = size_links_level0 + sizeof(float_t) * dimension + sizeof(int64_t);
-
-  // int64_t size_link_list_per_element =  sizeof(void*);
-  int64_t size_link_list_per_element = sizeof(int64_t);
-
-  int64_t count = memory_size_limit / (size_data_per_element + size_link_list_per_element);
-
-  if (count > UINT32_MAX) {
-    count = UINT32_MAX;
-  }
-
-  return static_cast<uint32_t>(count);
-}
-
 std::string Helper::GenMaxStartKey() { return std::string(9, '\xff'); }
 
 std::string Helper::GenMinStartKey() { return std::string(1, '\x00'); }

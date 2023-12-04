@@ -43,9 +43,15 @@
 
 namespace dingodb {
 
+DEFINE_int64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
+DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
+
 DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
 DEFINE_int32(max_hnsw_parallel_thread_num_per_request, 32, "max hnsw parallel thread num to acquire in a request");
 DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
+DEFINE_int64(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
+
+DECLARE_int64(vector_max_batch_count);
 
 HnswThreadConig& HnswThreadConig::GetInstance() {
   static HnswThreadConig instance;
@@ -200,9 +206,17 @@ VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParame
     // avoid error write vector index failed cause leader and follower data not consistency.
     // let user_max_elements_<actual_max_elements.
     user_max_elements_ = hnsw_parameter.max_elements();
-    uint32_t actual_max_elements = user_max_elements_ + Constant::kHnswMaxElementsExpandNum;
+    actual_max_elements_ = user_max_elements_ + Constant::kHnswMaxElementsExpandNum;
 
-    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, actual_max_elements, hnsw_parameter.nlinks(),
+    uint32_t max_element_for_create = actual_max_elements_ < FLAGS_hnsw_max_init_max_elements
+                                          ? actual_max_elements_
+                                          : FLAGS_hnsw_max_init_max_elements;
+
+    DINGO_LOG(INFO) << "create hnsw_index, max_elements=" << max_element_for_create
+                    << ", nlinks=" << hnsw_parameter.nlinks() << ", efconstruction=" << hnsw_parameter.efconstruction()
+                    << ", metric_type=" << hnsw_parameter.metric_type() << ", dimension=" << hnsw_parameter.dimension();
+
+    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, max_element_for_create, hnsw_parameter.nlinks(),
                                                       hnsw_parameter.efconstruction(), 100, false);
   }
 }
@@ -237,11 +251,31 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
   // Add data to index
   try {
-    size_t available_threads =
-        HnswThreadConig::GetInstance().AcquireThreads(FLAGS_max_hnsw_parallel_thread_num_per_request);
+    // check if we need to expand the max_elements
+    if (hnsw_index_->max_elements_ < actual_max_elements_ &&
+        hnsw_index_->cur_element_count > hnsw_index_->max_elements_ - FLAGS_vector_max_batch_count * 2) {
+      auto new_max_elements = hnsw_index_->max_elements_ * 2;
+      if (new_max_elements > actual_max_elements_) {
+        new_max_elements = actual_max_elements_;
+      }
+
+      DINGO_LOG(INFO) << "expand hnsw_index, max_elements from " << hnsw_index_->max_elements_ << " to "
+                      << new_max_elements;
+
+      hnsw_index_->resizeIndex(new_max_elements);
+    }
+
+    int32_t acquire_num = vector_with_ids.size() > FLAGS_max_hnsw_parallel_thread_num_per_request
+                              ? FLAGS_max_hnsw_parallel_thread_num_per_request
+                              : vector_with_ids.size();
+
+    size_t available_threads = HnswThreadConig::GetInstance().AcquireThreads(acquire_num);
     DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
 
-    DINGO_LOG(INFO) << "available_threads=" << available_threads;
+    if (available_threads > 0) {
+      DINGO_LOG(INFO) << "hnsw upsert, vector_index_id = " << id << ", count = " << vector_with_ids.size()
+                      << ", acquire_num = " << acquire_num << ", available_threads = " << available_threads;
+    }
 
     size_t real_threads = available_threads > 0 ? available_threads : 1;
 
@@ -285,9 +319,17 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
 
   butil::Status ret;
 
-  size_t available_threads =
-      HnswThreadConig::GetInstance().AcquireThreads(FLAGS_max_hnsw_parallel_thread_num_per_request);
+  int32_t acquire_num = delete_ids.size() > FLAGS_max_hnsw_parallel_thread_num_per_request
+                            ? FLAGS_max_hnsw_parallel_thread_num_per_request
+                            : delete_ids.size();
+
+  size_t available_threads = HnswThreadConig::GetInstance().AcquireThreads(acquire_num);
   DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
+
+  if (available_threads > 0) {
+    DINGO_LOG(INFO) << "hnsw delete, vector_index_id = " << id << ", count = " << delete_ids.size()
+                    << ", acquire_num = " << acquire_num << ", available_threads = " << available_threads;
+  }
 
   size_t real_threads = available_threads > 0 ? available_threads : 1;
 
@@ -463,11 +505,17 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
 
-  size_t available_threads =
-      HnswThreadConig::GetInstance().AcquireThreads(FLAGS_max_hnsw_parallel_thread_num_per_request);
+  int32_t acquire_num = vector_with_ids.size() > FLAGS_max_hnsw_parallel_thread_num_per_request
+                            ? FLAGS_max_hnsw_parallel_thread_num_per_request
+                            : vector_with_ids.size();
+
+  size_t available_threads = HnswThreadConig::GetInstance().AcquireThreads(acquire_num);
   DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
 
-  DINGO_LOG(INFO) << "available_threads=" << available_threads;
+  if (available_threads > 0) {
+    DINGO_LOG(INFO) << "hnsw search, vector_index_id = " << id << ", count = " << vector_with_ids.size()
+                    << ", acquire_num = " << acquire_num << ", available_threads = " << available_threads;
+  }
 
   size_t real_threads = available_threads > 0 ? available_threads : 1;
 
@@ -549,11 +597,17 @@ void VectorIndexHnsw::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
 butil::Status VectorIndexHnsw::ResizeMaxElements(int64_t new_max_elements) {
   BAIDU_SCOPED_LOCK(mutex_);
 
-  if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    hnsw_index_->resizeIndex(new_max_elements);
-    return butil::Status::OK();
-  } else {
-    return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
+  try {
+    if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+      hnsw_index_->resizeIndex(new_max_elements);
+      return butil::Status::OK();
+    } else {
+      return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
+    }
+  } catch (std::runtime_error& e) {
+    std::string s = fmt::format("resizeIndex failed, error= {}", e.what());
+    LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
   return butil::Status::OK();
@@ -638,6 +692,57 @@ bool VectorIndexHnsw::NeedToSave(int64_t last_save_log_behind) {
   }
 
   return false;
+}
+
+// calc hnsw count from memory
+uint32_t VectorIndexHnsw::CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dimension, int64_t nlinks) {
+  // size_links_level0_ = maxM0_ * sizeof(tableint) + sizeof(linklistsizeint);
+  int64_t size_links_level0 = nlinks * 2 + sizeof(int64_t) + sizeof(int64_t);
+
+  // int64_t size_data_per_element_ = size_links_level0_ + data_size_ + sizeof(labeltype);
+  int64_t size_data_per_element = size_links_level0 + sizeof(float_t) * dimension + sizeof(int64_t);
+
+  // int64_t size_link_list_per_element =  sizeof(void*);
+  int64_t size_link_list_per_element = sizeof(int64_t);
+
+  int64_t count = memory_size_limit / (size_data_per_element + size_link_list_per_element);
+
+  if (count > UINT32_MAX) {
+    count = UINT32_MAX;
+  }
+
+  return static_cast<uint32_t>(count);
+}
+
+butil::Status VectorIndexHnsw::CheckAndSetHnswParameter(pb::common::CreateHnswParam& hnsw_parameter) {
+  if (hnsw_parameter.dimension() <= 0) {
+    DINGO_LOG(ERROR) << "hnsw dimension is too small, dimension=" << hnsw_parameter.dimension();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "hnsw dimension is too small");
+  }
+
+  if (hnsw_parameter.nlinks() > FLAGS_max_hnsw_nlinks_of_region) {
+    DINGO_LOG(WARNING) << "hnsw nlinks is too big, nlinks=" << hnsw_parameter.nlinks()
+                       << ", max_nlinks=" << FLAGS_max_hnsw_nlinks_of_region;
+    hnsw_parameter.set_nlinks(FLAGS_max_hnsw_nlinks_of_region);
+  }
+
+  auto max_elements_limit = CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(),
+                                                    hnsw_parameter.nlinks());
+  if (hnsw_parameter.max_elements() > max_elements_limit) {
+    DINGO_LOG(WARNING) << "hnsw max_elements is too big, max_elements=" << hnsw_parameter.max_elements()
+                       << ", dimension=" << hnsw_parameter.dimension()
+                       << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
+                       << ", max elements in this dimention=" << max_elements_limit;
+    hnsw_parameter.set_max_elements(max_elements_limit);
+  } else if (hnsw_parameter.max_elements() == 0) {
+    DINGO_LOG(WARNING) << "hnsw max_elements is zero, max_elements=" << hnsw_parameter.max_elements()
+                       << ", dimension=" << hnsw_parameter.dimension()
+                       << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
+                       << ", max elements in this dimention=" << max_elements_limit;
+    hnsw_parameter.set_max_elements(max_elements_limit);
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

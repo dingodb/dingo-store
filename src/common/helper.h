@@ -207,9 +207,6 @@ class Helper {
   static float GenerateRandomFloat(float min_value, float max_value);
   static int64_t GenId();
 
-  // calc hnsw count from memory
-  static uint32_t CalcHnswCountFromMemory(int64_t memory_size_limit, int64_t dimension, int64_t nlinks);
-
   // Gen coordinator new_table_check_name
   static std::string GenNewTableCheckName(int64_t schema_id, const std::string& table_name);
 

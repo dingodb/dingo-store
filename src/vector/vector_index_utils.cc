@@ -672,7 +672,7 @@ butil::Status VectorIndexUtils::CheckVectorIndexParameterCompatibility(const pb:
 }
 
 // validate vector index parameter
-// in: vector_index_parameter 
+// in: vector_index_parameter
 // return: errno
 butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     const pb::common::VectorIndexParameter& vector_index_parameter) {
@@ -721,8 +721,8 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
 
     // check hnsw_parameter.max_elements
     // The maximum number of elements that can be indexed. This parameter affects the memory usage of the index.
-    // This parameter must be greater than 0.
-    if (hnsw_parameter.max_elements() <= 0) {
+    // This parameter must be equal or greater than 0.
+    if (hnsw_parameter.max_elements() < 0) {
       DINGO_LOG(ERROR) << "hnsw_parameter.max_elements is illegal " << hnsw_parameter.max_elements();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "hnsw_parameter.max_elements is illegal " + std::to_string(hnsw_parameter.max_elements()));
