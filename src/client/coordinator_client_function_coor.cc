@@ -1446,14 +1446,14 @@ void SendMergeRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   if (FLAGS_target_id > 0) {
     request.mutable_merge_request()->set_target_region_id(FLAGS_target_id);
   } else {
-    DINGO_LOG(ERROR) << "merge_to_id is empty";
+    DINGO_LOG(ERROR) << "target_id is empty";
     return;
   }
 
   if (FLAGS_source_id > 0) {
     request.mutable_merge_request()->set_source_region_id(FLAGS_source_id);
   } else {
-    DINGO_LOG(ERROR) << "merge_from_id is empty";
+    DINGO_LOG(ERROR) << "source_id is empty";
     return;
   }
 
