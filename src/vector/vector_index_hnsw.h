@@ -35,6 +35,28 @@
 
 namespace dingodb {
 
+class HnswThreadConig {
+ public:
+  static HnswThreadConig& GetInstance();
+
+  HnswThreadConig();
+  ~HnswThreadConig() { bthread_mutex_destroy(&mutex_); }
+
+  HnswThreadConig(const HnswThreadConig&) = delete;
+  const HnswThreadConig& operator=(const HnswThreadConig&) = delete;
+
+  uint32_t GetMaxThreadNum() const { return max_thread_num_; }
+  void SetMaxThreadNum(uint32_t max_thread_num) { max_thread_num_ = max_thread_num; }
+
+  uint32_t AcquireThreads(uint32_t num);
+  void ReleaseThreads(uint32_t num);
+
+ private:
+  bthread_mutex_t mutex_;
+  uint32_t max_thread_num_;
+  uint32_t running_thread_num_;
+};
+
 class VectorIndexHnsw : public VectorIndex {
  public:
   explicit VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
@@ -89,17 +111,12 @@ class VectorIndexHnsw : public VectorIndex {
 
   hnswlib::HierarchicalNSW<float>* GetHnswIndex();
 
-  uint32_t WriteOpParallelNum() override { return hnsw_num_threads_; }
-
   // void NormalizeVector(const float* data, float* norm_array) const;
 
  private:
   // hnsw members
   hnswlib::HierarchicalNSW<float>* hnsw_index_;
   hnswlib::SpaceInterface<float>* hnsw_space_;
-
-  // hnsw parallel threads count
-  uint32_t hnsw_num_threads_;
 
   // Dimension of the elements
   uint32_t dimension_;

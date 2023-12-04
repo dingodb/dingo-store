@@ -29,6 +29,7 @@
 
 #include "bthread/mutex.h"
 #include "bthread/types.h"
+#include "butil/compiler_specific.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/constant.h"
@@ -43,7 +44,46 @@
 namespace dingodb {
 
 DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
+DEFINE_int32(max_hnsw_parallel_thread_num_per_request, 32, "max hnsw parallel thread num to acquire in a request");
 DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
+
+HnswThreadConig& HnswThreadConig::GetInstance() {
+  static HnswThreadConig instance;
+  return instance;
+}
+
+HnswThreadConig::HnswThreadConig() {
+  bthread_mutex_init(&mutex_, nullptr);
+  if (FLAGS_max_hnsw_parallel_thread_num > 0) {
+    max_thread_num_ = FLAGS_max_hnsw_parallel_thread_num;
+  } else {
+    max_thread_num_ = std::thread::hardware_concurrency();
+  }
+  DINGO_LOG(INFO) << "HnswThreadConfig: max hnsw parallel thread num is set to " << max_thread_num_;
+}
+
+uint32_t HnswThreadConig::AcquireThreads(uint32_t num) {
+  CHECK(num > 0);
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (running_thread_num_ >= max_thread_num_) {
+    return 0;
+  } else {
+    uint32_t acquire_num = std::min(num, max_thread_num_ - running_thread_num_);
+    running_thread_num_ += acquire_num;
+    return acquire_num;
+  }
+}
+
+void HnswThreadConig::ReleaseThreads(uint32_t num) {
+  CHECK(num > 0);
+  BAIDU_SCOPED_LOCK(mutex_);
+  running_thread_num_ -= num;
+  if (BAIDU_UNLIKELY(running_thread_num_ < 0)) {
+    DINGO_LOG(ERROR) << "running_thread_num_ is illegal, running_thread_num_=" << running_thread_num_
+                     << ", max_thread_num_=" << max_thread_num_ << ", num=" << num;
+    running_thread_num_ = 0;
+  }
+}
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
@@ -135,11 +175,6 @@ VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParame
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
   bthread_mutex_init(&mutex_, nullptr);
-  if (FLAGS_max_hnsw_parallel_thread_num > 0) {
-    hnsw_num_threads_ = FLAGS_max_hnsw_parallel_thread_num;
-  } else {
-    hnsw_num_threads_ = std::thread::hardware_concurrency();
-  }
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
@@ -202,11 +237,17 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
   // Add data to index
   try {
-    size_t real_threads = hnsw_num_threads_;
+    size_t available_threads =
+        HnswThreadConig::GetInstance().AcquireThreads(FLAGS_max_hnsw_parallel_thread_num_per_request);
+    DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
 
-    if (BAIDU_UNLIKELY(hnsw_index_->M_ < hnsw_num_threads_ &&
+    DINGO_LOG(INFO) << "available_threads=" << available_threads;
+
+    size_t real_threads = available_threads > 0 ? available_threads : 1;
+
+    if (BAIDU_UNLIKELY(hnsw_index_->M_ < real_threads &&
                        hnsw_index_->cur_element_count.load(std::memory_order_relaxed) <
-                           hnsw_num_threads_ * hnsw_index_->M_)) {
+                           real_threads * hnsw_index_->M_)) {
       real_threads = 1;
     }
 
@@ -244,11 +285,17 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
 
   butil::Status ret;
 
+  size_t available_threads =
+      HnswThreadConig::GetInstance().AcquireThreads(FLAGS_max_hnsw_parallel_thread_num_per_request);
+  DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
+
+  size_t real_threads = available_threads > 0 ? available_threads : 1;
+
   BAIDU_SCOPED_LOCK(mutex_);
 
   // Add data to index
   try {
-    ParallelFor(0, delete_ids.size(), hnsw_num_threads_,
+    ParallelFor(0, delete_ids.size(), real_threads,
                 [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
   } catch (std::runtime_error& e) {
     DINGO_LOG(ERROR) << "delete vector failed, error=" << e.what();
@@ -416,6 +463,14 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
 
+  size_t available_threads =
+      HnswThreadConig::GetInstance().AcquireThreads(FLAGS_max_hnsw_parallel_thread_num_per_request);
+  DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
+
+  DINGO_LOG(INFO) << "available_threads=" << available_threads;
+
+  size_t real_threads = available_threads > 0 ? available_threads : 1;
+
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (search_parameter.hnsw().efsearch() > 0) {
@@ -424,7 +479,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   if (!normalize_) {
-    ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t /*thread_id*/) {
+    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
       std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
       try {
@@ -442,8 +497,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       }
     });
   } else {  // normalize_
-    std::vector<float> norm_array(hnsw_num_threads_ * dimension_);
-    ParallelFor(0, vector_with_ids.size(), hnsw_num_threads_, [&](size_t row, size_t thread_id) {
+    std::vector<float> norm_array(real_threads * dimension_);
+    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
       size_t start_idx = thread_id * dimension_;
       VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,  // NOLINT
                                                (norm_array.data() + start_idx));
