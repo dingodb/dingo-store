@@ -21,6 +21,7 @@ import io.dingodb.sdk.common.Location;
 import java.util.List;
 
 public interface Region {
+    public long regionId();
     public int regionState();
     public int regionType();
     public long createTime();
@@ -30,4 +31,6 @@ public interface Region {
     public List<Location> followers();
 
     public Location leader();
+
+    public long leaderStoreId();
 }
