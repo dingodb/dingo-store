@@ -26,6 +26,7 @@
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "coordinator/coordinator_control.h"
@@ -1195,6 +1196,49 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             continue;
           }
 
+          // CAUTION: check the old_region's start_key is not in the range_region_map, if exists, and is not self
+          // region, there must be some error, so we need to check and set is_legal_delete flag to control the deletiong
+          // of RangeRegionMap.
+          pb::coordinator_internal::RegionInternal region_for_old_start_key;
+          auto ret1 = range_region_map_.Get(old_region.definition().range().start_key(), region_for_old_start_key);
+          bool is_legal_delete = true;
+          if (ret1 > 0 && region_for_old_start_key.id() > 0 && region_for_old_start_key.id() != region.id()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id()
+                            << "] old_start_key is exists, and is not self region, old_start_key=["
+                            << Helper::StringToHex(old_region.definition().range().start_key())
+                            << "], region of old_start_key: [" << region_for_old_start_key.ShortDebugString()
+                            << "], will update region: [" << region.ShortDebugString()
+                            << "], old_region of will update region: [" << old_region.ShortDebugString()
+                            << "], will check the region from RegionMap again";
+
+            pb::coordinator_internal::RegionInternal temp_region;
+            auto ret2 = region_map_.Get(region_for_old_start_key.id(), temp_region);
+            if (ret > 0 && temp_region.id() > 0 && temp_region.id() == region_for_old_start_key.id() &&
+                temp_region.definition().range().start_key() == old_region.definition().range().start_key()) {
+              DINGO_LOG(ERROR)
+                  << "ApplyMetaIncrement region UPDATE, [id=" << region.id()
+                  << "] old_start_key is exists, and is not self region, old_start_key=["
+                  << Helper::StringToHex(old_region.definition().range().start_key()) << "], region of old_start_key: ["
+                  << region_for_old_start_key.ShortDebugString() << "], will update region: ["
+                  << region.ShortDebugString() << "], old_region of will update region: ["
+                  << old_region.ShortDebugString() << "], region of old_start_key in RegionMap: ["
+                  << temp_region.ShortDebugString()
+                  << "], the region from RegionMap is same as region from RangeRegionMap, so we cannot delete "
+                     "the old_start_key from RangeRegionMap, it's not ok";
+              is_legal_delete = false;
+            } else {
+              DINGO_LOG(INFO) << "ApplyMetaIncrement region UPDATE, [id=" << region.id()
+                              << "] old_start_key is exists, and is not self region, old_start_key=["
+                              << Helper::StringToHex(old_region.definition().range().start_key())
+                              << "], region of old_start_key: [" << region_for_old_start_key.ShortDebugString()
+                              << "], will update region: [" << region.ShortDebugString()
+                              << "], old_region of will update region: [" << old_region.ShortDebugString()
+                              << "], region of old_start_key in RegionMap: [" << temp_region.ShortDebugString()
+                              << "], the region from RegionMap is not same as region from RangeRegionMap, so we "
+                                 "can delete the old_start_key from RangeRegionMap, it's ok";
+            }
+          }
+
           // update range_region_map_
           // range_region_map_.Erase(old_region.definition().range().start_key());
           bool need_delete = true;
@@ -1205,7 +1249,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             }
           }
 
-          if (need_delete) {
+          if (need_delete && is_legal_delete) {
             region_start_key_to_delete_for_update.push_back(old_region.definition().range().start_key());
             DINGO_LOG(INFO) << "erase range_region_map_ success, region_id=[" << region.region().id()
                             << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
@@ -1213,7 +1257,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           } else {
             DINGO_LOG(INFO) << "erase range_region_map_ skipped, region_id=[" << region.region().id()
                             << "], start_key=[" << Helper::StringToHex(old_region.definition().range().start_key())
-                            << "]";
+                            << "], need_delete=[" << need_delete << "], is_legal_delete=[" << is_legal_delete << "]";
           }
         }
 

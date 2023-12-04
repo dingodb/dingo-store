@@ -12,8 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Use the command in the next line to release
-# cmake -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release ..
+# Note: if BRPC_ENABLE_CPU_PROFILER is ON, there may be child process hang because of the sample process of tcmalloc will cause dead lock after fork,
+#       so do not enable DBRPC_ENABLE_CPU_PROFILER in production enviroment.
+# For develop without MKL:
+#     cmake .. -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=Debug -DBRPC_ENABLE_CPU_PROFILER=ON -DLINK_TCMALLOC=ON
+# For develop with MKL:
+#     cmake .. -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=Debug -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=ON -DLINK_TCMALLOC=ON
+# For RelWithDbgInfo:
+#     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON
+# For RelWithDbgInfo:
+#     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON
+# For Release:
+#     cmake .. -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON
+# Build all binaries include unit test:
+#     make
+# Build only product binaries:
+#     make dingodb_server dingodb_client
+
+# if compile_commands.json is needed, please enable CMAKE_EXPORT_COMPILE_COMMANDS, of use `bear --append -- make` to do make, it's more recommended to use bear.
+
 cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(dingo-store C CXX)
 
@@ -62,7 +79,7 @@ if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
