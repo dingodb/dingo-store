@@ -2389,6 +2389,28 @@ void SendCompact(const std::string& cf_name) {
   InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Compact", request, response);
 }
 
+void GetMemoryStats() {
+  dingodb::pb::debug::GetMemoryStatsRequest request;
+  dingodb::pb::debug::GetMemoryStatsResponse response;
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "GetMemoryStats", request, response);
+
+  DINGO_LOG(INFO) << response.memory_stats();
+}
+
+void ReleaseFreeMemory(double rate) {
+  dingodb::pb::debug::ReleaseFreeMemoryRequest request;
+  dingodb::pb::debug::ReleaseFreeMemoryResponse response;
+
+  if (rate < 0.00001) {
+    request.set_is_force(true);
+  } else {
+    request.set_is_force(false);
+    request.set_rate(rate);
+  }
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "ReleaseFreeMemory", request, response);
+}
 void SendTransferLeader(int64_t region_id, const dingodb::pb::common::Peer& peer) {
   dingodb::pb::debug::TransferLeaderRequest request;
   dingodb::pb::debug::TransferLeaderResponse response;

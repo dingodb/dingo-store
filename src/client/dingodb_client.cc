@@ -174,6 +174,7 @@ DEFINE_int64(tso_new_logical, 0, "new tso logical");
 DEFINE_int32(nsubvector, 8, "ivf pq default subvector nums 8");
 DEFINE_int32(nbits_per_idx, 8, "ivf pq default nbits_per_idx 8");
 DEFINE_double(radius, 10.1, "range search radius");
+DEFINE_double(rate, 0.0, "rate");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -306,6 +307,10 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "Compact") {
       client::SendCompact("");
 
+    } else if (method == "GetMemoryStats") {
+      client::GetMemoryStats();
+    } else if (method == "ReleaseFreeMemory") {
+      client::ReleaseFreeMemory(FLAGS_rate);
       // Kev/Value operation
     } else if (method == "KvGet") {
       std::string value;

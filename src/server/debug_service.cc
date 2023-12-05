@@ -40,6 +40,10 @@
 #include "vector/codec.h"
 #include "vector/vector_index_snapshot_manager.h"
 
+#ifdef LINK_TCMALLOC
+#include "gperftools/malloc_extension.h"
+#endif
+
 using dingodb::pb::error::Errno;
 
 namespace dingodb {
@@ -47,10 +51,9 @@ namespace dingodb {
 void DebugServiceImpl::AddRegion(google::protobuf::RpcController* controller,
                                  const dingodb::pb::debug::AddRegionRequest* request,
                                  dingodb::pb::debug::AddRegionResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "AddRegion request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto region_controller = Server::GetInstance().GetRegionController();
 
@@ -60,7 +63,7 @@ void DebugServiceImpl::AddRegion(google::protobuf::RpcController* controller,
   command->set_region_cmd_type(pb::coordinator::CMD_CREATE);
   *(command->mutable_create_request()->mutable_region_definition()) = request->region();
 
-  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, nullptr), command);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
@@ -69,10 +72,9 @@ void DebugServiceImpl::AddRegion(google::protobuf::RpcController* controller,
 void DebugServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
                                     const pb::debug::ChangeRegionRequest* request,
                                     pb::debug::ChangeRegionResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "ChangeRegion request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto region_controller = Server::GetInstance().GetRegionController();
 
@@ -82,7 +84,7 @@ void DebugServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
   command->set_region_cmd_type(pb::coordinator::CMD_CHANGE_PEER);
   *(command->mutable_change_peer_request()->mutable_region_definition()) = request->region();
 
-  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, nullptr), command);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
@@ -91,8 +93,9 @@ void DebugServiceImpl::ChangeRegion(google::protobuf::RpcController* controller,
 void DebugServiceImpl::MergeRegion(google::protobuf::RpcController* controller,
                                    const dingodb::pb::debug::MergeRegionRequest* request,
                                    dingodb::pb::debug::MergeRegionResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+  brpc::ClosureGuard done_guard(svr_done);
 
   DINGO_LOG(INFO) << "MergeRegion request: " << request->ShortDebugString();
 
@@ -100,9 +103,6 @@ void DebugServiceImpl::MergeRegion(google::protobuf::RpcController* controller,
   auto status = storage->ValidateLeader(request->source_region_id());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-    if (status.error_code() == pb::error::ERAFT_NOTLEADER) {
-      ServiceHelper::RedirectLeader(status.error_str(), response);
-    }
     return;
   }
 
@@ -117,7 +117,7 @@ void DebugServiceImpl::MergeRegion(google::protobuf::RpcController* controller,
   merge_request->set_source_region_id(request->source_region_id());
   merge_request->set_target_region_id(request->target_region_id());
 
-  status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, nullptr), command);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
@@ -127,10 +127,9 @@ void DebugServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
                                      const dingodb::pb::debug::DestroyRegionRequest* request,
                                      dingodb::pb::debug::DestroyRegionResponse* response,
                                      google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "DestroyRegion request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto region_controller = Server::GetInstance().GetRegionController();
 
@@ -140,7 +139,7 @@ void DebugServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
   command->set_region_cmd_type(pb::coordinator::CMD_DELETE);
   command->mutable_delete_request()->set_region_id(request->region_id());
 
-  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, nullptr), command);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
@@ -148,9 +147,9 @@ void DebugServiceImpl::DestroyRegion(google::protobuf::RpcController* controller
 
 void DebugServiceImpl::Snapshot(google::protobuf::RpcController* controller, const pb::debug::SnapshotRequest* request,
                                 pb::debug::SnapshotResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-
-  DINGO_LOG(DEBUG) << "Snapshot request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto region_controller = Server::GetInstance().GetRegionController();
 
@@ -159,9 +158,8 @@ void DebugServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
   command->set_region_id(request->region_id());
   command->set_region_cmd_type(pb::coordinator::CMD_SNAPSHOT);
 
-  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, nullptr), command);
   if (!status.ok()) {
-    brpc::ClosureGuard done_guard(done);
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
@@ -169,10 +167,9 @@ void DebugServiceImpl::Snapshot(google::protobuf::RpcController* controller, con
 void DebugServiceImpl::TransferLeader(google::protobuf::RpcController* controller,
                                       const pb::debug::TransferLeaderRequest* request,
                                       pb::debug::TransferLeaderResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "TransferLeader request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
@@ -187,10 +184,9 @@ void DebugServiceImpl::SnapshotVectorIndex(google::protobuf::RpcController* cont
                                            const pb::debug::SnapshotVectorIndexRequest* request,
                                            pb::debug::SnapshotVectorIndexResponse* response,
                                            google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "SnapshotVectorIndex request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto region_controller = Server::GetInstance().GetRegionController();
 
@@ -200,7 +196,7 @@ void DebugServiceImpl::SnapshotVectorIndex(google::protobuf::RpcController* cont
   command->set_region_cmd_type(pb::coordinator::CMD_SNAPSHOT_VECTOR_INDEX);
   command->mutable_snapshot_vector_index_request()->set_vector_index_id(request->vector_index_id());
 
-  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, done), command);
+  auto status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(cntl, nullptr), command);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
@@ -210,10 +206,9 @@ void DebugServiceImpl::TriggerVectorIndexSnapshot(google::protobuf::RpcControlle
                                                   const pb::debug::TriggerVectorIndexSnapshotRequest* request,
                                                   pb::debug::TriggerVectorIndexSnapshotResponse* response,
                                                   google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "TriggerVectorIndexSnapshot request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   butil::EndPoint endpoint;
   butil::str2endpoint(request->location().host().c_str(), request->location().port(), &endpoint);
@@ -261,8 +256,9 @@ void DebugServiceImpl::TriggerVectorIndexSnapshot(google::protobuf::RpcControlle
 
 void DebugServiceImpl::Compact(google::protobuf::RpcController* controller, const pb::debug::CompactRequest* request,
                                pb::debug::CompactResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto raw_engine = Server::GetInstance().GetRawEngine(pb::common::RawEngine::RAW_ENG_ROCKSDB);
   if (raw_engine == nullptr) {
@@ -337,10 +333,9 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
 void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
                              const ::dingodb::pb::debug::DebugRequest* request,
                              ::dingodb::pb::debug::DebugResponse* response, ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
-
-  DINGO_LOG(DEBUG) << "Debug request: " << request->ShortDebugString();
+  brpc::ClosureGuard done_guard(svr_done);
 
   if (request->type() == pb::debug::DebugType::STORE_REGION_META_STAT) {
     auto store_region_meta = GET_STORE_REGION_META;
@@ -598,6 +593,44 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
       }
     }
   }
+}
+
+void DebugServiceImpl::GetMemoryStats(google::protobuf::RpcController* controller,
+                                      const ::dingodb::pb::debug::GetMemoryStatsRequest* request,
+                                      ::dingodb::pb::debug::GetMemoryStatsResponse* response,
+                                      ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+#ifdef LINK_TCMALLOC
+  std::string stat_buf(4096, '\0');
+  MallocExtension::instance()->GetStats(stat_buf.data(), stat_buf.size());
+  response->set_memory_stats(stat_buf);
+#else
+  response->mutable_error()->set_errcode(pb::error::EINTERNAL);
+  response->mutable_error()->set_errmsg("No use tcmalloc");
+#endif
+}
+
+void DebugServiceImpl::ReleaseFreeMemory(google::protobuf::RpcController* controller,
+                                         const ::dingodb::pb::debug::ReleaseFreeMemoryRequest* request,
+                                         ::dingodb::pb::debug::ReleaseFreeMemoryResponse* response,
+                                         ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+#ifdef LINK_TCMALLOC
+  if (request->is_force()) {
+    MallocExtension::instance()->ReleaseFreeMemory();
+  } else {
+    MallocExtension::instance()->SetMemoryReleaseRate(request->rate());
+  }
+#else
+  response->mutable_error()->set_errcode(pb::error::EINTERNAL);
+  response->mutable_error()->set_errmsg("No use tcmalloc");
+#endif
 }
 
 }  // namespace dingodb

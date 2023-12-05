@@ -35,44 +35,6 @@ namespace dingodb {
 DECLARE_int64(service_helper_store_min_log_elapse);
 DECLARE_int64(service_helper_coordinator_min_log_elapse);
 
-// Handle service request in execute queue.
-class ServiceTask : public TaskRunnable {
- public:
-  using Handler = std::function<void(void)>;
-  ServiceTask(Handler handle) : handle_(handle) {}
-  ~ServiceTask() override = default;
-
-  std::string Type() override { return "SERVICE_TASK"; }
-
-  void Run() override { handle_(); }
-
- private:
-  Handler handle_;
-};
-
-// Wrapper brpc service closure for log.
-template <typename T, typename U>
-class ServiceClosure : public google::protobuf::Closure {
- public:
-  ServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request, U* response)
-      : method_name_(method_name), done_(done), request_(request), response_(response) {
-    start_time_ = Helper::TimestampNs();
-    DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
-  }
-  ~ServiceClosure() override = default;
-
-  void Run() override;
-
- private:
-  std::string method_name_;
-  uint64_t start_time_;
-
-  google::protobuf::Closure* done_;
-  const T* request_;
-  U* response_;
-};
-
 class ServiceHelper {
  public:
   template <typename T>
@@ -131,6 +93,44 @@ void ServiceHelper::RedirectLeader(std::string addr, T* response) {
     response->mutable_error()->set_store_id(Server::GetInstance().Id());
   }
 }
+
+// Handle service request in execute queue.
+class ServiceTask : public TaskRunnable {
+ public:
+  using Handler = std::function<void(void)>;
+  ServiceTask(Handler handle) : handle_(handle) {}
+  ~ServiceTask() override = default;
+
+  std::string Type() override { return "SERVICE_TASK"; }
+
+  void Run() override { handle_(); }
+
+ private:
+  Handler handle_;
+};
+
+// Wrapper brpc service closure for log.
+template <typename T, typename U>
+class ServiceClosure : public google::protobuf::Closure {
+ public:
+  ServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request, U* response)
+      : method_name_(method_name), done_(done), request_(request), response_(response) {
+    start_time_ = Helper::TimestampNs();
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  }
+  ~ServiceClosure() override = default;
+
+  void Run() override;
+
+ private:
+  std::string method_name_;
+  uint64_t start_time_;
+
+  google::protobuf::Closure* done_;
+  const T* request_;
+  U* response_;
+};
 
 template <typename T, typename U>
 void ServiceClosure<T, U>::Run() {
@@ -263,6 +263,61 @@ void CoordinatorServiceClosure<T, U>::Run() {
           response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
           request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
     }
+  }
+
+  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
+}
+
+template <typename T, typename U>
+class NoContextServiceClosure : public google::protobuf::Closure {
+ public:
+  NoContextServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request,
+                          U* response)
+      : method_name_(method_name), done_(done), request_(request), response_(response) {
+    start_time_ = Helper::TimestampNs();
+    DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
+                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  }
+  ~NoContextServiceClosure() override = default;
+
+  void Run() override;
+
+ private:
+  std::string method_name_;
+  uint64_t start_time_;
+
+  google::protobuf::Closure* done_;
+  const T* request_;
+  U* response_;
+};
+
+template <typename T, typename U>
+void NoContextServiceClosure<T, U>::Run() {
+  std::unique_ptr<NoContextServiceClosure<T, U>> self_guard(this);
+  brpc::ClosureGuard done_guard(done_);
+
+  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
+
+  if (response_->error().errcode() != 0) {
+    // Set leader redirect info(pb.Error.leader_location).
+    if (response_->error().errcode() == pb::error::ERAFT_NOTLEADER) {
+      ServiceHelper::RedirectLeader(response_->error().errmsg(), response_);
+      response_->mutable_error()->set_errmsg(fmt::format("Not leader({}), please redirect leader({}).",
+                                                         Server::GetInstance().ServerAddr(),
+                                                         response_->error().errmsg()));
+    }
+
+    DINGO_LOG(ERROR) << fmt::format(
+        "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
+        request_->request_info().request_id(), elapsed_time,
+        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+  } else {
+    DINGO_LOG(DEBUG) << fmt::format(
+        "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
+        request_->request_info().request_id(), elapsed_time,
+        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
+        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
 
   Helper::SetPbMessageResponseInfo(response_, elapsed_time);
