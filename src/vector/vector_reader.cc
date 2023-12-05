@@ -515,8 +515,6 @@ butil::Status VectorReader::VectorGetRegionMetrics(int64_t /*region_id*/, const 
 }
 
 butil::Status VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
-  // std::string begin_key = VectorCodec::FillVectorTablePrefix(range.start_key());
-  // std::string end_key = VectorCodec::FillVectorTablePrefix(range.end_key());
   const std::string& begin_key = range.start_key();
   const std::string& end_key = range.end_key();
 
@@ -532,8 +530,6 @@ butil::Status VectorReader::VectorCount(const pb::common::Range& range, int64_t&
 
 // GetBorderId
 butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id) {
-  // std::string start_key = VectorCodec::FillVectorDataPrefix(region_range.start_key());
-  // std::string end_key = VectorCodec::FillVectorDataPrefix(region_range.end_key());
   const std::string& start_key = region_range.start_key();
   const std::string& end_key = region_range.end_key();
 
@@ -591,9 +587,6 @@ butil::Status VectorReader::GetBorderId(const pb::common::Range& region_range, b
 butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                          std::vector<int64_t>& vector_ids) {
   std::string seek_key;
-  // VectorCodec::EncodeVectorData(ctx->partition_id, ctx->start_id, seek_key);
-  // std::string range_start_key = VectorCodec::FillVectorDataPrefix(ctx->region_range.start_key());
-  // std::string range_end_key = VectorCodec::FillVectorDataPrefix(ctx->region_range.end_key());
   VectorCodec::EncodeVectorKey(ctx->region_range.start_key()[0], ctx->partition_id, ctx->start_id, seek_key);
   std::string range_start_key = ctx->region_range.start_key();
   std::string range_end_key = ctx->region_range.end_key();
