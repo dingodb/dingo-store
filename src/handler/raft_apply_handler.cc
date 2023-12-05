@@ -733,7 +733,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   assert(raft_store_engine != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge, source_region({}/{}/{}) target_region({}/{}).",
+      "[merge.merging][job_id({}).region({}/{})] Appling CommitMerge, source_region({}/{}/{}) target_region({}/{}).",
       request.job_id(), request.source_region_id(), target_region->Id(),
       Helper::RegionEpochToString(request.source_region_epoch()), Helper::RangeToString(request.source_region_range()),
       request.entries().size(), target_region->EpochToString(), target_region->RangeToString());
@@ -754,7 +754,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   auto source_region = store_region_meta->GetRegion(request.source_region_id());
   if (source_region == nullptr) {
     DINGO_LOG(FATAL) << fmt::format(
-        "[merge.merging][job_id({}).region({}/{})] Appling CommitMerge, source region is nullptr.", request.job_id(),
+        "[merge.merging][job_id({}).region({}/{})] Apply CommitMerge, source region is nullptr.", request.job_id(),
         request.source_region_id(), target_region->Id());
     return 0;
   }

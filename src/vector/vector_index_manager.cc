@@ -792,7 +792,7 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
     return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found raft meta.");
   }
 
-  for (int i = i;; ++i) {
+  for (int i = 0;; ++i) {
     int64_t start_log_id = vector_index->ApplyLogId() + 1;
     int64_t end_log_id = raft_meta->AppliedId();
     if (end_log_id - start_log_id < FLAGS_catchup_log_min_gap) {
@@ -823,12 +823,18 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
     ON_SCOPE_EXIT([&]() { vector_index_wrapper->SetIsSwitchingVectorIndex(false); });
 
     start_time = Helper::TimestampMs();
+    int64_t start_log_id = vector_index->ApplyLogId() + 1;
+    int64_t end_log_id = raft_meta->AppliedId();
     // second ground replay wal
-    auto status = ReplayWalToVectorIndex(vector_index, vector_index->ApplyLogId() + 1, raft_meta->AppliedId());
+    auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
     if (!status.ok()) {
       vector_index_wrapper->SetRebuildError();
       return status;
     }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.catchup][index_id({})][trace({})] Catch up last-round({}-{}) success.", vector_index_id, trace,
+        start_log_id, end_log_id);
 
     vector_index_wrapper->UpdateVectorIndex(vector_index, trace);
     vector_index_wrapper->SetRebuildSuccess();
