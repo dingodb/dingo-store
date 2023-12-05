@@ -3647,6 +3647,13 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation partial heartbeat, split/merge, region_metrics_map_size = "
                     << store_metrics.region_metrics_map_size()
                     << ", region_metrics=" << store_metrics.ShortDebugString();
+  } else if (store_metrics.is_partial_region_metrics()) {
+    DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation partial heartbeat, not split/merge, region_metrics_map_size = "
+                    << store_metrics.region_metrics_map_size()
+                    << ", region_metrics=" << store_metrics.ShortDebugString();
+  } else {
+    DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation full heartbeat, region_metrics_map_size = "
+                    << store_metrics.region_metrics_map_size();
   }
 
   // update region_map
@@ -3725,7 +3732,7 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
                          << store_metrics.id() << " region_id = " << region_metrics.id();
         continue;
       } else {
-        DINGO_LOG(INFO) << "follower will update RegionMape, store_id=" << store_metrics.id()
+        DINGO_LOG(INFO) << "follower will update RegionMap, store_id=" << store_metrics.id()
                         << " region_id = " << region_metrics.id();
       }
     } else {
@@ -3788,10 +3795,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
     if (region_to_update.definition().range().start_key() != region_metrics.region_definition().range().start_key() ||
         region_to_update.definition().range().end_key() != region_metrics.region_definition().range().end_key()) {
       DINGO_LOG(INFO) << "region range change region_id = " << region_metrics.id() << " old range = ["
-                      << region_to_update.definition().range().start_key() << ", "
-                      << region_to_update.definition().range().end_key() << ")"
-                      << " new range = [" << region_metrics.region_definition().range().start_key() << ", "
-                      << region_metrics.region_definition().range().end_key() << ")";
+                      << Helper::StringToHex(region_to_update.definition().range().start_key()) << ", "
+                      << Helper::StringToHex(region_to_update.definition().range().end_key()) << ")"
+                      << " new range = [" << Helper::StringToHex(region_metrics.region_definition().range().start_key())
+                      << ", " << Helper::StringToHex(region_metrics.region_definition().range().end_key()) << ")";
       if (!leader_has_old_epoch) {
         need_update_region_metrics = true;
       }

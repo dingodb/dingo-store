@@ -86,28 +86,30 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     }
   }
   for (const auto& region_meta : region_metas) {
-    if (region_meta->State() == pb::common::StoreRegionState::SPLITTING ||
-        region_meta->State() == pb::common::StoreRegionState::MERGING) {
+    auto inner_region = region_meta->InnerRegion();
+    if (inner_region.state() == pb::common::StoreRegionState::SPLITTING ||
+        inner_region.state() == pb::common::StoreRegionState::MERGING) {
       DINGO_LOG(WARNING) << fmt::format("[heartbeat.store][region({})] region state({}) not suit heartbeat.",
-                                        region_meta->Id(), pb::common::StoreRegionState_Name(region_meta->State()));
+                                        inner_region.id(), pb::common::StoreRegionState_Name(inner_region.state()));
       continue;
     }
+
     pb::common::RegionMetrics tmp_region_metrics;
-    auto metrics = region_metrics->GetMetrics(region_meta->Id());
+    auto metrics = region_metrics->GetMetrics(inner_region.id());
     if (metrics != nullptr) {
       tmp_region_metrics = metrics->InnerRegionMetrics();
     }
 
-    tmp_region_metrics.set_id(region_meta->Id());
-    tmp_region_metrics.set_leader_store_id(region_meta->LeaderId());
-    tmp_region_metrics.set_store_region_state(region_meta->State());
-    *(tmp_region_metrics.mutable_region_definition()) = region_meta->Definition();
-    tmp_region_metrics.set_snapshot_epoch_version(region_meta->SnapshotEpochVersion());
+    tmp_region_metrics.set_id(inner_region.id());
+    tmp_region_metrics.set_leader_store_id(inner_region.leader_id());
+    tmp_region_metrics.set_store_region_state(inner_region.state());
+    *(tmp_region_metrics.mutable_region_definition()) = inner_region.definition();
+    tmp_region_metrics.set_snapshot_epoch_version(inner_region.snapshot_epoch_version());
 
-    if (region_meta->State() == pb::common::StoreRegionState::NORMAL ||
-        region_meta->State() == pb::common::StoreRegionState::STANDBY ||
-        region_meta->State() == pb::common::StoreRegionState::TOMBSTONE) {
-      auto raft_node = raft_store_engine->GetNode(region_meta->Id());
+    if (inner_region.state() == pb::common::StoreRegionState::NORMAL ||
+        inner_region.state() == pb::common::StoreRegionState::STANDBY ||
+        inner_region.state() == pb::common::StoreRegionState::TOMBSTONE) {
+      auto raft_node = raft_store_engine->GetNode(inner_region.id());
       if (raft_node != nullptr) {
         *(tmp_region_metrics.mutable_braft_status()) = (*raft_node->GetStatus());
       }
@@ -127,7 +129,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
     }
 
-    mut_region_metrics_map->insert({region_meta->Id(), tmp_region_metrics});
+    mut_region_metrics_map->insert({inner_region.id(), tmp_region_metrics});
   }
 
   DINGO_LOG(INFO) << fmt::format("[heartbeat.store] request region count({}) size({}) elapsed time({} ms)",
