@@ -19,11 +19,11 @@
 namespace dingodb {
 namespace sdk {
 
-CoordiantorProxy::CoordiantorProxy() = default;
+CoordinatorProxy::CoordinatorProxy() = default;
 
-CoordiantorProxy::~CoordiantorProxy() = default;
+CoordinatorProxy::~CoordinatorProxy() = default;
 
-Status CoordiantorProxy::Open(std::string naming_service_url) {
+Status CoordinatorProxy::Open(std::string naming_service_url) {
   coordinator_interaction_ = std::make_shared<dingodb::CoordinatorInteraction>();
   if (!coordinator_interaction_->InitByNameService(
           naming_service_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
@@ -54,7 +54,7 @@ Status CoordiantorProxy::Open(std::string naming_service_url) {
   return Status::OK();
 }
 
-Status CoordiantorProxy::CreateRegion(const pb::coordinator::CreateRegionRequest& request,
+Status CoordinatorProxy::CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                                       pb::coordinator::CreateRegionResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("CreateRegion", request, response);
   if (!rpc_status.ok()) {
@@ -65,7 +65,7 @@ Status CoordiantorProxy::CreateRegion(const pb::coordinator::CreateRegionRequest
   return Status::OK();
 }
 
-Status CoordiantorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& request,
+Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& request,
                                      pb::coordinator::ScanRegionsResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("ScanRegions", request, response);
   if (!rpc_status.ok()) {
@@ -76,7 +76,7 @@ Status CoordiantorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& 
   return Status::OK();
 }
 
-Status CoordiantorProxy::TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
+Status CoordinatorProxy::TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
   butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("TsoService", request, response);
   if (!rpc_status.ok()) {
     std::string msg =
