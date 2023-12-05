@@ -51,6 +51,34 @@ DEFINE_int32(init_election_timeout_ms, 1000, "init election timeout");
 
 namespace dingodb {
 
+// Notify coordinator region command execute result.
+static void NotifyRegionCmdStatus(RegionCmdPtr region_cmd, butil::Status status) {
+  auto coordinatro_interaction = Server::GetInstance().GetCoordinatorInteraction();
+  if (coordinatro_interaction == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[control.region][region({}).job_id({}).cmd_id({})] coordinator interaction is null.", region_cmd->region_id(),
+        region_cmd->job_id(), region_cmd->id());
+    return;
+  }
+
+  pb::coordinator::UpdateRegionCmdStatusRequest request;
+  pb::coordinator::UpdateRegionCmdStatusResponse response;
+
+  request.set_task_list_id(region_cmd->job_id());
+  request.set_region_cmd_id(region_cmd->id());
+  request.set_status(pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+  request.mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
+  request.mutable_error()->set_errmsg(status.error_str());
+
+  status = coordinatro_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[control.region][region({}).job_id({}).cmd_id({})] send UpdateRegionCmdStatus failed, error: {} {}.",
+        region_cmd->region_id(), region_cmd->job_id(), region_cmd->id(), pb::error::Errno_Name(status.error_code()),
+        status.error_str());
+  }
+}
+
 butil::Status CreateRegionTask::PreValidateCreateRegion(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
@@ -427,31 +455,7 @@ void SplitRegionTask::Run() {
                                     region_cmd_->split_request().split_to_region_id(),
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
 
-    // update region_cmd_status to coordinator
-    auto coordinatro_interaction = Server::GetInstance().GetCoordinatorInteraction();
-    if (coordinatro_interaction == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, coordinator interaction is null",
-                                      region_cmd_->split_request().split_from_region_id(),
-                                      region_cmd_->split_request().split_to_region_id());
-    } else {
-      pb::coordinator::UpdateRegionCmdStatusRequest request;
-      pb::coordinator::UpdateRegionCmdStatusResponse response;
-
-      request.set_task_list_id(region_cmd_->job_id());
-      request.set_region_cmd_id(region_cmd_->id());
-      request.set_status(pb::coordinator::RegionCmdStatus::STATUS_FAIL);
-      request.mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
-      request.mutable_error()->set_errmsg(status.error_str());
-
-      status = coordinatro_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[split.spliting][region({}->{})] Split failed, update region cmd status to coordinator failed, error: {} "
-            "{}",
-            region_cmd_->split_request().split_from_region_id(), region_cmd_->split_request().split_to_region_id(),
-            pb::error::Errno_Name(status.error_code()), status.error_str());
-      }
-    }
+    NotifyRegionCmdStatus(region_cmd_, status);
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -725,31 +729,7 @@ void MergeRegionTask::Run() {
                                     region_cmd_->merge_request().target_region_id(),
                                     pb::error::Errno_Name(status.error_code()), status.error_str());
 
-    // update region_cmd_status to coordinator
-    auto coordinatro_interaction = Server::GetInstance().GetCoordinatorInteraction();
-    if (coordinatro_interaction == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[split.spliting][region({}->{})] Split failed, coordinator interaction is null",
-                                      region_cmd_->split_request().split_from_region_id(),
-                                      region_cmd_->split_request().split_to_region_id());
-    } else {
-      pb::coordinator::UpdateRegionCmdStatusRequest request;
-      pb::coordinator::UpdateRegionCmdStatusResponse response;
-
-      request.set_task_list_id(region_cmd_->job_id());
-      request.set_region_cmd_id(region_cmd_->id());
-      request.set_status(pb::coordinator::RegionCmdStatus::STATUS_FAIL);
-      request.mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
-      request.mutable_error()->set_errmsg(status.error_str());
-
-      status = coordinatro_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[merge.merging][region({}->{})] merge failed, update region cmd status to coordinator failed, error: {} "
-            "{}",
-            region_cmd_->merge_request().source_region_id(), region_cmd_->merge_request().target_region_id(),
-            pb::error::Errno_Name(status.error_code()), status.error_str());
-      }
-    }
+    NotifyRegionCmdStatus(region_cmd_, status);
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -813,8 +793,7 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
   return CheckLeader(region_definition.id());
 }
 
-butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx,
-                                             std::shared_ptr<pb::coordinator::RegionCmd> command) {
+butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
   const auto& region_definition = command->change_peer_request().region_definition();
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] change region, region definition: {}",
@@ -1262,8 +1241,7 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
   return butil::Status();
 }
 
-butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/,
-                                                   std::shared_ptr<pb::coordinator::RegionCmd> region_cmd) {
+butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ctx*/, RegionCmdPtr region_cmd) {
   int64_t region_id = region_cmd->hold_vector_index_request().region_id();
   bool is_hold = region_cmd->hold_vector_index_request().is_hold();
 
@@ -1337,7 +1315,7 @@ bool RegionCommandManager::IsExist(int64_t command_id) {
   return region_commands_.find(command_id) != region_commands_.end();
 }
 
-void RegionCommandManager::AddCommand(std::shared_ptr<pb::coordinator::RegionCmd> region_cmd) {
+void RegionCommandManager::AddCommand(RegionCmdPtr region_cmd) {
   {
     BAIDU_SCOPED_LOCK(mutex_);
     if (region_commands_.find(region_cmd->id()) != region_commands_.end()) {
@@ -1352,8 +1330,7 @@ void RegionCommandManager::AddCommand(std::shared_ptr<pb::coordinator::RegionCmd
   meta_writer_->Put(TransformToKv(region_cmd));
 }
 
-void RegionCommandManager::UpdateCommandStatus(std::shared_ptr<pb::coordinator::RegionCmd> region_cmd,
-                                               pb::coordinator::RegionCmdStatus status) {
+void RegionCommandManager::UpdateCommandStatus(RegionCmdPtr region_cmd, pb::coordinator::RegionCmdStatus status) {
   region_cmd->set_status(status);
   meta_writer_->Put(TransformToKv(region_cmd));
 }
@@ -1365,7 +1342,7 @@ void RegionCommandManager::UpdateCommandStatus(int64_t command_id, pb::coordinat
   }
 }
 
-std::shared_ptr<pb::coordinator::RegionCmd> RegionCommandManager::GetCommand(int64_t command_id) {
+RegionCmdPtr RegionCommandManager::GetCommand(int64_t command_id) {
   BAIDU_SCOPED_LOCK(mutex_);
   auto it = region_commands_.find(command_id);
   if (it == region_commands_.end()) {
@@ -1375,10 +1352,9 @@ std::shared_ptr<pb::coordinator::RegionCmd> RegionCommandManager::GetCommand(int
   return it->second;
 }
 
-std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetCommands(
-    pb::coordinator::RegionCmdStatus status) {
+std::vector<RegionCmdPtr> RegionCommandManager::GetCommands(pb::coordinator::RegionCmdStatus status) {
   BAIDU_SCOPED_LOCK(mutex_);
-  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  std::vector<RegionCmdPtr> commands;
   for (auto& [_, command] : region_commands_) {
     if (command->status() == status) {
       commands.push_back(command);
@@ -1386,15 +1362,14 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
   }
 
   std::sort(commands.begin(), commands.end(),
-            [](const std::shared_ptr<pb::coordinator::RegionCmd>& a,
-               const std::shared_ptr<pb::coordinator::RegionCmd>& b) { return a->id() < b->id(); });
+            [](const RegionCmdPtr& a, const RegionCmdPtr& b) { return a->id() < b->id(); });
 
   return commands;
 }
 
-std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetCommands(int64_t region_id) {
+std::vector<RegionCmdPtr> RegionCommandManager::GetCommands(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
-  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  std::vector<RegionCmdPtr> commands;
   for (auto& [_, command] : region_commands_) {
     if (command->region_id() == region_id) {
       commands.push_back(command);
@@ -1402,29 +1377,27 @@ std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::G
   }
 
   std::sort(commands.begin(), commands.end(),
-            [](const std::shared_ptr<pb::coordinator::RegionCmd>& a,
-               const std::shared_ptr<pb::coordinator::RegionCmd>& b) { return a->id() < b->id(); });
+            [](const RegionCmdPtr& a, const RegionCmdPtr& b) { return a->id() < b->id(); });
 
   return commands;
 }
 
-std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> RegionCommandManager::GetAllCommand() {
+std::vector<RegionCmdPtr> RegionCommandManager::GetAllCommand() {
   BAIDU_SCOPED_LOCK(mutex_);
-  std::vector<std::shared_ptr<pb::coordinator::RegionCmd>> commands;
+  std::vector<RegionCmdPtr> commands;
   commands.reserve(region_commands_.size());
   for (auto& [_, command] : region_commands_) {
     commands.push_back(command);
   }
 
   std::sort(commands.begin(), commands.end(),
-            [](const std::shared_ptr<pb::coordinator::RegionCmd>& a,
-               const std::shared_ptr<pb::coordinator::RegionCmd>& b) { return a->id() < b->id(); });
+            [](const RegionCmdPtr& a, const RegionCmdPtr& b) { return a->id() < b->id(); });
 
   return commands;
 }
 
 std::shared_ptr<pb::common::KeyValue> RegionCommandManager::TransformToKv(std::any obj) {
-  auto region_cmd = std::any_cast<std::shared_ptr<pb::coordinator::RegionCmd>>(obj);
+  auto region_cmd = std::any_cast<RegionCmdPtr>(obj);
   std::shared_ptr<pb::common::KeyValue> kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenKey(region_cmd->id()));
   kv->set_value(region_cmd->SerializeAsString());
@@ -1538,8 +1511,7 @@ std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecuto
   return it->second;
 }
 
-butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx,
-                                                                  std::shared_ptr<pb::coordinator::RegionCmd> command) {
+butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] dispatch region control command, commad id: {} {}",
                                   command->region_id(), command->id(),
                                   pb::coordinator::RegionCmdType_Name(command->region_cmd_type()));
@@ -1578,8 +1550,7 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
   return butil::Status();
 }
 
-butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Context> ctx,
-                                                             std::shared_ptr<pb::coordinator::RegionCmd> command) {
+butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
   // Check repeat region command
   auto region_command_manager = Server::GetInstance().GetRegionCommandManager();
   if (region_command_manager->IsExist(command->id())) {
@@ -1604,59 +1575,59 @@ RegionController::ValidateFunc RegionController::GetValidater(pb::coordinator::R
 
 RegionController::TaskBuilderMap RegionController::task_builders = {
     {pb::coordinator::CMD_CREATE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<CreateRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_DELETE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<DeleteRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SPLIT,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<SplitRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_MERGE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<MergeRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_CHANGE_PEER,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<ChangeRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_TRANSFER_LEADER,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<TransferLeaderTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SNAPSHOT,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<SnapshotRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_PURGE,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<PurgeRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_STOP,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<StopRegionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_DESTROY_EXECUTOR,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<DestroyRegionExecutorTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SNAPSHOT_VECTOR_INDEX,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<SnapshotVectorIndexTask>(ctx, command);
      }},
     {pb::coordinator::CMD_UPDATE_DEFINITION,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<UpdateDefinitionTask>(ctx, command);
      }},
     {pb::coordinator::CMD_SWITCH_SPLIT,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<SwitchSplitTask>(ctx, command);
      }},
     {pb::coordinator::CMD_HOLD_VECTOR_INDEX,
-     [](std::shared_ptr<Context> ctx, std::shared_ptr<pb::coordinator::RegionCmd> command) -> TaskRunnablePtr {
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<HoldVectorIndexTask>(ctx, command);
      }},
 };
