@@ -34,7 +34,7 @@ class ClientStub {
 
   Status Open(std::string naming_service_url);
 
-  virtual std::shared_ptr<CoordiantorProxy> GetCoordinatorProxy() const { return coordinator_proxy_; }
+  virtual std::shared_ptr<CoordinatorProxy> GetCoordinatorProxy() const { return coordinator_proxy_; }
 
   virtual std::shared_ptr<MetaCache> GetMetaCache() const { return meta_cache_; }
 
@@ -43,7 +43,7 @@ class ClientStub {
   virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const { return region_scanner_factory_; }
 
  private:
-  std::shared_ptr<CoordiantorProxy> coordinator_proxy_;
+  std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
 
   std::shared_ptr<MetaCache> meta_cache_;
 

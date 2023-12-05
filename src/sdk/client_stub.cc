@@ -30,7 +30,7 @@ ClientStub::ClientStub() = default;
 ClientStub::~ClientStub() = default;
 
 Status ClientStub::Open(std::string naming_service_url) {
-  coordinator_proxy_ = std::make_shared<CoordiantorProxy>();
+  coordinator_proxy_ = std::make_shared<CoordinatorProxy>();
   DINGO_RETURN_NOT_OK(coordinator_proxy_->Open(naming_service_url));
 
   // TODO: pass use gflag or add options

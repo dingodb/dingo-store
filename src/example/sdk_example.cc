@@ -37,7 +37,7 @@ DEFINE_string(coordinator_url, "", "coordinator url");
 // TODO: remove
 static std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 
-static std::shared_ptr<dingodb::sdk::CoordiantorProxy> coordinator_proxy;
+static std::shared_ptr<dingodb::sdk::CoordinatorProxy> coordinator_proxy;
 
 void CreateRegion(std::string name, std::string start_key, std::string end_key, int replicas = 3) {
   CHECK(!name.empty()) << "name should not empty";
@@ -486,7 +486,7 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  coordinator_proxy = std::make_shared<dingodb::sdk::CoordiantorProxy>();
+  coordinator_proxy = std::make_shared<dingodb::sdk::CoordinatorProxy>();
   Status open = coordinator_proxy->Open(FLAGS_coordinator_url);
   if (!open.IsOK()) {
     DINGO_LOG(ERROR) << "Fail to open coordinator_proxy, please check parameter --url=" << FLAGS_coordinator_url;

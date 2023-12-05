@@ -22,7 +22,7 @@ namespace sdk {
 
 using pb::coordinator::ScanRegionInfo;
 
-MetaCache::MetaCache(std::shared_ptr<CoordiantorProxy> coordinator_proxy)
+MetaCache::MetaCache(std::shared_ptr<CoordinatorProxy> coordinator_proxy)
     : coordinator_proxy_(std::move(coordinator_proxy)) {}
 
 MetaCache::~MetaCache() = default;

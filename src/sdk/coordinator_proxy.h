@@ -23,14 +23,14 @@
 
 namespace dingodb {
 namespace sdk {
-class CoordiantorProxy {
+class CoordinatorProxy {
  public:
-  CoordiantorProxy(const CoordiantorProxy&) = delete;
-  const CoordiantorProxy& operator=(const CoordiantorProxy&) = delete;
+  CoordinatorProxy(const CoordinatorProxy&) = delete;
+  const CoordinatorProxy& operator=(const CoordinatorProxy&) = delete;
 
-  CoordiantorProxy();
+  CoordinatorProxy();
 
-  virtual ~CoordiantorProxy();
+  virtual ~CoordinatorProxy();
 
   virtual Status Open(std::string naming_service_url);
 

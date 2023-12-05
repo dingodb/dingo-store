@@ -21,7 +21,7 @@
 namespace dingodb {
 namespace sdk {
 
-class MockCoordinatorProxy final : public CoordiantorProxy {
+class MockCoordinatorProxy final : public CoordinatorProxy {
  public:
   explicit MockCoordinatorProxy() = default;
 

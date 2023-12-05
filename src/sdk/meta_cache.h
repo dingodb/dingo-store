@@ -37,7 +37,7 @@ class MetaCache {
   MetaCache(const MetaCache&) = delete;
   const MetaCache& operator=(const MetaCache&) = delete;
 
-  explicit MetaCache(std::shared_ptr<CoordiantorProxy> coordinator_proxy);
+  explicit MetaCache(std::shared_ptr<CoordinatorProxy> coordinator_proxy);
 
   ~MetaCache();
 
@@ -97,7 +97,7 @@ class MetaCache {
 
   static bool NeedUpdateRegion(const std::shared_ptr<Region>& old_region, const std::shared_ptr<Region>& new_region);
 
-  std::shared_ptr<CoordiantorProxy> coordinator_proxy_;
+  std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
 
   mutable std::shared_mutex rw_lock_;
   std::unordered_map<int64_t, std::shared_ptr<Region>> region_by_id_;
