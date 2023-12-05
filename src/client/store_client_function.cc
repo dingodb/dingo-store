@@ -2076,7 +2076,6 @@ int64_t SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCount", request, response);
 
-  DINGO_LOG(INFO) << "VectorCount response: " << response.DebugString();
   return response.error().errcode() != 0 ? 0 : response.count();
 }
 
