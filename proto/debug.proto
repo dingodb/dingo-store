@@ -216,18 +216,42 @@ message DebugResponse {
   }
 
   dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 
-  RegionMetaStat region_meta_stat = 2;
-  RegionMetaDetails region_meta_details = 3;
-  RegionControlCommand region_control_command = 4;
-  RaftMeta raft_meta = 5;
-  RegionExecutor region_executor = 6;
-  RegionMetrics region_metrics = 7;
-  FileReader file_reader = 8;
-  RegionActualMetrics region_actual_metrics = 9;
-  StoreMetrics store_metrics = 10;
-  RegionChange region_change_record = 11;
-  VectorIndexMetrics vector_index_metrics = 100;
+  RegionMetaStat region_meta_stat = 10;
+  RegionMetaDetails region_meta_details = 11;
+  RegionControlCommand region_control_command = 12;
+  RaftMeta raft_meta = 13;
+  RegionExecutor region_executor = 14;
+  RegionMetrics region_metrics = 15;
+  FileReader file_reader = 16;
+  RegionActualMetrics region_actual_metrics = 17;
+  StoreMetrics store_metrics = 18;
+  RegionChange region_change_record = 19;
+  VectorIndexMetrics vector_index_metrics = 20;
+}
+
+message GetMemoryStatsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+}
+
+message GetMemoryStatsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  string memory_stats = 10;
+}
+
+message ReleaseFreeMemoryRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+
+  bool is_force = 2;
+  double rate = 3;
+}
+
+message ReleaseFreeMemoryResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 service DebugService {
@@ -246,4 +270,8 @@ service DebugService {
 
   // debug
   rpc Debug(DebugRequest) returns (DebugResponse);
+
+  // tcmalloc
+  rpc GetMemoryStats(GetMemoryStatsRequest) returns (GetMemoryStatsResponse);
+  rpc ReleaseFreeMemory(ReleaseFreeMemoryRequest) returns (ReleaseFreeMemoryResponse);
 }

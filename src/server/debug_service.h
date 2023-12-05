@@ -57,6 +57,16 @@ class DebugServiceImpl : public pb::debug::DebugService {
 
   void Debug(google::protobuf::RpcController* controller, const ::dingodb::pb::debug::DebugRequest* request,
              ::dingodb::pb::debug::DebugResponse* response, ::google::protobuf::Closure* done) override;
+
+  void GetMemoryStats(google::protobuf::RpcController* controller,
+                      const ::dingodb::pb::debug::GetMemoryStatsRequest* request,
+                      ::dingodb::pb::debug::GetMemoryStatsResponse* response,
+                      ::google::protobuf::Closure* done) override;
+
+  void ReleaseFreeMemory(google::protobuf::RpcController* controller,
+                         const ::dingodb::pb::debug::ReleaseFreeMemoryRequest* request,
+                         ::dingodb::pb::debug::ReleaseFreeMemoryResponse* response,
+                         ::google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb

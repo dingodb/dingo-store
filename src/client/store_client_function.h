@@ -177,6 +177,8 @@ void BatchSendAddRegion(int start_region_id, int region_count, int thread_num, c
                         std::vector<std::string>& raft_addrs);
 void SendSnapshotVectorIndex(int64_t vector_index_id);
 void SendCompact(const std::string& cf_name);
+void GetMemoryStats();
+void ReleaseFreeMemory(double rate);
 
 // test
 void TestBatchPut(std::shared_ptr<Context> ctx);
