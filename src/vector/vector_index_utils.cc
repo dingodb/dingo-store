@@ -885,8 +885,8 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     }
 
     int32_t nbits_per_idx = ivf_pq_parameter.nbits_per_idx();
-    if (nbits_per_idx <= 0 || nbits_per_idx > 8) {
-      std::string s = fmt::format("ivf_pq_parameter.nbits_per_idx is illegal : {} nbits_per_idx valid : (0, 8]",
+    if (nbits_per_idx <= 0 || nbits_per_idx > 16) {
+      std::string s = fmt::format("ivf_pq_parameter.nbits_per_idx is illegal : {} nbits_per_idx valid : (0, 16]",
                                   ivf_pq_parameter.nbits_per_idx());
       DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
