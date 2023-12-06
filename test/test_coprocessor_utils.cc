@@ -43,11 +43,11 @@ class CoprocessorUtilsTest : public testing::Test {
 };
 
 TEST_F(CoprocessorUtilsTest, CheckPbSchema) {
-  // empty failed
+  // empty ok
   {
     google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
     butil::Status ok = Utils::CheckPbSchema(pb_schemas);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // type invalid
@@ -60,7 +60,7 @@ TEST_F(CoprocessorUtilsTest, CheckPbSchema) {
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
     butil::Status ok = Utils::CheckPbSchema(pb_schemas);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // index invalid
@@ -151,12 +151,12 @@ TEST_F(CoprocessorUtilsTest, CheckPbSchema) {
 }
 
 TEST_F(CoprocessorUtilsTest, CheckSelection) {
-  // empty failed
+  // empty ok
   {
     ::google::protobuf::RepeatedField<int32_t> selection_columns;
     size_t original_schema_size = 10;
     butil::Status ok = Utils::CheckSelection(selection_columns, 10);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // index = -1 invalid
