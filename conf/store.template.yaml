@@ -34,6 +34,6 @@ store:
   stats_dump_period_s: 120
   scan:
     scan_interval_s: 30
-    timeout_s: 60
+    timeout_s: 1800
     max_bytes_rpc: 4194304
     max_fetch_cnt_by_server: 1000
