@@ -798,10 +798,11 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     // check ivf_flat_parameter.ncentroids
     // The number of centroids (clusters) used in the product quantization. This parameter affects the memory usage
     // of the index and the accuracy of the search. This parameter must be greater than 0.
-    if (ivf_flat_parameter.ncentroids() < 0) {
-      DINGO_LOG(ERROR) << "ivf_flat_parameter.ncentroids is illegal " << ivf_flat_parameter.ncentroids();
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "ivf_flat_parameter.ncentroids is illegal " +
-                                                                       std::to_string(ivf_flat_parameter.ncentroids()));
+    if (ivf_flat_parameter.ncentroids() <= 0) {
+      std::string s = fmt::format("ivf_flat_parameter.ncentroids is illegal : {}  default : {}",
+                                  ivf_flat_parameter.ncentroids(), Constant::kCreateIvfFlatParamNcentroids);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
   }
 
@@ -835,19 +836,21 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     // check ivf_pq_parameter.nlist
     // The number of inverted lists (buckets) used in the index. This parameter affects the memory usage of the
     // index and the accuracy of the search. This parameter must be greater than 0.
-    if (ivf_pq_parameter.ncentroids() < 0) {
-      DINGO_LOG(ERROR) << "ivf_pq_parameter.ncentroids is illegal " << ivf_pq_parameter.ncentroids();
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "ivf_pq_parameter.ncentroids is illegal " + std::to_string(ivf_pq_parameter.ncentroids()));
+    if (ivf_pq_parameter.ncentroids() <= 0) {
+      std::string s = fmt::format("ivf_pq_parameter.ncentroids is illegal : {} default : {}",
+                                  ivf_pq_parameter.ncentroids(), Constant::kCreateIvfPqParamNcentroids);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
 
     // check ivf_pq_parameter.nsubvector
     // The number of subvectors used in the product quantization. This parameter affects the memory usage of the
     // index and the accuracy of the search. This parameter must be greater than 0.
-    if (ivf_pq_parameter.nsubvector() < 0) {
-      DINGO_LOG(ERROR) << "ivf_pq_parameter.nsubvector is illegal " << ivf_pq_parameter.nsubvector();
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "ivf_pq_parameter.nsubvector is illegal " + std::to_string(ivf_pq_parameter.nsubvector()));
+    if (ivf_pq_parameter.nsubvector() <= 0) {
+      std::string s = fmt::format("ivf_pq_parameter.nsubvector is illegal : {} default : {}",
+                                  ivf_pq_parameter.nsubvector(), Constant::kCreateIvfPqParamNsubvector);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
 
     // check ivf_pq_parameter.bucket_init_size
@@ -871,17 +874,20 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     }
 
     int32_t nsubvector = ivf_pq_parameter.nsubvector();
-    if (0 == nsubvector) {
-      nsubvector = Constant::kCreateIvfPqParamNsubvector;
-      DINGO_LOG(INFO) << "ivf_pq_parameter vector_index_parameter nsubvector = 0, use default "
-                      << Constant::kCreateIvfPqParamNsubvector;
-    }
 
     uint32_t dimension = ivf_pq_parameter.dimension();
     if (0 != (dimension % nsubvector)) {
       std::string s =
           fmt::format("ivf_pq_parameter vector_index_parameter is illegal, dimension:{} / nsubvector:{} not divisible ",
                       dimension, nsubvector);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    int32_t nbits_per_idx = ivf_pq_parameter.nbits_per_idx();
+    if (nbits_per_idx <= 0 || nbits_per_idx > 8) {
+      std::string s = fmt::format("ivf_pq_parameter.nbits_per_idx is illegal : {} nbits_per_idx valid : (0, 8]",
+                                  ivf_pq_parameter.nbits_per_idx());
       DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
