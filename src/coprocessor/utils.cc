@@ -70,11 +70,11 @@ void SerialBaseSchemaUpdateKeyWrapper(bool is_key, const UPDATE& update, SERIAL_
 }
 
 butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas) {
-  if (pb_schemas.empty()) {
-    std::string error_message = fmt::format("pb_schema empty. not support");
-    DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-  }
+  // if (pb_schemas.empty()) {
+  //   std::string error_message = fmt::format("pb_schema empty. not support");
+  //   DINGO_LOG(ERROR) << error_message;
+  //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  // }
 
   size_t i = 0;
   for (const auto& schema : pb_schemas) {
@@ -104,11 +104,11 @@ butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::
 
 butil::Status Utils::CheckSerialSchema(
     const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas) {
-  if (serial_schemas && serial_schemas->empty()) {
-    std::string error_message = fmt::format("serial_schemas empty. not support");
-    DINGO_LOG(ERROR) << error_message;
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-  }
+  // if (serial_schemas && serial_schemas->empty()) {
+  //   std::string error_message = fmt::format("serial_schemas empty. not support");
+  //   DINGO_LOG(ERROR) << error_message;
+  //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  // }
 
   size_t i = 0;
   for (const auto& schema : *serial_schemas) {

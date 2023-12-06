@@ -164,7 +164,7 @@ TEST_F(CoprocessorTest, Open) {
     pb_coprocessor.set_schema_version(1);
 
     ok = coprocessor->Open(pb_coprocessor);
-    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // selection empty failed
@@ -225,7 +225,7 @@ TEST_F(CoprocessorTest, Open) {
     }
 
     ok = coprocessor->Open(pb_coprocessor);
-    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // result empty failed
@@ -300,7 +300,7 @@ TEST_F(CoprocessorTest, Open) {
     selection_columns->Add(5);
 
     ok = coprocessor->Open(pb_coprocessor);
-    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // ok but not exist aggregation
