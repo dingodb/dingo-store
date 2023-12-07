@@ -25,6 +25,7 @@
 #include <set>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "butil/time.h"
 #include "common/helper.h"
@@ -46,6 +47,8 @@ DEFINE_int32(executor_heartbeat_timeout, 30, "executor heartbeat timeout in seco
 DEFINE_int32(store_heartbeat_timeout, 30, "store heartbeat timeout in seconds");
 DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds");
 DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after deleted time in seconds");
+
+DECLARE_string(raft_snapshot_policy);
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
                                        std::vector<int64_t> region_ids, bool is_update_epoch_version) {
@@ -104,7 +107,12 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     tmp_region_metrics.set_leader_store_id(inner_region.leader_id());
     tmp_region_metrics.set_store_region_state(inner_region.state());
     *(tmp_region_metrics.mutable_region_definition()) = inner_region.definition();
-    tmp_region_metrics.set_snapshot_epoch_version(inner_region.snapshot_epoch_version());
+
+    if (BAIDU_LIKELY(FLAGS_raft_snapshot_policy == Constant::kRaftSnapshotPolicyDingo)) {
+      tmp_region_metrics.set_snapshot_epoch_version(INT64_MAX);
+    } else {
+      tmp_region_metrics.set_snapshot_epoch_version(inner_region.snapshot_epoch_version());
+    }
 
     if (inner_region.state() == pb::common::StoreRegionState::NORMAL ||
         inner_region.state() == pb::common::StoreRegionState::STANDBY ||

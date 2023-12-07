@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/failpoint.h"
@@ -592,12 +593,14 @@ int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   // std::string policy = GetSnapshotPolicy(config);
   std::string policy = FLAGS_raft_snapshot_policy;
-  if (policy == "checkpoint") {
-    SaveSnapshotByCheckpoint(region, engine, term, log_index, writer, done);
-  } else if (policy == "scan") {
-    AsyncSaveSnapshotByScan(region, engine, term, log_index, writer, done);
-  } else if (policy == "dingo") {
+  if (BAIDU_LIKELY(policy == Constant::kRaftSnapshotPolicyDingo)) {
     SaveSnapshotByDingo(region, engine, term, log_index, writer, done);
+  } else if (policy == Constant::kRaftSnapshotPolicyCheckpoint) {
+    SaveSnapshotByCheckpoint(region, engine, term, log_index, writer, done);
+  } else if (policy == Constant::kRaftSnapshotPolicyScan) {
+    AsyncSaveSnapshotByScan(region, engine, term, log_index, writer, done);
+  } else {
+    DINGO_LOG(FATAL) << fmt::format("[raft.snapshot][region({})] unknown snapshot policy: {}", region->Id(), policy);
   }
 
   return 0;
