@@ -3540,33 +3540,50 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
 
 pb::common::RegionState CoordinatorControl::GenRegionState(
     const pb::common::RegionMetrics& region_metrics, const pb::coordinator_internal::RegionInternal& region_internal) {
-  DINGO_LOG(INFO) << fmt::format("===region state: {} {}", region_metrics.id(),
-                                 pb::common::StoreRegionState_Name(region_metrics.store_region_state()));
+  pb::common::RegionState old_state = region_internal.state();
+  pb::common::RegionState new_state = old_state;
+
+  DEFER(if (new_state != old_state) {
+    LOG(INFO) << fmt::format("region_state_change, region_id=({}), store_regin_state is {}, region_state from {} to {}",
+                             region_metrics.id(),
+                             pb::common::StoreRegionState_Name(region_metrics.store_region_state()),
+                             pb::common::RegionState_Name(old_state), pb::common::RegionState_Name(new_state));
+  });
+
   if (region_internal.state() == pb::common::RegionState::REGION_DELETE ||
       region_internal.state() == pb::common::RegionState::REGION_DELETING ||
       region_internal.state() == pb::common::RegionState::REGION_DELETED) {
     if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
-      return pb::common::RegionState::REGION_DELETED;
+      new_state = pb::common::RegionState::REGION_DELETED;
+      return new_state;
     } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETING) {
-      return pb::common::RegionState::REGION_DELETING;
+      new_state = pb::common::RegionState::REGION_DELETING;
+      return new_state;
     }
   } else {
     if (region_metrics.store_region_state() == pb::common::StoreRegionState::NORMAL) {
-      return pb::common::RegionState::REGION_NORMAL;
+      new_state = pb::common::RegionState::REGION_NORMAL;
+      return new_state;
     } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::SPLITTING) {
-      return pb::common::RegionState::REGION_SPLITTING;
+      new_state = pb::common::RegionState::REGION_SPLITTING;
+      return new_state;
     } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::MERGING) {
-      return pb::common::RegionState::REGION_MERGING;
+      new_state = pb::common::RegionState::REGION_MERGING;
+      return new_state;
     } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::STANDBY) {
-      return pb::common::RegionState::REGION_STANDBY;
+      new_state = pb::common::RegionState::REGION_STANDBY;
+      return new_state;
     } else if (region_metrics.store_region_state() == pb::common::StoreRegionState::TOMBSTONE) {
-      return pb::common::RegionState::REGION_TOMBSTONE;
+      new_state = pb::common::RegionState::REGION_TOMBSTONE;
+      return new_state;
     } else {
-      return pb::common::RegionState::REGION_NONE;
+      new_state = pb::common::RegionState::REGION_NONE;
+      return new_state;
     }
   }
 
-  return pb::common::RegionState::REGION_NONE;
+  new_state = pb::common::RegionState::REGION_NONE;
+  return new_state;
 }
 
 pb::common::RegionStatus CoordinatorControl::GenRegionStatus(const pb::common::RegionMetrics& region_metrics) {
