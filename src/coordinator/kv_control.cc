@@ -169,8 +169,8 @@ void KvControl::GetServerLocation(pb::common::Location& raft_location, pb::commo
   auto raft_location_string = raft_location.host() + ":" + std::to_string(raft_location.port());
   if (coordinator_location_cache_.find(raft_location_string) != coordinator_location_cache_.end()) {
     server_location = coordinator_location_cache_[raft_location_string];
-    DINGO_LOG(INFO) << "GetServiceLocation Cache Hit raft_location=" << raft_location.host() << ":"
-                    << raft_location.port();
+    DINGO_LOG(DEBUG) << "GetServiceLocation Cache Hit raft_location=" << raft_location.host() << ":"
+                     << raft_location.port();
     return;
   }
 

@@ -266,7 +266,7 @@ void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location
   auto it = auto_increment_location_cache_.find(raft_location_string);
   if (it != auto_increment_location_cache_.end()) {
     server_location = it->second;
-    DINGO_LOG(INFO) << "Cache Hit raft_location=" << raft_location.host() << ":" << raft_location.port();
+    DINGO_LOG(DEBUG) << "Cache Hit raft_location=" << raft_location.host() << ":" << raft_location.port();
     return;
   }
 
