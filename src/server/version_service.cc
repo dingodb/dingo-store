@@ -817,8 +817,8 @@ void VersionServiceProtoImpl::LeaseQuery(google::protobuf::RpcController* contro
                                          pb::version::LeaseQueryResponse* response, google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive LeaseTimeToLive Request: IsLeader:" << is_leader
-                     << ", Request: " << request->ShortDebugString();
+  DINGO_LOG(INFO) << "Receive LeaseTimeToLive Request: IsLeader:" << is_leader
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return RedirectResponse(response);
@@ -962,7 +962,7 @@ void VersionServiceProtoImpl::KvPut(google::protobuf::RpcController* controller,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = this->IsKvControlLeader();
-  DINGO_LOG(WARNING) << "Receive Put Request: IsLeader:" << is_leader << ", Request: " << request->ShortDebugString();
+  DINGO_LOG(INFO) << "Receive Put Request: IsLeader:" << is_leader << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return RedirectResponse(response);

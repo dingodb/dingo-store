@@ -218,7 +218,7 @@ butil::Status KvControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &gr
 
   auto it = lease_to_key_map_temp_.find(lease_id);
   if (it == lease_to_key_map_temp_.end()) {
-    DINGO_LOG(WARNING) << "lease id " << lease_id << " not found";
+    DINGO_LOG(INFO) << "lease id " << lease_id << " not found";
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
