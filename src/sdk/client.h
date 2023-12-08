@@ -15,6 +15,7 @@
 #ifndef DINGODB_SDK_CLIENT_H_
 #define DINGODB_SDK_CLIENT_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -26,8 +27,10 @@ namespace dingodb {
 namespace sdk {
 
 class RawKV;
+class RegionCreator;
 class TestBase;
 
+/// @brief Callers must keep client valid in it's lifetime in order to interact with the cluster,
 class Client : public std::enable_shared_from_this<Client> {
  public:
   Client(const Client&) = delete;
@@ -36,8 +39,22 @@ class Client : public std::enable_shared_from_this<Client> {
   ~Client();
 
   static Status Build(std::string naming_service_url, std::shared_ptr<Client>& client);
+  // NOTE:: Caller must delete *client when it is no longer needed.
+  static Status Build(std::string naming_service_url, Client** client);
 
   Status NewRawKV(std::shared_ptr<RawKV>& raw_kv);
+  // NOTE:: Caller must delete *raw_kv when it is no longer needed.
+  Status NewRawKV(RawKV** raw_kv);
+
+  Status NewRegionCreator(std::shared_ptr<RegionCreator>& creator);
+  // NOTE:: Caller must delete *raw_kv when it is no longer needed.
+  Status NewRegionCreator(RegionCreator** creator);
+
+  /// The out_create_in_progress is set only in case of success;
+  /// it is true if the operation is in progress, else is false
+  Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
+
+  Status DropRegion(int64_t region_id);
 
  private:
   friend class RawKV;
@@ -47,8 +64,8 @@ class Client : public std::enable_shared_from_this<Client> {
   Status Init(std::string naming_service_url);
 
   // own
-  class ClientImpl;
-  std::unique_ptr<ClientImpl> impl_;
+  class Data;
+  std::unique_ptr<Data> data_;
 };
 
 struct KVPair {
@@ -112,6 +129,41 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
   std::unique_ptr<RawKVImpl> impl_;
 
   explicit RawKV(RawKVImpl* impl);
+};
+
+class RegionCreator {
+ public:
+  ~RegionCreator();
+
+  // required
+  RegionCreator& SetRegionName(const std::string& name);
+
+  // required
+  RegionCreator& SetRange(const std::string& lower_bound, const std::string& upper_bound);
+
+  /// optional, if not called, defaults is 1
+  RegionCreator& SetReplicaNum(int64_t num);
+
+  /// Wait for the region to be fully created before returning.
+  /// If not called, defaults to @c true.
+  RegionCreator& Wait(bool wait);
+
+  // TODO: support resource_tag/schema_id/table_id/index_id/part_id/store_ids/region_type
+
+  // TODO: support timeout
+  /// when wait is false, the out_region_id will be set only in case of status ok
+  /// when wait is true, the out_region_id will be set and status maybe ok or not,
+  /// so caller should check out_region_id is set or not
+  Status Create(int64_t& out_region_id);
+
+ private:
+  friend class Client;
+
+  // own
+  class Data;
+  std::unique_ptr<Data> data_;
+
+  explicit RegionCreator(Data* data);
 };
 
 }  // namespace sdk

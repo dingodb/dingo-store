@@ -36,6 +36,8 @@ class CoordinatorProxy {
   virtual Status Open(std::string naming_service_url);
 
   // Region
+  virtual Status QueryRegion(const pb::coordinator::QueryRegionRequest& request,
+                              pb::coordinator::QueryRegionResponse& response);
   virtual Status CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                               pb::coordinator::CreateRegionResponse& response);
 

@@ -12,34 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/client_impl.h"
+#ifndef DINGODB_SDK_REGION_CREATOR_DATA_H_
+#define DINGODB_SDK_REGION_CREATOR_DATA_H_
 
-#include <cstdint>
-#include <memory>
-#include <string>
+#include <optional>
 
-#include "common/logging.h"
-#include "coordinator/coordinator_interaction.h"
-#include "glog/logging.h"
-#include "proto/meta.pb.h"
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
 
 namespace dingodb {
 namespace sdk {
+class RegionCreator::Data {
+ public:
+  Data(const Data&) = delete;
+  const Data& operator=(const Data&) = delete;
 
-Client::ClientImpl::ClientImpl() : init_(false), stub_(new ClientStub()){};
+  explicit Data(const ClientStub& stub) : stub(stub), replica_num(1), wait(true) {}
+  ~Data() = default;
 
-Client::ClientImpl::~ClientImpl() = default;
+  const ClientStub& stub;
 
-Status Client::ClientImpl::Init(std::string naming_service_url) {
-  CHECK(!init_) << "forbidden multiple init";
-  Status open = stub_->Open(naming_service_url);
-  if (open.IsOK()) {
-    init_ = true;
-  }
-  return open;
-}
+  std::string region_name;
+
+  std::string lower_bound;
+  std::string upper_bound;
+
+  int64_t replica_num;
+
+  bool wait;
+};
 
 }  // namespace sdk
 }  // namespace dingodb
+#endif  // DINGODB_SDK_REGION_CREATOR_DATA_H_
