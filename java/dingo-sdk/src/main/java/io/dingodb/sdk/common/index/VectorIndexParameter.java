@@ -33,6 +33,7 @@ public class VectorIndexParameter {
     private IvfPqParam ivfPqParam;
     private HnswParam hnswParam;
     private DiskAnnParam diskAnnParam;
+    private BruteForceParam bruteForceParam;
 
     public VectorIndexParameter(VectorIndexType vectorIndexType, FlatParam flatParam) {
         this.vectorIndexType = vectorIndexType;
@@ -59,13 +60,19 @@ public class VectorIndexParameter {
         this.diskAnnParam = diskAnnParam;
     }
 
+    public VectorIndexParameter(VectorIndexType vectorIndexType, BruteForceParam bruteForceParam) {
+        this.vectorIndexType = vectorIndexType;
+        this.bruteForceParam = bruteForceParam;
+    }
+
     public enum VectorIndexType {
         VECTOR_INDEX_TYPE_NONE,
         VECTOR_INDEX_TYPE_FLAT,
         VECTOR_INDEX_TYPE_IVF_FLAT,
         VECTOR_INDEX_TYPE_IVF_PQ,
         VECTOR_INDEX_TYPE_HNSW,
-        VECTOR_INDEX_TYPE_DISKANN
+        VECTOR_INDEX_TYPE_DISKANN,
+        VECTOR_INDEX_TYPE_BRUTEFORCE
     }
 
     public enum MetricType {

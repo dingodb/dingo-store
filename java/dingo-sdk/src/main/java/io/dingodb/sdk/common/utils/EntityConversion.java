@@ -40,6 +40,7 @@ import io.dingodb.sdk.common.cluster.InternalStore;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.codec.DingoKeyValueCodec;
 import io.dingodb.sdk.common.codec.KeyValueCodec;
+import io.dingodb.sdk.common.index.BruteForceParam;
 import io.dingodb.sdk.common.index.DiskAnnParam;
 import io.dingodb.sdk.common.index.FlatParam;
 import io.dingodb.sdk.common.index.HnswParam;
@@ -464,7 +465,14 @@ public class EntityConversion {
                                     new DiskAnnParam(
                                             annParam.getDimension(),
                                             VectorIndexParameter.MetricType.valueOf(annParam.getMetricType().name()))));
-
+                case VECTOR_INDEX_TYPE_BRUTEFORCE:
+                    Common.CreateBruteForceParam bruteForceParam = vectorParam.getBruteforceParameter();
+                    return new IndexParameter(
+                            IndexParameter.IndexType.valueOf(parameter.getIndexType().name()),
+                            new VectorIndexParameter(VectorIndexParameter.VectorIndexType.VECTOR_INDEX_TYPE_BRUTEFORCE,
+                                    new BruteForceParam(
+                                            bruteForceParam.getDimension(),
+                                            VectorIndexParameter.MetricType.valueOf(bruteForceParam.getMetricType().name()))));
                 default:
                     throw new IllegalStateException("Unexpected value: " + vectorParam.getVectorIndexType());
             }
@@ -530,6 +538,12 @@ public class EntityConversion {
                             .setMetricType(Common.MetricType.valueOf(diskAnnParam.getMetricType().name()))
                             .build());
                     break;
+                case VECTOR_INDEX_TYPE_BRUTEFORCE:
+                    BruteForceParam bruteForceParam = vectorParameter.getBruteForceParam();
+                    build.setBruteforceParameter(Common.CreateBruteForceParam.newBuilder()
+                            .setDimension(bruteForceParam.getDimension())
+                            .setMetricType(Common.MetricType.valueOf(bruteForceParam.getMetricType().name()))
+                            .build());
             }
             builder.setVectorIndexParameter(build.build());
         } else {
