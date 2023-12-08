@@ -38,6 +38,25 @@ public class VectorSearchParameter {
     private Coprocessor coprocessor;
     private List<Long> vectorIds;
 
+    private boolean useBruteForce;
+
+    @Deprecated
+    public VectorSearchParameter(
+            Integer topN,
+            boolean withoutVectorData,
+            boolean withoutScalarData,
+            List<String> selectedKeys,
+            boolean withoutTableData,
+            Search search,
+            VectorFilter vectorFilter,
+            VectorFilterType vectorFilterType,
+            Coprocessor coprocessor,
+            List<Long> vectorIds
+    ) {
+        this(topN, withoutVectorData, withoutScalarData, selectedKeys, withoutTableData, search,
+                vectorFilter, vectorFilterType, coprocessor, vectorIds, false);
+    }
+
     public enum VectorFilter {
         SCALAR_FILTER,
         TABLE_FILTER,
