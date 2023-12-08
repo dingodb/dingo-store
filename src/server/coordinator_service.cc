@@ -1056,9 +1056,9 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->DebugString();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
-    response->set_region_id(new_region_id);
     return;
   }
+  response->set_region_id(new_region_id);
 
   // if meta_increment is empty, means no need to update meta
   if (meta_increment.ByteSizeLong() == 0) {

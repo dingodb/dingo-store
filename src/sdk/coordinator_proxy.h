@@ -23,6 +23,7 @@
 
 namespace dingodb {
 namespace sdk {
+
 class CoordinatorProxy {
  public:
   CoordinatorProxy(const CoordinatorProxy&) = delete;
@@ -38,6 +39,9 @@ class CoordinatorProxy {
   virtual Status CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                               pb::coordinator::CreateRegionResponse& response);
 
+  virtual Status DropRegion(const pb::coordinator::DropRegionRequest& request,
+                            pb::coordinator::DropRegionResponse& response);
+
   virtual Status ScanRegions(const pb::coordinator::ScanRegionsRequest& request,
                              pb::coordinator::ScanRegionsResponse& response);
 
@@ -49,6 +53,7 @@ class CoordinatorProxy {
   std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_meta_;
   std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_version_;
 };
+
 }  // namespace sdk
 
 }  // namespace dingodb

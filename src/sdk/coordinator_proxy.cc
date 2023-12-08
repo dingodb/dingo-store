@@ -65,6 +65,17 @@ Status CoordinatorProxy::CreateRegion(const pb::coordinator::CreateRegionRequest
   return Status::OK();
 }
 
+Status CoordinatorProxy::DropRegion(const pb::coordinator::DropRegionRequest& request,
+                                    pb::coordinator::DropRegionResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_->SendRequest("DropRegion", request, response);
+  if (!rpc_status.ok()) {
+    std::string msg =
+        fmt::format("DropRegion fail, code: {}, msg:{}", rpc_status.error_code(), rpc_status.error_cstr());
+    return Status::NetworkError(msg);
+  }
+  return Status::OK();
+}
+
 Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& request,
                                      pb::coordinator::ScanRegionsResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("ScanRegions", request, response);
