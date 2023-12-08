@@ -2899,11 +2899,8 @@ butil::Status CoordinatorControl::UpdateTableDefinition(int64_t table_id, bool i
   }
 
   // update table definition, we do not support change partitions, so we just update other fields
-  pb::coordinator_internal::TableInternal table_internal_new;
+  pb::coordinator_internal::TableInternal table_internal_new = table_internal;
   *(table_internal_new.mutable_definition()) = table_definition;
-  table_internal_new.set_id(table_internal.id());
-  table_internal_new.set_table_id(table_internal.table_id());
-  table_internal_new.set_schema_id(table_internal.schema_id());
 
   if (!is_index) {
     auto* table_increment = meta_increment.add_tables();
