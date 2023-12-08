@@ -1,6 +1,5 @@
 
 add_library(sdk
-    client_impl.cc
     client_stub.cc
     client.cc
     coordinator_proxy.cc
@@ -12,6 +11,7 @@ add_library(sdk
     status.cc
     store_rpc_controller.cc
     store_rpc.cc
+    supervisor.cc
     # TODO: use libary
     ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
     ${PROJECT_SOURCE_DIR}/src/common/role.cc

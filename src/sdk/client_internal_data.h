@@ -12,32 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_PARAM_CONFIG_H_
-#define DINGODB_SDK_PARAM_CONFIG_H_
+#ifndef DINGODB_SDK_CLIENT_IMPL_H_
+#define DINGODB_SDK_CLIENT_IMPL_H_
 
 #include <cstdint>
+#include <memory>
 
-// TODO: make params in this file use glfags
+#include "coordinator/coordinator_interaction.h"
+#include "sdk/client.h"
+#include "sdk/client_stub.h"
+#include "sdk/meta_cache.h"
+#include "sdk/status.h"
 
-// start: each rpc call params
-const int64_t kRpcCallMaxRetry = 3;
+namespace dingodb {
+namespace sdk {
 
-const int64_t kRpcTimeOutMs = 5000;
-// end: each rpc call params
+class Client::Data {
+ public:
+  Data(const Data&) = delete;
+  const Data& operator=(const Data&) = delete;
 
-// use case: wrong leader or request range invalid
-const int64_t kRpcMaxRetry = 5;
+  Data() : init(false), stub(nullptr) {}
 
-// start: use for region scanner
-const int64_t kScanBatchSize = 10;
+  ~Data() = default;
 
-const int64_t kMinScanBatchSize = 1;
+  bool init;
+  std::unique_ptr<ClientStub> stub;
+};
 
-const int64_t kMaxScanBatchSize = 100;
-// end: use for region scanner
+}  // namespace sdk
+}  // namespace dingodb
 
-const int64_t kPrefetchRegionCount = 3;
-
-const int64_t kCoordinatorInteractionMaxRetry = 3;
-
-#endif  // DINGODB_SDK_PARAM_CONFIG_H_
+#endif  // DINGODB_SDK_CLIENT_IMPL_H_

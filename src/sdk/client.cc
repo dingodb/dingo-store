@@ -14,17 +14,25 @@
 
 #include "sdk/client.h"
 
+#include <unistd.h>
+
 #include <charconv>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
-#include "sdk/client_impl.h"
+#include "sdk/client_internal_data.h"
+#include "sdk/client_stub.h"
+#include "sdk/param_config.h"
 #include "sdk/raw_kv_impl.h"
+#include "sdk/region_creator_internal_data.h"
 #include "sdk/status.h"
 
 namespace dingodb {
@@ -45,20 +53,73 @@ Status Client::Build(std::string naming_service_url, std::shared_ptr<Client>& cl
   return s;
 }
 
-Client::Client() : impl_(new Client::ClientImpl()) {}
+Status Client::Build(std::string naming_service_url, Client** client) {
+  std::shared_ptr<Client> tmp;
+  Status s = Build(naming_service_url, tmp);
+  if (s.ok()) {
+    *client = tmp.get();
+    tmp.reset();
+  }
+  return s;
+}
 
-Client::~Client() { impl_.reset(nullptr); }
+Client::Client() : data_(new Client::Data()) {}
+
+Client::~Client() { data_.reset(nullptr); }
 
 Status Client::Init(std::string naming_service_url) {
   CHECK(!naming_service_url.empty());
-  return impl_->Init(std::move(naming_service_url));
+  if (data_->init) {
+    return Status::IllegalState("forbidden multiple init");
+  }
+
+  auto tmp = std::make_unique<ClientStub>();
+  Status open = tmp->Open(naming_service_url);
+  if (open.IsOK()) {
+    data_->init = true;
+    data_->stub = std::move(tmp);
+  }
+  return open;
 }
 
 Status Client::NewRawKV(std::shared_ptr<RawKV>& raw_kv) {
-  std::shared_ptr<RawKV> ret(new RawKV(new RawKV::RawKVImpl(impl_->GetStub())));
-  raw_kv = std::move(ret);
+  std::shared_ptr<RawKV> tmp(new RawKV(new RawKV::RawKVImpl(*data_->stub)));
+  raw_kv = std::move(tmp);
   return Status::OK();
 }
+
+Status Client::NewRawKV(RawKV** raw_kv) {
+  std::shared_ptr<RawKV> tmp;
+  Status s = NewRawKV(tmp);
+  if (s.ok()) {
+    *raw_kv = tmp.get();
+    tmp.reset();
+  }
+  return s;
+}
+
+Status Client::NewRegionCreator(std::shared_ptr<RegionCreator>& creator) {
+  std::shared_ptr<RegionCreator> tmp(new RegionCreator(new RegionCreator::Data(*data_->stub)));
+  creator = std::move(tmp);
+  return Status::OK();
+}
+
+// NOTE:: Caller must delete *raw_kv when it is no longer needed.
+Status Client::NewRegionCreator(RegionCreator** creator) {
+  std::shared_ptr<RegionCreator> tmp;
+  Status s = NewRegionCreator(tmp);
+  if (s.ok()) {
+    *creator = tmp.get();
+    tmp.reset();
+  }
+  return s;
+}
+
+Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress) {
+  return data_->stub->GetSupervisor()->IsCreateRegionInProgress(region_id, out_create_in_progress);
+}
+
+Status Client::DropRegion(int64_t region_id) { return data_->stub->GetSupervisor()->DropRegion(region_id); }
 
 RawKV::RawKV(RawKVImpl* impl) : impl_(impl) {}
 
@@ -107,6 +168,77 @@ Status RawKV::BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vect
 
 Status RawKV::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs) {
   return impl_->Scan(start_key, end_key, limit, kvs);
+}
+
+RegionCreator::RegionCreator(Data* data) : data_(data) {}
+
+RegionCreator::~RegionCreator() = default;
+
+RegionCreator& RegionCreator::SetRegionName(const std::string& name) {
+  data_->region_name = name;
+  return *this;
+}
+
+RegionCreator& RegionCreator::SetRange(const std::string& lower_bound, const std::string& upper_bound) {
+  data_->lower_bound = lower_bound;
+  data_->upper_bound = upper_bound;
+  return *this;
+}
+
+RegionCreator& RegionCreator::SetReplicaNum(int64_t num) {
+  data_->replica_num = num;
+  return *this;
+}
+
+RegionCreator& RegionCreator::Wait(bool wait) {
+  data_->wait = wait;
+  return *this;
+}
+
+Status RegionCreator::Create(int64_t& out_region_id) {
+  if (data_->region_name.empty()) {
+    return Status::InvalidArgument("Missing region name");
+  }
+  if (data_->lower_bound.empty() || data_->upper_bound.empty()) {
+    return Status::InvalidArgument("lower_bound or upper_bound must not empty");
+  }
+  if (data_->replica_num <= 0) {
+    return Status::InvalidArgument("replica num must greater 0");
+  }
+
+  pb::coordinator::CreateRegionRequest req;
+  req.set_region_name(data_->region_name);
+  req.set_replica_num(data_->replica_num);
+  req.mutable_range()->set_start_key(data_->lower_bound);
+  req.mutable_range()->set_end_key(data_->upper_bound);
+
+  pb::coordinator::CreateRegionResponse resp;
+  DINGO_RETURN_NOT_OK(data_->stub.GetCoordinatorProxy()->CreateRegion(req, resp));
+  CHECK(resp.region_id() > 0) << "create region internal error, req:" << req.DebugString()
+                              << ", resp:" << resp.DebugString();
+  out_region_id = resp.region_id();
+
+  if (data_->wait) {
+    int retry = 0;
+    while (retry < kCoordinatorInteractionMaxRetry) {
+      bool creating = false;
+      DINGO_RETURN_NOT_OK(data_->stub.GetSupervisor()->IsCreateRegionInProgress(out_region_id, creating));
+
+      if (creating) {
+        retry++;
+        sleep(3);
+      } else {
+        return Status::OK();
+      }
+    }
+
+    std::string msg = fmt::format("Fail query region:{} state retry:{} exceed limit:{}", out_region_id, retry,
+                                  kCoordinatorInteractionMaxRetry);
+    DINGO_LOG(INFO) << msg;
+    return Status::Incomplete(msg);
+  }
+
+  return Status::OK();
 }
 
 }  // namespace sdk

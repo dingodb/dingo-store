@@ -14,7 +14,10 @@
 #define DINGODB_SDK_STATUS_H_
 
 #include <algorithm>
+#include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "common/slice.h"
 
@@ -25,124 +28,63 @@
     if (!_s.IsOK()) return _s;              \
   } while (0)
 
+#define DECLARE_ERROR_STATUS(NAME, CODE)                                                                        \
+  static Status NAME(const Slice& msg, const Slice& msg2 = Slice()) { return Status(CODE, kNone, msg, msg2); }; \
+  static Status NAME(int32_t p_errno, const Slice& msg, const Slice& msg2 = Slice()) {                          \
+    return Status(CODE, p_errno, msg, msg2);                                                                    \
+  }                                                                                                             \
+  bool Is##NAME() const { return code_ == (CODE); }
+
 namespace dingodb {
 namespace sdk {
 
-// TODO:: add sub code
+const static int32_t kNone = 0;
+
 class Status {
  public:
   // Create a success status.
-  Status() noexcept : state_(nullptr) {}
-  ~Status() { delete[] state_; }
+  Status() noexcept : code_(kOk), errno_(kNone), state_(nullptr) {}
+  ~Status() = default;
 
   Status(const Status& rhs);
   Status& operator=(const Status& rhs);
 
-  Status(Status&& rhs) noexcept : state_(rhs.state_) { rhs.state_ = nullptr; }
-
+  Status(Status&& rhs) noexcept;
   Status& operator=(Status&& rhs) noexcept;
 
-  // Return a success status.
+  bool ok() const { return code_ == kOk; }
   static Status OK() { return Status(); }
 
-  // Return error status of an appropriate type.
-  static Status NotFound(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kNotFound, msg, msg2); }
-
-  static Status Corruption(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kCorruption, msg, msg2); }
-
-  static Status NotSupported(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kNotSupported, msg, msg2); }
-
-  static Status InvalidArgument(const Slice& msg, const Slice& msg2 = Slice()) {
-    return Status(kInvalidArgument, msg, msg2);
-  }
-
-  static Status IOError(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kIOError, msg, msg2); }
-
-  static Status AlreadyPresent(const Slice& msg, const Slice& msg2 = Slice()) {
-    return Status(kAlreadyPresent, msg, msg2);
-  }
-
-  static Status RuntimeError(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kRuntimeError, msg, msg2); }
-
-  static Status NetworkError(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kNetworkError, msg, msg2); }
-  static Status IllegalState(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kIllegalState, msg, msg2); }
-
-  static Status NotAuthorized(const Slice& msg, const Slice& msg2 = Slice()) {
-    return Status(kNotAuthorized, msg, msg2);
-  }
-
-  static Status Aborted(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kAborted, msg, msg2); }
-
-  static Status RemoteError(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kRemoteError, msg, msg2); }
-
-  static Status ServiceUnavailable(const Slice& msg, const Slice& msg2 = Slice()) {
-    return Status(kServiceUnavailable, msg, msg2);
-  }
-
-  static Status TimedOut(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kTimedOut, msg, msg2); }
-
-  static Status Uninitialized(const Slice& msg, const Slice& msg2 = Slice()) {
-    return Status(kUninitialized, msg, msg2);
-  }
-
-  static Status ConfigurationError(const Slice& msg, const Slice& msg2 = Slice()) {
-    return Status(kConfigurationError, msg, msg2);
-  }
-
-  static Status Incomplete(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kIncomplete, msg, msg2); }
-
-  static Status NotLeader(const Slice& msg, const Slice& msg2 = Slice()) { return Status(kNotLeader, msg, msg2); }
-
-  // Returns true iff the status indicates success.
-  bool IsOK() const { return (state_ == nullptr); }
-
-  // Returns true iff the status indicates a NotFound error.
-  bool IsNotFound() const { return GetCode() == kNotFound; }
-
-  // Returns true iff the status indicates a Corruption error.
-  bool IsCorruption() const { return GetCode() == kCorruption; }
-
-  // Returns true iff the status indicates an IOError.
-  bool IsIOError() const { return GetCode() == kIOError; }
-
-  // Returns true iff the status indicates a NotSupportedError.
-  bool IsNotSupportedError() const { return GetCode() == kNotSupported; }
-
-  // Returns true iff the status indicates an InvalidArgument.
-  bool IsInvalidArgument() const { return GetCode() == kInvalidArgument; }
-
-  bool IsAlreadyPresent() const { return GetCode() == kAlreadyPresent; }
-
-  bool IsRuntimeError() const { return GetCode() == kRuntimeError; }
-
-  bool IsNetworkError() const { return GetCode() == kNetworkError; }
-
-  bool IsIllegalState() const { return GetCode() == kIllegalState; }
-
-  bool IsNotAuthorized() const { return GetCode() == kNotAuthorized; }
-
-  bool IsAborted() const { return GetCode() == kAborted; }
-
-  bool IsRemoteError() const { return GetCode() == kRemoteError; }
-
-  bool IsServiceUnavailable() const { return GetCode() == kServiceUnavailable; }
-
-  bool IsTimedOut() const { return GetCode() == kTimedOut; }
-
-  bool IsUninitialized() const { return GetCode() == kUninitialized; }
-
-  bool IsConfigurationError() const { return GetCode() == kConfigurationError; }
-
-  bool IsIncomplete() const { return GetCode() == kIncomplete; }
-
-  bool IsNotLeader() const { return GetCode() == kNotLeader; }
+  DECLARE_ERROR_STATUS(OK, kOk);
+  DECLARE_ERROR_STATUS(NotFound, kNotFound);
+  DECLARE_ERROR_STATUS(Corruption, kCorruption);
+  DECLARE_ERROR_STATUS(NotSupported, kNotSupported);
+  DECLARE_ERROR_STATUS(InvalidArgument, kInvalidArgument);
+  DECLARE_ERROR_STATUS(IOError, kIOError);
+  DECLARE_ERROR_STATUS(AlreadyPresent, kAlreadyPresent);
+  DECLARE_ERROR_STATUS(RuntimeError, kRuntimeError);
+  DECLARE_ERROR_STATUS(NetworkError, kNetworkError);
+  DECLARE_ERROR_STATUS(IllegalState, kIllegalState);
+  DECLARE_ERROR_STATUS(NotAuthorized, kNotAuthorized);
+  DECLARE_ERROR_STATUS(Aborted, kAborted);
+  DECLARE_ERROR_STATUS(RemoteError, kRemoteError);
+  DECLARE_ERROR_STATUS(ServiceUnavailable, kServiceUnavailable);
+  DECLARE_ERROR_STATUS(TimedOut, kTimedOut);
+  DECLARE_ERROR_STATUS(Uninitialized, kUninitialized);
+  DECLARE_ERROR_STATUS(ConfigurationError, kConfigurationError);
+  DECLARE_ERROR_STATUS(Incomplete, kIncomplete);
+  DECLARE_ERROR_STATUS(NotLeader, kNotLeader);
+  DECLARE_ERROR_STATUS(LockConflict, kLockConflict);
+  DECLARE_ERROR_STATUS(WriteConflict, kWriteConflict);
+  DECLARE_ERROR_STATUS(TxnNotFound, kTxnNotFound);
+  DECLARE_ERROR_STATUS(PrimaryMismatch, kPrimaryMismatch);
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
   std::string ToString() const;
 
  private:
-  enum Code {
+  enum Code : uint8_t {
     kOk = 0,
     kNotFound = 1,
     kCorruption = 2,
@@ -161,34 +103,44 @@ class Status {
     kUninitialized = 15,
     kConfigurationError = 16,
     kIncomplete = 17,
-    kNotLeader = 18
+    kNotLeader = 18,
+    kLockConflict = 19,
+    kWriteConflict = 20,
+    kTxnNotFound = 21,
+    kPrimaryMismatch = 22,
   };
 
-  Code GetCode() const { return (state_ == nullptr) ? kOk : static_cast<Code>(state_[4]); }
+  Status(Code code, int32_t p_errno, const Slice& msg, const Slice& msg2);
 
-  Status(Code code, const Slice& msg, const Slice& msg2);
-  static const char* CopyState(const char* s);
+  static std::unique_ptr<const char[]> CopyState(const char* s);
 
-  // OK status has a null state_.  Otherwise, state_ is a new[] array
-  // of the following form:
-  //    state_[0..3] == length of message
-  //    state_[4]    == code
-  //    state_[5..]  == message
-  const char* state_;
+  Code code_;
+  int32_t errno_;
+  // A nullptr state_ (which is at least the case for OK) means the extra message is empty.
+  std::unique_ptr<const char[]> state_;
 };
 
-inline Status::Status(const Status& rhs) { state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_); }
+inline Status::Status(const Status& rhs) : code_(rhs.code_), errno_(rhs.errno_) {
+  state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_.get());
+}
 
 inline Status& Status::operator=(const Status& rhs) {
   if (this != &rhs) {
-    delete[] state_;
-    state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
+    code_ = rhs.code_;
+    errno_ = rhs.errno_;
+    state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_.get());
   }
   return *this;
 }
 
+inline Status::Status(Status&& rhs) noexcept : Status() { *this = std::move(rhs); }
+
 inline Status& Status::operator=(Status&& rhs) noexcept {
-  std::swap(state_, rhs.state_);
+  if (this != &rhs) {
+    code_ = rhs.code_;
+    errno_ = rhs.errno_;
+    state_ = std::move(rhs.state_);
+  }
   return *this;
 }
 

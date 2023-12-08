@@ -14,7 +14,9 @@
 
 #include "sdk/coordinator_proxy.h"
 
+#include "common/logging.h"
 #include "proto/coordinator.pb.h"
+#include "proto/error.pb.h"
 
 namespace dingodb {
 namespace sdk {
@@ -54,13 +56,27 @@ Status CoordinatorProxy::Open(std::string naming_service_url) {
   return Status::OK();
 }
 
+Status CoordinatorProxy::QueryRegion(const pb::coordinator::QueryRegionRequest& request,
+                                     pb::coordinator::QueryRegionResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_->SendRequest("QueryRegion", request, response);
+  if (!rpc_status.ok()) {
+    if (rpc_status.error_code() == pb::error::Errno::EREGION_NOT_FOUND) {
+      return Status::NotFound(rpc_status.error_code(), rpc_status.error_cstr());
+    } else {
+      std::string msg = fmt::format("Fail query region {}", rpc_status.error_cstr());
+      return Status::RemoteError(rpc_status.error_code(), msg);
+    }
+  }
+  return Status::OK();
+}
+
 Status CoordinatorProxy::CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                                       pb::coordinator::CreateRegionResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("CreateRegion", request, response);
   if (!rpc_status.ok()) {
-    std::string msg =
-        fmt::format("CreateRegion request fail: code: {}, msg:{}", rpc_status.error_code(), rpc_status.error_cstr());
-    return Status::NetworkError(msg);
+    std::string msg = fmt::format("Fail create region {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
   }
   return Status::OK();
 }
@@ -69,10 +85,15 @@ Status CoordinatorProxy::DropRegion(const pb::coordinator::DropRegionRequest& re
                                     pb::coordinator::DropRegionResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("DropRegion", request, response);
   if (!rpc_status.ok()) {
-    std::string msg =
-        fmt::format("DropRegion fail, code: {}, msg:{}", rpc_status.error_code(), rpc_status.error_cstr());
-    return Status::NetworkError(msg);
+    std::string msg = fmt::format("Fail drop region {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    if (rpc_status.error_code() == pb::error::Errno::EREGION_NOT_FOUND) {
+      return Status::NotFound(rpc_status.error_code(), msg);
+    } else {
+      return Status::RemoteError(rpc_status.error_code(), msg);
+    }
   }
+
   return Status::OK();
 }
 
@@ -80,9 +101,9 @@ Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& 
                                      pb::coordinator::ScanRegionsResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("ScanRegions", request, response);
   if (!rpc_status.ok()) {
-    std::string msg =
-        fmt::format("ScanRegions request fail: code: {}, msg:{}", rpc_status.error_code(), rpc_status.error_cstr());
-    return Status::NetworkError(msg);
+    std::string msg = fmt::format("Fail scan regions {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
   }
   return Status::OK();
 }
@@ -90,9 +111,9 @@ Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& 
 Status CoordinatorProxy::TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
   butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("TsoService", request, response);
   if (!rpc_status.ok()) {
-    std::string msg =
-        fmt::format("TsoService request fail: code: {}, msg:{}", rpc_status.error_code(), rpc_status.error_cstr());
-    return Status::NetworkError(msg);
+    std::string msg = fmt::format("Fail tso service {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
   }
   return Status::OK();
 }

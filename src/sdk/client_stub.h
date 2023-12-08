@@ -22,6 +22,7 @@
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
 #include "sdk/rpc_interaction.h"
+#include "sdk/supervisor.h"
 
 namespace dingodb {
 namespace sdk {
@@ -42,6 +43,8 @@ class ClientStub {
 
   virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const { return region_scanner_factory_; }
 
+  virtual std::shared_ptr<Supervisor> GetSupervisor() const { return supervisor_; }
+
  private:
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
 
@@ -50,6 +53,8 @@ class ClientStub {
   std::shared_ptr<RpcInteraction> store_rpc_interaction_;
 
   std::shared_ptr<RegionScannerFactory> region_scanner_factory_;
+
+  std::shared_ptr<Supervisor> supervisor_;
 };
 
 }  // namespace sdk

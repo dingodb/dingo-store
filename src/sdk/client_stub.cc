@@ -20,12 +20,14 @@
 #include "sdk/region_scanner_impl.h"
 #include "sdk/rpc_interaction.h"
 #include "sdk/status.h"
+#include "sdk/supervisor.h"
 
 namespace dingodb {
 
 namespace sdk {
 
-ClientStub::ClientStub() = default;
+ClientStub::ClientStub()
+    : coordinator_proxy_(nullptr), region_scanner_factory_(nullptr), meta_cache_(nullptr), supervisor_(nullptr) {}
 
 ClientStub::~ClientStub() = default;
 
@@ -43,6 +45,8 @@ Status ClientStub::Open(std::string naming_service_url) {
   meta_cache_.reset(new MetaCache(coordinator_proxy_));
 
   region_scanner_factory_.reset(new RegionScannerFactoryImpl());
+
+  supervisor_.reset(new Supervisor(coordinator_proxy_));
 
   return Status::OK();
 }

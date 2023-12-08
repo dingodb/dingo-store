@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <iterator>
 #include <memory>
@@ -35,9 +36,13 @@ using dingodb::sdk::Status;
 DEFINE_string(coordinator_url, "", "coordinator url");
 
 // TODO: remove
-static std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
+static std::shared_ptr<dingodb::CoordinatorInteraction> g_coordinator_interaction;
 
-static std::shared_ptr<dingodb::sdk::CoordinatorProxy> coordinator_proxy;
+static std::shared_ptr<dingodb::sdk::CoordinatorProxy> g_coordinator_proxy;
+
+static std::shared_ptr<dingodb::sdk::Client> g_client;
+
+static std::vector<int64_t> g_region_ids;
 
 void CreateRegion(std::string name, std::string start_key, std::string end_key, int replicas = 3) {
   CHECK(!name.empty()) << "name should not empty";
@@ -46,23 +51,37 @@ void CreateRegion(std::string name, std::string start_key, std::string end_key, 
   CHECK(start_key < end_key) << "start_key must < end_key";
   CHECK(replicas > 0) << "replicas must > 0";
 
-  dingodb::pb::coordinator::CreateRegionRequest request;
-  dingodb::pb::coordinator::CreateRegionResponse response;
+  std::shared_ptr<dingodb::sdk::RegionCreator> creator;
+  Status built = g_client->NewRegionCreator(creator);
+  CHECK(built.IsOK()) << "dingo creator build fail";
+  CHECK_NOTNULL(creator.get());
 
-  request.set_region_name(name);
-  request.set_replica_num(replicas);
-  request.mutable_range()->set_start_key(start_key);
-  request.mutable_range()->set_end_key(end_key);
+  int64_t region_id = -1;
+  Status tmp =
+      creator->SetRegionName(name).SetRange(start_key, end_key).SetReplicaNum(replicas).Wait(true).Create(region_id);
+  DINGO_LOG(INFO) << "Create region status: " << tmp.ToString() << ", region_id:" << region_id;
 
-  DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
+  if (tmp.ok()) {
+    CHECK(region_id > 0);
+    bool inprogress = true;
+    g_client->IsCreateRegionInProgress(region_id, inprogress);
+    CHECK(!inprogress);
+    g_region_ids.push_back(region_id);
+  }
+}
 
-  auto status2 = coordinator_proxy->CreateRegion(request, response);
-  DINGO_LOG(INFO) << "SendRequest status:" << status2.ToString();
-  DINGO_LOG(INFO) << response.DebugString();
+void PostClean() {
+  for (const auto region_id : g_region_ids) {
+    Status tmp = g_client->DropRegion(region_id);
+    DINGO_LOG(INFO) << "drop region status: " << tmp.ToString() << ", region_id:" << region_id;
+    bool inprogress = true;
+    tmp = g_client->IsCreateRegionInProgress(region_id, inprogress);
+    DINGO_LOG(INFO) << "query region status: " << tmp.ToString() << ", region_id:" << region_id;
+  }
 }
 
 void MetaCacheExample() {
-  auto meta_cache = std::make_shared<MetaCache>(coordinator_proxy);
+  auto meta_cache = std::make_shared<MetaCache>(g_coordinator_proxy);
 
   std::shared_ptr<Region> region;
   Status got = meta_cache->LookupRegionByKey("wb", region);
@@ -81,13 +100,8 @@ void MetaCacheExample() {
 }
 
 void RawKVExample() {
-  std::shared_ptr<dingodb::sdk::Client> client;
-  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, client);
-  CHECK(built.IsOK()) << "dingo client build fail";
-  CHECK_NOTNULL(client.get());
-
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  built = client->NewRawKV(raw_kv);
+  Status built = g_client->NewRawKV(raw_kv);
   CHECK(built.IsOK()) << "dingo raw_kv build fail";
   CHECK_NOTNULL(raw_kv.get());
 
@@ -479,19 +493,28 @@ int main(int argc, char* argv[]) {
   }
 
   CHECK(!FLAGS_coordinator_url.empty());
-  coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
-  if (!coordinator_interaction->InitByNameService(
+  g_coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
+  if (!g_coordinator_interaction->InitByNameService(
           FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
     DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coordinator_url;
     return -1;
   }
 
-  coordinator_proxy = std::make_shared<dingodb::sdk::CoordinatorProxy>();
-  Status open = coordinator_proxy->Open(FLAGS_coordinator_url);
+  g_coordinator_proxy = std::make_shared<dingodb::sdk::CoordinatorProxy>();
+  Status open = g_coordinator_proxy->Open(FLAGS_coordinator_url);
   if (!open.IsOK()) {
     DINGO_LOG(ERROR) << "Fail to open coordinator_proxy, please check parameter --url=" << FLAGS_coordinator_url;
     return -1;
   }
+
+  std::shared_ptr<dingodb::sdk::Client> client;
+  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, client);
+  if (!built.ok()) {
+    DINGO_LOG(ERROR) << "Fail to build client, please check parameter --url=" << FLAGS_coordinator_url;
+    return -1;
+  }
+  CHECK_NOTNULL(client.get());
+  g_client = std::move(client);
 
   CreateRegion("skd_example01", "wa00000000", "wc00000000", 3);
   CreateRegion("skd_example02", "wc00000000", "we00000000", 3);
@@ -499,10 +522,9 @@ int main(int argc, char* argv[]) {
 
   CreateRegion("skd_example04", "wl00000000", "wn00000000", 3);
 
-  // wait region ready
-  sleep(3);
-
   MetaCacheExample();
 
   RawKVExample();
+
+  PostClean();
 }

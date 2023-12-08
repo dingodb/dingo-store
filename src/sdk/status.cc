@@ -11,30 +11,28 @@
 
 namespace dingodb {
 namespace sdk {
-
-const char* Status::CopyState(const char* state) {
-  uint32_t size;
-  std::memcpy(&size, state, sizeof(size));
-  char* result = new char[size + 5];
-  std::memcpy(result, state, size + 5);
-  return result;
+std::unique_ptr<const char[]> Status::CopyState(const char* s) {
+  const size_t cch = std::strlen(s) + 1;  // +1 for the null terminator
+  char* rv = new char[cch];
+  std::strncpy(rv, s, cch);
+  return std::unique_ptr<const char[]>(rv);
 }
 
-Status::Status(Code code, const Slice& msg, const Slice& msg2) {
-  assert(code != kOk);
+Status::Status(Code code, int32_t p_errno, const Slice& msg, const Slice& msg2) : code_(code), errno_(p_errno) {
   const uint32_t len1 = static_cast<uint32_t>(msg.size());
   const uint32_t len2 = static_cast<uint32_t>(msg2.size());
   const uint32_t size = len1 + (len2 ? (2 + len2) : 0);
-  char* result = new char[size + 5];
-  std::memcpy(result, &size, sizeof(size));
-  result[4] = static_cast<char>(code);
-  std::memcpy(result + 5, msg.data(), len1);
+
+  char* const result = new char[size + 1];  // +1 for null terminator
+  memcpy(result, msg.data(), len1);
+
   if (len2) {
-    result[5 + len1] = ':';
-    result[6 + len1] = ' ';
-    std::memcpy(result + 7 + len1, msg2.data(), len2);
+    result[len1] = ':';
+    result[len1 + 1] = ' ';
+    memcpy(result + len1 + 2, msg2.data(), len2);
   }
-  state_ = result;
+  result[size] = '\0';  // null terminator for C style string
+  state_.reset(result);
 }
 
 std::string Status::ToString() const {
@@ -43,21 +41,21 @@ std::string Status::ToString() const {
   } else {
     char tmp[30];
     const char* type;
-    switch (GetCode()) {
+    switch (code_) {
       case kOk:
         type = "OK";
         break;
       case kNotFound:
-        type = "NotFound: ";
+        type = "NotFound";
         break;
       case kCorruption:
-        type = "Corruption: ";
+        type = "Corruption";
         break;
       case kNotSupported:
-        type = "Not implemented: ";
+        type = "Not implemented";
         break;
       case kInvalidArgument:
-        type = "Invalid argument: ";
+        type = "Invalid argument";
         break;
       case kIOError:
         type = "IO error: ";
@@ -101,18 +99,33 @@ std::string Status::ToString() const {
       case kNotLeader:
         type = "NotLeader";
         break;
+      case kLockConflict:
+        type = "LockConflict";
+        break;
+      case kWriteConflict:
+        type = "WriteConflict";
+        break;
+      case kTxnNotFound:
+        type = "TxnNotFound";
+        break;
+      case kPrimaryMismatch:
+        type = "PrimaryMismatch";
+        break;
       default:
-        std::string tmp = fmt::format("Unknown code({}):", static_cast<int>(GetCode()));
+        std::string tmp = fmt::format("Unknown code({}):", static_cast<int>(code_));
         CHECK(false) << tmp;
     }
 
     std::string result(type);
-    uint32_t length;
-    std::memcpy(&length, state_, sizeof(length));
-    if(length) {
-      result.append(": ");
+    if (errno_ != kNone) {
+      result.append(fmt::format(" (errno:{}) ", errno_));
     }
-    result.append(state_ + 5, length);
+
+    if (state_ != nullptr) {
+      result.append(": ");
+      result.append(state_.get());
+    }
+
     return result;
   }
 }
