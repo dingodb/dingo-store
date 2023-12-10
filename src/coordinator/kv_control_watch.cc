@@ -206,7 +206,7 @@ butil::Status KvControl::RemoveOneTimeWatch() {
   one_time_watch_closure_status_map_.GetRawMapCopy(closure_status_map);
 
   if (closure_status_map.empty()) {
-    DINGO_LOG(INFO) << "CRONTAB RemoveOneTimeWatch, done_map is empty";
+    DINGO_LOG(DEBUG) << "CRONTAB RemoveOneTimeWatch, done_map is empty";
     return butil::Status::OK();
   }
 

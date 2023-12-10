@@ -344,8 +344,7 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
           << "[term=" << term << "][applied_term=" << applied_term;
       return;
     } else if (meta_increment.ByteSizeLong() > 0) {
-      DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement index <= applied_index && term <<= applied_term [index=" << index
-                      << "][applied_index=" << applied_index << "]"
+      DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement [index=" << index << "][applied_index=" << applied_index << "]"
                       << "[term=" << term << "][applied_term=" << applied_term << "]";
       KvLogMetaIncrementSize(meta_increment);
     } else {

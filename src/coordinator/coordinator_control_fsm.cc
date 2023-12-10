@@ -149,7 +149,7 @@ void CoordinatorControl::OnLeaderStop() {
   region_metrics_map_.Clear();
 
   // clear all store_metrics on follower
-  DeleteStoreMetrics(0);
+  DeleteStoreRegionMetrics(0);
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
@@ -913,8 +913,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           << "[term=" << term << "][applied_term=" << applied_term << "]";
       return;
     } else if (meta_increment.ByteSizeLong() > 0) {
-      DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement index <= applied_index && term <<= applied_term [index=" << index
-                      << "][applied_index=" << applied_index << "]"
+      DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement [index=" << index << "][applied_index=" << applied_index << "]"
                       << "[term=" << term << "][applied_term=" << applied_term;
       LogMetaIncrementSize(meta_increment);
     } else {
@@ -1020,7 +1019,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   // 2.store map
   {
     if (meta_increment.stores_size() > 0) {
-      DINGO_LOG(INFO) << "2.stores_size=" << meta_increment.stores_size();
+      DINGO_LOG(DEBUG) << "2.stores_size=" << meta_increment.stores_size();
     }
 
     for (int i = 0; i < meta_increment.stores_size(); i++) {
@@ -1611,9 +1610,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
         DINGO_LOG(INFO) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
                         << " region_cmd count change [" << store_operation_in_map.region_cmd_ids_size() << ", "
-                        << store_operation_residual.region_cmd_ids_size() << "]  orig_store_operation=["
-                        << store_operation.ShortDebugString() << "] new_store_operation=["
-                        << store_operation_residual.ShortDebugString() << "]";
+                        << store_operation_residual.region_cmd_ids_size();
+
+        DINGO_LOG(DEBUG) << "store_operation_map_.Put in DELETE, store_id=" << store_operation.id()
+                         << " region_cmd count change [" << store_operation_in_map.region_cmd_ids_size() << ", "
+                         << store_operation_residual.region_cmd_ids_size() << "]  orig_store_operation=["
+                         << store_operation.ShortDebugString() << "] new_store_operation=["
+                         << store_operation_residual.ShortDebugString() << "]";
       }
     }
   }

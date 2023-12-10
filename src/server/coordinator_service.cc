@@ -584,9 +584,9 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
 
   // validate store
   if (!request->has_store()) {
-    auto *error = response->mutable_error();
-    error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
     DINGO_LOG(ERROR) << "StoreHeartBeat has_store() is false, reject heartbeat";
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EILLEGAL_PARAMTETERS,
+                            "StoreHeartBeat has_store() is false, reject heartbeat");
     return;
   }
 
@@ -594,6 +594,8 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
   if (ret) {
     DINGO_LOG(ERROR) << "StoreHeartBeat ValidateStore failed, reject heardbeat, store_id=" << request->store().id()
                      << " keyring=" << request->store().keyring();
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EILLEGAL_PARAMTETERS,
+                            "StoreHeartBeat ValidateStore failed, reject heardbeat");
     return;
   }
 
@@ -619,22 +621,21 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
   }
 
-  // if no need to update meta, just return
-  if (meta_increment.ByteSizeLong() == 0) {
+  // if no need to update meta, just skip raft submit
+  if (meta_increment.ByteSizeLong() > 0) {
     DINGO_LOG(DEBUG) << "StoreHeartbeat no need to update meta, store_id=" << request->store().id();
-    return;
-  }
 
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+    std::shared_ptr<Context> ctx = std::make_shared<Context>();
+    ctx->SetRegionId(Constant::kMetaRegionId);
+    ctx->SetRequestId(request->request_info().request_id());
 
-  // this is a async operation will be block by closure
-  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-  if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "StoreHeartbeat Write failed:  store_id=" << request->store().id();
-    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
-    return;
+    // this is a async operation will be block by closure
+    auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+    if (!ret2.ok()) {
+      DINGO_LOG(ERROR) << "StoreHeartbeat Write failed:  store_id=" << request->store().id();
+      ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+      return;
+    }
   }
 
   auto *new_storemap = response->mutable_storemap();
@@ -679,7 +680,7 @@ void DoGetStoreMetrics(google::protobuf::RpcController * /*controller*/,
   // get store metrics
   pb::common::StoreMetrics store_metrics;
   std::vector<pb::common::StoreMetrics> store_metrics_list;
-  coordinator_control->GetStoreMetrics(request->store_id(), request->region_id(), store_metrics_list);
+  coordinator_control->GetStoreRegionMetrics(request->store_id(), request->region_id(), store_metrics_list);
 
   for (auto &store_metrics : store_metrics_list) {
     auto *new_store_metrics = response->add_store_metrics();
@@ -702,7 +703,7 @@ void DoDeleteStoreMetrics(google::protobuf::RpcController * /*controller*/,
   }
 
   // get store metrics
-  coordinator_control->DeleteStoreMetrics(request->store_id());
+  coordinator_control->DeleteStoreRegionMetrics(request->store_id());
 }
 
 void DoGetRegionMetrics(google::protobuf::RpcController * /*controller*/,
