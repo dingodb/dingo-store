@@ -1,6 +1,6 @@
 [submodule "contrib/braft"]
 	path = contrib/braft
-	url = https://github.com/brpc/braft
+	url = https://github.com/dingodb/braft
 [submodule "contrib/brpc"]
 	path = contrib/brpc
 	url = https://github.com/apache/brpc
