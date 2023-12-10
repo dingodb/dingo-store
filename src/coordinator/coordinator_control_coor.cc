@@ -145,25 +145,24 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
-void CoordinatorControl::GetStoreMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
-  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
+  BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
   if (store_id == 0) {
-    for (auto& elemnt : store_metrics_map_) {
+    for (auto& elemnt : store_region_metrics_map_) {
       store_metrics.push_back(elemnt.second);
     }
   } else {
-    auto* it = store_metrics_map_.seek(store_id);
-    if (it != nullptr) {
-      store_metrics.push_back(*it);
+    if (store_region_metrics_map_.find(store_id) != store_region_metrics_map_.end()) {
+      store_metrics.push_back(store_region_metrics_map_.at(store_id));
     }
   }
 }
 
-void CoordinatorControl::GetStoreMetrics(int64_t store_id, int64_t region_id,
-                                         std::vector<pb::common::StoreMetrics>& store_metrics) {
-  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, int64_t region_id,
+                                               std::vector<pb::common::StoreMetrics>& store_metrics) {
+  BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
   if (store_id == 0) {
-    for (auto& element : store_metrics_map_) {
+    for (auto& element : store_region_metrics_map_) {
       if (region_id == 0) {
         store_metrics.push_back(element.second);
       } else {
@@ -179,24 +178,17 @@ void CoordinatorControl::GetStoreMetrics(int64_t store_id, int64_t region_id,
       }
     }
   } else {
-    auto* it = store_metrics_map_.seek(store_id);
-    if (it != nullptr) {
+    if (store_region_metrics_map_.find(store_id) != store_region_metrics_map_.end()) {
       if (region_id == 0) {
-        store_metrics.push_back(*it);
+        store_metrics.push_back(store_region_metrics_map_.at(store_id));
       } else {
         pb::common::StoreMetrics tmp_store_metrics;
-        tmp_store_metrics.set_id(it->id());
+        tmp_store_metrics.set_id(store_id);
 
-        const auto& region_metrics_map = it->region_metrics_map();
+        const auto& region_metrics_map = store_region_metrics_map_.at(store_id).region_metrics_map();
         if (region_metrics_map.find(region_id) != region_metrics_map.end()) {
           tmp_store_metrics.mutable_region_metrics_map()->insert({region_id, region_metrics_map.at(region_id)});
         }
-
-        DINGO_LOG(INFO) << "GetStoreMetrics store_id=" << store_id << " region_id=" << region_id
-                        << " region_metrics_map.size()=" << region_metrics_map.size()
-                        << " tmp_store_metrics=" << tmp_store_metrics.DebugString() << " it=" << it->DebugString()
-                        << " it->id()=" << it->id()
-                        << " it->region_metrics_map().size()=" << it->region_metrics_map().size();
 
         store_metrics.push_back(tmp_store_metrics);
       }
@@ -206,16 +198,27 @@ void CoordinatorControl::GetStoreMetrics(int64_t store_id, int64_t region_id,
   }
 }
 
-void CoordinatorControl::DeleteStoreMetrics(int64_t store_id) {
-  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-  if (store_id == 0) {
-    for (const auto& it : store_metrics_map_) {
-      coordinator_bvar_metrics_store_.DeleteStoreBvar(it.first);
+void CoordinatorControl::DeleteStoreRegionMetrics(int64_t store_id) {
+  {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    if (store_id == 0) {
+      for (const auto& it : store_region_metrics_map_) {
+        coordinator_bvar_metrics_store_.DeleteStoreBvar(it.first);
+      }
+      store_region_metrics_map_.clear();
+    } else {
+      store_region_metrics_map_.erase(store_id);
+      coordinator_bvar_metrics_store_.DeleteStoreBvar(store_id);
     }
-    store_metrics_map_.clear();
-  } else {
-    store_metrics_map_.erase(store_id);
-    coordinator_bvar_metrics_store_.DeleteStoreBvar(store_id);
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    if (store_id == 0) {
+      store_metrics_map_.clear();
+    } else {
+      store_metrics_map_.erase(store_id);
+    }
   }
 }
 
@@ -254,9 +257,9 @@ void CoordinatorControl::DeleteRegionMetrics(int64_t region_id) {
 
 butil::Status CoordinatorControl::GetOrphanRegion(int64_t store_id,
                                                   std::map<int64_t, pb::common::RegionMetrics>& orphan_regions) {
-  BAIDU_SCOPED_LOCK(this->store_metrics_map_mutex_);
+  BAIDU_SCOPED_LOCK(this->store_region_metrics_map_mutex_);
 
-  for (const auto& it : this->store_metrics_map_) {
+  for (const auto& it : store_region_metrics_map_) {
     if (it.first != store_id && store_id != 0) {
       continue;
     }
@@ -456,8 +459,13 @@ int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
         *(store_increment_store->mutable_raft_location()) = store.raft_location();
         store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
         store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
-      } else {
-        // this is normall heartbeat,
+      } else if (store_to_update.server_location().host() != store.server_location().host() ||
+                 store_to_update.server_location().port() != store.server_location().port() ||
+                 store_to_update.raft_location().host() != store.raft_location().host() ||
+                 store_to_update.raft_location().port() != store.raft_location().port() ||
+                 store_to_update.resource_tag() != store.resource_tag() ||
+                 store_to_update.keyring() != store.keyring()) {
+        // this is normal heartbeat, with state change or location change
         // so only need to update state & last_seen_timestamp, no need to update epoch
         auto* store_increment = meta_increment.add_stores();
         store_increment->set_id(store.id());
@@ -469,6 +477,18 @@ int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
         // only update state & last_seen_timestamp
         store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
         store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
+      } else {
+        // this is normal heartbeat, with no state change and no location change
+        store_to_update.set_last_seen_timestamp(butil::gettimeofday_ms());
+        store_to_update.set_state(pb::common::StoreState::STORE_NORMAL);
+        auto ret = store_map_.Put(store_to_update.id(), store_to_update);
+        if (ret < 0) {
+          DINGO_LOG(ERROR) << "UpdateStoreMap store_map_.Put failed, store_id=" << store_to_update.id();
+        }
+        DINGO_LOG(INFO) << "NORMAL HEARTBEAT store_id = " << store_to_update.id()
+                        << " status = " << pb::common::StoreState_Name(store_to_update.state())
+                        << " time = " << store_to_update.last_seen_timestamp();
+        return store_map_epoch;
       }
     } else {
       // this is a special new store's first heartbeat
@@ -615,9 +635,9 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
 }
 
 void CoordinatorControl::UpdateClusterReadOnly() {
-  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
   bool cluster_is_read_only = false;
-  for (const auto& store_metrics : store_metrics_map_) {
+  for (const auto& store_metrics : store_region_metrics_map_) {
     if (store_metrics.second.store_own_metrics().is_ready_only()) {
       pb::common::Store store;
       auto ret = store_map_.Get(store_metrics.first, store);
@@ -977,8 +997,8 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 
   // load all region_id to region_id_on_store
   {
-    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    for (auto& store_metric : store_metrics_map_) {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    for (auto& store_metric : store_region_metrics_map_) {
       const auto& region_metrics_map = store_metric.second.region_metrics_map();
       for (const auto& region_metric : region_metrics_map) {
         region_id_on_store[store_metric.first].push_back(region_metric.first);
@@ -1338,7 +1358,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
   // if (store_type == pb::common::StoreType::NODE_TYPE_INDEX) {
   for (const auto& store : stores_for_regions) {
     std::vector<pb::common::StoreMetrics> tmp_store_metrics;
-    GetStoreMetrics(store.id(), tmp_store_metrics);
+    GetStoreRegionMetrics(store.id(), tmp_store_metrics);
     if (tmp_store_metrics.empty()) {
       DINGO_LOG(WARNING) << "Store metrics not found, store_id=" << store.id() << ", just make use of it";
       tmp_stores_for_regions.push_back(store);
@@ -1482,10 +1502,10 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
     {
       BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-      auto* ptr = store_metrics_map_.seek(it.id());
-      if (ptr != nullptr) {
-        store_more.region_num = ptr->region_metrics_map_size() > 0 ? ptr->region_metrics_map_size() : 0;
-        store_own_metrics = ptr->store_own_metrics();
+      auto it2 = store_metrics_map_.find(it.id());
+      if (it2 != store_metrics_map_.end()) {
+        store_own_metrics = it2->second.store_own_metrics;
+        store_more.region_num = it2->second.region_num > 0 ? it2->second.region_num : 0;
       }
     }
 
@@ -1966,39 +1986,6 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
     DINGO_LOG(INFO) << "store_operation_increment = " << store_operation.ShortDebugString();
   }
 
-  // fix: now update table/index range distribution in raft apply
-  // need to update table's range distribution
-  // if (split_from_region_id > 0 && table_id > 0) {
-  //   pb::coordinator_internal::TableInternal table_internal;
-  //   int ret = table_map_.Get(table_id, table_internal);
-  //   if (ret < 0) {
-  //     DINGO_LOG(INFO) << "CreateRegionForSplit table_id not exists, id=" << table_id;
-  //     return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not exists");
-  //   }
-
-  //   // update table's range distribution
-  //   auto* update_table_internal = meta_increment.add_tables();
-  //   update_table_internal->set_id(table_id);
-  //   update_table_internal->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-  //   auto* update_table_internal_table = update_table_internal->mutable_table();
-  //   update_table_internal_table->set_id(table_id);
-  //   for (const auto& it : table_internal.partitions()) {
-  //     *(update_table_internal_table->add_partitions())=it;
-  //   }
-
-  //   auto* new_partition = update_table_internal_table->add_partitions();
-  //   // new_partition->mutable_range()->set_start_key(region_range.start_key());
-  //   // new_partition->mutable_range()->set_end_key(region_range.end_key());
-  //   new_partition->set_region_id(create_region_id);
-  //   new_partition->set_part_id(part_id);
-  // }
-
-  // on_apply
-  // region_map_epoch++;                                               // raft_kv_put
-  // region_map_.insert(std::make_pair(create_region_id, new_region));  // raft_kv_put
-
-  // new_region_id = create_region_id;
-
   return butil::Status::OK();
 }
 
@@ -2162,6 +2149,17 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
                          "SplitRegion split_from_region is not ready for split");
   }
 
+  // check if all peers are healthy
+  auto peer_status = CheckRegionAllPeerOnline(split_from_region_id);
+  if (!peer_status.ok()) {
+    DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
+                        "split_from_region_id = "
+                     << split_from_region_id << " from_state=" << split_from_region.state()
+                     << ",  error: " << peer_status.error_str();
+    return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL,
+                         "SplitRegion split_from_region is not ready for split, error: %s", peer_status.error_cstr());
+  }
+
   // validate split_watershed_key
   if (split_watershed_key.empty()) {
     DINGO_LOG(ERROR) << "SplitRegion split_watershed_key is empty";
@@ -2298,6 +2296,17 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
     return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL, "SplitRegion split_from_region is not ready");
   }
 
+  // check if all peers are healthy
+  auto peer_status = CheckRegionAllPeerOnline(split_from_region_id);
+  if (!peer_status.ok()) {
+    DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
+                        "split_from_region_id = "
+                     << split_from_region_id << " from_state=" << split_from_region.state()
+                     << ",  error: " << peer_status.error_str();
+    return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL,
+                         "SplitRegion split_from_region is not ready for split, error: %s", peer_status.error_cstr());
+  }
+
   // only send split region_cmd to split_from_region_id's leader store id
   auto leader_store_id = GetRegionLeaderId(split_from_region_id);
   if (leader_store_id == 0) {
@@ -2424,6 +2433,27 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
                         "merge_to_region_id = "
                      << merge_to_region_id << " from_state=" << merge_to_region.state();
     return butil::Status(pb::error::Errno::EMERGE_STATUS_ILLEGAL, "MergeRegion merge_to_region is not ready for merge");
+  }
+
+  // check if all peers are healthy
+  auto peer_status = CheckRegionAllPeerOnline(merge_from_region_id);
+  if (!peer_status.ok()) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region is not ready for merge, "
+                        "merge_from_region_id = "
+                     << merge_from_region_id << " from_state=" << merge_from_region.state()
+                     << ",  error: " << peer_status.error_str();
+    return butil::Status(pb::error::Errno::EMERGE_STATUS_ILLEGAL,
+                         "MergeRegion merge_from_region is not ready for merge, error: %s", peer_status.error_cstr());
+  }
+
+  peer_status = CheckRegionAllPeerOnline(merge_to_region_id);
+  if (!peer_status.ok()) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_to_region is not ready for merge, "
+                        "merge_to_region_id = "
+                     << merge_to_region_id << " from_state=" << merge_to_region.state()
+                     << ",  error: " << peer_status.error_str();
+    return butil::Status(pb::error::Errno::EMERGE_STATUS_ILLEGAL,
+                         "MergeRegion merge_to_region is not ready for merge, error: %s", peer_status.error_cstr());
   }
 
   // validate merge_from_region_id and merge_to_region_id
@@ -2638,6 +2668,18 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
                          "ChangePeerRegion region is not ready for change_peer");
   }
 
+  // check if region leader is healthy
+  auto leader_store_status = CheckRegionLeaderOnline(region_id);
+  if (!leader_store_status.ok()) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                     << ", region leader is not ready for "
+                        "change_peer, region_id = "
+                     << region_id << ", error: " << leader_store_status.error_str();
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
+                         "ChangePeerRegion region leader is not ready for change_peer, error: %s",
+                         leader_store_status.error_cstr());
+  }
+
   // validate new_store_ids
   if (new_store_ids.size() != (region.definition().peers_size() + 1) &&
       new_store_ids.size() != (region.definition().peers_size() - 1) && (!new_store_ids.empty())) {
@@ -2683,19 +2725,30 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
                          "ChangePeerRegion new_store_ids can only has one diff store");
   }
 
+  if (new_store_ids_diff_more.size() == 1) {
+    auto store_status = CheckStoreNormal(new_store_ids_diff_more.at(0));
+    if (!store_status.ok()) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                       << ", new_store_ids_diff_more store is not normal, region_id = " << region_id
+                       << " store_id = " << new_store_ids_diff_more.at(0);
+      return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
+                           "ChangePeerRegion new_store_ids_diff_more store is not normal, %s",
+                           store_status.error_cstr());
+    }
+  }
+
   // for region with epoch > 1, check if all peer has eligible snapshot (snapshot's epoch version is equal to region
   if (region.definition().epoch().version() > 1) {
     for (const auto& store_id : old_store_ids) {
-      BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-      auto* ptr = store_metrics_map_.seek(store_id);
-      if (ptr == nullptr) {
+      BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+      if (store_region_metrics_map_.find(store_id) == store_region_metrics_map_.end()) {
         DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
-                         << ", store_metrics_map seek failed, store_id = " << store_id;
-        return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "ChangePeerRegion store_metrics_map seek failed");
+                         << ", store_metrics_map find failed, store_id = " << store_id;
+        return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "ChangePeerRegion store_metrics_map find failed");
       }
 
-      auto it = ptr->region_metrics_map().find(region_id);
-      if (it == ptr->region_metrics_map().end()) {
+      auto it = store_region_metrics_map_[store_id].region_metrics_map().find(region_id);
+      if (it == store_region_metrics_map_[store_id].region_metrics_map().end()) {
         DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics_map seek failed, region_id = " << region_id;
         return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region_metrics_map seek failed");
       }
@@ -3914,10 +3967,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
 
       region_metrics_map_.Put(region_metrics.id(), region_metrics_to_update);
 
-      DINGO_LOG(INFO) << "UpdateRegionMapAndStoreOperation region_metrics_map_ update region_id = "
-                      << region_metrics.id()
-                      << " last_update_timestamp = " << region_metrics_to_update.region_status().last_update_timestamp()
-                      << " now = " << butil::gettimeofday_ms();
+      DINGO_LOG(DEBUG) << "UpdateRegionMapAndStoreOperation region_metrics_map_ update region_id = "
+                       << region_metrics.id() << " last_update_timestamp = "
+                       << region_metrics_to_update.region_status().last_update_timestamp()
+                       << " now = " << butil::gettimeofday_ms();
     }
 
     // mbvar region
@@ -3939,19 +3992,35 @@ int64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& s
     return -1;
   }
 
-  {
+  if (store_metrics.region_metrics_map_size() <= 0) {
+    DINGO_LOG(DEBUG) << "UpdateStoreMetrics store_metrics.region_metrics_map_size() <= 0, store_id="
+                     << store_metrics.id() << ", do not update StoreMetrics";
+    return 0;
+  }
+
+  if (!store_metrics.is_partial_region_metrics()) {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    StoreMetricsSlim store_metrics_slim;
+    store_metrics_slim.store_id = store_metrics.id();
+    store_metrics_slim.store_own_metrics = store_metrics.store_own_metrics();
+    store_metrics_slim.region_num = store_metrics.region_metrics_map_size();
+
+    store_metrics_map_.insert_or_assign(store_metrics.id(), std::move(store_metrics_slim));
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
     if (store_metrics.is_partial_region_metrics()) {
-      auto* ptr = store_metrics_map_.seek(store_metrics.id());
-      if (ptr == nullptr) {
-        store_metrics_map_.insert(store_metrics.id(), store_metrics);
+      if (store_region_metrics_map_.find(store_metrics.id()) == store_region_metrics_map_.end()) {
+        store_region_metrics_map_.insert_or_assign(store_metrics.id(), store_metrics);
       } else {
         for (const auto& region_metrics : store_metrics.region_metrics_map()) {
-          ptr->mutable_region_metrics_map()->insert({region_metrics.first, region_metrics.second});
+          store_region_metrics_map_[store_metrics.id()].mutable_region_metrics_map()->insert(
+              {region_metrics.first, region_metrics.second});
         }
       }
     } else {
-      store_metrics_map_.insert(store_metrics.id(), store_metrics);
+      store_region_metrics_map_.insert_or_assign(store_metrics.id(), store_metrics);
     }
   }
 
@@ -3961,9 +4030,7 @@ int64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& s
                                                   store_metrics.store_own_metrics().system_free_capacity());
 
   // use region_metrics_map to update region_map and store_operation
-  if (store_metrics.region_metrics_map_size() > 0) {
-    UpdateRegionMapAndStoreOperation(store_metrics, meta_increment);
-  }
+  UpdateRegionMapAndStoreOperation(store_metrics, meta_increment);
 
   DINGO_LOG(INFO) << "UpdateStoreMetricsMap store_metrics.id=" << store_metrics.id();
 
@@ -4056,9 +4123,18 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_store_metrics_map_count(store_metrics_map_.size());
     for (auto& it : store_metrics_map_) {
       memory_info.set_store_metrics_map_size(memory_info.store_metrics_map_size() + sizeof(it.first) +
-                                             it.second.ByteSizeLong());
+                                             it.second.store_own_metrics.ByteSizeLong() + sizeof(int64_t) * 2);
     }
     memory_info.set_total_size(memory_info.total_size() + memory_info.store_metrics_map_size());
+  }
+  {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    memory_info.set_store_region_metrics_map_count(store_region_metrics_map_.size());
+    for (auto& it : store_region_metrics_map_) {
+      memory_info.set_store_region_metrics_map_size(memory_info.store_region_metrics_map_size() + sizeof(it.first) +
+                                                    it.second.ByteSizeLong());
+    }
+    memory_info.set_total_size(memory_info.total_size() + memory_info.store_region_metrics_map_size());
   }
   {
     // BAIDU_SCOPED_LOCK(table_metrics_map_mutex_);
@@ -4352,8 +4428,8 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
 //   purge_region_task->add_store_operations();
 //   store_operation_purge->set_id(store_id);
 //   auto* region_cmd_to_purge = store_operation_purge->add_region_cmds();
-//   region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-//   region_cmd_to_purge->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_PURGE);
+//   region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD,
+//   meta_increment)); region_cmd_to_purge->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_PURGE);
 //   region_cmd_to_purge->set_region_id(region_id);
 //   region_cmd_to_purge->set_create_timestamp(butil::gettimeofday_ms());
 //   region_cmd_to_purge->mutable_purge_request()->set_region_id(region_id);
@@ -4579,14 +4655,15 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
   } else if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK) {
     pb::common::RegionMetrics region;
     {
-      BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-      auto* ret = store_metrics_map_.seek(task_pre_check.store_region_check().store_id());
-      if (ret == nullptr) {
-        DINGO_LOG(INFO) << "store_metrics_map_.seek(" << task_pre_check.store_region_check().store_id() << ") failed";
+      BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+      auto it = store_region_metrics_map_.find(task_pre_check.store_region_check().store_id());
+      if (it == store_region_metrics_map_.end()) {
+        DINGO_LOG(INFO) << "store_region_metrics_map_.find(" << task_pre_check.store_region_check().store_id()
+                        << ") failed";
         return false;
       }
 
-      const auto& region_metrics_map = ret->region_metrics_map();
+      const auto& region_metrics_map = it->second.region_metrics_map();
       if (region_metrics_map.find(task_pre_check.store_region_check().region_id()) == region_metrics_map.end()) {
         DINGO_LOG(INFO) << "region_metrics_map.find(" << task_pre_check.store_region_check().region_id() << ") failed";
         return false;
@@ -4953,11 +5030,11 @@ butil::Status CoordinatorControl::AddCoordinatorOperation(
  * The `CheckStoreOperationResult` function checks the result of a store operation.
  * It takes as input a command type and an error code.
  * If the error code is `OK` or `EREGION_REPEAT_COMMAND`, the function returns true, indicating that the operation was
- * successful. If the error code is `ERAFT_NOTLEADER`, the function returns false, indicating that the operation failed
- * because the current node is not the leader. For other command types, the function checks the error code and logs an
- * error message if the operation failed. In some cases, even if the operation failed, the function returns true to
- * indicate that the failure is expected or recoverable. For example, if a `CMD_CREATE` operation fails with an
- * `EREGION_EXIST` error code, the function returns true because the region already exists.
+ * successful. If the error code is `ERAFT_NOTLEADER`, the function returns false, indicating that the operation
+ * failed because the current node is not the leader. For other command types, the function checks the error code and
+ * logs an error message if the operation failed. In some cases, even if the operation failed, the function returns
+ * true to indicate that the failure is expected or recoverable. For example, if a `CMD_CREATE` operation fails with
+ * an `EREGION_EXIST` error code, the function returns true because the region already exists.
  *
  * @param cmd_type The type of the command that was executed.
  * @param errcode The error code returned by the command execution.
@@ -5026,9 +5103,9 @@ bool CoordinatorControl::CheckStoreOperationResult(pb::coordinator::RegionCmdTyp
  * It first checks the state of the store. If the store is in a normal state and its last seen timestamp is within the
  * heartbeat timeout, it proceeds with sending the operation. If the store is not in a normal state or its last seen
  * timestamp is beyond the heartbeat timeout, it logs a warning message and returns without sending the operation. If
- * the store is offline, it attempts to set the store to offline and returns. It then checks if the store operation has
- * any region commands. If not, it logs a debug message and returns without sending the operation. Note: The actual
- * sending of the store operation is not implemented in this function.
+ * the store is offline, it attempts to set the store to offline and returns. It then checks if the store operation
+ * has any region commands. If not, it logs a debug message and returns without sending the operation. Note: The
+ * actual sending of the store operation is not implemented in this function.
  *
  * @param store The store to which the operation is to be sent.
  * @param store_operation The operation to be sent to the store.
@@ -5265,11 +5342,11 @@ void CoordinatorControl::TryToSendStoreOperations() {
     }
 
     for (int32_t i = 0; i < 1000; i++) {
-      DINGO_LOG(INFO) << "... send store_operation of create_region, loop: " << i++;
-
       if (tmp_create_operation.empty()) {
         break;
       }
+
+      DINGO_LOG(INFO) << "... send store_operation of create_region, loop: " << i++;
 
       for (auto& it : tmp_create_operation) {
         auto store_id = it.first;
@@ -5359,19 +5436,19 @@ void CoordinatorControl::TryToSendStoreOperations() {
 }
 
 /**
- * The `RpcSendPushStoreOperation` function is responsible for sending a `PushStoreOperation` request to a remote store
- * server. It first builds the remote server location string from the provided location. It then initializes a BRPC
- * channel to the remote server and sets a timeout for the RPC. The function sends a `PushStoreOperation` request to the
- * remote server and waits for a response. If the RPC fails, it logs an error message and retries the operation up to a
- * maximum number of times. If the RPC succeeds, it logs a success message and returns a success status. If the RPC
- * response indicates an error, it logs detailed error information including the error code and message, the store ID,
- * the number of region commands in the request, and the number of region command results in the response.
+ * The `RpcSendPushStoreOperation` function is responsible for sending a `PushStoreOperation` request to a remote
+ * store server. It first builds the remote server location string from the provided location. It then initializes a
+ * BRPC channel to the remote server and sets a timeout for the RPC. The function sends a `PushStoreOperation` request
+ * to the remote server and waits for a response. If the RPC fails, it logs an error message and retries the operation
+ * up to a maximum number of times. If the RPC succeeds, it logs a success message and returns a success status. If
+ * the RPC response indicates an error, it logs detailed error information including the error code and message, the
+ * store ID, the number of region commands in the request, and the number of region command results in the response.
  *
  * @param location The location of the remote store server.
  * @param request The `PushStoreOperationRequest` to be sent to the remote store server.
  * @param response The `PushStoreOperationResponse` received from the remote store server.
- * @return A `butil::Status` indicating the result of the operation. If the operation was successful, the status is OK.
- *         If the operation failed, the status indicates the error.
+ * @return A `butil::Status` indicating the result of the operation. If the operation was successful, the status is
+ * OK. If the operation failed, the status indicates the error.
  */
 butil::Status CoordinatorControl::RpcSendPushStoreOperation(const pb::common::Location& location,
                                                             pb::push::PushStoreOperationRequest& request,
@@ -5456,6 +5533,91 @@ butil::Status CoordinatorControl::UpdateRegionCmdStatus(int64_t task_list_id, in
   region_cmd_status->set_region_cmd_id(region_cmd_id);
   region_cmd_status->set_status(status);
   *(region_cmd_status->mutable_error()) = error;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CheckRegionAllPeerOnline(int64_t region_id) {
+  pb::common::RegionMetrics region_metrics;
+  auto ret = region_metrics_map_.Get(region_id, region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "region_metrics_map_.Get(" << region_id << ") failed";
+    return butil::Status(pb::error::EINTERNAL, "region_metrics_map_.Get failed");
+  }
+
+  if (region_metrics.id() <= 0) {
+    DINGO_LOG(ERROR) << "region_metrics_map_.Get(" << region_id << ") failed, region_metrics.id() <= 0";
+    return butil::Status(pb::error::EINTERNAL, "region_metrics_map_.Get failed");
+  }
+
+  if (region_metrics.region_definition().peers_size() <= 0) {
+    DINGO_LOG(ERROR) << "region_metrics_map_.Get(" << region_id
+                     << ") failed, region_metrics.region_definition.peers_size() <= 0";
+    return butil::Status(pb::error::EINTERNAL, "region_metrics_map_.Get failed");
+  }
+
+  for (const auto& peer : region_metrics.region_definition().peers()) {
+    pb::common::Store store;
+    auto ret1 = store_map_.Get(peer.store_id(), store);
+    if (ret1 < 0) {
+      DINGO_LOG(ERROR) << "store_map_.Get(" << peer.store_id() << ") failed";
+      return butil::Status(pb::error::EINTERNAL, "store_map_.Get failed");
+    }
+
+    if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+      DINGO_LOG(INFO) << "store " << store.id() << " state is not STORE_NORMAL, region_id=" << region_id;
+      return butil::Status(pb::error::EBRAFT_EINVAL, "store state is not STORE_NORMAL");
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CheckRegionLeaderOnline(int64_t region_id) {
+  pb::common::RegionMetrics region_metrics;
+  auto ret = region_metrics_map_.Get(region_id, region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "region_metrics_map_.Get(" << region_id << ") failed";
+    return butil::Status(pb::error::EINTERNAL, "region_metrics_map_.Get failed");
+  }
+
+  if (region_metrics.id() <= 0) {
+    DINGO_LOG(ERROR) << "region_metrics_map_.Get(" << region_id << ") failed, region_metrics.id() <= 0";
+    return butil::Status(pb::error::EINTERNAL, "region_metrics_map_.Get failed");
+  }
+
+  if (region_metrics.leader_store_id() <= 0) {
+    DINGO_LOG(ERROR) << "region_metrics_map_.Get(" << region_id << ") failed, region_metrics.leader_store_id() <= 0";
+    return butil::Status(pb::error::EINTERNAL, "region_metrics_map_.Get failed");
+  }
+
+  pb::common::Store store;
+  auto ret2 = store_map_.Get(region_metrics.leader_store_id(), store);
+  if (ret2 < 0) {
+    DINGO_LOG(ERROR) << "store_map_.Get(" << region_metrics.leader_store_id() << ") failed";
+    return butil::Status(pb::error::EINTERNAL, "store_map_.Get failed");
+  }
+
+  if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+    DINGO_LOG(INFO) << "store " << store.id() << " state is not STORE_NORMAL, region_id=" << region_id;
+    return butil::Status(pb::error::EBRAFT_EINVAL, "store state is not STORE_NORMAL");
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CheckStoreNormal(int64_t store_id) {
+  pb::common::Store store;
+  auto ret = store_map_.Get(store_id, store);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "store_map_.Get(" << store_id << ") failed";
+    return butil::Status(pb::error::EINTERNAL, "store_map_.Get failed");
+  }
+
+  if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+    DINGO_LOG(INFO) << "store " << store.id() << " state is not STORE_NORMAL";
+    return butil::Status(pb::error::EBRAFT_EINVAL, "store state is not STORE_NORMAL");
+  }
 
   return butil::Status::OK();
 }

@@ -5,7 +5,7 @@ cluster:
 server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
-  heartbeat_interval_s: 10
+  heartbeat_interval_s: 6
   metrics_collect_interval_s: 300
   scrub_vector_index_interval_s: 60
   worker_thread_num: 96 # must >4, worker_thread_num priority worker_thread_ratio

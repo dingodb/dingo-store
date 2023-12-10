@@ -155,6 +155,12 @@ struct LeaseWithKeys {
   std::set<std::string> keys;
 };
 
+struct StoreMetricsSlim {
+  int64_t store_id;
+  pb::common::StoreOwnMetrics store_own_metrics;
+  int64_t region_num;
+};
+
 class CoordinatorControl : public MetaControl {
  public:
   CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
@@ -469,11 +475,11 @@ class CoordinatorControl : public MetaControl {
   void GetStoreMap(pb::common::StoreMap &store_map);
 
   // get store metrics
-  void GetStoreMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
-  void GetStoreMetrics(int64_t store_id, int64_t region_id, std::vector<pb::common::StoreMetrics> &store_metrics);
+  void GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
+  void GetStoreRegionMetrics(int64_t store_id, int64_t region_id, std::vector<pb::common::StoreMetrics> &store_metrics);
 
   // delete store metrics
-  void DeleteStoreMetrics(int64_t store_id);
+  void DeleteStoreRegionMetrics(int64_t store_id);
 
   // region metrics
   void GetRegionMetrics(int64_t region_id, std::vector<pb::common::RegionMetrics> &region_metrics_array);
@@ -533,6 +539,10 @@ class CoordinatorControl : public MetaControl {
   // try to set region to online
   // return bool
   bool TrySetRegionToOnline(int64_t region_id);
+
+  butil::Status CheckRegionAllPeerOnline(int64_t region_id);
+  butil::Status CheckRegionLeaderOnline(int64_t region_id);
+  butil::Status CheckStoreNormal(int64_t store_id);
 
   // get regionmap
   void GenRegionFull(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
@@ -866,7 +876,9 @@ class CoordinatorControl : public MetaControl {
   DingoSafeMap<std::string, int64_t> table_name_map_safe_temp_;
 
   // 7.store_metrics
-  butil::FlatMap<int64_t, pb::common::StoreMetrics> store_metrics_map_;
+  std::map<int64_t, pb::common::StoreMetrics> store_region_metrics_map_;
+  bthread_mutex_t store_region_metrics_map_mutex_;
+  std::map<int64_t, StoreMetricsSlim> store_metrics_map_;
   bthread_mutex_t store_metrics_map_mutex_;
 
   // 8.table_metrics
