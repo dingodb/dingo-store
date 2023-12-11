@@ -227,6 +227,11 @@ class Constant {
   inline static const std::string kRaftSnapshotPolicyDingo = "dingo";
   inline static const std::string kRaftSnapshotPolicyCheckpoint = "checkpoint";
   inline static const std::string kRaftSnapshotPolicyScan = "scan";
+
+  // gc stop
+  inline static const std::string kGcStopKey = "GC_STOP";
+  inline static const std::string kGcStopValueTrue = "GC_STOP_TRUE";
+  inline static const std::string kGcStopValueFalse = "GC_STOP_FALSE";
 };
 
 }  // namespace dingodb

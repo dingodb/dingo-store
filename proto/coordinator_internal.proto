@@ -33,6 +33,11 @@ message RegionCmdInternal {
   dingodb.pb.error.Error error = 3;  // if region_cmd is not success, this field will be set from store response
 }
 
+message CommonInternal {
+  bytes id = 1;
+  bytes value = 2;
+}
+
 // TableInternal is storage structure for coordinator
 message TableInternal {
   int64 id = 1;
@@ -239,6 +244,12 @@ message MetaIncrementTableIndex {
   MetaIncrementOpType op_type = 3;
 }
 
+message MetaIncrementCommon {
+  bytes id = 1;
+  CommonInternal common = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 message MetaIncrementIdEpoch {
   int64 id = 1;
   IdEpochInternal idepoch = 2;
@@ -399,6 +410,8 @@ message MetaIncrement {
   repeated MetaIncrementKvRevision kv_revs = 42;
 
   repeated MetaIncrementTableIndex table_indexes = 50;
+
+  repeated MetaIncrementCommon commons = 51;
 }
 
 message TsoStorage {
@@ -435,4 +448,6 @@ message MetaSnapshotFile {
   repeated dingodb.pb.common.KeyValue lease_map_kvs = 40;
   repeated dingodb.pb.common.KeyValue kv_index_map_kvs = 41;
   repeated dingodb.pb.common.KeyValue kv_rev_map_kvs = 42;
+
+  repeated dingodb.pb.common.KeyValue common_map_kvs = 51;
 }

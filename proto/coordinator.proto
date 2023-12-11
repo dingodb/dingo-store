@@ -321,6 +321,14 @@ message CoordinatorMemoryInfo {
   int64 deleted_index_map_count = 75;
   int64 deleted_index_map_size = 76;
 
+  // table index
+  int64 table_index_map_count = 77;
+  int64 table_index_map_size = 78;
+
+  // common map
+  int64 common_map_count = 79;
+  int64 common_map_size = 80;
+
   // kv
   int64 kv_lease_map_count = 81;
   int64 kv_lease_map_size = 82;
@@ -948,14 +956,22 @@ message RaftControlResponse {
 };
 
 message UpdateGCSafePointRequest {
+  enum GcFlagType {
+    GC_NONE = 0;
+    GC_START = 1;
+    GC_STOP = 2;
+  }
+
   dingodb.pb.common.RequestInfo request_info = 1;
   int64 safe_point = 2;
+  GcFlagType gc_flag = 3;
 }
 
 message UpdateGCSafePointResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
   int64 new_safe_point = 3;
+  bool gc_stop = 4;  // if this is true, store will not do gc.
 }
 
 message GetGCSafePointRequest {
@@ -966,6 +982,7 @@ message GetGCSafePointResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
   int64 safe_point = 3;
+  bool gc_stop = 4;  // if this is true, store will not do gc.
 }
 
 service CoordinatorService {
