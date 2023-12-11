@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/supervisor.h"
+#include "sdk/admin_tool.h"
 
 #include "proto/coordinator.pb.h"
 #include "sdk/status.h"
@@ -20,9 +20,9 @@
 namespace dingodb {
 namespace sdk {
 
-Supervisor::Supervisor(std::shared_ptr<CoordinatorProxy> coordinator_proxy) : coordinator_proxy_(coordinator_proxy) {}
+AdminTool::AdminTool(std::shared_ptr<CoordinatorProxy> coordinator_proxy) : coordinator_proxy_(coordinator_proxy) {}
 
-Status Supervisor::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress) {
+Status AdminTool::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress) {
   pb::coordinator::QueryRegionRequest req;
   req.set_region_id(region_id);
 
@@ -37,7 +37,7 @@ Status Supervisor::IsCreateRegionInProgress(int64_t region_id, bool& out_create_
   return Status::OK();
 }
 
-Status Supervisor::DropRegion(int64_t region_id) {
+Status AdminTool::DropRegion(int64_t region_id) {
   pb::coordinator::DropRegionRequest req;
   req.set_region_id(region_id);
   pb::coordinator::DropRegionResponse resp;

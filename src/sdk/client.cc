@@ -116,10 +116,10 @@ Status Client::NewRegionCreator(RegionCreator** creator) {
 }
 
 Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress) {
-  return data_->stub->GetSupervisor()->IsCreateRegionInProgress(region_id, out_create_in_progress);
+  return data_->stub->GetAdminTool()->IsCreateRegionInProgress(region_id, out_create_in_progress);
 }
 
-Status Client::DropRegion(int64_t region_id) { return data_->stub->GetSupervisor()->DropRegion(region_id); }
+Status Client::DropRegion(int64_t region_id) { return data_->stub->GetAdminTool()->DropRegion(region_id); }
 
 RawKV::RawKV(RawKVImpl* impl) : impl_(impl) {}
 
@@ -222,7 +222,7 @@ Status RegionCreator::Create(int64_t& out_region_id) {
     int retry = 0;
     while (retry < kCoordinatorInteractionMaxRetry) {
       bool creating = false;
-      DINGO_RETURN_NOT_OK(data_->stub.GetSupervisor()->IsCreateRegionInProgress(out_region_id, creating));
+      DINGO_RETURN_NOT_OK(data_->stub.GetAdminTool()->IsCreateRegionInProgress(out_region_id, creating));
 
       if (creating) {
         retry++;
