@@ -1323,19 +1323,49 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
       }
     }
   } else {
-    for (const auto& element : store_map_copy) {
-      const auto& store = element.second;
-      if (store.state() != pb::common::StoreState::STORE_NORMAL) {
-        continue;
+    if (store_ids.size() != replica_num) {
+      DINGO_LOG(INFO) << "Store ids size not match, store_ids.size=" << store_ids.size()
+                      << ", replica_num=" << replica_num;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store_ids size not match replica_num");
+    }
+
+    for (const auto id : store_ids) {
+      auto* ptr = store_map_copy.seek(id);
+      if (ptr == nullptr) {
+        selected_stores_for_regions.clear();
+        DINGO_LOG(WARNING) << "Store id not found in CreateRegion with store_ids provided, store_id=" << id;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store_id not found in store_map");
       }
 
-      for (const auto& store_id : store_ids) {
-        if (store.id() == store_id) {
-          stores_for_regions.push_back(store);
-          break;
-        }
+      const auto& store = *ptr;
+      if (store.state() != pb::common::StoreState::STORE_NORMAL ||
+          store.in_state() != pb::common::StoreInState::STORE_IN) {
+        selected_stores_for_regions.clear();
+        DINGO_LOG(INFO) << "Store state not normal or in, store_id=" << store.id()
+                        << ", state=" << pb::common::StoreState_Name(store.state())
+                        << ", in_state=" << pb::common::StoreInState_Name(store.in_state());
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store state not normal or in");
       }
+
+      if (store.store_type() != store_type) {
+        selected_stores_for_regions.clear();
+        DINGO_LOG(INFO) << "Store type not match, store_id=" << store.id()
+                        << ", store_type=" << pb::common::StoreType_Name(store.store_type())
+                        << ", expect_store_type=" << pb::common::StoreType_Name(store_type);
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store type not match");
+      }
+
+      selected_stores_for_regions.push_back(store);
     }
+
+    if (selected_stores_for_regions.size() != replica_num) {
+      selected_stores_for_regions.clear();
+      DINGO_LOG(INFO) << "Store ids size not match, store_ids.size=" << store_ids.size()
+                      << ", replica_num=" << replica_num;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store_ids size not match replica_num");
+    }
+
+    return butil::Status::OK();
   }
 
   // if not enough stores is selected, return -1
@@ -1743,6 +1773,12 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
                      << ", selected_stores_for_regions.size=" << selected_stores_for_regions.size();
     return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create shadow region");
   }
+  if (selected_stores_for_regions.size() < replica_num) {
+    DINGO_LOG(ERROR) << "CreateShadowRegion store_ids not enough, store_ids.size=" << store_ids.size()
+                     << ", selected_stores_for_regions.size=" << selected_stores_for_regions.size()
+                     << ", replicat_num=" << replica_num;
+    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create shadow region");
+  }
 
   // generate new region
   if (new_region_id <= 0) {
@@ -1984,6 +2020,50 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
     }
 
     DINGO_LOG(INFO) << "store_operation_increment = " << store_operation.ShortDebugString();
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType region_type,
+                                                          pb::common::RawEngine raw_engine,
+                                                          const std::string& resource_tag, int32_t replica_num,
+                                                          const pb::common::IndexParameter& index_parameter,
+                                                          std::vector<int64_t>& store_ids) {
+  DINGO_LOG(INFO) << "GetCreateRegionStoreIds replica_num=" << replica_num
+                  << ", raw_engine=" << pb::common::RawEngine_Name(raw_engine)
+                  << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
+                  << ", index_parameter=" << index_parameter.ShortDebugString();
+
+  if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
+    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
+    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  }
+
+  std::vector<pb::common::Store> selected_stores_for_regions;
+
+  // setup store_type
+  pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
+  if (region_type == pb::common::RegionType::INDEX_REGION && index_parameter.has_vector_index_parameter()) {
+    store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+  }
+
+  // select store for region
+  auto ret =
+      SelectStore(store_type, replica_num, resource_tag, index_parameter, store_ids, selected_stores_for_regions);
+  if (!ret.ok()) {
+    return ret;
+  }
+
+  if (selected_stores_for_regions.size() != replica_num) {
+    DINGO_LOG(ERROR) << "GetCreateRegionStoreIds replica_num=" << replica_num
+                     << ", selected_stores_for_regions.size=" << selected_stores_for_regions.size();
+    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
+  }
+
+  store_ids.clear();
+  for (const auto& store : selected_stores_for_regions) {
+    store_ids.push_back(store.id());
   }
 
   return butil::Status::OK();
