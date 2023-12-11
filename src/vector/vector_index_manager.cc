@@ -87,7 +87,7 @@ void RebuildVectorIndexTask::Run() {
 
   if (vector_index_wrapper_->IsStop()) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.rebuild][index_id({})][trace({})] vector index is stop, gave up rebuild vector index.",
+        "[vector_index.rebuild][index_id({})][trace({})] vector index is stop, gave up rebuild.",
         vector_index_wrapper_->Id(), trace_);
     return;
   }
@@ -95,15 +95,29 @@ void RebuildVectorIndexTask::Run() {
   if (!force_) {
     if (!vector_index_wrapper_->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.rebuild][index_id({})][trace({})] vector index is not ready, gave up rebuild vector index.",
+          "[vector_index.rebuild][index_id({})][trace({})] vector index is not ready, gave up rebuild.",
           vector_index_wrapper_->Id(), trace_);
       return;
     }
     if (!vector_index_wrapper_->NeedToRebuild()) {
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.rebuild][index_id({})][trace({})] vector index not need rebuild, gave up rebuild vector index",
+          "[vector_index.rebuild][index_id({})][trace({})] vector index not need rebuild, gave up rebuild.",
           vector_index_wrapper_->Id(), trace_);
       return;
+    }
+  } else {
+    // Compare vector index snapshot epoch and region epoch.
+    auto snapshot_set = vector_index_wrapper_->SnapshotSet();
+    if (snapshot_set != nullptr) {
+      auto last_snapshot = snapshot_set->GetLastSnapshot();
+      if (last_snapshot != nullptr && region->Epoch().version() <= last_snapshot->Epoch().version()) {
+        DINGO_LOG(INFO) << fmt::format(
+            "[vector_index.rebuild][index_id({})][trace({})] vector index snapshot epoch({}/{}) is latest, gave up "
+            "rebuild.",
+            vector_index_wrapper_->Id(), trace_, Helper::RegionEpochToString(region->Epoch()),
+            Helper::RegionEpochToString(last_snapshot->Epoch()));
+        return;
+      }
     }
   }
 
