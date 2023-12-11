@@ -62,6 +62,18 @@ void VectorIndex::SetApplyLogId(int64_t apply_log_id) {
 
 int64_t VectorIndex::SnapshotLogId() const { return snapshot_log_id.load(std::memory_order_relaxed); }
 
+pb::common::RegionEpoch VectorIndex::Epoch() const { return epoch; };
+
+pb::common::Range VectorIndex::Range() const { return range; }
+
+void VectorIndex::SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range) {
+  DINGO_LOG(INFO) << fmt::format("[vector_index.raw][id({})] set epoch({}->{}) and range({}->{})", id,
+                                 Helper::RegionEpochToString(this->epoch), Helper::RegionEpochToString(epoch),
+                                 Helper::RangeToString(this->range), Helper::RangeToString(range));
+  this->epoch = epoch;
+  this->range = range;
+}
+
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement save");

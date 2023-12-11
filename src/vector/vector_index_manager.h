@@ -154,6 +154,8 @@ class VectorIndexManager {
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
 
  private:
+  static butil::Status LoadVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch,
+                                       const std::string& trace);
   // Build vector index with original data(rocksdb).
   // Invoke when server starting.
   static std::shared_ptr<VectorIndex> BuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,

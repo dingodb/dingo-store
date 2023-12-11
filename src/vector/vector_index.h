@@ -235,8 +235,9 @@ class VectorIndex {
   int64_t SnapshotLogId() const;
   void SetSnapshotLogId(int64_t snapshot_log_id);
 
-  pb::common::RegionEpoch Epoch() const { return epoch; };
-  pb::common::Range Range() const { return range; }
+  pb::common::RegionEpoch Epoch() const;
+  pb::common::Range Range() const;
+  void SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
  protected:
   // vector index id
