@@ -941,87 +941,20 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
   kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
 
-  // build vector_with_ids
-  std::vector<pb::common::VectorWithId> vector_with_ids;
-  vector_with_ids.reserve(request.vectors_size());
-
-  for (const auto &vector : request.vectors()) {
-    pb::common::VectorWithId vector_with_id;
-    *(vector_with_id.mutable_vector()) = vector.vector();
-    vector_with_id.set_id(vector.id());
-    vector_with_ids.push_back(vector_with_id);
-  }
-
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  int64_t vector_index_id = vector_index_wrapper->Id();
-  bool is_ready = vector_index_wrapper->IsReady();
-  // if leadder vector_index is nullptr, return internal error
-  if (ctx != nullptr && !is_ready) {
-    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
-    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
-    set_ctx_status(status);
-    return 0;
-  }
-
-  // Only leader and specific follower write vector index, other follower don't write vector index.
-  if (is_ready) {
-    // Check if the log_id is greater than the ApplyLogIndex of the vector index
-    if (log_id > vector_index_wrapper->ApplyLogId()) {
-      try {
-        auto start = std::chrono::steady_clock::now();
-
-        auto ret = vector_index_wrapper->Upsert(vector_with_ids);
-
-        auto end = std::chrono::steady_clock::now();
-
-        auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        DINGO_LOG(INFO) << fmt::format("vector index {} upsert {} vectors, cost {}us", vector_index_id,
-                                       vector_with_ids.size(), diff);
-
-        if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL) {
-          DINGO_LOG(WARNING) << fmt::format("vector index {} is full", vector_index_id);
-          status = butil::Status(pb::error::EVECTOR_INDEX_FULL, "Vector index %lu is full", vector_index_id);
-        } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
-          DINGO_LOG(WARNING) << fmt::format("vector index {} is not found.", vector_index_id);
-        } else if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("vector index {} upsert failed, vector_count={}, err={}", vector_index_id,
-                                          vector_with_ids.size(), ret.error_str());
-          status = butil::Status(pb::error::EINTERNAL, "Vector index %lu upsert failed, vector_count=[%ld], err=[%s]",
-                                 vector_index_id, vector_with_ids.size(), ret.error_cstr());
-          set_ctx_status(status);
-        }
-      } catch (const std::exception &e) {
-        DINGO_LOG(ERROR) << fmt::format("vector_index add failed : {}", e.what());
-        status =
-            butil::Status(pb::error::EINTERNAL, "Vector index %lu add failed, err=[%s]", vector_index_id, e.what());
-      }
-    } else {
-      DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
-                                        vector_index_id, log_id, vector_index_wrapper->ApplyLogId());
-    }
-  }
-
-  // Store vector
-  if (!kv_puts_with_cf.empty() && status.ok()) {
+  // Put vector data to rocksdb
+  if (!kv_puts_with_cf.empty()) {
     auto writer = engine->Writer();
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id()
-                       << ")] VectorAdd->KvBatchPutAndDelete failed, error: " << status.error_str();
-    }
-
-    if (is_ready) {
-      // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_wrapper->SetApplyLogId(log_id);
+      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
+                                      status.error_str());
+      return 0;
     }
   }
 
   if (ctx) {
     if (ctx->Response()) {
-      bool key_state = false;
-      if (status.ok()) {
-        key_state = true;
-      }
+      bool key_state = status.ok();
       auto *response = dynamic_cast<pb::index::VectorAddResponse *>(ctx->Response());
       for (int i = 0; i < request.vectors_size(); i++) {
         response->add_key_states(key_state);
@@ -1029,6 +962,48 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     }
 
     ctx->SetStatus(status);
+  }
+
+  // Handle vector index
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  int64_t vector_index_id = vector_index_wrapper->Id();
+  bool is_ready = vector_index_wrapper->IsReady();
+  if (is_ready) {
+    // Check if the log_id is greater than the ApplyLogIndex of the vector index
+    if (log_id > vector_index_wrapper->ApplyLogId()) {
+      try {
+        // Build vector_with_ids
+        std::vector<pb::common::VectorWithId> vector_with_ids;
+        vector_with_ids.reserve(request.vectors_size());
+
+        for (const auto &vector : request.vectors()) {
+          pb::common::VectorWithId vector_with_id;
+          *(vector_with_id.mutable_vector()) = vector.vector();
+          vector_with_id.set_id(vector.id());
+          vector_with_ids.push_back(vector_with_id);
+        }
+
+        auto start_time = Helper::TimestampNs();
+        auto status = vector_index_wrapper->Upsert(vector_with_ids);
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us", vector_index_id,
+                                        vector_with_ids.size(), Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          vector_index_wrapper->SetApplyLogId(log_id);
+        } else if (status.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL ||
+                   status.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {} {}",
+                                            vector_index_id, vector_with_ids.size(),
+                                            pb::error::Errno_Name(status.error_code()), status.error_str());
+        } else if (!status.ok()) {
+          DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {} {}",
+                                          vector_index_id, vector_with_ids.size(),
+                                          pb::error::Errno_Name(status.error_code()), status.error_str());
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}", vector_index_id,
+                                        e.what());
+      }
+    }
   }
 
   return 0;
@@ -1049,12 +1024,12 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   auto reader = engine->Reader();
   auto snapshot = engine->GetSnapshot();
   if (!snapshot) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")][cf_name(" << request.cf_name()
-                     << ")] GetSnapshot failed";
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})][cf_name({})] GetSnapshot failed.", region->Id(),
+                                    request.cf_name());
   }
 
   if (request.ids_size() == 0) {
-    DINGO_LOG(WARNING) << fmt::format("vector_delete ids_size is 0, region_id={}", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector id is empty.", region->Id());
     status = butil::Status::OK();
     set_ctx_status(status);
     return 0;
@@ -1085,7 +1060,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
       key_states[i] = true;
       delete_ids.push_back(request.ids(i));
 
-      DINGO_LOG(DEBUG) << fmt::format("vector_delete id={}, region_id={}", request.ids(i), region->Id());
+      DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
     }
   }
 
@@ -1095,58 +1070,13 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
     kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCF, kv_deletes_default);
   }
 
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  int64_t vector_index_id = vector_index_wrapper->Id();
-  bool is_ready = vector_index_wrapper->IsReady();
-  // if leadder vector_index is nullptr, return internal error
-  if (ctx != nullptr && !is_ready) {
-    DINGO_LOG(ERROR) << fmt::format("Not found vector index {}", vector_index_id);
-    status = butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %ld", vector_index_id);
-    set_ctx_status(status);
-    return 0;
-  }
-
-  // Only leader and specific follower write vector index, other follower don't write vector index.
-  if (is_ready && !delete_ids.empty()) {
-    if (log_id > vector_index_wrapper->ApplyLogId()) {
-      // delete vector from index
-      try {
-        auto ret = vector_index_wrapper->Delete(delete_ids);
-        if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND) {
-          DINGO_LOG(ERROR) << fmt::format("vector not found at vector index {}, vector_count={}, err={}",
-                                          vector_index_id, delete_ids.size(), ret.error_str());
-        } else if (ret.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
-          DINGO_LOG(WARNING) << fmt::format("vector index {} is not found.", vector_index_id);
-        } else if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("vector index {} delete failed, vector_count={}, err={}", vector_index_id,
-                                          delete_ids.size(), ret.error_str());
-          status = butil::Status(pb::error::EINTERNAL, "Vector index %lu delete failed, vector_count=[%ld], err=[%s]",
-                                 vector_index_id, delete_ids.size(), ret.error_cstr());
-          set_ctx_status(status);
-        }
-      } catch (const std::exception &e) {
-        DINGO_LOG(ERROR) << fmt::format("vector index {} delete failed : {}", vector_index_id, e.what());
-        status =
-            butil::Status(pb::error::EINTERNAL, "Vector index %lu delete failed, err=[%s]", vector_index_id, e.what());
-      }
-    } else {
-      DINGO_LOG(WARNING) << fmt::format("Vector index {} already applied log index, log_id({}) / apply_log_index({})",
-                                        vector_index_id, log_id, vector_index_wrapper->ApplyLogId());
-    }
-  }
-
   // Delete vector and write wal
-  if (!kv_deletes_with_cf.empty() && status.ok()) {
+  if (!kv_deletes_with_cf.empty()) {
     auto writer = engine->Writer();
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
-      DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id()
-                       << ")] VectorDelete->KvBatchDelete failed, error: " << status.error_str();
-    }
-
-    if (is_ready) {
-      // Update the ApplyLogIndex of the vector index to the current log_id
-      vector_index_wrapper->SetApplyLogId(log_id);
+      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
+                                      status.error_str());
     }
   }
 
@@ -1158,13 +1088,37 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           response->add_key_states(state);
         }
       } else {
-        for (const auto &state : key_states) {
-          response->add_key_states(false);
-        }
+        response->mutable_key_states()->Resize(key_states.size(), false);
       }
     }
 
     ctx->SetStatus(status);
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  int64_t vector_index_id = vector_index_wrapper->Id();
+  bool is_ready = vector_index_wrapper->IsReady();
+  if (is_ready && !delete_ids.empty()) {
+    if (log_id > vector_index_wrapper->ApplyLogId()) {
+      try {
+        auto status = vector_index_wrapper->Delete(delete_ids);
+        if (status.ok()) {
+          vector_index_wrapper->SetApplyLogId(log_id);
+        } else if (status.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND ||
+                   status.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {} {}",
+                                            vector_index_id, delete_ids.size(),
+                                            pb::error::Errno_Name(status.error_code()), status.error_str());
+        } else if (!status.ok()) {
+          DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {} {}",
+                                          vector_index_id, delete_ids.size(),
+                                          pb::error::Errno_Name(status.error_code()), status.error_str());
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
+                                        e.what());
+      }
+    }
   }
 
   return 0;
