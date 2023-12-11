@@ -72,8 +72,11 @@ class Region {
   pb::common::RegionEpoch Epoch(bool lock = true);
   std::string EpochToString();
   void SetEpochVersionAndRange(int64_t version, const pb::common::Range& range);
+  void GetEpochAndRange(pb::common::RegionEpoch& epoch, pb::common::Range& range);
+
   void SetEpochConfVersion(int64_t version);
   void SetSnapshotEpochVersion(int64_t version);
+
   void LockRegionMeta();
   void UnlockRegionMeta();
 

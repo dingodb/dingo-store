@@ -118,6 +118,12 @@ void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& r
   *(inner_region_.mutable_definition()->mutable_range()) = range;
 }
 
+void Region::GetEpochAndRange(pb::common::RegionEpoch& epoch, pb::common::Range& range) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  epoch = inner_region_.mutable_definition()->epoch();
+  range = inner_region_.mutable_definition()->range();
+}
+
 void Region::SetEpochConfVersion(int64_t version) {
   BAIDU_SCOPED_LOCK(mutex_);
   inner_region_.set_last_change_job_id(inner_region_.last_change_job_id() + 1);
