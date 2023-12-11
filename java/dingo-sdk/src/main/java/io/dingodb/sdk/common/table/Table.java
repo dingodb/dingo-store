@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.common.table;
 
+import io.dingodb.common.Common;
 import io.dingodb.sdk.common.index.IndexParameter;
 import io.dingodb.sdk.common.partition.Partition;
 
@@ -53,6 +54,22 @@ public interface Table {
     String getCharset();
 
     String getCollate();
+
+    default String getTableType() {
+        return "BASE TABLE";
+    }
+
+    default String getRowFormat() {
+        return "Dynamic";
+    }
+
+    default long getCreateTime() {
+        return System.currentTimeMillis();
+    }
+
+    default long getUpdateTime() {
+        return 0;
+    }
 
     default int getPrimaryKeyCount() {
         int count = 0;

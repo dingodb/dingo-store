@@ -123,6 +123,8 @@ public class EntityConversion {
                 .setComment(Parameters.cleanNull(table.getComment(), ""))
                 .setCharset(Parameters.cleanNull(table.getCharset(), "utf8"))
                 .setCollate(Parameters.cleanNull(table.getCollate(), "utf8_bin"))
+                .setTableType(Parameters.cleanNull(table.getTableType(), "BASE TABLE"))
+                .setRowFormat(Parameters.cleanNull(table.getRowFormat(), "Dynamic"))
                 .build();
     }
 
@@ -146,6 +148,10 @@ public class EntityConversion {
                 .comment(tableDefinition.getComment())
                 .charset(Parameters.cleanNull(tableDefinition.getCharset(), "utf8"))
                 .collate(Parameters.cleanNull(tableDefinition.getCollate(), "utf8_bin"))
+                .tableType(Parameters.cleanNull(tableDefinition.getTableType(), "BASE TABLE"))
+                .rowFormat(Parameters.cleanNull(tableDefinition.getRowFormat(), "Dynamic"))
+                .createTime(tableDefinition.getCreateTimestamp())
+                .updateTime(tableDefinition.getUpdateTimestamp())
                 .build();
     }
 

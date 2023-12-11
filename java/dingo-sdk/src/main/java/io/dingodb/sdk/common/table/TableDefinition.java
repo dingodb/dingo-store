@@ -49,5 +49,9 @@ public class TableDefinition implements Table {
     private String comment;
     private String charset;
     private String collate;
+    private String tableType;
+    private String rowFormat;
+    private long createTime;
+    private long updateTime;
 
 }
