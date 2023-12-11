@@ -288,8 +288,10 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
       sibling_vector_index_ = nullptr;
     }
 
-    ready_.store(true);
     ++version_;
+    last_build_epoch_version_ = vector_index->Epoch().version();
+
+    ready_.store(true);
 
     int64_t apply_log_id = ApplyLogId();
     int64_t snapshot_log_id = SnapshotLogId();

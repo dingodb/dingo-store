@@ -782,6 +782,7 @@ message VectorIndexStatus {
   bool is_hold_vector_index = 7;  // is hold vector index
   int64 apply_log_id = 8;
   int64 snapshot_log_id = 9;
+  int64 last_build_epoch_version = 10;
 }
 
 message StoreOwnMetrics {
