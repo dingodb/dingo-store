@@ -18,11 +18,11 @@
 #include <memory>
 #include <vector>
 
+#include "sdk/admin_tool.h"
 #include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
 #include "sdk/rpc_interaction.h"
-#include "sdk/supervisor.h"
 
 namespace dingodb {
 namespace sdk {
@@ -43,7 +43,7 @@ class ClientStub {
 
   virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const { return region_scanner_factory_; }
 
-  virtual std::shared_ptr<Supervisor> GetSupervisor() const { return supervisor_; }
+  virtual std::shared_ptr<AdminTool> GetAdminTool() const { return admin_tool_; }
 
  private:
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
@@ -54,7 +54,7 @@ class ClientStub {
 
   std::shared_ptr<RegionScannerFactory> region_scanner_factory_;
 
-  std::shared_ptr<Supervisor> supervisor_;
+  std::shared_ptr<AdminTool> admin_tool_;
 };
 
 }  // namespace sdk

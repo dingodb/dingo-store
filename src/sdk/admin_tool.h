@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_SUPERVISOR_H_
-#define DINGODB_SDK_SUPERVISOR_H_
+#ifndef DINGODB_SDK_ADMIN_TOOL_H_
+#define DINGODB_SDK_ADMIN_TOOL_H_
 
 #include "sdk/coordinator_proxy.h"
 
 namespace dingodb {
 namespace sdk {
 
-class Supervisor {
+class AdminTool {
  public:
-  Supervisor(const Supervisor&) = delete;
-  const Supervisor& operator=(const Supervisor&) = delete;
+  AdminTool(const AdminTool&) = delete;
+  const AdminTool& operator=(const AdminTool&) = delete;
 
-  explicit Supervisor(std::shared_ptr<CoordinatorProxy> coordinator_proxy);
+  explicit AdminTool(std::shared_ptr<CoordinatorProxy> coordinator_proxy);
 
-  virtual ~Supervisor() = default;
+  ~AdminTool() = default;
 
   Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
 
@@ -39,4 +39,4 @@ class Supervisor {
 
 }  // namespace sdk
 }  // namespace dingodb
-#endif  // DINGODB_SDK_SUPERVISOR_H_
+#endif  // DINGODB_SDK_ADMIN_TOOL_H_
