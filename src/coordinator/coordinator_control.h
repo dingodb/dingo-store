@@ -231,6 +231,7 @@ class CoordinatorControl : public MetaControl {
                                    const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                    int64_t split_from_region_id, int64_t &new_region_id,
                                    pb::coordinator_internal::MetaIncrement &meta_increment);
+
   butil::Status CreateRegionFinal(const std::string &region_name, pb::common::RegionType region_type,
                                   pb::common::RawEngine raw_engine, const std::string &resource_tag,
                                   int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
@@ -239,6 +240,11 @@ class CoordinatorControl : public MetaControl {
                                   int64_t split_from_region_id, int64_t &new_region_id,
                                   std::vector<pb::coordinator::StoreOperation> &store_operations,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status GetCreateRegionStoreIds(pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
+                                        const std::string &resource_tag, int32_t replica_num,
+                                        const pb::common::IndexParameter &index_parameter,
+                                        std::vector<int64_t> &store_ids);
 
   butil::Status CreateRegionAutoSelectStore(const std::string &region_name, pb::common::RegionType region_type,
                                             pb::common::RawEngine raw_engine, const std::string &resource_tag,

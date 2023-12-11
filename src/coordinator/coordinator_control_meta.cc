@@ -662,6 +662,15 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   // this is just a null parameter
   pb::common::IndexParameter index_parameter;
 
+  std::vector<int64_t> store_ids;
+  auto ret4 = GetCreateRegionStoreIds(pb::common::RegionType::STORE_REGION, region_raw_engine_type, "", replica,
+                                      index_parameter, store_ids);
+  if (!ret4.ok()) {
+    DINGO_LOG(ERROR) << "GetCreateRegionStoreIds error:" << ret4.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
+    return ret4;
+  }
+
   // for partitions
   for (int i = 0; i < new_part_ranges.size(); i++) {
     int64_t new_region_id = 0;
@@ -671,9 +680,13 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     std::string const region_name = std::string("T_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type,
-                                           "", replica, new_part_range, schema_id, new_table_id, 0, new_part_id,
-                                           index_parameter, new_region_id, meta_increment);
+    std::vector<pb::coordinator::StoreOperation> store_operations;
+    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type, "", replica,
+                                 new_part_range, schema_id, new_table_id, 0, new_part_id, index_parameter, store_ids, 0,
+                                 new_region_id, store_operations, meta_increment);
+    // auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type,
+    //                                        "", replica, new_part_range, schema_id, new_table_id, 0, new_part_id,
+    //                                        index_parameter, new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
@@ -1090,6 +1103,15 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     return ret2;
   }
 
+  std::vector<int64_t> store_ids;
+  auto ret4 = GetCreateRegionStoreIds(pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
+                                      table_definition.index_parameter(), store_ids);
+  if (!ret4.ok()) {
+    DINGO_LOG(ERROR) << "GetCreateRegionStoreIds error:" << ret4.error_str()
+                     << ", table_definition:" << table_definition.ShortDebugString();
+    return ret4;
+  }
+
   for (int i = 0; i < new_part_ranges.size(); i++) {
     int64_t new_region_id = 0;
     int64_t new_part_id = new_part_ids[i];
@@ -1098,9 +1120,14 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     std::string const region_name = std::string("I_") + std::to_string(schema_id) + std::string("_") +
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
-    auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type,
-                                           "", replica, new_part_range, schema_id, 0, new_index_id, new_part_id,
-                                           table_definition.index_parameter(), new_region_id, meta_increment);
+    std::vector<pb::coordinator::StoreOperation> store_operations;
+    auto ret =
+        CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
+                          new_part_range, schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
+                          store_ids, 0, new_region_id, store_operations, meta_increment);
+    // auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type,
+    //                                        "", replica, new_part_range, schema_id, 0, new_index_id, new_part_id,
+    //                                        table_definition.index_parameter(), new_region_id, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
