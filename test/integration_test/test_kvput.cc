@@ -56,7 +56,9 @@ class KvPutTest : public testing::Test {
 
 int64_t KvPutTest::region_id = 0;
 
-TEST_F(KvPutTest, Normal) {
+TEST_F(KvPutTest, NormalPut) {
+  RecordProperty("description", "Test normal case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -77,7 +79,9 @@ TEST_F(KvPutTest, Normal) {
   }
 }
 
-TEST_F(KvPutTest, Batch) {
+TEST_F(KvPutTest, BatchPut) {
+  RecordProperty("description", "Test batch case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {

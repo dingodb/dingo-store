@@ -137,6 +137,7 @@ include(libunwind)
 include(libbacktrace)
 include(hnswlib)
 include(bdb)
+include(rapidjson)
 
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -195,6 +196,7 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${BDB_INCLUDE_DIR})
+include_directories(${RAPIDJSON_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 set(DYNAMIC_LIB

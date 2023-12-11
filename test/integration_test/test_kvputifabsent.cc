@@ -57,6 +57,8 @@ class KvPutIfAbsentTest : public testing::Test {
 int64_t KvPutIfAbsentTest::region_id = 0;
 
 TEST_F(KvPutIfAbsentTest, Absent) {
+  RecordProperty("description", "Test key absent case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -80,6 +82,8 @@ TEST_F(KvPutIfAbsentTest, Absent) {
 }
 
 TEST_F(KvPutIfAbsentTest, NotAbsent) {
+  RecordProperty("description", "Test key not absent case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -106,6 +110,8 @@ TEST_F(KvPutIfAbsentTest, NotAbsent) {
 }
 
 TEST_F(KvPutIfAbsentTest, BatchAbsent) {
+  RecordProperty("description", "Test batch absent case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -150,6 +156,8 @@ TEST_F(KvPutIfAbsentTest, BatchAbsent) {
 }
 
 TEST_F(KvPutIfAbsentTest, BatchNotAbsent) {
+  RecordProperty("description", "Test batch not absent case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -198,6 +206,8 @@ TEST_F(KvPutIfAbsentTest, BatchNotAbsent) {
 }
 
 TEST_F(KvPutIfAbsentTest, BatchPartialNotAbsent) {
+  RecordProperty("description", "Test batch partial not absent case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {

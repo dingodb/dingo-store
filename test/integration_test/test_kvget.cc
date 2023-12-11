@@ -58,7 +58,9 @@ class KvGetTest : public testing::Test {
 
 int64_t KvGetTest::region_id = 0;
 
-TEST_F(KvGetTest, Blank) {
+TEST_F(KvGetTest, BlankGet) {
+  RecordProperty("description", "Test blank key case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -80,7 +82,9 @@ TEST_F(KvGetTest, Blank) {
   }
 }
 
-TEST_F(KvGetTest, Normal) {
+TEST_F(KvGetTest, NormalGet) {
+  RecordProperty("description", "Test normal case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
@@ -104,7 +108,9 @@ TEST_F(KvGetTest, Normal) {
   }
 }
 
-TEST_F(KvGetTest, Batch) {
+TEST_F(KvGetTest, BatchGet) {
+  RecordProperty("description", "Test batch case");
+
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
   if (!status.IsOK()) {
