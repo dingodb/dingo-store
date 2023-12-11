@@ -1959,7 +1959,9 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   int64_t new_gc_safe_point = 0;
-  auto ret = coordinator_control->UpdateGCSafePoint(request->safe_point(), new_gc_safe_point, meta_increment);
+  bool gc_stop = false;
+  auto ret = coordinator_control->UpdateGCSafePoint(request->safe_point(), request->gc_flag(), new_gc_safe_point,
+                                                    gc_stop, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "UpdateGCSafePoint failed, gc_safe_point:" << request->safe_point()
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -1969,6 +1971,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
   }
 
   response->set_new_safe_point(new_gc_safe_point);
+  response->set_gc_stop(gc_stop);
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;
@@ -2001,7 +2004,8 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
   }
 
   int64_t gc_safe_point = 0;
-  auto ret = coordinator_control->GetGCSafePoint(gc_safe_point);
+  bool gc_stop = false;
+  auto ret = coordinator_control->GetGCSafePoint(gc_safe_point, gc_stop);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "GetGCSafePoint failed, errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -2009,6 +2013,7 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
   }
 
   response->set_safe_point(gc_safe_point);
+  response->set_gc_stop(gc_stop);
 
   DINGO_LOG(INFO) << "Response GetGCSafePoint Request:" << response->ShortDebugString();
 }

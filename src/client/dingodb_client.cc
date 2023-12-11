@@ -166,6 +166,7 @@ DEFINE_string(db_path, "", "rocksdb path");
 DEFINE_bool(show_vector, false, "show vector data");
 DEFINE_string(metrics_type, "L2", "metrics type");
 DEFINE_int64(safe_point, 0, "gc safe point");
+DEFINE_string(gc_flag, "", "gc_flag action, must be oneof [start, stop], if empty, no action will be taken");
 DEFINE_int64(def_version, 0, "version");
 
 DEFINE_int64(tso_save_physical, 0, "new tso save physical");

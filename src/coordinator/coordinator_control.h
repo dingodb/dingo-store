@@ -821,9 +821,10 @@ class CoordinatorControl : public MetaControl {
                                               pb::common::Range &table_internal_range);
 
   // GC
-  butil::Status UpdateGCSafePoint(int64_t safe_point, int64_t &new_safe_point,
+  butil::Status UpdateGCSafePoint(int64_t safe_point, pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag,
+                                  int64_t &new_safe_point, bool &gc_stop,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status GetGCSafePoint(int64_t &safe_point);
+  butil::Status GetGCSafePoint(int64_t &safe_point, bool &gc_stop);
 
  private:
   butil::Status ValidateTaskListConflict(int64_t region_id, int64_t second_region_id);
@@ -921,6 +922,9 @@ class CoordinatorControl : public MetaControl {
   // 50. table index
   DingoSafeMap<int64_t, pb::coordinator_internal::TableIndexInternal> table_index_map_;
   MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal> *table_index_meta_;
+
+  // 51. common maps
+  MetaDiskMap<pb::coordinator_internal::CommonInternal> *common_meta_;
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

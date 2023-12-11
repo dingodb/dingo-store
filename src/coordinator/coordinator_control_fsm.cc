@@ -361,6 +361,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot table_index_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 51.common map
+  if (!meta_reader_->Scan(snapshot, common_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_common_map_kvs();
+    *snapshot_file_kv = kv;
+  }
+  DINGO_LOG(INFO) << "Snapshot common_meta, count=" << kvs.size();
+  kvs.clear();
+
   return true;
 }
 
@@ -813,6 +825,33 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   }
   DINGO_LOG(INFO) << "Coordinator put table_index_meta_ success in LoadMetaFromSnapshotFile";
   DINGO_LOG(INFO) << "LoadSnapshot table_index_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 51.common map
+  kvs.reserve(meta_snapshot_file.common_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.common_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.common_map_kvs(i));
+  }
+  {
+    // if (!common_meta_->Recover(kvs)) {
+    //   return false;
+    // }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(common_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete common_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range common_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write common_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put common_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot common_meta, count=" << kvs.size();
   kvs.clear();
 
   // build id_epoch, schema_name, table_name, index_name maps
@@ -1958,6 +1997,41 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                            << "] failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
           DINGO_LOG(INFO) << "ApplyMetaIncrement table_index DELETE, [id=" << table_index.id() << "] success";
+        }
+      }
+    }
+  }
+
+  // 51.common map
+  {
+    if (meta_increment.commons_size() > 0) {
+      DINGO_LOG(INFO) << "6.commons_size=" << meta_increment.commons_size();
+    }
+
+    for (int i = 0; i < meta_increment.commons_size(); i++) {
+      const auto& common = meta_increment.commons(i);
+      if (common.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = common_meta_->Put(common.id(), common.common());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common CREATE, [id=" << common.id() << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common CREATE, [id=" << common.id() << "] success";
+        }
+
+      } else if (common.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto ret = common_meta_->Put(common.id(), common.common());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common UPDATE, [id=" << common.id() << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common UPDATE, [id=" << common.id() << "] success";
+        }
+
+      } else if (common.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        auto ret = common_meta_->Erase(common.id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common DELETE, [id=" << common.id() << "] failed";
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common DELETE, [id=" << common.id() << "] success";
         }
       }
     }

@@ -70,6 +70,7 @@ DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
 DECLARE_int64(limit);
 DECLARE_int64(safe_point);
+DECLARE_string(gc_flag);
 DECLARE_int64(replica);
 DECLARE_string(start_key);
 DECLARE_string(end_key);
@@ -1887,6 +1888,7 @@ void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
   DINGO_LOG(INFO) << "gc_safe_point=" << response.safe_point();
+  DINGO_LOG(INFO) << "gc_stop=" << response.gc_stop();
 }
 
 void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
@@ -1896,6 +1898,21 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   if (FLAGS_safe_point == 0) {
     DINGO_LOG(ERROR) << "gc_safe_point is empty";
     return;
+  }
+
+  if (!FLAGS_gc_flag.empty()) {
+    if (FLAGS_gc_flag == "start") {
+      request.set_gc_flag(::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::
+                              UpdateGCSafePointRequest_GcFlagType_GC_START);
+    } else if (FLAGS_gc_flag == "stop") {
+      request.set_gc_flag(
+          ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_STOP);
+    } else {
+      DINGO_LOG(ERROR) << "gc_flag is invalid, must be start or stop";
+      return;
+    }
+  } else {
+    DINGO_LOG(INFO) << "gc_flag is empty, no action, if you want to start/stop gc, set --gc_stop=[start, stop]";
   }
 
   request.set_safe_point(FLAGS_safe_point);

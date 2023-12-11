@@ -30,6 +30,7 @@
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "butil/time.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
@@ -4264,6 +4265,15 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     int64_t deleted_region_count = deleted_region_meta_->Count();
     memory_info.set_deleted_region_map_count(deleted_region_count);
   }
+  {
+    memory_info.set_table_index_map_count(table_index_map_.Size());
+    memory_info.set_table_index_map_size(table_index_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.table_index_map_size());
+  }
+  {
+    int64_t common_map_count = common_meta_->Count();
+    memory_info.set_common_map_count(common_map_count);
+  }
 }
 
 int CoordinatorControl::GetStoreOperation(int64_t store_id, pb::coordinator::StoreOperation& store_operation) {
@@ -5044,10 +5054,55 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point, int64_t& new_safe_point,
+butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
+                                                    pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag,
+                                                    int64_t& new_safe_point, bool& gc_stop,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
-  DINGO_LOG(INFO) << "UpdateGCSafePoint safe_point=" << safe_point;
+  DINGO_LOG(INFO) << "UpdateGCSafePoint safe_point=" << safe_point
+                  << ", gc_flag=" << pb::coordinator::UpdateGCSafePointRequest::GcFlagType_Name(gc_flag);
 
+  // update gc_stop
+  pb::coordinator_internal::CommonInternal gc_stop_element;
+  auto ret1 = common_meta_->Get(Constant::kGcStopKey, gc_stop_element);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "common_meta_->Get(Constant::kGcStopKey) failed, errcode=" << ret1.error_code()
+                     << " errmsg=" << ret1.error_str();
+    return ret1;
+  }
+
+  DINGO_LOG(INFO) << "UpdateGCSafePoint now_gc_stop=" << gc_stop_element.value() << ", gc_flag=" << gc_flag;
+
+  if (gc_flag == pb::coordinator::UpdateGCSafePointRequest::GC_NONE) {
+    gc_stop = (gc_stop_element.value() == Constant::kGcStopValueTrue);
+  } else if (gc_flag == pb::coordinator::UpdateGCSafePointRequest::GC_STOP) {
+    gc_stop = true;
+    if (gc_stop_element.value() != Constant::kGcStopValueTrue) {
+      DINGO_LOG(INFO) << "UpdateGCSafePoint now_gc_stop=" << gc_stop_element.value() << ", update to true";
+      gc_stop_element.set_id(Constant::kGcStopKey);
+      gc_stop_element.set_value(Constant::kGcStopValueTrue);
+
+      auto* increment = meta_increment.add_commons();
+      increment->set_id(Constant::kGcStopKey);
+      increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+      *(increment->mutable_common()) = gc_stop_element;
+    }
+  } else if (gc_flag == pb::coordinator::UpdateGCSafePointRequest::GC_START) {
+    gc_stop = false;
+    if (gc_stop_element.value() == Constant::kGcStopValueTrue) {
+      DINGO_LOG(INFO) << "UpdateGCSafePoint now_gc_stop=" << gc_stop_element.value() << ", update to false";
+      gc_stop_element.set_id(Constant::kGcStopKey);
+      gc_stop_element.set_value(Constant::kGcStopValueFalse);
+
+      auto* increment = meta_increment.add_commons();
+      increment->set_id(Constant::kGcStopKey);
+      increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+      *(increment->mutable_common()) = gc_stop_element;
+    }
+  } else {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "gc_flag not support");
+  }
+
+  // update safe_point_ts
   int64_t now_safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
 
   if (now_safe_point >= safe_point) {
@@ -5064,8 +5119,11 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point, int64_t&
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point) {
+butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_stop) {
   safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+  pb::coordinator_internal::CommonInternal common;
+  common_meta_->Get(Constant::kGcStopKey, common);
+  gc_stop = (common.value() == Constant::kGcStopValueTrue);
   return butil::Status::OK();
 }
 
