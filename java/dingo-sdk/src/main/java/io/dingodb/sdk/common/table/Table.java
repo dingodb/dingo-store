@@ -54,6 +54,14 @@ public interface Table {
 
     String getCollate();
 
+    String getTableType();
+
+    String getRowFormat();
+
+    long getCreateTime();
+
+    long getUpdateTime();
+
     default int getPrimaryKeyCount() {
         int count = 0;
         for (Column column : getColumns()) {

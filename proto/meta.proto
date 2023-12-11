@@ -148,6 +148,8 @@ message TableDefinition {
   int64 delete_timestamp = 53;
 
   string comment = 60;
+  string table_type = 61;
+  string row_format = 62;
 }
 
 // IndexDefinition is for vector/scalar index
