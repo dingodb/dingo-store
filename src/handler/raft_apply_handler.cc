@@ -350,6 +350,16 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
           from_region->Id(), to_region->Id());
+
+      auto vector_index_wrapper = to_region->VectorIndexWrapper();
+      vector_index_wrapper->SetIsTempHoldVectorIndex(false);
+      if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
+        vector_index_wrapper->ClearVectorIndex("child split");
+      }
+
+      store_region_meta->UpdateTemporaryDisableChange(to_region, false);
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
+                                         fmt::format("Clear follower vector index {}", to_region->Id()));
     }
 
     if (Server::GetInstance().IsLeader(from_region->Id())) {
@@ -358,6 +368,16 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] parent follower not need rebuild vector index.",
           request.job_id(), from_region->Id(), to_region->Id());
+
+      auto vector_index_wrapper = from_region->VectorIndexWrapper();
+      vector_index_wrapper->SetIsTempHoldVectorIndex(false);
+      if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
+        vector_index_wrapper->ClearVectorIndex("child split");
+      }
+
+      store_region_meta->UpdateTemporaryDisableChange(from_region, false);
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
+                                         fmt::format("Clear follower vector index {}", from_region->Id()));
     }
   }
 
@@ -539,6 +559,16 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
           parent_region->Id(), child_region->Id());
+
+      auto vector_index_wrapper = child_region->VectorIndexWrapper();
+      vector_index_wrapper->SetIsTempHoldVectorIndex(false);
+      if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
+        vector_index_wrapper->ClearVectorIndex("child split");
+      }
+
+      store_region_meta->UpdateTemporaryDisableChange(child_region, false);
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
+                                         fmt::format("Clear follower vector index {}", child_region->Id()));
     }
 
     if (Server::GetInstance().IsLeader(parent_region->Id())) {
@@ -548,6 +578,15 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
           parent_region->Id(), child_region->Id());
+      auto vector_index_wrapper = parent_region->VectorIndexWrapper();
+      vector_index_wrapper->SetIsTempHoldVectorIndex(false);
+      if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
+        vector_index_wrapper->ClearVectorIndex("child split");
+      }
+
+      store_region_meta->UpdateTemporaryDisableChange(parent_region, false);
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
+                                         fmt::format("Clear follower vector index {}", parent_region->Id()));
     }
   }
 
@@ -870,6 +909,16 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
       DINGO_LOG(WARNING) << fmt::format(
           "[merge.merging][job_id({}).region({}/{})] target follower not need rebuild vector index.", request.job_id(),
           source_region->Id(), target_region->Id());
+
+      auto vector_index_wrapper = target_region->VectorIndexWrapper();
+      vector_index_wrapper->SetIsTempHoldVectorIndex(false);
+      if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
+        vector_index_wrapper->ClearVectorIndex("merge");
+      }
+
+      store_region_meta->UpdateTemporaryDisableChange(target_region, false);
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
+                                         fmt::format("Clear follower vector index {}", target_region->Id()));
     }
   } else {
     store_region_meta->UpdateTemporaryDisableChange(target_region, false);
@@ -1022,15 +1071,10 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
                                         vector_with_ids.size(), Helper::TimestampNs() - start_time);
         if (status.ok()) {
           vector_index_wrapper->SetApplyLogId(log_id);
-        } else if (status.error_code() == pb::error::Errno::EVECTOR_INDEX_FULL ||
-                   status.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
+        } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {} {}",
                                             vector_index_id, vector_with_ids.size(),
                                             pb::error::Errno_Name(status.error_code()), status.error_str());
-        } else if (!status.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {} {}",
-                                          vector_index_id, vector_with_ids.size(),
-                                          pb::error::Errno_Name(status.error_code()), status.error_str());
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}", vector_index_id,
@@ -1137,13 +1181,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
         auto status = vector_index_wrapper->Delete(delete_ids);
         if (status.ok()) {
           vector_index_wrapper->SetApplyLogId(log_id);
-        } else if (status.error_code() == pb::error::Errno::EVECTOR_NOT_FOUND ||
-                   status.error_code() == pb::error::Errno::EVECTOR_INDEX_NOT_FOUND) {
+        } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {} {}",
-                                            vector_index_id, delete_ids.size(),
-                                            pb::error::Errno_Name(status.error_code()), status.error_str());
-        } else if (!status.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {} {}",
                                           vector_index_id, delete_ids.size(),
                                           pb::error::Errno_Name(status.error_code()), status.error_str());
         }

@@ -239,6 +239,19 @@ butil::Status VectorIndexWrapper::LoadMeta() {
   return butil::Status();
 }
 
+int64_t VectorIndexWrapper::LastBuildEpochVersion() {
+  if (snapshot_set_ == nullptr) {
+    return 0;
+  }
+
+  auto snapshot = snapshot_set_->GetLastSnapshot();
+  if (snapshot == nullptr) {
+    return 0;
+  }
+
+  return snapshot->Epoch().version();
+}
+
 int64_t VectorIndexWrapper::ApplyLogId() { return apply_log_id_.load(); }
 
 void VectorIndexWrapper::SetApplyLogId(int64_t apply_log_id) { apply_log_id_.store(apply_log_id); }
@@ -301,7 +314,6 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
     }
 
     ++version_;
-    last_build_epoch_version_ = vector_index->Epoch().version();
 
     ready_.store(true);
 

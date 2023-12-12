@@ -494,6 +494,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
 
       entry->set_id(vector_index_wrapper->Id());
       entry->set_version(vector_index_wrapper->Version());
+      entry->set_last_build_epoch_version(vector_index_wrapper->LastBuildEpochVersion());
       entry->set_dimension(vector_index_wrapper->GetDimension());
       entry->set_apply_log_index(vector_index_wrapper->ApplyLogId());
       entry->set_snapshot_log_index(vector_index_wrapper->SnapshotLogId());

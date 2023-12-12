@@ -96,8 +96,8 @@ bool SnapshotMeta::Init() {
   range_ = meta.range();
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.snapshot][index_id({})] Load vector index snapshot meta, snapshot_index_id: {}, path: {}",
-      vector_index_id_, snapshot_index_id, path_);
+      "[vector_index.snapshot][index_id({})] Load snapshot meta, epoch: {} snapshot_index_id: {}, path: {}",
+      vector_index_id_, Helper::RegionEpochToString(epoch_), snapshot_index_id, path_);
 
   return true;
 }

@@ -126,8 +126,7 @@ class VectorIndexHnsw : public VectorIndex {
 
   bthread_mutex_t mutex_;
 
-  uint32_t user_max_elements_;
-  uint32_t actual_max_elements_;
+  uint32_t max_element_limit_;
 
   // normalize vector
   bool normalize_;

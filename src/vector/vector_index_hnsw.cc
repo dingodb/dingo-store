@@ -49,7 +49,7 @@ DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
 DEFINE_int32(max_hnsw_parallel_thread_num_per_request, 32, "max hnsw parallel thread num to acquire in a request");
 DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
-DEFINE_int64(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
+DEFINE_uint32(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
 
 DECLARE_int64(vector_max_batch_count);
 
@@ -65,7 +65,7 @@ HnswThreadConig::HnswThreadConig() {
   } else {
     max_thread_num_ = std::thread::hardware_concurrency();
   }
-  DINGO_LOG(INFO) << "HnswThreadConfig: max hnsw parallel thread num is set to " << max_thread_num_;
+  DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw] max hnsw parallel thread num is set to {}", max_thread_num_);
 }
 
 uint32_t HnswThreadConig::AcquireThreads(uint32_t num) {
@@ -85,8 +85,9 @@ void HnswThreadConig::ReleaseThreads(uint32_t num) {
   BAIDU_SCOPED_LOCK(mutex_);
   running_thread_num_ -= num;
   if (BAIDU_UNLIKELY(running_thread_num_ < 0)) {
-    DINGO_LOG(ERROR) << "running_thread_num_ is illegal, running_thread_num_=" << running_thread_num_
-                     << ", max_thread_num_=" << max_thread_num_ << ", num=" << num;
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.hnsw] running_thread_num_ is illegal, running_thread_num_={} max_thread_num_={} num={}",
+        running_thread_num_, max_thread_num_, num);
     running_thread_num_ = 0;
   }
 }
@@ -205,19 +206,19 @@ VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParame
 
     // avoid error write vector index failed cause leader and follower data not consistency.
     // let user_max_elements_<actual_max_elements.
-    user_max_elements_ = hnsw_parameter.max_elements();
-    actual_max_elements_ = user_max_elements_ + Constant::kHnswMaxElementsExpandNum;
+    max_element_limit_ = hnsw_parameter.max_elements();
 
-    uint32_t max_element_for_create = actual_max_elements_ < FLAGS_hnsw_max_init_max_elements
-                                          ? actual_max_elements_
-                                          : FLAGS_hnsw_max_init_max_elements;
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.hnsw][id({})] create index, init_max_elements={} max_element_limit={} nlinks={} "
+        "efconstruction={} "
+        "metric_type={} dimension={}",
+        Id(), FLAGS_hnsw_max_init_max_elements, max_element_limit_, hnsw_parameter.nlinks(),
+        hnsw_parameter.efconstruction(), pb::common::MetricType_Name(hnsw_parameter.metric_type()),
+        hnsw_parameter.dimension());
 
-    DINGO_LOG(INFO) << "create hnsw_index, max_elements=" << max_element_for_create
-                    << ", nlinks=" << hnsw_parameter.nlinks() << ", efconstruction=" << hnsw_parameter.efconstruction()
-                    << ", metric_type=" << hnsw_parameter.metric_type() << ", dimension=" << hnsw_parameter.dimension();
-
-    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, max_element_for_create, hnsw_parameter.nlinks(),
-                                                      hnsw_parameter.efconstruction(), 100, false);
+    hnsw_index_ =
+        new hnswlib::HierarchicalNSW<float>(hnsw_space_, FLAGS_hnsw_max_init_max_elements, hnsw_parameter.nlinks(),
+                                            hnsw_parameter.efconstruction(), 100, false);
   }
 }
 
@@ -234,16 +235,15 @@ butil::Status VectorIndexHnsw::Add(const std::vector<pb::common::VectorWithId>& 
 
 butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
   if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "upsert vector empty";
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.hnsw][id({})] upsert vector empty.", Id());
     return butil::Status::OK();
   }
 
   // check
   uint32_t input_dimension = vector_with_ids[0].vector().float_values_size();
   if (input_dimension != static_cast<size_t>(dimension_)) {
-    std::string s =
-        fmt::format("HNSW: float size : {} not equal to  dimension(create) : {}", input_dimension, dimension_);
-    DINGO_LOG(ERROR) << s;
+    std::string s = fmt::format("dimension is invalid, expect({}) input({})", dimension_, input_dimension);
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", s);
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
 
@@ -252,15 +252,11 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   // Add data to index
   try {
     // check if we need to expand the max_elements
-    if (hnsw_index_->max_elements_ < actual_max_elements_ &&
-        hnsw_index_->cur_element_count > hnsw_index_->max_elements_ - FLAGS_vector_max_batch_count * 2) {
+    auto batch_count = std::max(FLAGS_vector_max_batch_count, static_cast<int64_t>(vector_with_ids.size()));
+    if (hnsw_index_->cur_element_count + batch_count * 2 > hnsw_index_->max_elements_) {
       auto new_max_elements = hnsw_index_->max_elements_ * 2;
-      if (new_max_elements > actual_max_elements_) {
-        new_max_elements = actual_max_elements_;
-      }
-
-      DINGO_LOG(INFO) << "expand hnsw_index, max_elements from " << hnsw_index_->max_elements_ << " to "
-                      << new_max_elements;
+      DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw][id({})] expand max element, {} -> {}.", Id(),
+                                     hnsw_index_->max_elements_, new_max_elements);
 
       hnsw_index_->resizeIndex(new_max_elements);
     }
@@ -273,8 +269,9 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
 
     if (available_threads > 0) {
-      DINGO_LOG(INFO) << "hnsw upsert, vector_index_id = " << id << ", count = " << vector_with_ids.size()
-                      << ", acquire_num = " << acquire_num << ", available_threads = " << available_threads;
+      DINGO_LOG(DEBUG) << fmt::format(
+          "[vector_index.hnsw][id({})] upsert, count({}) acquire_num({}) available_threads({})", id,
+          vector_with_ids.size(), acquire_num, available_threads);
     }
 
     size_t real_threads = available_threads > 0 ? available_threads : 1;
@@ -305,9 +302,9 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   } catch (std::runtime_error& e) {
     int64_t current_element_count = hnsw_index_->getCurrentElementCount();
     int64_t max_element_count = hnsw_index_->getMaxElements();
-    std::string s = fmt::format("upsert vector failed, error={} current_element_count={} max_element_count={}",
-                                e.what(), current_element_count, max_element_count);
-    DINGO_LOG(ERROR) << s;
+    std::string s = fmt::format("upsert failed, current_element_count({}) max_element_count({}) error: {}",
+                                current_element_count, max_element_count, e.what());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
     return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 }
@@ -327,8 +324,9 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
   DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
 
   if (available_threads > 0) {
-    DINGO_LOG(INFO) << "hnsw delete, vector_index_id = " << id << ", count = " << delete_ids.size()
-                    << ", acquire_num = " << acquire_num << ", available_threads = " << available_threads;
+    DINGO_LOG(DEBUG) << fmt::format(
+        "[vector_index.hnsw][id({})] delete, count({}) acquire_num({}) available_threads({})", Id(), delete_ids.size(),
+        acquire_num, available_threads);
   }
 
   size_t real_threads = available_threads > 0 ? available_threads : 1;
@@ -340,8 +338,9 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
     ParallelFor(0, delete_ids.size(), real_threads,
                 [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
   } catch (std::runtime_error& e) {
-    DINGO_LOG(ERROR) << "delete vector failed, error=" << e.what();
-    ret = butil::Status(pb::error::Errno::EINTERNAL, "delete vector failed, error=" + std::string(e.what()));
+    std::string s = fmt::format("delete vector failed, error: {}", e.what());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
+    ret = butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
   return ret;
@@ -380,12 +379,10 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
                                       const pb::common::VectorSearchParameter& search_parameter,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "vector_with_ids is empty";
     return butil::Status::OK();
   }
 
   if (topk == 0) {
-    DINGO_LOG(WARNING) << "topk is invalid";
     return butil::Status::OK();
   }
 
@@ -403,10 +400,9 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   if (search_parameter.hnsw().efsearch() < 0 || search_parameter.hnsw().efsearch() > 1024) {
-    std::string errmsg =
-        fmt::format("[hnsw] efsearch is illegal, {}, muste between 0 and 1024", search_parameter.hnsw().efsearch());
-    DINGO_LOG(ERROR) << errmsg;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, errmsg);
+    std::string s = fmt::format("efsearch is illegal, {}, must between 0 and 1024", search_parameter.hnsw().efsearch());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
   butil::Status ret;
@@ -415,8 +411,9 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   try {
     data.reset(new float[this->dimension_ * vector_with_ids.size()]);
   } catch (std::bad_alloc& e) {
-    DINGO_LOG(ERROR) << "upsert vector failed, error=" << e.what();
-    ret = butil::Status(pb::error::Errno::EINTERNAL, "upsert vector failed, error=" + std::string(e.what()));
+    std::string s = fmt::format("upsert vector failed, error: {}", e.what());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
+    ret = butil::Status(pb::error::Errno::EINTERNAL, s);
     return ret;
   }
 
@@ -470,7 +467,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
         } catch (std::exception& e) {
           std::string s =
               fmt::format("getDataByLabel failed, label: {}  err: {}", data_label[row * topk + i], e.what());
-          LOG(ERROR) << s;
+          LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
           return butil::Status(pb::error::Errno::EINTERNAL, s);
         }
       }
@@ -482,12 +479,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
                                                 std::priority_queue<std::pair<float, hnswlib::labeltype>>& result,
                                                 size_t row, int topk) {
     if (result.size() != topk) {
-      std::string s = fmt::format(
-          "Cannot return the results in a contigious 2D array. Probably ef or M is too small ignore.  topk : {} "
-          "result.size() : "
-          "{}",
-          topk, result.size());
-      LOG(WARNING) << s;
+      LOG(WARNING) << fmt::format("[vector_index.hnsw] tok and result size not match, topk: {} result: {}", topk,
+                                  result.size());
     }
 
     real_topks[row] = result.size();
@@ -513,8 +506,9 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
 
   if (available_threads > 0) {
-    DINGO_LOG(INFO) << "hnsw search, vector_index_id = " << id << ", count = " << vector_with_ids.size()
-                    << ", acquire_num = " << acquire_num << ", available_threads = " << available_threads;
+    DINGO_LOG(DEBUG) << fmt::format(
+        "[vector_index.hnsw][id({})] search, count({}) acquire_num({}) available_threads({})", Id(),
+        vector_with_ids.size(), acquire_num, available_threads);
   }
 
   size_t real_threads = available_threads > 0 ? available_threads : 1;
@@ -522,7 +516,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (search_parameter.hnsw().efsearch() > 0) {
-    DINGO_LOG(INFO) << "[hnsw] set ef_search=" << search_parameter.hnsw().efsearch();
+    DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw][id({})] set ef_search({}).", Id(),
+                                   search_parameter.hnsw().efsearch());
     hnsw_index_->setEf(search_parameter.hnsw().efsearch());
   }
 
@@ -533,8 +528,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       try {
         result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter.get());
       } catch (std::runtime_error& e) {
-        std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
-        LOG(ERROR) << s;
+        std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
+        LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
         statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
         return;
       }
@@ -556,8 +551,8 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       try {
         result = hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter.get());
       } catch (std::runtime_error& e) {
-        std::string s = fmt::format("parallel search vector failed, error= {}", e.what());
-        LOG(ERROR) << s;
+        std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
+        LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
         statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
         return;
       }
@@ -586,7 +581,6 @@ butil::Status VectorIndexHnsw::RangeSearch(std::vector<pb::common::VectorWithId>
                                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> /*filters*/,
                                            bool /*reconstruct*/, const pb::common::VectorSearchParameter& /*parameter*/,
                                            std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {
-  DINGO_LOG(ERROR) << "RangeSearch not support in Hnsw!!!";
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "RangeSearch not support in Hnsw!!!");
 }
 
@@ -605,8 +599,8 @@ butil::Status VectorIndexHnsw::ResizeMaxElements(int64_t new_max_elements) {
       return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
     }
   } catch (std::runtime_error& e) {
-    std::string s = fmt::format("resizeIndex failed, error= {}", e.what());
-    LOG(ERROR) << s;
+    std::string s = fmt::format("resize index failed, error: {}", e.what());
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
     return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
@@ -631,7 +625,7 @@ bool VectorIndexHnsw::IsExceedsMaxElements() {
     return true;
   }
 
-  return hnsw_index_->getCurrentElementCount() >= user_max_elements_;
+  return hnsw_index_->getCurrentElementCount() >= max_element_limit_;
 }
 
 hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }
@@ -716,31 +710,24 @@ uint32_t VectorIndexHnsw::CalcHnswCountFromMemory(int64_t memory_size_limit, int
 
 butil::Status VectorIndexHnsw::CheckAndSetHnswParameter(pb::common::CreateHnswParam& hnsw_parameter) {
   if (hnsw_parameter.dimension() <= 0) {
-    DINGO_LOG(ERROR) << "hnsw dimension is too small, dimension=" << hnsw_parameter.dimension();
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw] dimension is too small, dimension({}).",
+                                    hnsw_parameter.dimension());
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "hnsw dimension is too small");
   }
 
   if (hnsw_parameter.nlinks() > FLAGS_max_hnsw_nlinks_of_region) {
-    DINGO_LOG(WARNING) << "hnsw nlinks is too big, nlinks=" << hnsw_parameter.nlinks()
-                       << ", max_nlinks=" << FLAGS_max_hnsw_nlinks_of_region;
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.hnsw] nlinks is too big, nlinks({}) max_nlinks({}).",
+                                      hnsw_parameter.nlinks(), FLAGS_max_hnsw_nlinks_of_region);
     hnsw_parameter.set_nlinks(FLAGS_max_hnsw_nlinks_of_region);
   }
 
-  auto max_elements_limit = CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(),
-                                                    hnsw_parameter.nlinks());
-  if (hnsw_parameter.max_elements() > max_elements_limit) {
-    DINGO_LOG(WARNING) << "hnsw max_elements is too big, max_elements=" << hnsw_parameter.max_elements()
-                       << ", dimension=" << hnsw_parameter.dimension()
-                       << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
-                       << ", max elements in this dimention=" << max_elements_limit;
-    hnsw_parameter.set_max_elements(max_elements_limit);
-  } else if (hnsw_parameter.max_elements() == 0) {
-    DINGO_LOG(WARNING) << "hnsw max_elements is zero, max_elements=" << hnsw_parameter.max_elements()
-                       << ", dimension=" << hnsw_parameter.dimension()
-                       << ", max_memory_size_of_region=" << FLAGS_max_hnsw_memory_size_of_region
-                       << ", max elements in this dimention=" << max_elements_limit;
-    hnsw_parameter.set_max_elements(max_elements_limit);
-  }
+  auto max_element_limit = CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(),
+                                                   hnsw_parameter.nlinks());
+  hnsw_parameter.set_max_elements(max_element_limit);
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.hnsw] calc max element limit is {}, paramiter max_hnsw_memory_size_of_region({}) dimension({}) "
+      "nlinks({}).",
+      max_element_limit, FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(), hnsw_parameter.nlinks());
 
   return butil::Status::OK();
 }

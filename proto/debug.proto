@@ -201,6 +201,7 @@ message DebugResponse {
   message VectorIndexMetricsEntry {
     int64 id = 1;
     int64 version = 2;
+    int64 last_build_epoch_version = 3;
     uint32 dimension = 10;
     int64 apply_log_index = 20;
     int64 snapshot_log_index = 30;

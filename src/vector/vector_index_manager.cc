@@ -346,11 +346,10 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.loadorbuild][index_id({})][trace({})] Load vector index from snapshot failed, will rebuild "
-      "vector_index.",
+      "[vector_index.loadorbuild][index_id({})][trace({})] Load vector index from snapshot failed, will rebuild.",
       vector_index_id, trace);
 
-  // Build a new vector_index from original data
+  // Build a new vector index from original data
   status = RebuildVectorIndex(vector_index_wrapper, fmt::format("LOAD.REBUILD-{}", trace));
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][index_id({})][trace({})] Rebuild vector index failed.",
@@ -361,6 +360,14 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.loadorbuild][index_id({})][trace({})] Rebuild vector index success, elapsed time({}ms).",
       vector_index_id, trace, Helper::TimestampMs() - start_time);
+
+  // Save vector index
+  status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, trace);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.loadorbuild][index_id({})][trace({})] save vector index failed, error: {} {}.",
+        vector_index_wrapper->Id(), trace, pb::error::Errno_Name(status.error_code()), status.error_str());
+  }
 
   return butil::Status();
 }

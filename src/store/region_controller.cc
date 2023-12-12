@@ -384,6 +384,13 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   if (parent_region->Type() == pb::common::INDEX_REGION) {
+    int64_t region_epoch_version = parent_region->Epoch().version();
+    auto vector_index_wrapper = parent_region->VectorIndexWrapper();
+    if (vector_index_wrapper != nullptr && vector_index_wrapper->LastBuildEpochVersion() != region_epoch_version) {
+      return butil::Status(pb::error::EVECTOR_INDEX_SNAPSHOT_VERSION_NOT_MATCH,
+                           "Not match vector index(%lu) snapshot version(%lu/%lu)", parent_region_id,
+                           vector_index_wrapper->LastBuildEpochVersion(), region_epoch_version);
+    }
     if (!VectorCodec::IsValidKey(split_key)) {
       return butil::Status(pb::error::EKEY_INVALID,
                            fmt::format("Split key is invalid, length {} is wrong", split_key.size()));
@@ -409,6 +416,12 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
         if (!response.is_exist()) {
           return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
                                parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
+        }
+        if (response.last_build_epoch_version() != region_epoch_version) {
+          return butil::Status(pb::error::EVECTOR_INDEX_SNAPSHOT_VERSION_NOT_MATCH,
+                               "Not match vector index(%lu) snapshot version(%lu/%lu) at peer %s", parent_region_id,
+                               response.last_build_epoch_version(), region_epoch_version,
+                               Helper::EndPointToStr(peer.addr).c_str());
         }
       }
     }
