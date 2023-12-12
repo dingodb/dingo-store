@@ -52,6 +52,7 @@ message StoreRegionCheck {
   bool is_hold_vector_index = 8;
   bool check_vector_index_is_ready = 9;
   bool is_ready = 10;
+  int64 vector_index_version = 11;  // check if vector index version is equal to this value
 }
 
 message TaskPreCheck {

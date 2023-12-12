@@ -555,6 +555,7 @@ class CoordinatorControl : public MetaControl {
   void GenRegionSlim(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
   int64_t GetRegionLeaderId(int64_t region_id);
   pb::common::RegionStatus GetRegionStatus(int64_t region_id);
+  pb::common::RegionMetrics GetRegionMetrics(int64_t region_id);
   void GetRegionLeaderAndStatus(int64_t region_id, pb::common::RegionStatus &region_status, int64_t &leader_store_id);
   static pb::common::RegionState GenRegionState(const pb::common::RegionMetrics &region_metrics,
                                                 const pb::coordinator_internal::RegionInternal &region_internal);
@@ -780,7 +781,8 @@ class CoordinatorControl : public MetaControl {
                     int64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckSplitResultTask(pb::coordinator::TaskList *task_list, int64_t split_to_region_id);
-  static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
+  static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                                      int64_t vector_index_version);
   void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckStoreRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
