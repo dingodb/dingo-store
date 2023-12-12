@@ -1,11 +1,19 @@
+#!/bin/bash
+#
+# CAUTION: we setup ulimit parameters in deploy_func.sh, please check that file for
+#          how the ulimit options is required.
+# The ulimit is setup in start_program, the paramter of ulimit is:
+#   ulimit -n 800000
+#   ulimit -u 800000
+#   ulimit -c unlimited
+# If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit.
+
 DEPLOY_PARAMETER=deploy_parameters
 DEPLOY_SERVER_NUM=3
 
+# This is for developer, and only can be openned in develop envirement.
 export TCMALLOC_SAMPLE_PARAMETER=524288
 echo "export TCMALLOC_SAMPLE_PARAMETER=524288, to enable heap profiler"
-
-ulimit -n 40960
-ulimit -u 40960
 
 if [ -n "$1" ]
 then
