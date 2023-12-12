@@ -82,6 +82,19 @@ void RebuildVectorIndexTask::Run() {
                                       vector_index_wrapper_->Id(), trace_);
     return;
   }
+  auto state = region->State();
+  if (state == pb::common::StoreRegionState::STANDBY || state == pb::common::StoreRegionState::DELETING ||
+      state == pb::common::StoreRegionState::DELETED || state == pb::common::StoreRegionState::ORPHAN ||
+      state == pb::common::StoreRegionState::TOMBSTONE) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] region state({}) not match.",
+                                      vector_index_wrapper_->Id(), trace_, pb::common::StoreRegionState_Name(state));
+    return;
+  }
+  if (Helper::InvalidRange(region->Range())) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] region range invalid.",
+                                      vector_index_wrapper_->Id(), trace_);
+    return;
+  }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuild vector index {}", region->Id()));
 
@@ -236,6 +249,13 @@ void LoadOrBuildVectorIndexTask::Run() {
                                     vector_index_wrapper_->Id(), trace_);
     return;
   }
+  auto state = region->State();
+  if (state == pb::common::StoreRegionState::DELETING || state == pb::common::StoreRegionState::DELETED ||
+      state == pb::common::StoreRegionState::ORPHAN || state == pb::common::StoreRegionState::TOMBSTONE) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.loadorbuild][index_id({})][trace({})] region state({}) not match.",
+                                      vector_index_wrapper_->Id(), trace_, pb::common::StoreRegionState_Name(state));
+    return;
+  }
 
   if (is_temp_hold_vector_index_) {
     vector_index_wrapper_->SetIsTempHoldVectorIndex(true);
@@ -250,7 +270,8 @@ void LoadOrBuildVectorIndexTask::Run() {
     return;
   }
 
-  if (vector_index_wrapper_->IsOwnReady()) {
+  if (vector_index_wrapper_->IsOwnReady() &&
+      vector_index_wrapper_->LastBuildEpochVersion() >= region->Epoch().version()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Already own vector index {}", region->Id()));
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.loadorbuild][index_id({})][trace({})] vector index is ready, gave up loadorbuild vector index.",
@@ -272,7 +293,8 @@ void LoadOrBuildVectorIndexTask::Run() {
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
     if (!status.ok() && status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
-        status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND) {
+        status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND &&
+        status.error_code() != pb::error::EVECTOR_SNAPSHOT_NOT_FOUND) {
       DINGO_LOG(ERROR) << fmt::format(
           "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot failed, errcode: {}, "
           "errmsg: {}",
@@ -782,11 +804,16 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
                                                   const pb::common::RegionEpoch& epoch, const std::string& trace) {
   int64_t vector_index_id = vector_index_wrapper->Id();
+  int64_t start_time = Helper::TimestampMs();
   // try to load vector index from snapshot
   auto new_vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper, epoch);
   if (new_vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
   }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.load][index_id({})][trace({})] Load vector index snapshot success, elapsed time: {}ms.",
+      vector_index_id, trace, Helper::TimestampMs() - start_time);
 
   // catch up wal
   auto status = CatchUpLogToVectorIndex(vector_index_wrapper, new_vector_index, trace);
@@ -797,8 +824,9 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
     return status;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.load][index_id({})][trace({})] Load vector index success.",
-                                 vector_index_id, trace);
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.load][index_id({})][trace({})] Load vector index success, elapsed time: {}ms.", vector_index_id,
+      trace, Helper::TimestampMs() - start_time);
 
   return butil::Status();
 }
