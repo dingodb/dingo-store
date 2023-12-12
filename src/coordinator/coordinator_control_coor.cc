@@ -770,11 +770,23 @@ pb::common::RegionStatus CoordinatorControl::GetRegionStatus(int64_t region_id) 
 
   auto ret = region_metrics_map_.Get(region_id, region_metrics);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "GetRegionLeaderId failed, region_id: " << region_id << " not exists in region_metrics_map_";
+    DINGO_LOG(ERROR) << "GetRegionStatus failed, region_id: " << region_id << " not exists in region_metrics_map_";
     return region_status;
   }
 
   return region_metrics.region_status();
+}
+
+pb::common::RegionMetrics CoordinatorControl::GetRegionMetrics(int64_t region_id) {
+  pb::common::RegionMetrics region_metrics;
+
+  auto ret = region_metrics_map_.Get(region_id, region_metrics);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GetRegionMetrics failed, region_id: " << region_id << " not exists in region_metrics_map_";
+    return region_metrics;
+  }
+
+  return region_metrics;
 }
 
 void CoordinatorControl::GetRegionLeaderAndStatus(int64_t region_id, pb::common::RegionStatus& region_status,
@@ -2365,12 +2377,12 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
     return butil::Status(pb::error::Errno::EKEY_INVALID, "SplitRegion split_watershed_key is illegal");
   }
 
-  auto region_status = GetRegionStatus(split_from_region_id);
+  auto region_metrics = GetRegionMetrics(split_from_region_id);
 
   // validate split_from_region and split_to_region has NORMAL status
   if (split_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      region_metrics.region_status().raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_metrics.region_status().heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "SplitRegion split_from_region is not ready for split, "
                         "split_from_region_id = "
                      << split_from_region_id << " from_state=" << split_from_region.state();
@@ -2386,6 +2398,22 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
                      << ",  error: " << peer_status.error_str();
     return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL,
                          "SplitRegion split_from_region is not ready for split, error: %s", peer_status.error_cstr());
+  }
+
+  // check if vector_index_region has latest vector index epoch equal to region epoch.
+  if (split_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
+      split_from_region.definition().index_parameter().has_vector_index_parameter()) {
+    auto vector_index_version = region_metrics.vector_index_status().last_build_epoch_version();
+    auto region_version = split_from_region.definition().epoch().version();
+
+    if (region_version != vector_index_version) {
+      DINGO_LOG(ERROR) << "SplitRegion split_from_region vector index epoch is not equal to region epoch, "
+                          "split_from_region_id = "
+                       << split_from_region_id << " from_state=" << split_from_region.state()
+                       << ", vector_index_version=" << vector_index_version << ", region_version=" << region_version;
+      return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL,
+                           "SplitRegion split_from_region vector index epoch is not equal to region epoch");
+    }
   }
 
   // only send split region_cmd to split_from_region_id's leader store id
@@ -2425,7 +2453,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
 
     // check vector index is ready
     for (const auto& peer : split_from_region.definition().peers()) {
-      AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id);
+      AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id,
+                              split_from_region.definition().epoch().version());
     }
   }
 
@@ -2493,12 +2522,15 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MergeRegion to region not exists");
   }
 
-  auto region_status = GetRegionStatus(merge_from_region_id);
+  auto merge_from_region_metrics = GetRegionMetrics(merge_from_region_id);
+  auto merge_to_region_metrics = GetRegionMetrics(merge_to_region_id);
 
   // validate merge_from_region and merge_to_region has NORMAL status
   if (merge_from_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      merge_from_region_metrics.region_status().raft_status() !=
+          ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      merge_from_region_metrics.region_status().heartbeat_status() !=
+          ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "MergeRegion merge_from_region is not ready for merge, "
                         "merge_from_region_id = "
                      << merge_from_region_id << " from_state=" << merge_from_region.state();
@@ -2508,8 +2540,10 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
 
   // validate merge_to_region and merge_to_region has NORMAL status
   if (merge_to_region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
-      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
-      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+      merge_to_region_metrics.region_status().raft_status() !=
+          ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      merge_to_region_metrics.region_status().heartbeat_status() !=
+          ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "MergeRegion merge_to_region is not ready for merge, "
                         "merge_to_region_id = "
                      << merge_to_region_id << " from_state=" << merge_to_region.state();
@@ -2660,6 +2694,22 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
           << is_compatiablity.error_str();
       return is_compatiablity;
     }
+
+    // check if vector_index_region has latest vector index epoch equal to region epoch.
+    if (merge_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
+        merge_from_region.definition().index_parameter().has_vector_index_parameter()) {
+      auto vector_index_version = merge_from_region_metrics.vector_index_status().last_build_epoch_version();
+      auto region_version = merge_from_region.definition().epoch().version();
+
+      if (region_version != vector_index_version) {
+        DINGO_LOG(ERROR) << "MergeRegion merge_from_region vector index epoch is not equal to region epoch, "
+                            "merge_from_region_id = "
+                         << merge_from_region_id << " from_state=" << merge_from_region.state()
+                         << ", vector_index_version=" << vector_index_version << ", region_version=" << region_version;
+        return butil::Status(pb::error::Errno::EMERGE_STATUS_ILLEGAL,
+                             "MergeRegion merge_from_region vector index epoch is not equal to region epoch");
+      }
+    }
   }
 
   // only send merge region_cmd to merge_from_region_id's leader store id
@@ -2688,7 +2738,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
 
     // check vector index is ready
     for (const auto& peer : merge_from_region.definition().peers()) {
-      AddCheckVectorIndexTask(new_task_list, peer.store_id(), merge_from_region_id);
+      AddCheckVectorIndexTask(new_task_list, peer.store_id(), merge_from_region_id,
+                              merge_from_region.definition().epoch().version());
     }
   }
 
@@ -4640,7 +4691,7 @@ void CoordinatorControl::AddCheckMergeResultTask(pb::coordinator::TaskList* task
 }
 
 void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
-                                                 int64_t region_id) {
+                                                 int64_t region_id, int64_t vector_index_version) {
   // build check_vector_index task
   auto* check_vector_task = task_list->add_tasks();
   auto* region_check = check_vector_task->mutable_pre_check();
@@ -4651,6 +4702,10 @@ void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task
   region_check->mutable_store_region_check()->set_is_hold_vector_index(true);
   region_check->mutable_store_region_check()->set_check_vector_index_is_ready(true);
   region_check->mutable_store_region_check()->set_is_ready(true);
+
+  if (vector_index_version > 0) {
+    region_check->mutable_store_region_check()->set_vector_index_version(vector_index_version);
+  }
 }
 
 void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
@@ -4743,7 +4798,7 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
 
     return check_passed;
   } else if (task_pre_check.type() == pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK) {
-    pb::common::RegionMetrics region;
+    pb::common::RegionMetrics store_region_metrics;
     {
       BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
       auto it = store_region_metrics_map_.find(task_pre_check.store_region_check().store_id());
@@ -4759,35 +4814,37 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
         return false;
       }
 
-      region = region_metrics_map.at(task_pre_check.store_region_check().region_id());
+      store_region_metrics = region_metrics_map.at(task_pre_check.store_region_check().region_id());
     }
 
     bool check_passed = true;
-    const auto& region_check = task_pre_check.store_region_check();
+    const auto& store_region_check = task_pre_check.store_region_check();
 
-    if (region_check.store_region_state() != 0 && region_check.store_region_state() != region.store_region_state()) {
+    if (store_region_check.store_region_state() != 0 &&
+        store_region_check.store_region_state() != store_region_metrics.store_region_state()) {
       check_passed = false;
     }
 
-    if (region_check.raft_node_status() != 0 && region_check.raft_node_status() != region.braft_status().raft_state()) {
+    if (store_region_check.raft_node_status() != 0 &&
+        store_region_check.raft_node_status() != store_region_metrics.braft_status().raft_state()) {
       check_passed = false;
     }
 
-    if (region_check.has_range()) {
-      if (region_check.range().start_key() != region.region_definition().range().start_key() ||
-          region_check.range().end_key() != region.region_definition().range().end_key()) {
+    if (store_region_check.has_range()) {
+      if (store_region_check.range().start_key() != store_region_metrics.region_definition().range().start_key() ||
+          store_region_check.range().end_key() != store_region_metrics.region_definition().range().end_key()) {
         check_passed = false;
       }
     }
 
-    if (region_check.peers_size() > 0) {
+    if (store_region_check.peers_size() > 0) {
       std::vector<int64_t> peers_to_check;
       std::vector<int64_t> peers_of_region;
 
-      for (const auto& it : region_check.peers()) {
+      for (const auto& it : store_region_check.peers()) {
         peers_to_check.push_back(it.store_id());
       }
-      for (const auto& it : region.region_definition().peers()) {
+      for (const auto& it : store_region_metrics.region_definition().peers()) {
         peers_of_region.push_back(it.store_id());
       }
 
@@ -4800,34 +4857,57 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
     }
 
     // check vector_index
-    if (region_check.check_vector_index_is_hold()) {
-      if (!region.has_vector_index_status()) {
+    if (store_region_check.check_vector_index_is_hold()) {
+      if (!store_region_metrics.has_vector_index_status()) {
         DINGO_LOG(INFO) << "check vector_index faild, region.has_vector_index_status() is false, can't do check, wait "
                            "for heartbeat. store_id="
-                        << region_check.store_id() << ", region_id=" << region_check.region_id();
+                        << store_region_check.store_id() << ", region_id=" << store_region_check.region_id();
         check_passed = false;
-      } else if (region_check.is_hold_vector_index() != region.vector_index_status().is_hold_vector_index()) {
+      } else if (store_region_check.is_hold_vector_index() !=
+                 store_region_metrics.vector_index_status().is_hold_vector_index()) {
         DINGO_LOG(INFO) << "check vector_index failed, region_check.is_hold_vector_index()="
-                        << region_check.is_hold_vector_index()
+                        << store_region_check.is_hold_vector_index()
                         << " region.vector_index_status().is_hold_vector_index()="
-                        << region.vector_index_status().is_hold_vector_index()
-                        << ", store_id=" << region_check.store_id() << ", region_id=" << region_check.region_id()
-                        << ", region=" << region.ShortDebugString();
+                        << store_region_metrics.vector_index_status().is_hold_vector_index()
+                        << ", store_id=" << store_region_check.store_id()
+                        << ", region_id=" << store_region_check.region_id()
+                        << ", region=" << store_region_metrics.ShortDebugString();
         check_passed = false;
       }
     }
 
-    if (region_check.check_vector_index_is_ready()) {
-      if (!region.has_vector_index_status()) {
+    if (store_region_check.check_vector_index_is_ready()) {
+      if (!store_region_metrics.has_vector_index_status()) {
         DINGO_LOG(INFO) << "check vector_index faild, region.has_vector_index_status() is false, can't do check, wait "
                            "for heartbeat. store_id="
-                        << region_check.store_id() << ", region_id=" << region_check.region_id();
+                        << store_region_check.store_id() << ", region_id=" << store_region_check.region_id();
         check_passed = false;
-      } else if (region_check.is_ready() != region.vector_index_status().is_ready()) {
-        DINGO_LOG(INFO) << "check vector_index failed, region_check.is_ready()=" << region_check.is_ready()
-                        << " region.vector_index_status().is_ready()=" << region.vector_index_status().is_ready()
-                        << ", store_id=" << region_check.store_id() << ", region_id=" << region_check.region_id()
-                        << ", region=" << region.ShortDebugString();
+      } else if (store_region_check.is_ready() != store_region_metrics.vector_index_status().is_ready()) {
+        DINGO_LOG(INFO) << "check vector_index failed, region_check.is_ready()=" << store_region_check.is_ready()
+                        << " region.vector_index_status().is_ready()="
+                        << store_region_metrics.vector_index_status().is_ready()
+                        << ", store_id=" << store_region_check.store_id()
+                        << ", region_id=" << store_region_check.region_id()
+                        << ", region=" << store_region_metrics.ShortDebugString();
+        check_passed = false;
+      }
+    }
+
+    if (store_region_check.vector_index_version() > 0) {
+      if (!store_region_metrics.has_vector_index_status()) {
+        DINGO_LOG(INFO) << "check vector_index faild, region.has_vector_index_status() is false, can't do check, wait "
+                           "for heartbeat. store_id="
+                        << store_region_check.store_id() << ", region_id=" << store_region_check.region_id();
+        check_passed = false;
+      } else if (store_region_check.vector_index_version() !=
+                 store_region_metrics.vector_index_status().last_build_epoch_version()) {
+        DINGO_LOG(INFO) << "check vector_index failed, region_check.vector_index_version()="
+                        << store_region_check.vector_index_version()
+                        << " region.vector_index_status().vector_index_version()="
+                        << store_region_metrics.vector_index_status().last_build_epoch_version()
+                        << ", store_id=" << store_region_check.store_id()
+                        << ", region_id=" << store_region_check.region_id()
+                        << ", region=" << store_region_metrics.ShortDebugString();
         check_passed = false;
       }
     }
