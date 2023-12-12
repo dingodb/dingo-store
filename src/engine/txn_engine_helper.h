@@ -153,8 +153,33 @@ class TxnEngineHelper {
 
   static butil::Status Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                           int64_t safe_point_ts);
+
+  static butil::Status DoGc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                            int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                            const std::string &region_start_key, const std::string &region_end_key);
+
+  static butil::Status CheckLockForGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                      const std::string &start_key, const std::string &end_key, int64_t safe_point_ts);
+
+  static butil::Status RaftEngineWriteForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                            const std::vector<std::string> &kv_deletes_lock,
+                                            const std::vector<std::string> &kv_deletes_data,
+                                            const std::vector<std::string> &kv_deletes_write);
+
+  static butil::Status DoFinalWorkForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                        RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                        const std::string &write_key, int64_t safe_point_ts,
+                                        std::vector<std::string> &kv_deletes_lock,                    // NOLINT
+                                        std::vector<std::string> &kv_deletes_data,                    // NOLINT
+                                        std::vector<std::string> &kv_deletes_write,                   // NOLINT
+                                        std::string &lock_start_key,                                  // NOLINT
+                                        std::string &lock_end_key, std::string &last_lock_start_key,  // NOLINT
+                                        std::string &last_lock_end_key);                              // NOLINT
+
+  static void RegularUpdateSafePointTsHandler(void *arg);
+  static void RegularDoGcHandler(void *arg);
 };
 
 }  // namespace dingodb
 
-#endif  // DINGODB_TXN_ENGINE_HELPER_H_
+#endif  // DINGODB_TXN_ENGINE_HELPER_H_  // NOLINT

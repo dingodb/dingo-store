@@ -45,6 +45,7 @@ cmake-build-release
 tags
 .cache
 .run
+.fleet
 
 # eclipse
 .cproject

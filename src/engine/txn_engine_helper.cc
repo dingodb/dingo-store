@@ -14,7 +14,7 @@
 
 #include "engine/txn_engine_helper.h"
 
-#include <cstddef>
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -27,6 +27,8 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "fmt/core.h"
+#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
@@ -46,6 +48,7 @@ DEFINE_int64(max_commit_count, 1024, "max commit count");
 DEFINE_int64(max_rollback_count, 1024, "max rollback count");
 DEFINE_int64(max_resolve_count, 1024, "max rollback count");
 DEFINE_int64(max_pessimistic_count, 1024, "max pessimistic count");
+DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
 butil::Status TxnIterator::Init() {
   snapshot_ = raw_engine_->GetSnapshot();
@@ -2761,12 +2764,12 @@ butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::sha
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
-butil::Status TxnEngineHelper::Gc(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
+butil::Status TxnEngineHelper::Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                   std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Gc, safe_point_ts: {}", ctx->RegionId(), safe_point_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
 
-  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Gc", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
@@ -2779,39 +2782,620 @@ butil::Status TxnEngineHelper::Gc(RawEnginePtr /*raw_engine*/, std::shared_ptr<E
                      << ", response is nullptr";
     return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
   }
-  auto *error = response->mutable_error();
+
+  [[maybe_unused]] auto *error = response->mutable_error();
+
+  std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+  std::shared_ptr<GCSafePoint> gc_safe_point = store_meta_manager->GetGCSafePoint();
+
+  std::string region_start_key = region->Range().start_key();
+  std::string region_end_key = region->Range().end_key();
+
+  return DoGc(raw_engine, raft_engine, ctx, safe_point_ts, gc_safe_point, region_start_key, region_end_key);
+}
+
+butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                    std::shared_ptr<Context> ctx, int64_t safe_point_ts,
+                                    std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
+                                    const std::string &region_end_key) {
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_delete_count = 0;
+
+  DINGO_LOG(INFO) << fmt::format("[txn_gc][statics] start region start_key: {} end_key: {} safe_point_ts : {}",
+                                 Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key),
+                                 safe_point_ts);
 
   std::vector<std::string> kv_deletes_lock;
   std::vector<std::string> kv_deletes_data;
   std::vector<std::string> kv_deletes_write;
 
-  // TODO: scan data to be delete and add items to kv_deletes_*
+  std::string lock_start_key;
+  std::string lock_end_key;
 
-  // after all mutations is processed, write into raft engine
+  std::string last_lock_start_key;
+  std::string last_lock_end_key;
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions write_iter_options;
+  write_iter_options.lower_bound = Helper::EncodeTxnKey(region_start_key, Constant::kMaxVer);
+  write_iter_options.upper_bound = Helper::EncodeTxnKey(region_end_key, -1);
+
+  auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
+  if (nullptr == write_iter) {
+    std::string s = fmt::format("[txn_gc][write] NewIterator failed. region start_key: {} end_key: {} ",
+                                Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  write_iter->Seek(write_iter_options.lower_bound);
+
+  // this var is too long. this is important var. do not cut down it.
+  bool is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
+  // this var is too long. this is important var. do not cut down it.
+  bool is_first_put_key_if_write_ts_le_safe_point_ts = true;
+
+  std::string write_key;
+  std::string last_write_key;
+
+  while (write_iter->Valid()) {
+    std::string_view write_iter_key = write_iter->Key();
+    std::string_view write_iter_value = write_iter->Value();
+
+    int64_t write_ts = 0;
+
+    butil::Status status = Helper::DecodeTxnKey(write_iter_key, write_key, write_ts);
+    if (!status.ok()) {
+      std::string s = fmt::format("[txn_gc][write] DecodeTxnKey failed, write_iter->key : {} ",
+                                  Helper::StringToHex(write_iter_key));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    pb::store::WriteInfo write_info;
+    bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
+    if (!parse_success) {
+      std::string s = fmt::format(
+          "[txn_gc][write] ParseFromArray failed, write_iter->key : {}  write_key : {}  write_ts : {}, "
+          "write_iter->value : {} ",
+          Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
+          Helper::StringToHex(write_iter_value));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    // reset for first put
+    if (last_write_key != write_key) {
+      is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
+      last_write_key = write_key;
+      is_first_put_key_if_write_ts_le_safe_point_ts = true;
+    }
+
+    // update lock_start_key
+    if (lock_start_key != write_key) {
+      if (lock_start_key == last_lock_start_key || lock_start_key.empty()) {
+        lock_start_key = write_key;
+      }
+    }
+
+    pb::store::Op op = write_info.op();
+
+    // write_ts > safe_point_ts key value
+    if (write_ts > safe_point_ts) {
+      if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
+        if (pb::store::Op::Put == op || pb::store::Op::Delete == op) {
+          is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = true;
+        }
+      }
+      write_iter->Next();
+      continue;
+    }
+
+    // handle write_ts <= safe_point_ts key value
+    switch (op) {
+      case pb::store::Put: {
+        // caution!!!
+        // if write_ts > safe_point_ts. not exist delete or put key.
+        // if write_ts <= safe_point_ts. first is put key. this first put key can not be delete !!!
+        if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_write_ts_le_safe_point_ts) {
+            // others put key can be delete. clear this flag.
+            is_first_put_key_if_write_ts_le_safe_point_ts = false;
+            write_iter->Next();
+            continue;
+          }
+        }
+        kv_deletes_write.emplace_back(write_iter_key);
+        if (write_info.short_value().empty()) {
+          // try get key from data column family. if not exist , do not delete.
+          std::string data_key = Helper::EncodeTxnKey(write_key, write_info.start_ts());
+          std::string data_value;
+          status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
+          if (status.ok()) {
+            kv_deletes_data.emplace_back(data_key);
+          } else {
+            if (pb::error::Errno::EKEY_NOT_FOUND == status.error_code()) {
+              std::string s = fmt::format(
+                  "[txn_gc][data] key not found. maybe key already deleted or txn error. ignore. key: {} raw_key : {}  "
+                  "start_ts : {} "
+                  "status : {} write_info: {}",
+                  Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
+                  status.error_cstr(), write_info.ShortDebugString());
+              DINGO_LOG(INFO) << s;
+            } else {  // other error
+              std::string s = fmt::format(
+                  "[txn_gc][data] get key failed. key: {} raw_key : {}  start_ts : {}"
+                  "status : {} write_info: {}",
+                  Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
+                  status.error_cstr(), write_info.ShortDebugString());
+              DINGO_LOG(ERROR) << s;
+            }
+          }
+        }
+        break;
+      }
+      case pb::store::Delete: {
+        // caution!!!
+        // if write_ts > safe_point_ts. not exist delete or put key.
+        // if write_ts <= safe_point_ts. first is delete key. this first put key actually can be delete.
+        if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_write_ts_le_safe_point_ts) {
+            is_first_put_key_if_write_ts_le_safe_point_ts = false;
+          }
+        }
+        kv_deletes_write.emplace_back(write_iter_key);
+        break;
+      }
+
+      case pb::store::Rollback: {
+        kv_deletes_write.emplace_back(write_iter_key);
+        break;
+      }
+      case pb::store::Lock:
+        [[fallthrough]];
+      case pb::store::PutIfAbsent:
+        [[fallthrough]];
+      case pb::store::None:
+        [[fallthrough]];
+      case pb::store::Op_INT_MIN_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      case pb::store::Op_INT_MAX_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      default: {
+        std::string s = fmt::format(
+            "[txn_gc][write] invalid pb::store::Op type : {} type string : {} , write_iter->key : {}  write_key : {}  "
+            "write_ts : {} write_iter->value "
+            ": {} "
+            "ignore. ",
+            static_cast<int>(op), pb::store::Op_Name(op), Helper::StringToHex(write_iter_key),
+            Helper::StringToHex(write_key), write_ts, write_info.ShortDebugString());
+        DINGO_LOG(ERROR) << s;
+        break;
+      }
+    }
+
+    if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
+      auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+      if (internal_gc_stop || gc_safe_point->GetForceGcStop()) {
+        DINGO_LOG(INFO) << fmt::format("gc_stop set stop, region_id : {}.  start_key : {} end_key : {}. return",
+                                       ctx->RegionId(), Helper::StringToHex(region_start_key),
+                                       Helper::StringToHex(region_end_key));
+        gc_safe_point->SetForceGcStop(true);
+        goto _interrupt1;
+      }
+
+      if (safe_point_ts < internal_safe_point_ts) {
+        DINGO_LOG(INFO) << fmt::format(
+            "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore. "
+            "region_id : {}.  start_key : {} end_key : {}",
+            safe_point_ts, internal_safe_point_ts, ctx->RegionId(), Helper::StringToHex(region_start_key),
+            Helper::StringToHex(region_end_key));
+      }
+
+      total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
+      DoFinalWorkForGc(raft_engine, ctx, reader, snapshot, write_key, safe_point_ts, kv_deletes_lock, kv_deletes_data,
+                       kv_deletes_write, lock_start_key, lock_end_key, last_lock_start_key, last_lock_end_key);
+    }
+
+    write_iter->Next();
+  }
+
+_interrupt1:
+
+  auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+  if (internal_gc_stop || gc_safe_point->GetForceGcStop()) {
+    DINGO_LOG(INFO) << "set internal_gc_stop stop, return";
+    gc_safe_point->SetForceGcStop(true);
+    goto _interrupt2;
+  }
+
+  if (safe_point_ts < internal_safe_point_ts) {
+    DINGO_LOG(INFO) << fmt::format(
+        "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore.",
+        safe_point_ts, internal_safe_point_ts);
+  }
+
+  total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
+  DoFinalWorkForGc(raft_engine, ctx, reader, snapshot, write_key, safe_point_ts, kv_deletes_lock, kv_deletes_data,
+                   kv_deletes_write, lock_start_key, lock_end_key, last_lock_start_key, last_lock_end_key);
+
+_interrupt2:
+  end_time_ms = Helper::TimestampMs();
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[txn_gc][statics] end region start_key: {} end_key: {} safe_point_ts : {} time consuming : {} ms "
+      "total_delete_count : {}",
+      Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts,
+      (end_time_ms - start_time_ms), total_delete_count);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                              const std::string &start_key, const std::string &end_key,
+                                              int64_t safe_point_ts) {
+  auto lambda_get_raw_key_function = [](std::string_view lock_iter_key) {
+    std::string lock_key;
+    int64_t ts = 0;
+    Helper::DecodeTxnKey(lock_iter_key, lock_key, ts);
+    return lock_key;
+  };
+
+  int64_t total_count = 0;
+  int64_t failed_count = 0;
+
+  auto lambda_add_error_statics_function = [&total_count, &failed_count]() {
+    failed_count++;
+    total_count++;
+  };
+
+  IteratorOptions lock_iter_options;
+  lock_iter_options.lower_bound = Helper::EncodeTxnKey(start_key, Constant::kLockVer);
+  lock_iter_options.upper_bound = Helper::EncodeTxnKey(end_key, 0);
+
+  std::shared_ptr<dingodb::Iterator> lock_iter = reader->NewIterator(Constant::kTxnLockCF, snapshot, lock_iter_options);
+  if (nullptr == lock_iter) {
+    std::string s = fmt::format("[txn_gc][lock] NewIterator failed, start_key: {} end_key : {} safe_point_ts : {}",
+                                Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  lock_iter->Seek(lock_iter_options.lower_bound);
+
+  while (lock_iter->Valid()) {
+    std::string_view lock_iter_key = lock_iter->Key();
+    std::string_view lock_iter_value = lock_iter->Value();
+
+    if (lock_iter_value.empty()) {
+      std::string s = fmt::format("[txn_gc][lock] lock info empty. lock_iter_key: {} lock_key : {} safe_point_ts : {}",
+                                  Helper::StringToHex(lock_iter_key),
+                                  Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts);
+      DINGO_LOG(ERROR) << s;
+      lambda_add_error_statics_function();
+      lock_iter->Next();
+      continue;
+    }
+
+    pb::store::LockInfo lock_info;
+    bool parse_success = lock_info.ParseFromString(std::string(lock_iter_value));
+    if (!parse_success) {
+      std::string s = fmt::format(
+          "[txn_gc][lock] parse lock info failed, lock_iter_key : {} lock_key: {} , lock_value : {} safe_point_ts : {}",
+          Helper::StringToHex(lock_iter_key), Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)),
+          Helper::StringToHex(lock_iter_value), safe_point_ts);
+      DINGO_LOG(ERROR) << s;
+      lambda_add_error_statics_function();
+      lock_iter->Next();
+      continue;
+    }
+
+    int64_t lock_ts = lock_info.lock_ts();
+    if (lock_ts <= safe_point_ts) {
+      std::string s = fmt::format(
+          "[txn_gc][lock] find lock error. exist lock_ts : {} <= safe_point_ts : {}, lock_iter_key : {} lock_key: {}  "
+          ", safe_point_ts : {} "
+          "lock_value : {}",
+          lock_ts, safe_point_ts, Helper::StringToHex(lock_iter_key),
+          Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts, lock_info.ShortDebugString());
+      DINGO_LOG(ERROR) << s;
+      lambda_add_error_statics_function();
+      lock_iter->Next();
+      continue;
+    }
+
+    lock_iter->Next();
+    total_count++;
+  }
+
+  std::string s = fmt::format(
+      "[txn_gc][lock] scan lock column family. start_key : {} end_key : {} safe_point_ts : {} total : {} success : {} "
+      "failed : {}",
+      Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts, total_count,
+      (total_count - failed_count), failed_count);
+  DINGO_LOG(INFO) << s;
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::RaftEngineWriteForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                                    const std::vector<std::string> &kv_deletes_lock,
+                                                    const std::vector<std::string> &kv_deletes_data,
+                                                    const std::vector<std::string> &kv_deletes_write) {
   pb::raft::TxnRaftRequest txn_raft_request;
   auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
 
-  auto *write_dels = cf_put_delete->add_deletes_with_cf();
-  write_dels->set_cf_name(Constant::kTxnWriteCF);
-  for (auto &key_del : kv_deletes_write) {
-    write_dels->add_keys(key_del);
+  pb::raft::DeletesWithCf *write_dels = nullptr;
+  if (!kv_deletes_write.empty()) {
+    write_dels = cf_put_delete->add_deletes_with_cf();
+    write_dels->set_cf_name(Constant::kTxnWriteCF);
+    for (const auto &key_del : kv_deletes_write) {
+      write_dels->add_keys(key_del);
+    }
   }
-  auto *lock_dels = cf_put_delete->add_deletes_with_cf();
-  lock_dels->set_cf_name(Constant::kTxnLockCF);
-  for (auto &key_del : kv_deletes_lock) {
-    lock_dels->add_keys(key_del);
+
+  pb::raft::DeletesWithCf *lock_dels = nullptr;
+  if (!kv_deletes_lock.empty()) {
+    lock_dels = cf_put_delete->add_deletes_with_cf();
+    lock_dels->set_cf_name(Constant::kTxnLockCF);
+    for (const auto &key_del : kv_deletes_lock) {
+      lock_dels->add_keys(key_del);
+    }
   }
-  auto *data_dels = cf_put_delete->add_deletes_with_cf();
-  data_dels->set_cf_name(Constant::kTxnDataCF);
-  for (auto &key_del : kv_deletes_data) {
-    data_dels->add_keys(key_del);
+
+  pb::raft::DeletesWithCf *data_dels = nullptr;
+  if (!kv_deletes_data.empty()) {
+    data_dels = cf_put_delete->add_deletes_with_cf();
+    data_dels->set_cf_name(Constant::kTxnDataCF);
+    for (const auto &key_del : kv_deletes_data) {
+      data_dels->add_keys(key_del);
+    }
+  }
+
+  if (nullptr == write_dels && nullptr == lock_dels && nullptr == data_dels) {
+    return butil::Status::OK();
   }
 
   if (txn_raft_request.ByteSizeLong() == 0) {
     return butil::Status::OK();
   }
 
+  if (nullptr == raft_engine) {
+    return butil::Status::OK();
+  }
+
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+}
+
+butil::Status TxnEngineHelper::DoFinalWorkForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                                RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                                const std::string &write_key, int64_t safe_point_ts,
+                                                std::vector<std::string> &kv_deletes_lock,
+                                                std::vector<std::string> &kv_deletes_data,
+                                                std::vector<std::string> &kv_deletes_write, std::string &lock_start_key,
+                                                std::string &lock_end_key, std::string &last_lock_start_key,
+                                                std::string &last_lock_end_key) {
+  butil::Status status;
+  lock_end_key = write_key;
+  // optimization . already checked Ignore.
+  if (lock_start_key != last_lock_start_key && lock_end_key != last_lock_end_key) {
+    status = CheckLockForGc(reader, snapshot, lock_start_key, lock_end_key, safe_point_ts);
+    if (!status.ok()) {
+      std::string s = fmt::format(
+          "[txn_gc][lock] CheckLockForGc failed. lock_start_key : {} lock_end_key : {} safe_point_ts : {}. ignore.",
+          Helper::StringToHex(lock_start_key), Helper::StringToHex(lock_end_key), safe_point_ts);
+      DINGO_LOG(ERROR) << s + status.error_str();
+    }
+  }
+
+  status = RaftEngineWriteForGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write);
+  if (!status.ok()) {
+    std::string s = fmt::format(
+        "[txn_gc][write] RaftEngineWriteForGc failed. kv_deletes_lock size : {} kv_deletes_data size : {} "
+        "kv_deletes_write : {} safe_point_ts : {}. ignore.",
+        kv_deletes_lock.size(), kv_deletes_data.size(), kv_deletes_write.size(), safe_point_ts);
+    DINGO_LOG(ERROR) << s + status.error_str();
+  }
+
+  last_lock_start_key = lock_start_key;
+  last_lock_end_key = lock_end_key;
+  lock_start_key = lock_end_key;
+  lock_end_key = "";
+  kv_deletes_lock.resize(0);
+  kv_deletes_data.resize(0);
+  kv_deletes_write.resize(0);
+
+  return butil::Status();
+}
+
+void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
+  static std::atomic<bool> g_regular_update_safe_point_ts_handler_running(false);
+
+  if (g_regular_update_safe_point_ts_handler_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO)
+        << "RegularUpdateSafePointTsHandler... g_regular_update_safe_point_ts_handler_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_regular_update_safe_point_ts_handler_running);
+
+  int64_t start_time = 0;
+
+  std::shared_ptr<CoordinatorInteraction> coordinator_interaction = Server::GetInstance().GetCoordinatorInteraction();
+  std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+
+  pb::coordinator::GetGCSafePointRequest request;
+
+  request.mutable_request_info()->set_request_id(Server::GetInstance().Id());
+
+  start_time = Helper::TimestampMs();
+  pb::coordinator::GetGCSafePointResponse response;
+  butil::Status status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("[GetGCSafePoint] store heartbeat failed, error: {} {}",
+                                      pb::error::Errno_Name(status.error_code()), status.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[GetGCSafePoint] response size({}) elapsed time({} ms) response : {}",
+                                 response.ByteSizeLong(), Helper::TimestampMs() - start_time,
+                                 response.ShortDebugString());
+
+  std::shared_ptr<GCSafePoint> gc_safe_point = store_meta_manager->GetGCSafePoint();
+
+  bool gc_stop = response.gc_stop();
+  int64_t safe_point_ts = response.safe_point();
+
+  gc_safe_point->SetGcFlagAndSafePointTs(gc_stop, safe_point_ts);
+}
+
+// readme .
+// This macro handles the last safe_point_ts state.
+// If it is started, there is no need to repeat the process.
+// But the problem is that some regions may not be processed for a long time.
+// This region cannot be processed due to leader switching or region state changes.
+// In addition, the node's out-of-synchronization of data will also result in the inability to process it in time.
+// Scenario 1: If we don’t care about the data processing of a certain region, we can enable it.
+// Scenario 2: If the system is always busy and you don’t care that the data can be cleared in time. we can disable it.
+// To be conservative, let's close him first. The consequence is a waste of system resources.
+#ifndef ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS
+#define ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS
+#endif
+#undef ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS
+
+void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
+  static std::atomic<bool> g_regular_do_gc_handler_running(false);
+
+  if (g_regular_do_gc_handler_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "RegularUpdateSafePointTsHandler... g_regular_do_gc_handler_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_regular_do_gc_handler_running);
+  std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+
+  std::shared_ptr<GCSafePoint> gc_safe_point = store_meta_manager->GetGCSafePoint();
+
+  auto [gc_stop, safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+
+  if (gc_stop) {
+    DINGO_LOG(INFO) << "set gc_flag stop, return"
+                    << " safe_point_ts:" << safe_point_ts;
+    return;
+  }
+
+  gc_safe_point->SetForceGcStop(false);
+
+#if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
+  int64_t last_accomplished_safe_point_ts = gc_safe_point->GetLastAccomplishedSafePointTs();
+  if (last_accomplished_safe_point_ts <= safe_point_ts) {
+    DINGO_LOG(INFO) << fmt::format("safe_point_ts : {} already accomplished. ignore", safe_point_ts);
+    return;
+  }
+#endif
+
+  std::vector<store::RegionPtr> region_ptrs = Server::GetInstance().GetAllAliveRegion();
+  // int64_t self_id = Server::GetInstance().Id();
+
+  std::vector<store::RegionPtr> leader_region_ptrs;
+  leader_region_ptrs.reserve(region_ptrs.size());
+
+  std::shared_ptr<Storage> storage = Server::GetInstance().GetStorage();
+
+  for (auto &region_ptr : region_ptrs) {
+    butil::Status status;
+    status = storage->ValidateLeader(region_ptr->Id());
+
+    if (status.ok()) {
+      // if (region_ptr->LeaderId() == self_id) {
+      if (pb::common::StoreRegionState::NORMAL == region_ptr->State()) {
+        leader_region_ptrs.push_back(region_ptr);
+      }
+    }
+  }
+
+  sort(leader_region_ptrs.begin(), leader_region_ptrs.end(),
+       [](const store::RegionPtr &lhs, const store::RegionPtr &rhs) {
+         return lhs->Range().start_key() < rhs->Range().start_key();
+       });
+
+  for (auto &region_ptr : leader_region_ptrs) {
+    DINGO_LOG(INFO) << fmt::format("region id : {} start_key : {} end_key : {}", region_ptr->Id(),
+                                   Helper::StringToHex(region_ptr->Range().start_key()),
+                                   Helper::StringToHex(region_ptr->Range().end_key()));
+  }
+
+  std::shared_ptr<Engine> engine = storage->GetEngine();
+
+  // Caution !!!
+  // We will not use a snapshot globally because it will affect other region compaction.
+  for (const auto &region_ptr : leader_region_ptrs) {
+    butil::Status status;
+    status = storage->ValidateLeader(region_ptr->Id());
+    if (!status.ok()) {
+      DINGO_LOG(INFO) << fmt::format("region_id : {} is not leader yet. start_key : {} end_key : {}. ignore.",
+                                     region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
+                                     Helper::StringToHex(region_ptr->Range().end_key()));
+      continue;
+    } else {
+      if (pb::common::StoreRegionState::NORMAL != region_ptr->State()) {
+        DINGO_LOG(INFO) << fmt::format(
+            "region_id : {} is leader. but state is not normal : {}.  start_key : {} end_key : {}.  ignore.",
+            region_ptr->Id(), static_cast<int>(region_ptr->State()),
+            Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
+        continue;
+      }
+    }
+
+    auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+
+    if (internal_gc_stop) {
+      DINGO_LOG(INFO) << fmt::format("set internal_gc_stop stop, region_id : {} .  start_key : {} end_key : {}. return",
+                                     region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
+                                     Helper::StringToHex(region_ptr->Range().end_key()));
+      gc_safe_point->SetForceGcStop(true);
+      return;
+    }
+
+    if (safe_point_ts < internal_safe_point_ts) {
+      DINGO_LOG(INFO) << fmt::format(
+          "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore.",
+          safe_point_ts, internal_safe_point_ts);
+    }
+
+    dingodb::pb::store::TxnGcRequest request;
+    dingodb::pb::store::TxnGcResponse response;
+
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(nullptr, nullptr, &request, &response);
+    ctx->SetRegionId(region_ptr->Id());
+    // ctx->SetRequestId(request->request_info().request_id());
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(region_ptr->Epoch());
+    ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);
+    ctx->SetRawEngineType(region_ptr->GetRawEngineType());
+
+    std::shared_ptr<Engine::TxnWriter> writer = engine->NewTxnWriter(ctx->RawEngineType());
+    if (nullptr == writer) {
+      DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}.  start_key : {} end_key : {} ",
+                                      ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
+                                      Helper::StringToHex(region_ptr->Range().end_key()));
+      return;
+    }
+
+    status = writer->TxnGc(ctx, safe_point_ts);
+
+    if (gc_safe_point->GetForceGcStop()) {
+      DINGO_LOG(INFO) << fmt::format("gc_stop stopped, region_id : {}.  start_key : {} end_key : {}.  return",
+                                     ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
+                                     Helper::StringToHex(region_ptr->Range().end_key()));
+      return;
+    }
+  }
+
+#if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
+  gc_safe_point->SetLastAccomplishedSafePointTs(safe_point_ts);
+#endif
 }
 
 }  // namespace dingodb

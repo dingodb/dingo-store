@@ -57,6 +57,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":VectorIndexFlatTest.*";
     default_run_case += ":VectorIndexFlatSearchParamTest.*";
     default_run_case += ":VectorIndexFlatSearchParamLimitTest.*";
+    default_run_case += ":TxnGcTest.*";
 
     testing::GTEST_FLAG(filter) = default_run_case;
   }

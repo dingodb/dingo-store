@@ -40,6 +40,7 @@
 #include "engine/raw_bdb_engine.h"
 #include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
+#include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "meta/meta_reader.h"
@@ -538,6 +539,24 @@ bool Server::InitCrontabManager() {
         [](void*) { Server::GetInstance().GetRaftStoreEngine()->DoSnapshotPeriodicity(); },
     });
   }
+
+  // Add gc update safe point ts crontab
+  crontab_configs_.push_back({
+      "GC_UPDATE_SAFE_POINT",
+      {pb::common::STORE, pb::common::INDEX},
+      GetInterval(config, "gc.update_safe_point_interval_s", Constant::kGcUpdateSafePointIntervalS) * 1000,
+      false,
+      [](void*) { TxnEngineHelper::RegularUpdateSafePointTsHandler(nullptr); },
+  });
+
+  // Add gc  do gc crontab
+  crontab_configs_.push_back({
+      "GC_DO_GC",
+      {pb::common::STORE, pb::common::INDEX},
+      GetInterval(config, "gc.do_gc_interval_s", Constant::kGcDoGcPointIntervalS) * 1000,
+      false,
+      [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
+  });
 
   crontab_manager_->AddCrontab(crontab_configs_);
 
