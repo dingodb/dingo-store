@@ -534,6 +534,12 @@ bool VectorIndexWrapper::NeedToSave(std::string& reason) {
     return false;
   }
 
+  if (Helper::InvalidRange(vector_index->Range())) {
+    reason = "range invalid";
+    last_save_write_key_count_ = write_key_count_;
+    return true;
+  }
+
   if (SnapshotLogId() == 0) {
     reason = "no snapshot";
     last_save_write_key_count_ = write_key_count_;

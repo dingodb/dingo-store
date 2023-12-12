@@ -332,6 +332,10 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   // Do child region snapshot
   LaunchAyncSaveSnapshot(to_region);
 
+  // update StoreRegionState to NORMAL
+  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
+  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
+
   if (to_region->Type() == pb::common::INDEX_REGION) {
     // Set child share vector index
     auto vector_index = from_region->VectorIndexWrapper()->GetOwnVectorIndex();
@@ -380,10 +384,6 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                          fmt::format("Clear follower vector index {}", from_region->Id()));
     }
   }
-
-  // update StoreRegionState to NORMAL
-  store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
-  store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
 
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
 
@@ -541,6 +541,10 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   // Set do snapshot when bootstrap
   store_region_meta->UpdateNeedBootstrapDoSnapshot(child_region, true);
 
+  // update to NORMAL after save snapshot in SplitClosure::Run
+  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
+  store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::NORMAL);
+
   if (parent_region->Type() == pb::common::INDEX_REGION) {
     // Set child share vector index
     auto vector_index = parent_region->VectorIndexWrapper()->GetOwnVectorIndex();
@@ -589,10 +593,6 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
                                          fmt::format("Clear follower vector index {}", parent_region->Id()));
     }
   }
-
-  // update to NORMAL after save snapshot in SplitClosure::Run
-  store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
-  store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::NORMAL);
 
   Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
 
@@ -1183,8 +1183,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           vector_index_wrapper->SetApplyLogId(log_id);
         } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {} {}",
-                                          vector_index_id, delete_ids.size(),
-                                          pb::error::Errno_Name(status.error_code()), status.error_str());
+                                            vector_index_id, delete_ids.size(),
+                                            pb::error::Errno_Name(status.error_code()), status.error_str());
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,

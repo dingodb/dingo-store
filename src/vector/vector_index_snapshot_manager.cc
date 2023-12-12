@@ -337,7 +337,11 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
 
   auto self_peer = raft_node->GetPeerId();
   std::vector<braft::PeerId> peers;
-  raft_node->ListPeers(&peers);
+  if (raft_node->IsLeader()) {
+    raft_node->ListPeers(&peers);
+  } else {
+    peers.push_back(raft_node->GetLeaderId());
+  }
   for (const auto& peer : peers) {
     if (peer == self_peer) {
       continue;
@@ -353,12 +357,15 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
       continue;
     }
 
-    if (response.meta().epoch().version() != epoch.version()) {
+    if (response.meta().epoch().version() < epoch.version()) {
       DINGO_LOG(WARNING) << fmt::format(
           "[vector_index.snapshot][index({})] vector index snapshot epoch({}) not match region version({}).",
           vector_index_id, response.meta().epoch().version(), epoch.version());
       continue;
     }
+
+    DINGO_LOG(DEBUG) << fmt::format("[vector_index.snapshot][index({})] get snapshot, request: {} response: {}.",
+                                    vector_index_id, response.ShortDebugString(), response.ShortDebugString());
 
     if (max_snapshot_log_index < response.meta().snapshot_log_index()) {
       max_snapshot_log_index = response.meta().snapshot_log_index();
@@ -370,7 +377,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   if (max_snapshot_log_index == 0) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] other peers not exist vector index snapshot.",
                                    vector_index_id);
-    return butil::Status();
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_NOT_FOUND, "Not found peer snapshot");
   }
 
   auto last_snapshot = snapshot_set->GetLastSnapshot();
@@ -511,15 +518,22 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
 
   // for index like FLAT does not implement save, just skip save to prevent directory creating
   if (!vector_index->SupportSave()) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.save_snapshot][index_id({})] VectorIndex not support save, skip save",
-                                   vector_index_wrapper->Id());
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.save_snapshot][index_id({})] vector index not support save, skip save.",
+        vector_index_wrapper->Id());
     return butil::Status::OK();
   }
 
   // if vector index not train. ignore
   if (!vector_index->IsTrained()) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.save_snapshot][index_id({})] VectorIndex not train, skip save",
+    DINGO_LOG(INFO) << fmt::format("[vector_index.save_snapshot][index_id({})] vector index not train, skip save.",
                                    vector_index_wrapper->Id());
+    return butil::Status::OK();
+  }
+  if (Helper::InvalidRange(vector_index->Range())) {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.save_snapshot][index_id({})] vector index range({}) invalid, skip save.",
+        vector_index_wrapper->Id(), Helper::RangeToString(vector_index->Range()));
     return butil::Status::OK();
   }
 
