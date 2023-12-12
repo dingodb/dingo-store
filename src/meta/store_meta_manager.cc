@@ -1147,4 +1147,9 @@ std::shared_ptr<RegionChangeRecorder> StoreMetaManager::GetRegionChangeRecorder(
   return region_change_recorder_;
 }
 
+std::shared_ptr<GCSafePoint> StoreMetaManager::GetGCSafePoint() {
+  assert(gc_safe_point_ != nullptr);
+  return gc_safe_point_;
+}
+
 }  // namespace dingodb

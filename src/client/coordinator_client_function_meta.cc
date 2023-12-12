@@ -19,9 +19,11 @@
 
 #include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
+#include "coordinator/tso_control.h"
 #include "gflags/gflags_declare.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
@@ -1223,6 +1225,18 @@ void SendGenTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_int
   auto status = coordinator_interaction->SendRequest("TsoService", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+
+  auto lambda_tso_2_timestamp_function = [](const ::dingodb::pb::meta::TsoTimestamp& tso) {
+    return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
+  };
+
+  for (int i = 0; i < 10; i++) {
+    dingodb::pb::meta::TsoTimestamp tso;
+    tso.set_physical(response.start_timestamp().physical());
+    tso.set_logical(response.start_timestamp().logical() + i);
+    int64_t time_safe_ts = lambda_tso_2_timestamp_function(tso);
+    DINGO_LOG(INFO) << "time_safe_ts  : " << time_safe_ts;
+  }
 }
 
 void SendResetTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
