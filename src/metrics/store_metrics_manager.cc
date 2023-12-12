@@ -333,7 +333,7 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
     }
 
     DINGO_LOG(INFO) << fmt::format(
-        "[metrics.region] get rocksdb region approximate size tatal size({}) batch size({}) elapsed time[{} ms]",
+        "[metrics.region] get rocksdb region approximate size total size({}) batch size({}) elapsed time[{} ms]",
         need_collect_rocks_regions.size(), batch_regions.size(), Helper::TimestampMs() - start_time);
   }
 
@@ -355,7 +355,7 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
     }
 
     DINGO_LOG(INFO) << fmt::format(
-        "[metrics.region] get bdb region approximate size tatal size({}) batch size({}) elapsed time[{} ms]",
+        "[metrics.region] get bdb region approximate size total size({}) batch size({}) elapsed time[{} ms]",
         need_collect_bdb_regions.size(), batch_regions.size(), Helper::TimestampMs() - start_time);
   }
 

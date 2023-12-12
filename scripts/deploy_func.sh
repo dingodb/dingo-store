@@ -1,3 +1,10 @@
+#!/bin/bash
+# The ulimit is setup in start_program, the paramter of ulimit is:
+#   ulimit -n 1048576
+#   ulimit -u 1048576
+#   ulimit -c unlimited
+# If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit.
+
 function deploy_store() {
   role=$1
   srcpath=$2
@@ -70,22 +77,82 @@ function deploy_store() {
   fi
 }
 
+function set_ulimit() {
+    NUM_FILE=1048576
+    NUM_PROC=1048576
+
+    # 1. sysctl is the very-high-level hard limit:
+    #     fs.nr_open = 1048576
+    #     fs.file-max = 1048576
+    # 2. /etc/security/limits.conf is the second-level limit for users, this is not required to setup.
+    #    CAUTION: values in limits.conf can't bigger than sysctl kernel values, or user login will fail.
+    #     * - nofile 1048576
+    #     * - nproc  1048576
+    # 3. we can use ulimit to set value before start service.
+    #     ulimit -n 1048576
+    #     ulimit -u 1048576
+    #     ulimit -c unlimited
+
+    # ulimit -n
+    nfile=$(ulimit -n)
+    echo "nfile="${nfile}
+    if [ ${nfile} -lt ${NUM_FILE} ]
+    then
+        echo "try to increase nfile"
+        ulimit -n ${NUM_FILE}
+
+        nfile=$(ulimit -n)
+        echo "nfile new="${nfile}
+        if [ ${nfile} -lt ${NUM_FILE} ]
+        then
+            echo "need to increase nfile to ${NUM_FILE}, exit!"
+            exit -1
+        fi
+    fi
+
+    # ulimit -c
+    ncore=$(ulimit -c)
+    echo "ncore="${ncore}
+    if [ ${ncore} != "unlimited" ]
+    then
+        echo "try to set ulimit -c unlimited"
+        ulimit -c unlimited
+
+        ncore=$(ulimit -c)
+        echo "ncore new="${ncore}
+        if [ ${ncore} != "unlimited" ]
+        then
+            echo "need to set ulimit -c unlimited, exit!"
+            exit -1
+        fi
+    fi
+
+    # ulimit -u
+    nproc=$(ulimit -u)
+    echo "nproc="${nproc}
+    if [ ${nproc} -lt ${NUM_PROC} ]
+    then
+        echo "try to increase nproc"
+        ulimit -u ${NUM_PROC}
+
+        nproc=$(ulimit -u)
+        echo "nproc new="${nproc}
+        if [ ${nproc} -lt ${NUM_PROC} ]
+        then
+            echo "need to increase nproc to ${NUM_PROC}, exit!"
+            exit -1
+        fi
+    fi
+}
+
 function start_program() {
   role=$1
   root_dir=$2
+  echo "set ulimit"
+  set_ulimit
   echo "start server: ${root_dir}"
 
   cd ${root_dir}
-
-  user=`whoami`
-  if [ "${user}" == "root" ]; then
-    ulimit -c unlimited
-    ulimit -n 102400
-  else
-    sudo ulimit -c unlimited
-    sudo ulimit -n 102400
-  fi
-
 
   echo "${root_dir}/bin/dingodb_server -role=${role}"
 

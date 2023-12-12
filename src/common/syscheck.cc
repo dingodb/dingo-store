@@ -35,6 +35,9 @@ namespace dingodb {
 
 #ifdef __linux__
 
+#define NUM_FILE 1048576
+#define NUM_PROC 1048576
+
 static std::string ReadSysfsLine(char *path) {
   std::string ret_value;
   char buf[256];
@@ -115,16 +118,16 @@ int CheckNproc(std::string &error_msg) {
   if (getrlimit(RLIMIT_NPROC, &rlim) == 0) {
     DINGO_LOG(INFO) << "NPROC rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
 
-    if (rlim.rlim_cur < 20480) {
+    if (rlim.rlim_cur < NUM_PROC) {
       DINGO_LOG(ERROR) << "NPROC rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
 
       struct rlimit new_rlim;
-      new_rlim.rlim_cur = 20480;
-      new_rlim.rlim_max = 20480;
+      new_rlim.rlim_cur = NUM_PROC;
+      new_rlim.rlim_max = NUM_PROC;
       auto ret = setrlimit(RLIMIT_NPROC, &rlim);
       if (ret < 0) {
         error_msg = std::string("ulimit -u: ") + std::to_string(rlim.rlim_cur) + std::string(" rlim_max: ") +
-                    std::to_string(rlim.rlim_max) + std::string(" rlim_max should be at least 20480");
+                    std::to_string(rlim.rlim_max) + std::string(" rlim_max should be at least 800000");
         return -1;
       } else {
         DINGO_LOG(ERROR) << "NPROC is set to rlim_cur:[" << new_rlim.rlim_cur << "] rlim_max:[" << new_rlim.rlim_max
@@ -144,16 +147,16 @@ int CheckNofile(std::string &error_msg) {
   struct rlimit rlim;
   if (getrlimit(RLIMIT_NOFILE, &rlim) == 0) {
     DINGO_LOG(INFO) << "NOFILE rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
-    if (rlim.rlim_cur < 20480) {
+    if (rlim.rlim_cur < NUM_FILE) {
       DINGO_LOG(ERROR) << "NOFILE rlim_cur:[" << rlim.rlim_cur << "] rlim_max:[" << rlim.rlim_max << "]";
 
       struct rlimit new_rlim;
-      new_rlim.rlim_cur = 20480;
-      new_rlim.rlim_max = 20480;
+      new_rlim.rlim_cur = NUM_FILE;
+      new_rlim.rlim_max = NUM_FILE;
       auto ret = setrlimit(RLIMIT_NOFILE, &rlim);
       if (ret < 0) {
         error_msg = std::string("ulimit -n: ") + std::to_string(rlim.rlim_cur) + std::string(" rlim_max: ") +
-                    std::to_string(rlim.rlim_max) + std::string(" rlim_max should be at least 20480");
+                    std::to_string(rlim.rlim_max) + std::string(" rlim_max should be at least 800000");
         return -1;
       } else {
         DINGO_LOG(ERROR) << "NOFILE is set to rlim_cur:[" << new_rlim.rlim_cur << "] rlim_max:[" << new_rlim.rlim_max
