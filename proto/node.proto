@@ -203,6 +203,7 @@ message CheckVectorIndexResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
   bool is_exist = 3;
+  int64 last_build_epoch_version = 4;
 }
 
 message CommitMergeRequest {

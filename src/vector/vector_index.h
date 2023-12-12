@@ -280,7 +280,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   int64_t Version() const { return version_; }
   void SetVersion(int64_t version) { version_ = version; }
 
-  int64_t LastBuildEpochVersion() const { return last_build_epoch_version_; }
+  int64_t LastBuildEpochVersion();
 
   bool IsReady() { return ready_.load(); }
   bool IsStop() { return stop_.load(); }
@@ -413,8 +413,6 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   int64_t id_;
   // vector index version
   int64_t version_{0};
-  // last build vector index epoch.version
-  int64_t last_build_epoch_version_;
   // vector index is ready
   std::atomic<bool> ready_;
   // stop vector index

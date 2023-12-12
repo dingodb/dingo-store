@@ -487,6 +487,8 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*contro
                             fmt::format("Not found vector index {}.", request->vector_index_id()));
     return;
   }
+
+  response->set_last_build_epoch_version(vector_index_wrapper->LastBuildEpochVersion());
   if (vector_index_wrapper->IsOwnReady()) {
     response->set_is_exist(true);
   } else {
