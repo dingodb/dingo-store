@@ -17,12 +17,15 @@
 
 #include <cstdint>
 #include <iostream>
+#include <ostream>
 #include <string>
+#include <utility>
 
 #include "environment.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
+#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 
 namespace dingodb {
@@ -76,6 +79,26 @@ class Helper {
     auto client = Environment::GetInstance().GetClient();
     auto status = client->DropRegion(region_id);
     CHECK(status.IsOK()) << fmt::format("Drop region failed, {}", status.ToString());
+  }
+
+  static std::vector<std::pair<std::string, std::string>> TransformVersionInfo(
+      const pb::common::VersionInfo& version_info) {
+    std::vector<std::pair<std::string, std::string>> result = {
+        std::make_pair("git_commit_hash", version_info.git_commit_hash()),
+        std::make_pair("git_tag_name", version_info.git_tag_name()),
+        std::make_pair("major_version", version_info.major_version()),
+        std::make_pair("minor_version", version_info.minor_version()),
+        std::make_pair("dingo_build_type", version_info.dingo_build_type()),
+        std::make_pair("dingo_contrib_build_type", version_info.dingo_contrib_build_type()),
+        std::make_pair("use_mkl", version_info.use_mkl() ? "true" : "false"),
+        std::make_pair("use_openblas", version_info.use_openblas() ? "true" : "false"),
+        std::make_pair("use_openblas", version_info.use_openblas() ? "true" : "false"),
+        std::make_pair("use_tcmalloc", version_info.use_tcmalloc() ? "true" : "false"),
+        std::make_pair("use_profiler", version_info.use_profiler() ? "true" : "false"),
+        std::make_pair("use_sanitizer", version_info.use_sanitizer() ? "true" : "false"),
+    };
+
+    return result;
   }
 
   static bool IsContain(const std::vector<sdk::KVPair>& kvs, const std::string& key) {

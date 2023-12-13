@@ -20,12 +20,16 @@
 #include "common/uuid.h"
 #include "environment.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
+#include "helper.h"
 #include "report/allure.h"
 
 DEFINE_string(coordinator_url, "file://./coor_list", "coordinator url");
 DEFINE_int32(create_region_wait_time_s, 3, "create region wait time");
+
+DEFINE_bool(generate_allure, false, "generate allure");
 DEFINE_string(allure_report, "./allure_report", "allure report");
 
 static std::string TransformStatus(const testing::TestResult* test_case_result) {
@@ -131,13 +135,12 @@ void GenAllureReport() {
     allure_test_suites.push_back(allure_test_suite);
   }
 
-  // const auto& test_result = testing::UnitTest::GetInstance()->ad_hoc_test_result();
-
   dingodb::Helper::RemoveAllFileOrDirectory(FLAGS_allure_report);
   dingodb::Helper::CreateDirectory(FLAGS_allure_report);
 
   dingodb::integration_test::allure::Allure allure(allure_test_suites);
-  allure.GenReport(FLAGS_allure_report);
+  allure.GenReport(FLAGS_allure_report, dingodb::integration_test::Helper::TransformVersionInfo(
+                                            dingodb::integration_test::Environment::GetInstance().VersionInfo()));
 }
 
 int main(int argc, char* argv[]) {
@@ -147,7 +150,9 @@ int main(int argc, char* argv[]) {
 
   int ret = RUN_ALL_TESTS();
 
-  GenAllureReport();
+  if (FLAGS_generate_allure) {
+    GenAllureReport();
+  }
 
   return ret;
 }
