@@ -681,9 +681,8 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
     auto status =
         storage->CommitMerge(ctx, request.job_id(), source_region_definition, prepare_merge_log_id, log_entries);
     DINGO_LOG(INFO) << fmt::format(
-        "[merge.merging][job_id({}).region({}/{})] Commit CommitMerge failed, times({}) error: {} {}", request.job_id(),
-        source_region_definition.id(), request.target_region_id(), ++retry_count,
-        pb::error::Errno_Name(status.error_code()), status.error_str());
+        "[merge.merging][job_id({}).region({}/{})] Commit CommitMerge failed, times({}) error: {}", request.job_id(),
+        source_region_definition.id(), request.target_region_id(), ++retry_count, Helper::PrintStatus(status));
 
     bthread_usleep(500000);  // 500ms
   }
@@ -1072,9 +1071,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
         if (status.ok()) {
           vector_index_wrapper->SetApplyLogId(log_id);
         } else {
-          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {} {}",
-                                            vector_index_id, vector_with_ids.size(),
-                                            pb::error::Errno_Name(status.error_code()), status.error_str());
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
+                                            vector_index_id, vector_with_ids.size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}", vector_index_id,
@@ -1182,9 +1180,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
         if (status.ok()) {
           vector_index_wrapper->SetApplyLogId(log_id);
         } else {
-          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {} {}",
-                                            vector_index_id, delete_ids.size(),
-                                            pb::error::Errno_Name(status.error_code()), status.error_str());
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
+                                            vector_index_id, delete_ids.size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,

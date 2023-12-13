@@ -45,7 +45,8 @@ using pb::node::LogLevel;
 void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetNodeInfoRequest* request, pb::node::GetNodeInfoResponse* response,
                                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard const done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard const done_guard(svr_done);
 
   auto& server = Server::GetInstance();
 
@@ -75,7 +76,8 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
 
 void NodeServiceImpl::GetRegionInfo(google::protobuf::RpcController*, const pb::node::GetRegionInfoRequest* request,
                                     pb::node::GetRegionInfoResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard const done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard const done_guard(svr_done);
 
   auto store_region_meta = GET_STORE_REGION_META;
   for (auto region_id : request->region_ids()) {
@@ -93,7 +95,8 @@ void NodeServiceImpl::GetRegionInfo(google::protobuf::RpcController*, const pb::
 void NodeServiceImpl::GetRaftStatus(google::protobuf::RpcController* /*controller*/,
                                     const pb::node::GetRaftStatusRequest* request,
                                     pb::node::GetRaftStatusResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard const done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard const done_guard(svr_done);
 
   auto engine = Server::GetInstance().GetRaftStoreEngine();
   if (engine == nullptr) {
@@ -118,7 +121,8 @@ void NodeServiceImpl::GetRaftStatus(google::protobuf::RpcController* /*controlle
 void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetLogLevelRequest* request, pb::node::GetLogLevelResponse* response,
                                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard const done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard const done_guard(svr_done);
 
   DINGO_LOG(INFO) << "GetLogLevel receive Request:" << request->DebugString();
 
@@ -146,10 +150,9 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*
 
 void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* controller */,
                                      const pb::node::ChangeLogLevelRequest* request,
-                                     pb::node::ChangeLogLevelResponse* /*response*/, google::protobuf::Closure* done) {
-  brpc::ClosureGuard const done_guard(done);
-
-  DINGO_LOG(INFO) << "ChangeLogLevel=>Receive Request:" << request->DebugString();
+                                     pb::node::ChangeLogLevelResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard const done_guard(svr_done);
 
   const LogLevel log_level = request->log_level();
   const LogDetail& log_detail = request->log_detail();
@@ -310,10 +313,10 @@ int DumpPrometheusMetricsToIOBuf(butil::IOBuf* output) {
   return 0;
 }
 
-void NodeServiceImpl::DingoMetrics(google::protobuf::RpcController* controller,
-                                   const pb::node::MetricsRequest* /*request*/, pb::node::MetricsResponse* /*response*/,
-                                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+void NodeServiceImpl::DingoMetrics(google::protobuf::RpcController* controller, const pb::node::MetricsRequest* request,
+                                   pb::node::MetricsResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
   brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
   cntl->http_response().set_content_type("text/plain");
   if (DumpPrometheusMetricsToIOBuf(&cntl->response_attachment()) != 0) {
@@ -324,7 +327,8 @@ void NodeServiceImpl::DingoMetrics(google::protobuf::RpcController* controller,
 
 void NodeServiceImpl::SetFailPoint(google::protobuf::RpcController*, const pb::node::SetFailPointRequest* request,
                                    pb::node::SetFailPointResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
 
   const auto& failpoint = request->failpoint();
   if (failpoint.name().empty() || failpoint.config().empty()) {
@@ -340,7 +344,8 @@ void NodeServiceImpl::SetFailPoint(google::protobuf::RpcController*, const pb::n
 
 void NodeServiceImpl::GetFailPoints(google::protobuf::RpcController*, const pb::node::GetFailPointRequest* request,
                                     pb::node::GetFailPointResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
 
   std::vector<std::shared_ptr<FailPoint>> failpoints;
   if (request->names().empty()) {
@@ -372,9 +377,9 @@ void NodeServiceImpl::GetFailPoints(google::protobuf::RpcController*, const pb::
 
 void NodeServiceImpl::DeleteFailPoints(google::protobuf::RpcController*,
                                        const pb::node::DeleteFailPointRequest* request,
-                                       pb::node::DeleteFailPointResponse* /*response*/,
-                                       google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+                                       pb::node::DeleteFailPointResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
   for (const auto& name : request->names()) {
     FailPointManager::GetInstance().DeleteFailPoint(name);
   }
@@ -396,7 +401,8 @@ void NodeServiceImpl::InstallVectorIndexSnapshot(google::protobuf::RpcController
                                                  const pb::node::InstallVectorIndexSnapshotRequest* request,
                                                  pb::node::InstallVectorIndexSnapshotResponse* response,
                                                  google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
   auto status = ValidateInstallVectorIndexSnapshotRequest(request);
@@ -436,7 +442,8 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
                                              const pb::node::GetVectorIndexSnapshotRequest* request,
                                              pb::node::GetVectorIndexSnapshotResponse* response,
                                              google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
   brpc::Controller* cntl = (brpc::Controller*)controller;
 
   auto store_region_meta = GET_STORE_REGION_META;
@@ -471,7 +478,8 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
 void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*controller*/,
                                        const pb::node::CheckVectorIndexRequest* request,
                                        pb::node::CheckVectorIndexResponse* response, google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto store_region_meta = GET_STORE_REGION_META;
   auto region = store_region_meta->GetRegion(request->vector_index_id());
@@ -516,7 +524,8 @@ butil::Status ValidateCommitMergeRequest(const pb::node::CommitMergeRequest* req
 void NodeServiceImpl::CommitMerge(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::CommitMergeRequest* request, pb::node::CommitMergeResponse* response,
                                   google::protobuf::Closure* done) {
-  brpc::ClosureGuard done_guard(done);
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::ClosureGuard done_guard(svr_done);
 
   auto status = ValidateCommitMergeRequest(request);
   if (!status.ok()) {

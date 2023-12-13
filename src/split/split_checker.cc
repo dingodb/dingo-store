@@ -333,8 +333,8 @@ void SplitCheckTask::SplitCheck() {
   pb::coordinator::SplitRegionResponse response;
   auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[split.check][region({})] send SplitRegion failed, error: {} {}", region_->Id(),
-                                      pb::error::Errno_Name(status.error_code()), status.error_str());
+    DINGO_LOG(WARNING) << fmt::format("[split.check][region({})] send SplitRegion failed, error: {}", region_->Id(),
+                                      Helper::PrintStatus(status));
     return;
   }
 }

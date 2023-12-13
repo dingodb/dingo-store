@@ -141,9 +141,8 @@ void RebuildVectorIndexTask::Run() {
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuilded vector index {}", region->Id()));
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.rebuild][index_id({}_v{})][trace({})] rebuild vector index failed, error: {} {}.",
-        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_,
-        pb::error::Errno_Name(status.error_code()), status.error_str());
+        "[vector_index.rebuild][index_id({}_v{})][trace({})] rebuild vector index failed, error: {}.",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, Helper::PrintStatus(status));
     return;
   }
 
@@ -153,9 +152,8 @@ void RebuildVectorIndexTask::Run() {
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saved vector index {} failed", region->Id()));
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save][index_id({}_v{})][trace({})] save vector index failed, error: {} {}.",
-        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_,
-        pb::error::Errno_Name(status.error_code()), status.error_str());
+        "[vector_index.save][index_id({}_v{})][trace({})] save vector index failed, error: {}.",
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, Helper::PrintStatus(status));
   }
 
   vector_index_wrapper_->SetIsTempHoldVectorIndex(false);
@@ -288,28 +286,11 @@ void LoadOrBuildVectorIndexTask::Run() {
   }
 
   if (applied_index > Constant::kPullVectorIndexSnapshotMinApplyLogId) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.loadorbuild][region({})][trace({})] pull last snapshot from peers.",
-                                   vector_index_wrapper_->Id(), trace_);
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
-    if (!status.ok() && status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST &&
-        status.error_code() != pb::error::ERAFT_NOT_FOUND && status.error_code() != pb::error::EREGION_NOT_FOUND &&
-        status.error_code() != pb::error::EVECTOR_SNAPSHOT_NOT_FOUND) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot failed, errcode: {}, "
-          "errmsg: {}",
-          vector_index_wrapper_->Id(), trace_, pb::error::Errno_Name(status.error_code()), status.error_str());
-    } else {
-      DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot done, errcode: {}, "
-          "errmsg: {}",
-          vector_index_wrapper_->Id(), trace_, pb::error::Errno_Name(status.error_code()), status.error_str());
-    }
-  } else {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.loadorbuild][region({})][trace({})] do not pull vector index last snapshot from peers, "
-        "applied_index: {} ",
-        vector_index_wrapper_->Id(), trace_, applied_index);
+        "[vector_index.loadorbuild][region({})][trace({})] pull vector index last snapshot done, error: {}",
+        vector_index_wrapper_->Id(), trace_, Helper::PrintStatus(status));
   }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuilding vector index {}", region->Id()));
@@ -368,8 +349,8 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.loadorbuild][index_id({})][trace({})] Load vector index from snapshot failed, will rebuild.",
-      vector_index_id, trace);
+      "[vector_index.loadorbuild][index_id({})][trace({})] Load vector index from snapshot failed, error: {}.",
+      vector_index_id, trace, Helper::PrintStatus(status));
 
   // Build a new vector index from original data
   status = RebuildVectorIndex(vector_index_wrapper, fmt::format("LOAD.REBUILD-{}", trace));
@@ -387,8 +368,8 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, trace);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.loadorbuild][index_id({})][trace({})] save vector index failed, error: {} {}.",
-        vector_index_wrapper->Id(), trace, pb::error::Errno_Name(status.error_code()), status.error_str());
+        "[vector_index.loadorbuild][index_id({})][trace({})] save vector index failed, error: {}.",
+        vector_index_wrapper->Id(), trace, Helper::PrintStatus(status));
   }
 
   return butil::Status();
@@ -788,9 +769,8 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
 
   auto status = CatchUpLogToVectorIndex(vector_index_wrapper, vector_index, trace);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.rebuild][index_id({})][trace({})] Catch up log failed, error: {} {}.", vector_index_id, trace,
-        pb::error::Errno_Name(status.error_code()), status.error_str());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] Catch up log failed, error: {}.",
+                                      vector_index_id, trace, Helper::PrintStatus(status));
     return status;
   }
 
@@ -806,27 +786,26 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
   int64_t vector_index_id = vector_index_wrapper->Id();
   int64_t start_time = Helper::TimestampMs();
   // try to load vector index from snapshot
-  auto new_vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper, epoch);
-  if (new_vector_index == nullptr) {
+  auto vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper, epoch);
+  if (vector_index == nullptr) {
     return butil::Status(pb::error::EVECTOR_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.load][index_id({})][trace({})] Load vector index snapshot success, elapsed time: {}ms.",
-      vector_index_id, trace, Helper::TimestampMs() - start_time);
+      "[vector_index.load][index_id({})][trace({})] Load vector index snapshot success, epoch: {} elapsed time: {}ms.",
+      vector_index_id, trace, Helper::RegionEpochToString(vector_index->Epoch()), Helper::TimestampMs() - start_time);
 
   // catch up wal
-  auto status = CatchUpLogToVectorIndex(vector_index_wrapper, new_vector_index, trace);
+  auto status = CatchUpLogToVectorIndex(vector_index_wrapper, vector_index, trace);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.load][index_id({})][trace({})] Catch up log failed, error: {} {}.",
-                                      vector_index_id, trace, pb::error::Errno_Name(status.error_code()),
-                                      status.error_str());
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.load][index_id({})][trace({})] Catch up log failed, error: {}.",
+                                      vector_index_id, trace, Helper::PrintStatus(status));
     return status;
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.load][index_id({})][trace({})] Load vector index success, elapsed time: {}ms.", vector_index_id,
-      trace, Helper::TimestampMs() - start_time);
+      "[vector_index.load][index_id({})][trace({})] Load vector index success, epoch: {} elapsed time: {}ms.",
+      vector_index_id, trace, Helper::RegionEpochToString(vector_index->Epoch()), Helper::TimestampMs() - start_time);
 
   return butil::Status();
 }

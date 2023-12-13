@@ -73,9 +73,8 @@ static void NotifyRegionCmdStatus(RegionCmdPtr region_cmd, butil::Status status)
   status = coordinatro_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[control.region][region({}).job_id({}).cmd_id({})] send UpdateRegionCmdStatus failed, error: {} {}.",
-        region_cmd->region_id(), region_cmd->job_id(), region_cmd->id(), pb::error::Errno_Name(status.error_code()),
-        status.error_str());
+        "[control.region][region({}).job_id({}).cmd_id({})] send UpdateRegionCmdStatus failed, error: {}.",
+        region_cmd->region_id(), region_cmd->job_id(), region_cmd->id(), Helper::PrintStatus(status));
   }
 }
 
@@ -254,8 +253,8 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
     auto writer = region_raw_engine->Writer();
     status = writer->KvDeleteRange(Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range());
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled, error: {} {}.",
-                                      region_id, pb::error::Errno_Name(status.error_code()), status.error_str());
+      DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region data failled, error: {}.", region_id,
+                                      Helper::PrintStatus(status));
     }
   }
 
@@ -463,10 +462,9 @@ void SplitRegionTask::Run() {
                                  region_cmd_->split_request().split_to_region_id(), region_cmd_->ShortDebugString());
   auto status = SplitRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][job_id({}).region({}->{})] Split failed, error: {} {}",
+    DINGO_LOG(ERROR) << fmt::format("[split.spliting][job_id({}).region({}->{})] Split failed, error: {}",
                                     region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
-                                    region_cmd_->split_request().split_to_region_id(),
-                                    pb::error::Errno_Name(status.error_code()), status.error_str());
+                                    region_cmd_->split_request().split_to_region_id(), Helper::PrintStatus(status));
 
     NotifyRegionCmdStatus(region_cmd_, status);
   }
@@ -737,10 +735,9 @@ void MergeRegionTask::Run() {
 
   auto status = MergeRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}",
+    DINGO_LOG(ERROR) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {}",
                                     region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
-                                    region_cmd_->merge_request().target_region_id(),
-                                    pb::error::Errno_Name(status.error_code()), status.error_str());
+                                    region_cmd_->merge_request().target_region_id(), Helper::PrintStatus(status));
 
     NotifyRegionCmdStatus(region_cmd_, status);
   }

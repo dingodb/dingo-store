@@ -309,9 +309,6 @@ butil::Status VectorIndexSnapshotManager::HandlePullSnapshot(vector_index::Snaps
   int64_t reader_id = FileServiceReaderManager::GetInstance().AddReader(reader);
   response->set_uri(fmt::format("remote://{}:{}/{}", host, port, reader_id));
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] response: {}", snapshot->VectorIndexId(),
-                                 response->ShortDebugString());
-
   return butil::Status();
 }
 
@@ -352,8 +349,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
     if (!status.ok()) {
       DINGO_LOG(WARNING) << fmt::format(
           "[vector_index.snapshot][index({})] get peer vector index snapshot meta failed, peer({}) error: {}.",
-          vector_index_id, Helper::EndPointToStr(peer.addr), pb::error::Errno_Name(status.error_code()),
-          status.error_str());
+          vector_index_id, Helper::EndPointToStr(peer.addr), Helper::PrintStatus(status));
       continue;
     }
 
@@ -363,9 +359,6 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
           vector_index_id, response.meta().epoch().version(), epoch.version());
       continue;
     }
-
-    DINGO_LOG(DEBUG) << fmt::format("[vector_index.snapshot][index({})] get snapshot, request: {} response: {}.",
-                                    vector_index_id, response.ShortDebugString(), response.ShortDebugString());
 
     if (max_snapshot_log_index < response.meta().snapshot_log_index()) {
       max_snapshot_log_index = response.meta().snapshot_log_index();
@@ -384,9 +377,9 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   if (last_snapshot != nullptr &&
       last_snapshot->SnapshotLogId() + Constant::kVectorIndexSnapshotCatchupMargin > max_snapshot_log_index) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.snapshot][index({})] catchup margin too small, use local vector index snapshot {}.",
-        vector_index_id, last_snapshot->SnapshotLogId());
-    return butil::Status();
+        "[vector_index.snapshot][index({})] snapshot log id gap({} {}) too small, give up pull.", vector_index_id,
+        last_snapshot->SnapshotLogId(), max_snapshot_log_index);
+    return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, "local snapshot is enough fresh");
   }
 
   // Has vector index snapshot, pull it.
@@ -401,7 +394,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.snapshot][index({})] pull vector index snapshot {} finish elapsed time {}ms", vector_index_id,
+      "[vector_index.snapshot][index({})] pull vector index snapshot {} finish, elapsed time {}ms", vector_index_id,
       max_snapshot_log_index, Helper::TimestampMs() - start_time);
 
   return butil::Status();
@@ -851,40 +844,41 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   // Read vector index snapshot log id form snapshot meta file.
   auto last_snapshot = snapshot_set->GetLastSnapshot();
   if (last_snapshot == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] not found vector index snapshot.",
-                                      vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load_snapshot][index_id({})] load snapshot failed, not found snapshot.", vector_index_id);
     return nullptr;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.load_snapshot][index_id({})] snapshot log id is {}",
-                                 last_snapshot->VectorIndexId(), last_snapshot->SnapshotLogId());
-
   // check whether index file exist.
   if (!Helper::IsExistPath(last_snapshot->IndexDataPath())) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.load_snapshot][index_id({})] index file {} not exist, can't load.",
-                                    last_snapshot->VectorIndexId(), last_snapshot->IndexDataPath());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, not found index file.",
+        last_snapshot->VectorIndexId(), last_snapshot->SnapshotLogId());
     return nullptr;
   }
 
   // check whether meta file exist.
   if (!Helper::IsExistPath(last_snapshot->MetaPath())) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.load_snapshot][index_id({})] meta file {} not exist, can't load.",
-                                    last_snapshot->VectorIndexId(), last_snapshot->MetaPath());
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, not found meta file.",
+        last_snapshot->VectorIndexId(), last_snapshot->SnapshotLogId());
     return nullptr;
   }
 
   pb::store_internal::VectorIndexSnapshotMeta meta;
   braft::ProtoBufFile pb_file_meta(last_snapshot->MetaPath());
   if (pb_file_meta.load(&meta) != 0) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] load meta file failed.",
-                                      vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, meta file invalid.",
+        vector_index_id, last_snapshot->SnapshotLogId());
     return nullptr;
   }
 
   if (meta.epoch().version() != epoch.version()) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.load_snapshot][index_id({})] vector index snapshot version({}) not match region epoch({}).",
-        vector_index_id, meta.epoch().version(), epoch.version());
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, version({}) not match "
+        "region epoch({}).",
+        vector_index_id, last_snapshot->SnapshotLogId(), meta.epoch().version(), epoch.version());
     return nullptr;
   }
 
@@ -892,16 +886,18 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   auto vector_index =
       VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), meta.epoch(), meta.range());
   if (!vector_index) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] New vector index failed.",
-                                      vector_index_id);
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, new vector index failed.",
+        vector_index_id, last_snapshot->SnapshotLogId());
     return nullptr;
   }
 
   // load index from file
-  auto ret = vector_index->Load(last_snapshot->IndexDataPath());
-  if (!ret.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.load_snapshot][index_id({})] Load vector index failed.",
-                                      vector_index_id);
+  auto status = vector_index->Load(last_snapshot->IndexDataPath());
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, error: {}.",
+        vector_index_id, last_snapshot->SnapshotLogId(), Helper::PrintStatus(status));
     return nullptr;
   }
 
@@ -910,7 +906,7 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   vector_index->SetApplyLogId(last_snapshot->SnapshotLogId());
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.load_snapshot][index_id({})] Load vector index snapshot snapshot_{:020} elapsed time {}ms",
+      "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] Load snapshot finish, elapsed time: {}ms",
       vector_index_id, last_snapshot->SnapshotLogId(), Helper::TimestampMs() - start_time_ms);
 
   return vector_index;

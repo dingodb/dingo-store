@@ -173,8 +173,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   pb::coordinator::StoreHeartbeatResponse response;
   auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] store heartbeat failed, error: {} {}",
-                                      pb::error::Errno_Name(status.error_code()), status.error_str());
+    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] store heartbeat failed, error: {}",
+                                      Helper::PrintStatus(status));
     return;
   }
 

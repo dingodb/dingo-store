@@ -18,14 +18,16 @@
 #include <vector>
 
 #include "fmt/core.h"
+#include "server/service_helper.h"
 
 namespace dingodb {
 
 void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
                               const pb::fileservice::GetFileRequest* request,
                               pb::fileservice::GetFileResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+  brpc::ClosureGuard done_guard(svr_done);
 
   DINGO_LOG(DEBUG) << fmt::format("Send file to {} request {}", butil::endpoint2str(cntl->remote_side()).c_str(),
                                   request->ShortDebugString());
@@ -64,10 +66,11 @@ void FileServiceImpl::GetFile(google::protobuf::RpcController* controller,
 
 void FileServiceImpl::CleanFileReader(google::protobuf::RpcController* controller,
                                       const pb::fileservice::CleanFileReaderRequest* request,
-                                      pb::fileservice::CleanFileReaderResponse* /*response*/,
+                                      pb::fileservice::CleanFileReaderResponse* response,
                                       google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard done_guard(done);
+  brpc::ClosureGuard done_guard(svr_done);
 
   if (request->reader_id() > 0) {
     FileServiceReaderManager::GetInstance().DeleteReader(request->reader_id());
