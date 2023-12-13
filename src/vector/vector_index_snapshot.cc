@@ -54,8 +54,9 @@ SnapshotMeta::SnapshotMeta(int64_t vector_index_id, const std::string& path)
 
 SnapshotMeta::~SnapshotMeta() {
   // Delete directory
-  DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index_id({})] Delete vector index snapshot directory.",
-                                 vector_index_id_, path_);
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.snapshot][index_id({})] Delete snapshot, epoch: {} snapshot_index_id: {} path: {}.",
+      vector_index_id_, Helper::RegionEpochToString(epoch_), snapshot_log_id_, path_);
   Helper::RemoveAllFileOrDirectory(path_);
 }
 
@@ -96,8 +97,8 @@ bool SnapshotMeta::Init() {
   range_ = meta.range();
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.snapshot][index_id({})] Load snapshot meta, epoch: {} range: {} snapshot_index_id: {}, path: {}",
-      vector_index_id_, Helper::RegionEpochToString(epoch_), Helper::RangeToString(range_), snapshot_index_id, path_);
+      "[vector_index.snapshot][index_id({})] Load snapshot meta, epoch: {} snapshot_index_id: {}, path: {}",
+      vector_index_id_, Helper::RegionEpochToString(epoch_), snapshot_index_id, path_);
 
   return true;
 }

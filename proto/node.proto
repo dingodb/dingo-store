@@ -112,7 +112,10 @@ message ChangeLogLevelResponse {
 message MetricsRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
 };
-message MetricsResponse {};
+message MetricsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+};
 
 message FailPointAction {
   string type = 1;       // action type

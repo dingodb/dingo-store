@@ -332,6 +332,8 @@ class Helper {
   static int CompareRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch);
   static bool IsEqualRegionEpoch(const pb::common::RegionEpoch& src_epoch, const pb::common::RegionEpoch& dst_epoch);
   static std::string RegionEpochToString(const pb::common::RegionEpoch& epoch);
+
+  static std::string PrintStatus(const butil::Status& status);
 };
 
 }  // namespace dingodb

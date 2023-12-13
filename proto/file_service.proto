@@ -15,6 +15,7 @@
 syntax = "proto3";
 
 import "common.proto";
+import "error.proto";
 
 package dingodb.pb.fileservice;
 
@@ -31,9 +32,10 @@ message GetFileRequest {
 
 message GetFileResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
   // Data is in attachment
-  bool eof = 2;
-  int64 read_size = 3;
+  bool eof = 3;
+  int64 read_size = 4;
 }
 
 message CleanFileReaderRequest {
@@ -43,6 +45,7 @@ message CleanFileReaderRequest {
 
 message CleanFileReaderResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 service FileService {

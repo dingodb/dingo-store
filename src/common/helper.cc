@@ -1687,4 +1687,8 @@ std::string Helper::RegionEpochToString(const pb::common::RegionEpoch& epoch) {
   return fmt::format("{}-{}", epoch.conf_version(), epoch.version());
 }
 
+std::string Helper::PrintStatus(const butil::Status& status) {
+  return fmt::format("{} {}", pb::error::Errno_Name(status.error_code()), status.error_str());
+}
+
 }  // namespace dingodb

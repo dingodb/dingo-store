@@ -38,11 +38,11 @@ PushServiceImpl::PushServiceImpl() = default;
 
 void PushServiceImpl::PushHeartbeat(google::protobuf::RpcController* controller,
                                     const dingodb::pb::push::PushHeartbeatRequest* request,
-                                    dingodb::pb::push::PushHeartbeatResponse* /*response*/,
+                                    dingodb::pb::push::PushHeartbeatResponse* response,
                                     google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard const done_guard(done);
-  // DINGO_LOG(DEBUG) << "PushHeartbeat request: " << request->ShortDebugString();
+  brpc::ClosureGuard const done_guard(svr_done);
 
   // call HandleStoreHeartbeatResponse
   const auto& heartbeat_response = request->heartbeat_response();
@@ -54,9 +54,9 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
                                          const dingodb::pb::push::PushStoreOperationRequest* request,
                                          dingodb::pb::push::PushStoreOperationResponse* response,
                                          google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::Controller* cntl = (brpc::Controller*)controller;
-  brpc::ClosureGuard const done_guard(done);
-  DINGO_LOG(DEBUG) << "[push.store] request: " << request->ShortDebugString();
+  brpc::ClosureGuard const done_guard(svr_done);
 
   if (request->store_operation().id() != Server::GetInstance().Id()) {
     DINGO_LOG(ERROR) << fmt::format("[push.store] store id not match, req/local store id({} / {})",
@@ -91,9 +91,8 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
     status = (validate_func != nullptr) ? validate_func(command)
                                         : butil::Status(pb::error::EINTERNAL, "Unknown region command");
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[push.store] validate failed, error: {} {} command: {}",
-                                      pb::error::Errno_Name(status.error_code()), status.error_str(),
-                                      command.ShortDebugString());
+      DINGO_LOG(ERROR) << fmt::format("[push.store] validate failed, error: {} command: {}",
+                                      Helper::PrintStatus(status), command.ShortDebugString());
       error_func(command.id(), command.region_cmd_type(), status);
       continue;
     }
