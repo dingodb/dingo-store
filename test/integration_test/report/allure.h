@@ -100,7 +100,7 @@ class Allure {
   Allure(std::vector<TestSuite> test_suites) : test_suites_(test_suites) {}
   ~Allure() = default;
 
-  void GenReport(const std::string& directory_path);
+  void GenReport(const std::string& directory_path, const std::vector<std::pair<std::string, std::string>>& properties);
 
  private:
   void GenTestResultFile(const std::string& directory_path);

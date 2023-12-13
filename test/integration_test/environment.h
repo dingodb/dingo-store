@@ -20,6 +20,7 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
+#include "proto/common.pb.h"
 #include "sdk/client.h"
 #include "sdk/coordinator_proxy.h"
 
@@ -32,6 +33,7 @@ namespace integration_test {
 class Environment : public testing::Environment {
  public:
   Environment() : coordinator_proxy_(std::make_shared<sdk::CoordinatorProxy>()) {}
+
   static Environment& GetInstance() {
     // NOTE: gtest will own this and delete 
     static Environment* environment = new Environment();
@@ -44,16 +46,53 @@ class Environment : public testing::Environment {
 
     status = sdk::Client::Build(FLAGS_coordinator_url, client_);
     CHECK(status.IsOK()) << fmt::format("Build sdk client failed, error: {}", status.ToString());
+
+    // Get dingo-store version info
+    version_info_ = GetVersionInfo();
+    PrintVersionInfo(version_info_);
   }
+
   void TearDown() override {}
 
   // TODO: remove this
   std::shared_ptr<sdk::CoordinatorProxy> GetCoordinatorProxy() { return coordinator_proxy_; }
   std::shared_ptr<sdk::Client> GetClient() { return client_; }
 
+  pb::common::VersionInfo VersionInfo() { return version_info_; }
+
  private:
+  pb::common::VersionInfo GetVersionInfo() {
+    pb::coordinator::HelloRequest request;
+    pb::coordinator::HelloResponse response;
+
+    request.set_is_just_version_info(true);
+
+    LOG(INFO) << "Hello request: " << request.ShortDebugString();
+
+    auto status = coordinator_proxy_->Hello(request, response);
+    CHECK(status.IsOK()) << fmt::format("Hello failed, {}", status.ToString());
+
+    return response.version_info();
+  }
+
+  static void PrintVersionInfo(const pb::common::VersionInfo& version_info) {
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_commit_hash", version_info.git_commit_hash());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_tag_name", version_info.git_tag_name());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "major_version", version_info.major_version());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "minor_version", version_info.minor_version());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "dingo_build_type", version_info.dingo_build_type());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "dingo_contrib_build_type", version_info.dingo_contrib_build_type());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "use_mkl", (version_info.use_mkl() ? "true" : "false"));
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "use_openblas", (version_info.use_openblas() ? "true" : "false"));
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "use_tcmalloc", (version_info.use_tcmalloc() ? "true" : "false"));
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "use_profiler", (version_info.use_profiler() ? "true" : "false"));
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "use_sanitizer", (version_info.use_sanitizer() ? "true" : "false"));
+  }
+
   std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
   std::shared_ptr<sdk::Client> client_;
+
+  pb::common::VersionInfo version_info_;
 };
 
 }  // namespace integration_test

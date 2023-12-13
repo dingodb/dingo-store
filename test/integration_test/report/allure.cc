@@ -34,11 +34,12 @@ namespace integration_test {
 
 namespace allure {
 
-void Allure::GenReport(const std::string& directory_path) {
+void Allure::GenReport(const std::string& directory_path,
+                       const std::vector<std::pair<std::string, std::string>>& properties) {
   GenTestResultFile(directory_path);
   GenContainerFile(directory_path);
   GenCategoriesFile(directory_path);
-  GenEnvironmentFile(directory_path, {});
+  GenEnvironmentFile(directory_path, properties);
   GenHistoryFile(directory_path);
 }
 
