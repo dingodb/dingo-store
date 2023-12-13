@@ -842,3 +842,17 @@ message TimeInfo {
 message ResponseInfo {
   TimeInfo time_info = 1;
 }
+
+message VersionInfo {
+  string git_commit_hash = 10;
+  string git_tag_name = 20;
+  string major_version = 30;
+  string minor_version = 40;
+  string dingo_build_type = 50;
+  string dingo_contrib_build_type = 60;
+  bool use_mkl = 70;
+  bool use_openblas = 80;
+  bool use_tcmalloc = 90;
+  bool use_profiler = 100;
+  bool use_sanitizer = 110;
+}
