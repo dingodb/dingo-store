@@ -3,8 +3,8 @@
 # CAUTION: we setup ulimit parameters in deploy_func.sh, please check that file for
 #          how the ulimit options is required.
 # The ulimit is setup in start_program, the paramter of ulimit is:
-#   ulimit -n 800000
-#   ulimit -u 800000
+#   ulimit -n 1048576
+#   ulimit -u 1048576
 #   ulimit -c unlimited
 # If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit.
 
