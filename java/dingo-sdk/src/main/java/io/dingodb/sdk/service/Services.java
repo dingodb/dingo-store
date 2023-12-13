@@ -3,19 +3,24 @@ package io.dingodb.sdk.service;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.caller.ServiceCaller;
 import io.dingodb.sdk.service.entity.common.Location;
 import io.dingodb.sdk.service.entity.coordinator.GetCoordinatorMapResponse;
+import io.dingodb.sdk.service.entity.coordinator.GetRangeRegionMapRequest;
+import io.dingodb.sdk.service.entity.coordinator.RangeRegion;
 import io.dingodb.sdk.service.entity.meta.DingoCommonId;
 import lombok.SneakyThrows;
 
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static io.dingodb.sdk.common.utils.ByteArrayUtils.compare;
 import static io.grpc.CallOptions.DEFAULT;
 
 public class Services {
@@ -94,6 +99,26 @@ public class Services {
             }
         });
 
+    private static final LoadingCache<Set<Location>, LoadingCache<Long, RegionChannelProvider>> regionCache =
+        CacheBuilder.newBuilder()
+            .expireAfterAccess(30, TimeUnit.MINUTES)
+            .expireAfterWrite(30, TimeUnit.MINUTES)
+            .maximumSize(64)
+            .build(new CacheLoader<Set<Location>, LoadingCache<Long, RegionChannelProvider>>() {
+                @Override
+                public LoadingCache<Long, RegionChannelProvider> load(Set<Location> locations) throws Exception {
+                    return CacheBuilder.newBuilder()
+                        .expireAfterAccess(10, TimeUnit.MINUTES)
+                        .expireAfterWrite(10, TimeUnit.MINUTES)
+                        .build(new CacheLoader<Long, RegionChannelProvider>() {
+                            @Override
+                            public RegionChannelProvider load(Long regionId) throws Exception {
+                                return new RegionChannelProvider(coordinatorService(locations), regionId);
+                            }
+                        });
+                }
+            });
+
     private static final LoadingCache<Set<Location>, LoadingCache<DingoCommonId, TableRegionsFailOver>> tableFailOverCache =
         CacheBuilder.newBuilder()
             .expireAfterAccess(30, TimeUnit.MINUTES)
@@ -158,7 +183,87 @@ public class Services {
     }
 
     @SneakyThrows
-    public static StoreService regionService(
+    public static ChannelProvider regionChannelProvider(
+        Set<Location> locations, DingoCommonId tableId, DingoCommonId regionId
+    ) {
+        return tableFailOverCache.get(locations).get(tableId).createRegionProvider(regionId);
+    }
+
+    @SneakyThrows
+    public static ChannelProvider regionChannelProvider(
+        Set<Location> locations, byte[] key
+    ) {
+        CoordinatorService coordinatorService = coordinatorService(locations);
+        List<RangeRegion> regions = coordinatorService
+            .getRangeRegionMap(GetRangeRegionMapRequest::new).getRangeRegions();
+        for (RangeRegion region : regions) {
+            if (compare(key, region.getStartKey()) >= 0 && compare(key, region.getEndKey()) < 0) {
+                return regionCache.get(locations).get(region.getRegionId());
+            }
+        }
+        throw new RuntimeException("Cannot found " + Arrays.toString(key) + " region");
+    }
+
+    @SneakyThrows
+    public static StoreService storeRegionService(
+        Set<Location> locations, byte[] key, int retry
+    ) {
+        ServiceCaller<StoreService> serviceCaller = new ServiceCaller<StoreService>(
+            regionChannelProvider(locations, key), retry, DEFAULT
+        ){};
+        return (StoreService) Proxy.newProxyInstance(
+            StoreService.class.getClassLoader(),
+            new Class[] {StoreService.class}, serviceCaller
+        );
+    }
+
+    @SneakyThrows
+    public static IndexService indexRegionService(
+        Set<Location> locations, byte[] key, int retry
+    ) {
+        ServiceCaller<IndexService> serviceCaller = new ServiceCaller<IndexService>(
+            regionChannelProvider(locations, key), retry, DEFAULT
+        ){};
+        return (IndexService) Proxy.newProxyInstance(
+            StoreService.class.getClassLoader(),
+            new Class[] {IndexService.class}, serviceCaller
+        );
+    }
+
+    @SneakyThrows
+    public static StoreService storeRegionService(
+        Set<Location> locations, long regionId, int retry
+    ) {
+        Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
+        ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
+        ServiceCaller<StoreService> serviceCaller = new ServiceCaller<StoreService>(
+            regionProvider, retry, DEFAULT
+        ){};
+        serviceCaller.addExcludeErrorCheck(StoreService.kvScanContinue);
+        serviceCaller.addExcludeErrorCheck(StoreService.kvScanRelease);
+        return (StoreService) Proxy.newProxyInstance(
+            StoreService.class.getClassLoader(),
+            new Class[] {StoreService.class}, serviceCaller
+        );
+    }
+
+    @SneakyThrows
+    public static IndexService indexRegionService(
+        Set<Location> locations, long regionId, int retry
+    ) {
+        Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
+        ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
+        ServiceCaller<IndexService> serviceCaller = new ServiceCaller<IndexService>(
+            regionProvider, retry, DEFAULT
+        ){};
+        return (IndexService) Proxy.newProxyInstance(
+            IndexService.class.getClassLoader(),
+            new Class[] {IndexService.class}, serviceCaller
+        );
+    }
+
+    @SneakyThrows
+    public static StoreService storeRegionService(
         Set<Location> locations, DingoCommonId tableId, DingoCommonId regionId, int retry
     ) {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
@@ -172,6 +277,22 @@ public class Services {
         return (StoreService) Proxy.newProxyInstance(
             StoreService.class.getClassLoader(),
             new Class[] {StoreService.class}, serviceCaller
+        );
+    }
+
+    @SneakyThrows
+    public static IndexService indexRegionService(
+        Set<Location> locations, DingoCommonId indexId, DingoCommonId regionId, int retry
+    ) {
+        Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
+        ChannelProvider regionProvider = tableFailOverCache.get(locationsStr).get(indexId)
+            .createRegionProvider(regionId);
+        ServiceCaller<IndexService> serviceCaller = new ServiceCaller<IndexService>(
+            regionProvider, retry, DEFAULT
+        ){};
+        return (IndexService) Proxy.newProxyInstance(
+            IndexService.class.getClassLoader(),
+            new Class[] {IndexService.class}, serviceCaller
         );
     }
 

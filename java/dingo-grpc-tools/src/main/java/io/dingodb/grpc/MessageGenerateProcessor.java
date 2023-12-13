@@ -301,7 +301,7 @@ public class MessageGenerateProcessor {
                 builder.addType(oneOfType);
             } else {
                 number = (Integer) numberField.getConstantValue();
-                fieldType = fieldType(fieldName, fieldElement, elements).box();
+                fieldType = fieldType(fieldName, fieldElement, elements);
             }
             if (number != 0) {
                 all.put(number, new AbstractMap.SimpleEntry<>(fieldName, fieldType));
@@ -372,7 +372,7 @@ public class MessageGenerateProcessor {
             TypeName realTypeName;
             FieldSpec.Builder realValueField;
             if (returnType.getKind().isPrimitive()) {
-                realTypeName = ClassName.get(returnType).box();
+                realTypeName = ClassName.get(returnType);
                 realValueField = FieldSpec.builder(realTypeName, VALUE, PRIVATE);
             } else {
                 TypeMirror realType = returnType;

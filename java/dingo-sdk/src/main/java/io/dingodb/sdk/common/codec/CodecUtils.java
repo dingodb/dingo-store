@@ -20,6 +20,7 @@ import io.dingodb.sdk.common.serial.schema.*;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.common.utils.TypeSchemaMapper;
+import io.dingodb.sdk.service.entity.meta.ColumnDefinition;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,6 +48,16 @@ public final class CodecUtils {
         return codecOrderColumns;
     }
 
+    public static Comparator<ColumnDefinition> sortColumnDefinitionByPrimaryComparator() {
+        return (c1, c2) -> compareColumnByPrimary(c1.getIndexOfKey(), c2.getIndexOfKey());
+    }
+
+    public static List<ColumnDefinition> sortColumnDefinitions(List<ColumnDefinition> columns) {
+        List<ColumnDefinition> codecOrderColumns = new ArrayList<>(columns);
+        codecOrderColumns.sort(sortColumnDefinitionByPrimaryComparator());
+        return codecOrderColumns;
+    }
+
     public static DingoSchema createSchemaForColumn(Column column) {
         return createSchemaForColumn(column, 0);
     }
@@ -66,6 +77,31 @@ public final class CodecUtils {
         return schema;
     }
 
+    public static DingoSchema createSchemaForColumnDefinition(ColumnDefinition column, int index) {
+        DingoSchema schema;
+        String typeName = column.getSqlType();
+        if (typeName == null) {
+            throw new IllegalArgumentException("Invalid column type: null.");
+        }
+        typeName = typeName.toUpperCase();
+        String elementType = Parameters.cleanNull(column.getElementType(), "");
+        schema = TypeSchemaMapper.getSchemaForTypeName(typeName, elementType.toUpperCase());
+        schema.setAllowNull(column.isNullable());
+        schema.setIsKey(column.getIndexOfKey() >= 0);
+        schema.setIndex(index);
+        return schema;
+    }
+
+    public static List<DingoSchema> createSchemaForColumnDefinitions(List<ColumnDefinition> columns) {
+        List<ColumnDefinition> orderColumns = sortColumnDefinitions(columns);
+        List<DingoSchema> schemas = new ArrayList<>(orderColumns.size());
+        for (int i = 0; i < orderColumns.size(); i++) {
+            ColumnDefinition column = orderColumns.get(i);
+            schemas.add(CodecUtils.createSchemaForColumnDefinition(column, indexOf(column, columns)));
+        }
+        return schemas;
+    }
+
     public static List<DingoSchema> createSchemaForColumns(List<Column> columns) {
         List<Column> orderColumns = sortColumns(columns);
         List<DingoSchema> schemas = new ArrayList<>(orderColumns.size());
@@ -82,6 +118,15 @@ public final class CodecUtils {
 
     public static DingoSchema createSchemaForTypeName(String typeName, String elementType) {
         return TypeSchemaMapper.getSchemaForTypeName(typeName, elementType);
+    }
+
+    private static int indexOf(ColumnDefinition columnDefinition, List<ColumnDefinition> columns) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i) == columnDefinition) {
+                return i;
+            }
+        }
+        return -1;
     }
 
 }

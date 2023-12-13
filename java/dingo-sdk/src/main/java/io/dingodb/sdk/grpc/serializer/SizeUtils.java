@@ -31,19 +31,19 @@ public class SizeUtils {
     }
 
     public static Integer sizeOf(Integer value) {
-        return value == null || value == 0 ? 0 : computeInt32SizeNoTag(value);
+        return value == null ? 0 : computeInt32SizeNoTag(value);
     }
 
     public static Integer sizeOf(Long value) {
-        return value == null || value == 0 ? 0 : computeInt64SizeNoTag(value);
+        return value == null ? 0 : computeInt64SizeNoTag(value);
     }
 
     public static Integer sizeOf(Float value) {
-        return value == null || value == 0 ? 0 : computeFloatSizeNoTag(value);
+        return value == null ? 0 : computeFloatSizeNoTag(value);
     }
 
     public static Integer sizeOf(Double value) {
-        return value == null || value == 0 ? 0 : computeDoubleSizeNoTag(value);
+        return value == null ? 0 : computeDoubleSizeNoTag(value);
     }
 
     public static Integer sizeOf(Numeric value) {
@@ -73,23 +73,23 @@ public class SizeUtils {
     }
 
     public static Integer sizeOf(Integer number, Integer value) {
-        return value == null || value == 0 ? 0 : computeInt32Size(number, value);
+        return value == null ? 0 : computeInt32Size(number, value);
     }
 
     public static Integer sizeOf(Integer number, Long value) {
-        return value == null || value == 0 ? 0 : computeInt64Size(number, value);
+        return value == null ? 0 : computeInt64Size(number, value);
     }
 
     public static Integer sizeOf(Integer number, Float value) {
-        return value == null || value == 0 ? 0 : computeFloatSize(number, value);
+        return value == null ? 0 : computeFloatSize(number, value);
     }
 
     public static Integer sizeOf(Integer number, Double value) {
-        return value == null || value == 0 ? 0 : computeDoubleSize(number, value);
+        return value == null ? 0 : computeDoubleSize(number, value);
     }
 
     public static Integer sizeOf(Integer number, Numeric value) {
-        return value == null || value.number() == 0 ? 0 : computeEnumSize(number, value.number());
+        return value == null ? 0 : computeEnumSize(number, value.number());
     }
 
     public static Integer sizeOf(Integer number, String value) {
@@ -120,6 +120,18 @@ public class SizeUtils {
         return 0;
     }
 
+    public static <T> int sizeOfPack(Integer number, List<T> value, Function<T, Integer> sizeComputer) {
+        if (value != null && value.size() > 0) {
+            int size = 0;
+            for (T element : value) {
+                size += sizeComputer.apply(element);
+            }
+            size = computeUInt32SizeNoTag(size) + size + computeTagSize(number);
+            return size;
+        }
+        return 0;
+    }
+
     public static <T> int sizeOf(Integer number, List<T> value, Function<T, Integer> sizeComputer) {
         if (value != null && value.size() > 0) {
             int size = 0;
@@ -127,8 +139,6 @@ public class SizeUtils {
                 size += computeTagSize(number);
                 size += sizeComputer.apply(element);
             }
-            //size += computeInt32SizeNoTag(size);
-            //size += computeInt32SizeNoTag(number);
             return size;
         }
         return 0;

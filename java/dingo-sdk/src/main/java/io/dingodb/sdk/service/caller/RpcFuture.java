@@ -4,10 +4,12 @@ import io.dingodb.sdk.common.DingoClientException;
 import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import lombok.experimental.Delegate;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
-public class RpcFuture<T> extends CompletableFuture<T> {
+public class RpcFuture<T> implements CompletionStage<T> {
 
     public class Listener extends ClientCall.Listener<T> {
 
@@ -32,9 +34,12 @@ public class RpcFuture<T> extends CompletableFuture<T> {
         }
     }
 
+    @Delegate
+    protected final CompletableFuture<T> future = new CompletableFuture<>();
     protected final Listener listener = new Listener();
 
     private Metadata headers;
+    private T message;
 
     private Status status;
     private Metadata trailers;
@@ -60,7 +65,7 @@ public class RpcFuture<T> extends CompletableFuture<T> {
     }
 
     public void onMessage(T message) {
-        complete(message);
+        this.message = message;
     }
 
     public void onClose(Status status, Metadata trailers) {
@@ -73,6 +78,7 @@ public class RpcFuture<T> extends CompletableFuture<T> {
                 completeExceptionally(new DingoClientException(status.getCode().value(), status.getDescription()));
             }
         }
+        complete(message);
     }
 
     public void onReady() {

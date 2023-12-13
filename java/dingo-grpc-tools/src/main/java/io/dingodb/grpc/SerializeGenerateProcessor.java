@@ -150,10 +150,10 @@ public class SerializeGenerateProcessor {
     public static CodeBlock sizeOfStatement(String fieldName, TypeName fieldType, Integer number) {
         if (fieldType instanceof ParameterizedTypeName) {
             if (((ParameterizedTypeName) fieldType).rawType.equals(ClassName.get(List.class))) {
-                if (canPack(fieldType)) {
+                if (canPack(((ParameterizedTypeName) fieldType).typeArguments.get(0))) {
                     return CodeBlock.of(
-                        "size += $T.$L($L, $L, $L, $T::$L, $T::$L)",
-                        WRITER, WRITE, number, fieldName, OUT, WRITER, WRITE, SIZE_UTILS, SIZE_OF
+                        "size += $T.$LPack($L, $L, $T::$L)",
+                        SIZE_UTILS, SIZE_OF, number, fieldName, SIZE_UTILS, SIZE_OF
                     );
                 }
                 return CodeBlock.of(

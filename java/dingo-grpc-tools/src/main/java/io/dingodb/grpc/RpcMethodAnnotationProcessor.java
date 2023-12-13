@@ -56,6 +56,7 @@ import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 
 import static io.dingodb.grpc.Constant.CALLER;
+import static io.dingodb.grpc.Constant.COMMON_ID;
 import static io.dingodb.grpc.Constant.MARSHALLER;
 import static io.dingodb.grpc.Constant.MSG_PKG;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
@@ -126,9 +127,15 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                 ));
                 typeBuilder
                     .addMethod(makeRequestMethod(methodName, reqTypeName, resTypeName))
-                    .addMethod(makeProviderMethod(methodName, reqTypeName, resTypeName));
+                    .addMethod(makeProviderMethod(methodName, reqTypeName, resTypeName))
+                    .addMethod(makeRequestWithIdMethod(methodName, reqTypeName, resTypeName))
+                    .addMethod(makeProviderWithIdMethod(methodName, reqTypeName, resTypeName));
+                messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.REQUEST);
                 messageGenerateProcessor.messages.get(resTypeName).addSuperinterface(Constant.RESPONSE);
                 if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("store")) {
+                    messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.STORE_REQ);
+                }
+                if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("index")) {
                     messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.STORE_REQ);
                 }
                 serviceElements.add((TypeElement) element.getEnclosingElement());
@@ -226,6 +233,21 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             .build();
     }
 
+    private MethodSpec makeRequestWithIdMethod(
+        String methodName,
+        TypeName requestTypeName,
+        TypeName responseTypeName
+    ) {
+
+        return MethodSpec.methodBuilder(methodName)
+            .returns(responseTypeName)
+            .addParameter(TypeName.LONG, "requestId")
+            .addParameter(requestTypeName, "request")
+            .addModifiers(PUBLIC, DEFAULT)
+            .addStatement("return getCaller().call($L, requestId, request)", methodName)
+            .build();
+    }
+
     private MethodSpec makeProviderMethod(
         String methodName,
         TypeName requestTypeName,
@@ -236,6 +258,20 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             .addParameter(ParameterizedTypeName.get(ClassName.get(Supplier.class), requestTypeName), "provider")
             .addModifiers(PUBLIC, DEFAULT)
             .addStatement("return getCaller().call($L, provider)", methodName)
+            .build();
+    }
+
+    private MethodSpec makeProviderWithIdMethod(
+        String methodName,
+        TypeName requestTypeName,
+        TypeName responseTypeName
+    ) {
+        return MethodSpec.methodBuilder(methodName)
+            .returns(responseTypeName)
+            .addParameter(TypeName.LONG, "requestId")
+            .addParameter(ParameterizedTypeName.get(ClassName.get(Supplier.class), requestTypeName), "provider")
+            .addModifiers(PUBLIC, DEFAULT)
+            .addStatement("return getCaller().call($L, requestId, provider)", methodName)
             .build();
     }
 

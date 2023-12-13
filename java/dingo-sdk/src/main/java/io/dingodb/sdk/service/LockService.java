@@ -78,6 +78,7 @@ public class LockService {
     public LockService(String resource, String servers) {
         this(resource, servers, 30);
     }
+
     public LockService(String servers, int leaseTtl) {
         this(UUID.randomUUID().toString(), servers, leaseTtl);
     }
