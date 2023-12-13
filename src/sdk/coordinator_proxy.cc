@@ -108,6 +108,16 @@ Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& 
   return Status::OK();
 }
 
+Status CoordinatorProxy::Hello(const pb::coordinator::HelloRequest& request, pb::coordinator::HelloResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_->SendRequest("Hello", request, response);
+  if (!rpc_status.ok()) {
+    std::string msg = fmt::format("Fail hello {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
+  }
+  return Status::OK();
+}
+
 Status CoordinatorProxy::TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
   butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("TsoService", request, response);
   if (!rpc_status.ok()) {

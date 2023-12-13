@@ -27,6 +27,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
+#include "common/version.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "meta/store_meta_manager.h"
@@ -2636,6 +2637,11 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::sto
              dingodb::pb::store::HelloResponse* response, google::protobuf::Closure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+
+  *response->mutable_version_info() = GetVersionInfo();
+  if (request->is_just_version_info()) {
+    return;
+  }
 
   auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_engine == nullptr) {

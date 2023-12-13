@@ -26,6 +26,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
+#include "common/version.h"
 #include "engine/storage.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -2240,6 +2241,11 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::ind
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 
+  *response->mutable_version_info() = GetVersionInfo();
+  if (request->is_just_version_info()) {
+    return;
+  }
+
   auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_engine == nullptr) {
     return;
@@ -2279,7 +2285,9 @@ void IndexServiceImpl::Hello(google::protobuf::RpcController* controller, const 
                              pb::index::HelloResponse* response, google::protobuf::Closure* done) {
   // Run in queue.
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
+
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);

@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_VERSION_H_
 
 #include "gflags/gflags.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -47,6 +48,8 @@ DECLARE_bool(show_version);
 
 void DingoShowVerion();
 void DingoLogVerion();
+
+pb::common::VersionInfo GetVersionInfo();
 
 }  // namespace dingodb
 

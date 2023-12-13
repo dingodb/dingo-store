@@ -32,6 +32,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/version.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "gflags/gflags.h"
@@ -55,6 +56,11 @@ void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordin
              std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
+
+  *response->mutable_version_info() = GetVersionInfo();
+  if (request->is_just_version_info()) {
+    return;
+  }
 
   if (!coordinator_control->IsLeader()) {
     return coordinator_control->RedirectResponse(response);

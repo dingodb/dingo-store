@@ -939,6 +939,7 @@ message HelloRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   Context context = 2;
   bool get_region_metrics = 3;
+  bool is_just_version_info = 4;
 }
 
 message HelloResponse {
@@ -948,6 +949,7 @@ message HelloResponse {
   int64 region_count = 3;
   int64 region_leader_count = 4;
   repeated dingodb.pb.common.RegionMetrics region_metrics = 5;
+  dingodb.pb.common.VersionInfo version_info = 6;
 }
 
 service StoreService {

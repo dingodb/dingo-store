@@ -89,6 +89,22 @@ void DingoLogVerion() {
   DINGO_LOG(INFO) << GetBuildFlag();
 }
 
+pb::common::VersionInfo GetVersionInfo() {
+  pb::common::VersionInfo version_info;
+  version_info.set_git_commit_hash(FLAGS_git_commit_hash);
+  version_info.set_git_tag_name(FLAGS_git_tag_name);
+  version_info.set_major_version(FLAGS_major_version);
+  version_info.set_minor_version(FLAGS_minor_version);
+  version_info.set_dingo_build_type(FLAGS_dingo_build_type);
+  version_info.set_dingo_contrib_build_type(FLAGS_dingo_contrib_build_type);
+  version_info.set_use_mkl(FLAGS_use_mkl);
+  version_info.set_use_openblas(FLAGS_use_openblas);
+  version_info.set_use_tcmalloc(FLAGS_use_tcmalloc);
+  version_info.set_use_profiler(FLAGS_use_profiler);
+  version_info.set_use_sanitizer(FLAGS_use_sanitizer);
+  return version_info;
+}
+
 DEFINE_bool(show_version, false, "Print DingoStore version Flag");
 
 }  // namespace dingodb

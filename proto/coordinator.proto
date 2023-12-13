@@ -353,6 +353,7 @@ message HelloRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   int64 hello = 2;
   bool get_memory_info = 3;
+  bool is_just_version_info = 4;
 }
 
 message ClusterState {
@@ -366,6 +367,7 @@ message HelloResponse {
   string status_detail = 4;
   CoordinatorMemoryInfo memory_info = 5;
   ClusterState cluster_state = 6;
+  dingodb.pb.common.VersionInfo version_info = 7;
 }
 
 message GetRegionMapRequest {

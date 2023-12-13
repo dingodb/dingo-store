@@ -37,7 +37,7 @@ class CoordinatorProxy {
 
   // Region
   virtual Status QueryRegion(const pb::coordinator::QueryRegionRequest& request,
-                              pb::coordinator::QueryRegionResponse& response);
+                             pb::coordinator::QueryRegionResponse& response);
 
   virtual Status CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                               pb::coordinator::CreateRegionResponse& response);
@@ -47,6 +47,8 @@ class CoordinatorProxy {
 
   virtual Status ScanRegions(const pb::coordinator::ScanRegionsRequest& request,
                              pb::coordinator::ScanRegionsResponse& response);
+
+  virtual Status Hello(const pb::coordinator::HelloRequest& request, pb::coordinator::HelloResponse& response);
 
   // Meta Service
   virtual Status TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response);
