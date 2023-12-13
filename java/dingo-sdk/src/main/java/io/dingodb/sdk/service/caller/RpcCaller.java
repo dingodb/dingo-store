@@ -1,9 +1,9 @@
 package io.dingodb.sdk.service.caller;
 
-import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.service.Caller;
 import io.dingodb.sdk.service.Service;
 import io.dingodb.sdk.service.entity.Message;
+import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -17,15 +17,29 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
-
-import static io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy.RETRY;
 
 @Slf4j
 @AllArgsConstructor
 public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHandler {
+
+    private static final Map<String, RpcHandler> handlers = new ConcurrentHashMap<>();
+
+    public static <REQ extends Request, RES extends Response> void addHandler(
+        io.dingodb.sdk.service.RpcHandler<REQ, RES> handler
+    ) {
+        MethodDescriptor method = handler.matchMethod();
+        handlers.computeIfAbsent(method.getFullMethodName(), n -> new RpcHandler<>(method)).addHandler(handler);
+    }
+
+    public static <REQ extends Request, RES extends Response> void removeHandler(
+        io.dingodb.sdk.service.RpcHandler<REQ, RES> handler
+    ) {
+        MethodDescriptor method = handler.matchMethod();
+        handlers.computeIfAbsent(method.getFullMethodName(), n -> new RpcHandler<>(method)).removeHandler(handler);
+    }
 
     private final Channel channel;
     private final CallOptions options;
@@ -55,33 +69,39 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
         return method.invoke(service, args);
     }
 
-    public <REQ extends Message, RES extends Response> RES call(MethodDescriptor<REQ, RES> method, Supplier<REQ> provider) {
+    @Override
+    public <REQ extends Request, RES extends Response> RES call(
+        MethodDescriptor<REQ, RES> method, Supplier<REQ> provider
+    ) {
         return call(method, provider.get());
     }
 
-    public <REQ extends Message, RES extends Response> RES call(MethodDescriptor<REQ, RES> method, REQ request) {
+    @Override
+    public <REQ extends Request, RES extends Response> RES call(
+        MethodDescriptor<REQ, RES> method, REQ request
+    ) {
         return call(method, request, options, channel, System.identityHashCode(request));
     }
 
-    public static <REQ extends Message, RES extends Response> RpcFuture<RES> asyncCall(
-        MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel, long trace
+    @Override
+    public <REQ extends Request, RES extends Response> RES call(
+        MethodDescriptor<REQ, RES> method, long requestId, Supplier<REQ> provider
     ) {
-        String methodName = method.getFullMethodName();
-        RpcFuture<RES> future = new RpcFuture<>();
+        REQ request = provider.get();
+        return call(method, request, options, channel, System.identityHashCode(request));
+    }
 
-        if (log.isDebugEnabled()) {
-            log.debug(
-                "Call [{}], trace [{}], request: {}, options: {}", methodName, trace, request, options
-            );
-        }
-        if (channel == null) {
-            log.debug(
-                "Call [{}] channel is null, will refresh and retry, trace [{}], request: {}, options: {}",
-                methodName, trace, request, options
-            );
-            future.complete(null);
-            return future;
-        }
+    @Override
+    public <REQ extends Request, RES extends Response> RES call(
+        MethodDescriptor<REQ, RES> method, long requestId, REQ request
+    ) {
+        return call(method, request, options, channel, System.identityHashCode(request));
+    }
+
+    protected static <REQ extends Message, RES extends Response> RpcFuture<RES> asyncCall(
+        MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel
+    ) {
+        RpcFuture<RES> future = new RpcFuture<>();
         ClientCall<REQ, RES> call = channel.newCall(method, options);
         call.start(future.listener, new Metadata());
         call.request(2);
@@ -90,57 +110,26 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
         return future;
     }
 
-    public static <REQ extends Message, RES extends Response> RES call(
+    public static <REQ extends Request, RES extends Response> RES call(
         MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel, long trace
     ) {
         String methodName = method.getFullMethodName();
-        if (log.isDebugEnabled()) {
-            log.debug(
-                "Call [{}], trace [{}], request: {}, options: {}", methodName, trace, request, options
-            );
-        }
+        RpcHandler<REQ, RES> handler = handlers.computeIfAbsent(methodName, n -> new RpcHandler<>(method));
+
+        handler.enter(request, options, channel == null ? null : channel.authority(), trace);
         if (channel == null) {
-            log.debug(
-                "Call [{}] channel is null, will refresh and retry, trace [{}], request: {}, options: {}",
-                methodName, trace, request, options
-            );
             return null;
         }
-        long start = System.currentTimeMillis();
-        if (log.isDebugEnabled()) {
-            log.debug(
-                "Call [{}:{}] begin, trace [{}], request: {}, options: {}",
-                channel.authority(), methodName, trace, request, options
-            );
-        }
-        RES response = null;
+        handler.before(request, options, channel.authority(), trace);
+        RES response;
         try {
             response = ClientCalls.blockingUnaryCall(channel, method, options, request);
         } catch (StatusRuntimeException e) {
-            if (log.isDebugEnabled()) {
-                log.debug(
-                    "Call [{}:{}] StatusRuntimeException [{}], trace [{}], request: {}, options: {}",
-                    channel.authority(), methodName, e.getMessage(), trace, request, options
-                );
-            }
+            handler.onNonResponse(request, options, channel.authority(), trace, e.getMessage());
+            return null;
         }
-        if (log.isDebugEnabled()) {
-            log.debug(
-                "Call [{}:{}] finish, use [{}] ms, trace [{}], request: {}, response: {}, options: {}",
-                channel.authority(), methodName, System.currentTimeMillis() - start, trace, request, response, options
-            );
-        }
-        if (response != null && response.getError() != null) {
-            if (ErrorCodeUtils.errorToStrategy(response.getError().getErrcode().number()) == RETRY) {
-                if (log.isDebugEnabled()) {
-                    log.debug(
-                        "Call [{}:{}] return retry code, will refresh, trace [{}], return code [{}]",
-                        channel.authority(), methodName, trace, response.getError().getErrmsg()
-                    );
-                }
-                response = null;
-            }
-        }
+
+        handler.after(request, response, options, channel.authority(), trace);
         return response;
     }
 

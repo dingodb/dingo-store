@@ -19,7 +19,7 @@ package io.dingodb.sdk.service.connector;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
-import io.dingodb.sdk.common.DingoClientException.RetryException;
+import io.dingodb.sdk.common.DingoClientException.ExhaustedRetryException;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils.Strategy;
 import io.dingodb.sdk.common.utils.NoBreakFunctions;
@@ -38,7 +38,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -245,11 +244,11 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
             errMsgs.forEach((k, v) -> errMsgBuilder
                 .append('[').append(v).append("] times [").append(k).append(']').append(", ")
             );
-            throw new RetryException(
+            throw new ExhaustedRetryException(
                 "Exec attempts exhausted, failed to exec " + name + ", " + errMsgBuilder
             );
         } else {
-            throw new RetryException(
+            throw new ExhaustedRetryException(
                 "Exec " + name + " error, " + "transform leader attempts exhausted."
             );
         }

@@ -44,13 +44,13 @@ public class CoordinatorChannelProvider implements ChannelProvider {
             ManagedChannel channel = ChannelManager.getChannel(location);
             try {
                 GetCoordinatorMapResponse response = RpcCaller
-                    .asyncCall(
+                    .call(
                         CoordinatorService.getCoordinatorMap,
                         new GetCoordinatorMapRequest(),
                         CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
                         channel,
                         trace
-                    ).join();
+                    );
                 channelOptional = Optional.of(response)
                     .ifPresent(res -> locations = new HashSet<>(res.getCoordinatorLocations()))
                     .map(locationGetter)

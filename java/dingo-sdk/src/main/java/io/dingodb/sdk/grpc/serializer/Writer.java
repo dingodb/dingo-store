@@ -22,33 +22,35 @@ public class Writer {
 
     @SneakyThrows
     public static void write(Boolean value, CodedOutputStream out) {
-        out.writeBoolNoTag(value);
+        if (value != null) {
+            out.writeBoolNoTag(value);
+        }
     }
 
     @SneakyThrows
     public static void write(Integer value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeInt32NoTag(value);
         }
     }
 
     @SneakyThrows
     public static void write(Long value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeInt64NoTag(value);
         }
     }
 
     @SneakyThrows
     public static void write(Float value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeFloatNoTag(value);
         }
     }
 
     @SneakyThrows
     public static void write(Double value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeDoubleNoTag(value);
         }
     }
@@ -69,7 +71,7 @@ public class Writer {
 
     @SneakyThrows
     public static void write(byte[] value, CodedOutputStream out) {
-        if (value != null && value.length > 0) {
+        if (value != null) {
             out.writeUInt32NoTag(value.length);
             out.write(value, 0, value.length);
         }
@@ -93,7 +95,7 @@ public class Writer {
 
     @SneakyThrows
     public static void write(Integer number, Integer value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeTag(number, INT32.getWireType());
             write(value, out);
         }
@@ -101,7 +103,7 @@ public class Writer {
 
     @SneakyThrows
     public static void write(Integer number, Long value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeTag(number, INT64.getWireType());
             write(value, out);
         }
@@ -109,7 +111,7 @@ public class Writer {
 
     @SneakyThrows
     public static void write(Integer number, Float value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeTag(number, FLOAT.getWireType());
             write(value, out);
         }
@@ -117,7 +119,7 @@ public class Writer {
 
     @SneakyThrows
     public static void write(Integer number, Double value, CodedOutputStream out) {
-        if (value != null && value != 0) {
+        if (value != null) {
             out.writeTag(number, DOUBLE.getWireType());
             write(value, out);
         }

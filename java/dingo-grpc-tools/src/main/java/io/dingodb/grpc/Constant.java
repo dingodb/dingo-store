@@ -33,6 +33,8 @@ public class Constant {
     public static final ClassName NUMERIC = ClassName.get(MSG_PKG, "Numeric");
     public static final ClassName MESSAGE = ClassName.get(MSG_PKG, "Message");
     public static final ClassName FIELD = ClassName.get(MSG_PKG, "Field");
+    public static final ClassName COMMON_ID = ClassName.get(MSG_PKG + ".meta", "DingoCommonId");
+    public static final ClassName REQUEST = MESSAGE.nestedClass("Request");
     public static final ClassName RESPONSE = MESSAGE.nestedClass("Response");
     public static final ClassName STORE_REQ = MESSAGE.nestedClass("StoreRequest");
 

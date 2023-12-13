@@ -54,8 +54,8 @@ public class DingoClientException extends RuntimeException {
         }
     }
 
-    public static final class RetryException extends DingoClientException {
-        public RetryException(String message) {
+    public static final class ExhaustedRetryException extends DingoClientException {
+        public ExhaustedRetryException(String message) {
             super(message);
         }
     }
