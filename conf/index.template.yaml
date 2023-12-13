@@ -31,8 +31,6 @@ log:
 vector:
   index_path: $BASE_PATH$/data/vector_index_snapshot
   enable_follower_hold_index: false
-  # save hnsw vector index snapshot when write key num exceed threshold.
-  hnsw_save_threshold_write_key_num: 10000
   background_worker_num: 12 # vector index load/build/rebuild.
 store:
   path: $BASE_PATH$/data/db

@@ -42,15 +42,12 @@
 
 namespace dingodb {
 
+DECLARE_int64(hnsw_need_save_count);
+
 class VectorIndexHnswSearchParamTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    const std::string &filename = "../../conf/index.yaml";
-
-    Server::GetInstance().InitConfig(filename);
-    auto config = ConfigManager::GetInstance().GetRoleConfig();
-    int64_t hnsw_save_threshold_write_key_num = config->GetInt64("vector.hnsw_save_threshold_write_key_num");
-    std::cout << "hnsw_save_threshold_write_key_num : " << hnsw_save_threshold_write_key_num << std::endl;
+    std::cout << "hnsw_save_threshold_write_key_num : " << FLAGS_hnsw_need_save_count << '\n';
   }
 
   static void TearDownTestSuite() {
@@ -248,19 +245,19 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
     std::vector<int64_t> result_vector_ids;
     {
       size_t i = 0;
-      std::cout << "[" << i << "]" << std::endl;
+      std::cout << "[" << i << "]" << '\n';
       for (const auto &result : results) {
         {
           size_t j = 0;
           for (const auto &vector_with_distances : result.vector_with_distances()) {
-            std::cout << "[" << j << "]" << std::endl;
+            std::cout << "[" << j << "]" << '\n';
             auto id = vector_with_distances.vector_with_id().id();
             auto distance = vector_with_distances.distance();
             auto metric_type = vector_with_distances.metric_type();
 
             result_vector_ids.push_back(id);
 
-            std::cout << vector_with_distances.DebugString() << std::endl;
+            std::cout << vector_with_distances.DebugString() << '\n';
             j++;
           }
         }
@@ -272,21 +269,21 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
     for (auto vector_id = vector_id_start; vector_id < vector_id_end; vector_id++) {
       std::cout << vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     std::sort(vector_ids_for_search.begin(), vector_ids_for_search.end());
     std::cout << "vector_ids_for_search : [";
     for (const auto vector_id : vector_ids_for_search) {
       std::cout << vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     std::sort(result_vector_ids.begin(), result_vector_ids.end());
     std::cout << "result_vector_ids     : [";
     for (const auto result_vector_id : result_vector_ids) {
       std::cout << result_vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     bool is_return_true = !result_vector_ids.empty();
     std::cout << "====================> : ";
@@ -299,14 +296,14 @@ TEST_F(VectorIndexHnswSearchParamTest, Search) {
         std::cout << *iter << " ";
       }
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 
     if (is_return_true) {
-      std::cout << name << " result_vector_ids all in vector_ids" << std::endl;
+      std::cout << name << " result_vector_ids all in vector_ids" << '\n';
     } else {
-      std::cout << name << " result_vector_ids not all in vector_ids" << std::endl;
+      std::cout << name << " result_vector_ids not all in vector_ids" << '\n';
     }
-    std::cout << "..........................................................................." << std::endl;
+    std::cout << "..........................................................................." << '\n';
   };
 
   // l2 ok
@@ -366,13 +363,13 @@ TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
 
     {
       size_t i = 0;
-      std::cout << "[" << i << "]" << std::endl;
+      std::cout << "[" << i << "]" << '\n';
       for (const auto &result : results) {
         {
           size_t j = 0;
           for (const auto &vector_with_distances : result.vector_with_distances()) {
-            std::cout << "[" << j << "]" << std::endl;
-            std::cout << vector_with_distances.DebugString() << std::endl;
+            std::cout << "[" << j << "]" << '\n';
+            std::cout << vector_with_distances.DebugString() << '\n';
             j++;
           }
         }
@@ -380,7 +377,7 @@ TEST_F(VectorIndexHnswSearchParamTest, SearchOrder) {
       }
     }
 
-    std::cout << "..........................................................................." << std::endl;
+    std::cout << "..........................................................................." << '\n';
   };
 
   // l2 ok
