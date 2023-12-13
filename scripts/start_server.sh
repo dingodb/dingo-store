@@ -1,9 +1,9 @@
 #!/bin/bash
 # The ulimit is setup in start_program, the paramter of ulimit is:
-#   ulimit -n 800000
-#   ulimit -u 800000
+#   ulimit -n 1048576
+#   ulimit -u 1048576
 #   ulimit -c unlimited
-# If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit. 
+# If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit.
 
 mydir="${BASH_SOURCE%/*}"
 if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
