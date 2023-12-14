@@ -33,8 +33,9 @@ class Environment : public testing::Environment {
  public:
   Environment() : coordinator_proxy_(std::make_shared<sdk::CoordinatorProxy>()) {}
   static Environment& GetInstance() {
-    static Environment environment;
-    return environment;
+    // NOTE: gtest will own this and delete 
+    static Environment* environment = new Environment();
+    return *environment;
   }
 
   void SetUp() override {
@@ -46,6 +47,7 @@ class Environment : public testing::Environment {
   }
   void TearDown() override {}
 
+  // TODO: remove this
   std::shared_ptr<sdk::CoordinatorProxy> GetCoordinatorProxy() { return coordinator_proxy_; }
   std::shared_ptr<sdk::Client> GetClient() { return client_; }
 
