@@ -30,6 +30,10 @@ enum ClusterRole {
 enum Engine {
   ENG_ROCKSDB = 0;
   ENG_BDB = 1;
+  LSM = 2;
+  TXN_LSM = 3;
+  BDB = 4;
+  TXN_BDB = 5;
 };
 
 enum StorageEngine {
