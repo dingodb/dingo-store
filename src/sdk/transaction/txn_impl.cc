@@ -26,6 +26,7 @@
 #include "proto/store.pb.h"
 #include "sdk/client.h"
 #include "sdk/common.h"
+#include "sdk/helper.h"
 #include "sdk/param_config.h"
 #include "sdk/status.h"
 #include "sdk/store_rpc.h"
@@ -69,8 +70,7 @@ Status Transaction::TxnImpl::DoTxnGet(const std::string& key, std::string& value
 
   int retry = 0;
   while (true) {
-    StoreRpcController controller(stub_, *rpc, region);
-    DINGO_RETURN_NOT_OK(controller.Call());
+    DINGO_RETURN_NOT_OK(LogAndSendRpc(stub_, *rpc, region));
 
     const auto* response = rpc->Response();
     if (response->has_txn_result()) {
@@ -139,10 +139,7 @@ void Transaction::TxnImpl::ProcessTxnBatchGetSubTask(TxnSubTask* sub_task) {
   Status res;
   int retry = 0;
   while (true) {
-    StoreRpcController controller(stub_, *sub_task->rpc, sub_task->region);
-    res = controller.Call();
-    VLOG(1) << "txn batch get rpc response, status:" << res.ToString()
-            << " response:" << rpc->Response()->DebugString();
+    res = LogAndSendRpc(stub_, *rpc, sub_task->region);
 
     if (!res.ok()) {
       break;
@@ -180,7 +177,7 @@ void Transaction::TxnImpl::ProcessTxnBatchGetSubTask(TxnSubTask* sub_task) {
       if (!kv.value().empty()) {
         sub_task->result_kvs.push_back({kv.key(), kv.value()});
       } else {
-        VLOG(1) << "Ignore kv key:" << kv.key() << " because value is empty";
+        DINGO_LOG(DEBUG) << "Ignore kv key:" << kv.key() << " because value is empty";
       }
     }
   }
@@ -347,7 +344,7 @@ void Transaction::TxnImpl::CheckAndLogPreCommitPrimaryKeyResponse(
   std::string pk = buffer_->GetPrimaryKey();
   auto txn_result_size = response->txn_result_size();
   if (0 == txn_result_size) {
-    VLOG(1) << "success pre_commit_primary_key:" << pk;
+    DINGO_LOG(DEBUG) << "success pre_commit_primary_key:" << pk;
   } else if (1 == txn_result_size) {
     const auto& txn_result = response->txn_result(0);
     DINGO_LOG(INFO) << "lock or confict pre_commit_primary_key:" << pk << " txn_result:" << txn_result.DebugString();
@@ -401,8 +398,7 @@ Status Transaction::TxnImpl::PreCommitPrimaryKey() {
 
   int retry = 0;
   while (true) {
-    StoreRpcController controller(stub_, *rpc, region);
-    DINGO_RETURN_NOT_OK(controller.Call());
+    DINGO_RETURN_NOT_OK(LogAndSendRpc(stub_, *rpc, region));
 
     const auto* response = rpc->Response();
     CheckAndLogPreCommitPrimaryKeyResponse(response);
@@ -436,8 +432,7 @@ void Transaction::TxnImpl::ProcessTxnPrewriteSubTask(TxnSubTask* sub_task) {
   Status ret;
   int retry = 0;
   while (true) {
-    StoreRpcController controller(stub_, *sub_task->rpc, sub_task->region);
-    ret = controller.Call();
+    ret = LogAndSendRpc(stub_, *rpc, sub_task->region);
     if (!ret.ok()) {
       break;
     }
@@ -569,7 +564,8 @@ std::unique_ptr<TxnCommitRpc> Transaction::TxnImpl::PrepareTxnCommitRpc(const st
 Status Transaction::TxnImpl::ProcessTxnCommitResponse(const pb::store::TxnCommitResponse* response,
                                                       bool is_primary) const {
   std::string pk = buffer_->GetPrimaryKey();
-  VLOG(1) << "Fail commit txn, start_ts:" << start_ts_ << " pk:" << pk << ", response:" << response->DebugString();
+  DINGO_LOG(DEBUG) << "Fail commit txn, start_ts:" << start_ts_ << " pk:" << pk
+                   << ", response:" << response->DebugString();
 
   if (response->has_txn_result()) {
     const auto& txn_result = response->txn_result();
@@ -611,8 +607,7 @@ Status Transaction::TxnImpl::CommitPrimaryKey() {
   auto* fill = rpc->MutableRequest()->add_keys();
   *fill = pk;
 
-  StoreRpcController controller(stub_, *rpc, region);
-  DINGO_RETURN_NOT_OK(controller.Call());
+  DINGO_RETURN_NOT_OK(LogAndSendRpc(stub_, *rpc, region));
 
   const auto* response = rpc->Response();
   return ProcessTxnCommitResponse(response, true);
@@ -623,8 +618,7 @@ void Transaction::TxnImpl::ProcessTxnCommitSubTask(TxnSubTask* sub_task) {
   std::string pk = buffer_->GetPrimaryKey();
   Status ret;
 
-  StoreRpcController controller(stub_, *sub_task->rpc, sub_task->region);
-  ret = controller.Call();
+  ret = LogAndSendRpc(stub_, *rpc, sub_task->region);
   if (!ret.ok()) {
     sub_task->status = ret;
     return;
@@ -760,8 +754,7 @@ void Transaction::TxnImpl::ProcessBatchRollbackSubTask(TxnSubTask* sub_task) {
   std::string pk = buffer_->GetPrimaryKey();
   Status ret;
 
-  StoreRpcController controller(stub_, *sub_task->rpc, sub_task->region);
-  ret = controller.Call();
+  ret = LogAndSendRpc(stub_, *rpc, sub_task->region);
   if (!ret.ok()) {
     sub_task->status = ret;
     return;
@@ -771,16 +764,19 @@ void Transaction::TxnImpl::ProcessBatchRollbackSubTask(TxnSubTask* sub_task) {
   CheckAndLogTxnBatchRollbackResponse(response);
   if (response->has_txn_result()) {
     const auto& txn_result = response->txn_result();
-    CHECK(txn_result.has_locked());
-    sub_task->status = Status::TxnLockConflict("");
-  } else {
-    sub_task->status = Status::OK();
+    if (txn_result.has_locked()) {
+      sub_task->status = Status::TxnLockConflict("");
+      return;
+    }
   }
+
+  sub_task->status = Status::OK();
 }
 
 Status Transaction::TxnImpl::Rollback() {
   // TODO: client txn status maybe inconsistence with server
   // so we should check txn status first and then take action
+  // TODO: maybe support rollback when txn is active
   if (state_ != kRollbacking && state_ != kPreCommitting && state_ != kPreCommitted) {
     return Status::IllegalState(fmt::format("forbid rollback, txn state is:{}", TransactionState2Str(state_)));
   }
@@ -799,16 +795,16 @@ Status Transaction::TxnImpl::Rollback() {
     auto* fill = rpc->MutableRequest()->add_keys();
     *fill = pk;
 
-    StoreRpcController controller(stub_, *rpc, region);
-    DINGO_RETURN_NOT_OK(controller.Call());
+    DINGO_RETURN_NOT_OK(LogAndSendRpc(stub_, *rpc, region));
 
     const auto* response = rpc->Response();
     CheckAndLogTxnBatchRollbackResponse(response);
     if (response->has_txn_result()) {
       // TODO: which state should we transfer to ?
       const auto& txn_result = response->txn_result();
-      CHECK(txn_result.has_locked());
-      return Status::TxnLockConflict(txn_result.locked().DebugString());
+      if (txn_result.has_locked()) {
+        return Status::TxnLockConflict(txn_result.locked().DebugString());
+      }
     }
   }
   state_ = kRollbackted;

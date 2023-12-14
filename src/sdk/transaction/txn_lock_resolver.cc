@@ -34,13 +34,13 @@ TxnLockResolver::TxnLockResolver(const ClientStub& stub) : stub_(stub) {}
 
 // TODO: maybe support retry
 Status TxnLockResolver::ResolveLock(const pb::store::LockInfo& lock_info, int64_t caller_start_ts) {
-  VLOG(1) << "lock_info:" << lock_info.DebugString();
+  DINGO_LOG(DEBUG) << "lock_info:" << lock_info.DebugString();
   TxnStatus txn_status;
   Status ret = CheckTxnStatus(lock_info.lock_ts(), lock_info.primary_lock(), caller_start_ts, txn_status);
   if (!ret.ok()) {
     if (ret.IsNotFound()) {
-      VLOG(1) << "txn not exist when check txn status, status:" << ret.ToString()
-              << ", lock_info:" << lock_info.DebugString();
+      DINGO_LOG(DEBUG) << "txn not exist when check txn status, status:" << ret.ToString()
+                       << ", lock_info:" << lock_info.DebugString();
       return Status::OK();
     } else {
       return ret;
@@ -111,7 +111,7 @@ Status TxnLockResolver::ProcessTxnCheckStatusResponse(const pb::store::TxnCheckT
       DINGO_LOG(ERROR) << "Mismatch txn primary key, response" << response.DebugString();
       return Status::IllegalState("");
     } else {
-      VLOG(1) << "Ignore txn check status response:" << response.DebugString();
+      DINGO_LOG(DEBUG) << "Ignore txn check status response:" << response.DebugString();
     }
   }
 

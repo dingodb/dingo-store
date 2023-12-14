@@ -14,6 +14,7 @@
 
 #include "sdk/admin_tool.h"
 
+#include "common/logging.h"
 #include "glog/logging.h"
 #include "proto/coordinator.pb.h"
 #include "sdk/common.h"
@@ -38,7 +39,7 @@ Status AdminTool::GetCurrentTsoTimeStamp(pb::meta::TsoTimestamp& timestamp) {
   } else {
     CHECK(response.has_start_timestamp());
     timestamp = response.start_timestamp();
-    VLOG(1) << "tso timestamp: " << timestamp.DebugString();
+    DINGO_LOG(DEBUG) << "tso timestamp: " << timestamp.DebugString();
   }
 
   return status;

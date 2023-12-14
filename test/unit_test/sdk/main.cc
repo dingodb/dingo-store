@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "common/logging.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
@@ -22,6 +23,7 @@ int main(int argc, char** argv) {
   FLAGS_logtostdout = true;
   FLAGS_colorlogtostdout = true;
   FLAGS_logbufsecs = 0;
+  // FLAGS_v = dingodb::kGlobalValueOfDebug;
 
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
