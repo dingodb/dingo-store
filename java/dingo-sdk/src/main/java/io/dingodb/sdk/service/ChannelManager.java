@@ -45,6 +45,7 @@ public final class ChannelManager {
 
     public static ManagedChannel getChannel(io.dingodb.sdk.common.Location location) {
         return Optional.ofNullable(location)
+            .filter(__ -> __.getHost() != null)
             .filter(__ -> !__.getHost().isEmpty())
             .ifAbsent(() -> log.warn("Cannot connect empty host."))
             .map(__ -> channels.computeIfAbsent(
@@ -55,6 +56,7 @@ public final class ChannelManager {
 
     public static ManagedChannel getChannel(Location location) {
         return Optional.ofNullable(location)
+            .filter(__ -> __.getHost() != null)
             .filter(__ -> !__.getHost().isEmpty())
             .ifAbsent(() -> log.warn("Cannot connect empty host."))
             .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.getHost(), k.getPort())))

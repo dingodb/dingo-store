@@ -110,6 +110,7 @@ public class Services {
                     return CacheBuilder.newBuilder()
                         .expireAfterAccess(10, TimeUnit.MINUTES)
                         .expireAfterWrite(10, TimeUnit.MINUTES)
+                        .maximumSize(4096)
                         .build(new CacheLoader<Long, RegionChannelProvider>() {
                             @Override
                             public RegionChannelProvider load(Long regionId) throws Exception {
@@ -130,6 +131,7 @@ public class Services {
                     return CacheBuilder.newBuilder()
                         .expireAfterAccess(10, TimeUnit.MINUTES)
                         .expireAfterWrite(10, TimeUnit.MINUTES)
+                        .maximumSize(256)
                         .build(new CacheLoader<DingoCommonId, TableRegionsFailOver>() {
                             @Override
                             public TableRegionsFailOver load(DingoCommonId tableId) throws Exception {
