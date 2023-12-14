@@ -67,7 +67,10 @@ class Helper {
     auto status = client->NewRegionCreator(creator);
     CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
     int64_t region_id;
-    status = creator->SetRegionName(name).SetReplicaNum(replicas).SetRange(EncodeRawKey(start_key), EncodeRawKey(end_key)).Create(region_id);
+    status = creator->SetRegionName(name)
+                 .SetReplicaNum(replicas)
+                 .SetRange(EncodeRawKey(start_key), EncodeRawKey(end_key))
+                 .Create(region_id);
 
     CHECK(status.IsOK()) << fmt::format("Create region failed, {}", status.ToString());
     CHECK(region_id != 0) << "region_id is invalid";
