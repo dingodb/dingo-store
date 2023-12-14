@@ -16,6 +16,7 @@
 #define DINGODB_INTEGRATION_TEST_ENVIROMENT_
 
 #include <iostream>
+#include <mutex>
 
 #include "fmt/core.h"
 #include "glog/logging.h"
@@ -35,8 +36,14 @@ class Environment : public testing::Environment {
   Environment() : coordinator_proxy_(std::make_shared<sdk::CoordinatorProxy>()) {}
 
   static Environment& GetInstance() {
-    // NOTE: gtest will own this and delete 
-    static Environment* environment = new Environment();
+    static Environment* environment = nullptr;
+
+    static std::once_flag flag;
+    std::call_once(flag, [&]() {
+      // gtest free
+      environment = new Environment();
+    });
+
     return *environment;
   }
 
