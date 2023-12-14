@@ -326,25 +326,29 @@ message CoordinatorMemoryInfo {
   int64 table_index_map_count = 77;
   int64 table_index_map_size = 78;
 
-  // common map
-  int64 common_map_count = 79;
-  int64 common_map_size = 80;
+  // common disk map
+  int64 common_disk_map_count = 79;
+  int64 common_disk_map_size = 80;
+
+  // common mem map
+  int64 common_mem_map_count = 81;
+  int64 common_mem_map_size = 82;
 
   // kv
-  int64 kv_lease_map_count = 81;
-  int64 kv_lease_map_size = 82;
+  int64 kv_lease_map_count = 91;
+  int64 kv_lease_map_size = 92;
 
-  int64 kv_index_map_count = 83;
-  int64 kv_index_map_size = 84;
+  int64 kv_index_map_count = 93;
+  int64 kv_index_map_size = 94;
 
-  int64 kv_rev_map_count = 85;
-  int64 kv_rev_map_size = 86;
+  int64 kv_rev_map_count = 95;
+  int64 kv_rev_map_size = 96;
 
-  int64 kv_watch_count = 87;
+  int64 kv_watch_count = 97;
 
   // auto increment
-  int64 auto_increment_map_count = 91;
-  int64 auto_increment_map_size = 92;
+  int64 auto_increment_map_count = 111;
+  int64 auto_increment_map_size = 112;
 
   repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
 }
@@ -358,6 +362,7 @@ message HelloRequest {
 
 message ClusterState {
   bool cluster_is_read_only = 1;
+  bool cluster_is_force_read_only = 2;
 }
 
 message HelloResponse {
@@ -536,6 +541,17 @@ message GetCoordinatorMapResponse {
   dingodb.pb.common.Location tso_leader_location = 6;
   dingodb.pb.common.Location auto_increment_leader_location = 7;
   repeated dingodb.pb.common.Location coordinator_locations = 8;
+}
+
+message ConfigCoordinatorRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  bool set_force_read_only = 2;
+  bool is_force_read_only = 3;
+}
+
+message ConfigCoordinatorResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
 }
 
 message CreateRegionIdRequest {
@@ -1021,6 +1037,7 @@ service CoordinatorService {
 
   // Coordinator
   rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);
+  rpc ConfigCoordinator(ConfigCoordinatorRequest) returns (ConfigCoordinatorResponse);
   rpc CreateRegionId(CreateRegionIdRequest) returns (CreateRegionIdResponse);
 
   // Region

@@ -177,6 +177,8 @@ DEFINE_int32(nbits_per_idx, 8, "ivf pq default nbits_per_idx 8");
 DEFINE_double(radius, 10.1, "range search radius");
 DEFINE_double(rate, 0.0, "rate");
 
+DEFINE_bool(force_read_only, false, "force read only");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -885,6 +887,11 @@ int CoordinatorSender() {
     SendUpdateGCSafePoint(coordinator_interaction);
   } else if (FLAGS_method == "GetGCSafePoint") {
     SendGetGCSafePoint(coordinator_interaction);
+  }
+
+  // force_read_only
+  else if (FLAGS_method == "UpdateForceReadOnly") {
+    SendUpdateForceReadOnly(coordinator_interaction);
   }
 
   // tools

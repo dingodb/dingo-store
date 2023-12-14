@@ -85,7 +85,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
       new MetaMemMapFlat<pb::coordinator_internal::TableInternal>(&index_map_, kPrefixIndex, raw_engine_of_meta);
   deleted_index_meta_ =
       new MetaDiskMap<pb::coordinator_internal::TableInternal>(kPrefixDeletedIndex, raw_engine_of_meta);
-  common_meta_ = new MetaDiskMap<pb::coordinator_internal::CommonInternal>(kPrefixCommon, raw_engine_of_meta);
+  common_disk_meta_ = new MetaDiskMap<pb::coordinator_internal::CommonInternal>(kPrefixCommonDisk, raw_engine_of_meta);
+  common_mem_meta_ = new MetaMemMapStd<pb::coordinator_internal::CommonInternal>(&common_mem_map_, kPrefixCommonMem,
+                                                                                 raw_engine_of_meta);
 
   // table index
   table_index_meta_ = new MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal>(
@@ -128,6 +130,8 @@ CoordinatorControl::~CoordinatorControl() {
   delete executor_user_meta_;
   delete index_meta_;
   delete table_index_meta_;
+  delete common_disk_meta_;
+  delete common_mem_meta_;
 }
 
 // InitIds
@@ -386,8 +390,8 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover table_index_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 51 common_map
-  if (!meta_reader_->Scan(common_meta_->Prefix(), kvs)) {
+  // 51.1 common_disk_map
+  if (!meta_reader_->Scan(common_disk_meta_->Prefix(), kvs)) {
     return false;
   }
   {
@@ -396,7 +400,20 @@ bool CoordinatorControl::Recover() {
     //   return false;
     // }
   }
-  DINGO_LOG(INFO) << "Recover common_map_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover common_disk_map_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 51.2.common_mem_map
+  if (!meta_reader_->Scan(common_mem_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    if (!common_mem_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover common_mem_meta, count=" << kvs.size();
   kvs.clear();
 
   // build id_epoch, schema_name, table_name, index_name maps

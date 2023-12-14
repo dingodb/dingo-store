@@ -206,6 +206,12 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                          const pb::coordinator::GetCoordinatorMapRequest* request,
                          pb::coordinator::GetCoordinatorMapResponse* response,
                          google::protobuf::Closure* done) override;
+
+  void ConfigCoordinator(google::protobuf::RpcController* controller,
+                         const pb::coordinator::ConfigCoordinatorRequest* request,
+                         pb::coordinator::ConfigCoordinatorResponse* response,
+                         google::protobuf::Closure* done) override;
+
   // Region service
   void CreateRegionId(google::protobuf::RpcController* controller,
                       const pb::coordinator::CreateRegionIdRequest* request,

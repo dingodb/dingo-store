@@ -45,7 +45,8 @@ inline static const std::string kPrefixIndex = "INDEX__";
 inline static const std::string kPrefixIndexMetrics = "INDEXME";
 inline static const std::string kPrefixTableIndex = "TBLINDE";
 
-inline static const std::string kPrefixCommon = "COMMON_";
+inline static const std::string kPrefixCommonDisk = "COMDISK";
+inline static const std::string kPrefixCommonMem = "COMMEM_";
 
 }  // namespace dingodb
 

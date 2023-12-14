@@ -550,6 +550,11 @@ class CoordinatorControl : public MetaControl {
   butil::Status CheckRegionLeaderOnline(int64_t region_id);
   butil::Status CheckStoreNormal(int64_t store_id);
 
+  // force_read_only
+  butil::Status UpdateForceReadOnly(bool is_force_read_only, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status GetForceReadOnly(bool &is_force_read_only);
+  bool GetForceReadOnly();
+
   // get regionmap
   void GenRegionFull(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
   void GenRegionSlim(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
@@ -926,7 +931,9 @@ class CoordinatorControl : public MetaControl {
   MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal> *table_index_meta_;
 
   // 51. common maps
-  MetaDiskMap<pb::coordinator_internal::CommonInternal> *common_meta_;
+  MetaDiskMap<pb::coordinator_internal::CommonInternal> *common_disk_meta_;
+  DingoSafeStdMap<std::string, pb::coordinator_internal::CommonInternal> common_mem_map_;
+  MetaMemMapStd<pb::coordinator_internal::CommonInternal> *common_mem_meta_;  // need construct
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

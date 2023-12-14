@@ -232,6 +232,11 @@ class Constant {
   inline static const std::string kGcStopKey = "GC_STOP";
   inline static const std::string kGcStopValueTrue = "GC_STOP_TRUE";
   inline static const std::string kGcStopValueFalse = "GC_STOP_FALSE";
+
+  // force_read_only
+  inline static const std::string kForceReadOnlyKey = "FORCE_READ_ONLY";
+  inline static const std::string kForceReadOnlyValueTrue = "TRUE";
+  inline static const std::string kForceReadOnlyValueFalse = "FALSE";
 };
 
 }  // namespace dingodb

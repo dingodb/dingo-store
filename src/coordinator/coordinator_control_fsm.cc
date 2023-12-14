@@ -361,16 +361,28 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot table_index_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 51.common map
-  if (!meta_reader_->Scan(snapshot, common_meta_->Prefix(), kvs)) {
+  // 51.1 common_disk_map
+  if (!meta_reader_->Scan(snapshot, common_disk_meta_->Prefix(), kvs)) {
     return false;
   }
 
   for (const auto& kv : kvs) {
-    auto* snapshot_file_kv = meta_snapshot_file.add_common_map_kvs();
+    auto* snapshot_file_kv = meta_snapshot_file.add_common_disk_map_kvs();
     *snapshot_file_kv = kv;
   }
-  DINGO_LOG(INFO) << "Snapshot common_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot common_disk_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 51.2 common_mem_map
+  if (!meta_reader_->Scan(snapshot, common_mem_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_common_mem_map_kvs();
+    *snapshot_file_kv = kv;
+  }
+  DINGO_LOG(INFO) << "Snapshot common_mem_meta, count=" << kvs.size();
   kvs.clear();
 
   return true;
@@ -827,31 +839,59 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot table_index_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 51.common map
-  kvs.reserve(meta_snapshot_file.common_map_kvs_size());
-  for (int i = 0; i < meta_snapshot_file.common_map_kvs_size(); i++) {
-    kvs.push_back(meta_snapshot_file.common_map_kvs(i));
+  // 51.1 common_disk_map
+  kvs.reserve(meta_snapshot_file.common_disk_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.common_disk_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.common_disk_map_kvs(i));
   }
   {
-    // if (!common_meta_->Recover(kvs)) {
+    // if (!common_disk_meta_->Recover(kvs)) {
     //   return false;
     // }
 
     // remove data in rocksdb
-    if (!meta_writer_->DeletePrefix(common_meta_->internal_prefix)) {
-      DINGO_LOG(ERROR) << "Coordinator delete common_meta_ range failed in LoadMetaFromSnapshotFile";
+    if (!meta_writer_->DeletePrefix(common_disk_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete common_disk_meta_ range failed in LoadMetaFromSnapshotFile";
       return false;
     }
-    DINGO_LOG(INFO) << "Coordinator delete range common_meta_ success in LoadMetaFromSnapshotFile";
+    DINGO_LOG(INFO) << "Coordinator delete range common_disk_meta_ success in LoadMetaFromSnapshotFile";
 
     // write data to rocksdb
     if (!meta_writer_->Put(kvs)) {
-      DINGO_LOG(ERROR) << "Coordinator write common_meta_ failed in LoadMetaFromSnapshotFile";
+      DINGO_LOG(ERROR) << "Coordinator write common_disk_meta_ failed in LoadMetaFromSnapshotFile";
       return false;
     }
-    DINGO_LOG(INFO) << "Coordinator put common_meta_ success in LoadMetaFromSnapshotFile";
+    DINGO_LOG(INFO) << "Coordinator put common_disk_meta_ success in LoadMetaFromSnapshotFile";
   }
-  DINGO_LOG(INFO) << "LoadSnapshot common_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot common_disk_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 51.2 common_mem_map
+  kvs.reserve(meta_snapshot_file.common_mem_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.common_mem_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.common_mem_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(common_mem_map_mutex_);
+    if (!common_mem_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(common_mem_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete common_mem_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range common_mem_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write common_mem_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put common_mem_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot common_mem_meta, count=" << kvs.size();
   kvs.clear();
 
   // build id_epoch, schema_name, table_name, index_name maps
@@ -2002,36 +2042,74 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // 51.common map
+  // 51.common_disk_map
   {
-    if (meta_increment.commons_size() > 0) {
-      DINGO_LOG(INFO) << "6.commons_size=" << meta_increment.commons_size();
+    if (meta_increment.common_disk_s_size() > 0) {
+      DINGO_LOG(INFO) << "6.common_disk_s_size=" << meta_increment.common_disk_s_size();
     }
 
-    for (int i = 0; i < meta_increment.commons_size(); i++) {
-      const auto& common = meta_increment.commons(i);
+    for (int i = 0; i < meta_increment.common_disk_s_size(); i++) {
+      const auto& common = meta_increment.common_disk_s(i);
       if (common.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        auto ret = common_meta_->Put(common.id(), common.common());
+        auto ret = common_disk_meta_->Put(common.id(), common.common());
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement common CREATE, [id=" << common.id() << "] failed";
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common_disk CREATE, [id=" << common.id() << "] failed";
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement common CREATE, [id=" << common.id() << "] success";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common_disk CREATE, [id=" << common.id() << "] success";
         }
 
       } else if (common.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto ret = common_meta_->Put(common.id(), common.common());
+        auto ret = common_disk_meta_->Put(common.id(), common.common());
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement common UPDATE, [id=" << common.id() << "] failed";
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common_disk UPDATE, [id=" << common.id() << "] failed";
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement common UPDATE, [id=" << common.id() << "] success";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common_disk UPDATE, [id=" << common.id() << "] success";
         }
 
       } else if (common.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        auto ret = common_meta_->Erase(common.id());
+        auto ret = common_disk_meta_->Erase(common.id());
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement common DELETE, [id=" << common.id() << "] failed";
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common_disk DELETE, [id=" << common.id() << "] failed";
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement common DELETE, [id=" << common.id() << "] success";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common_disk DELETE, [id=" << common.id() << "] success";
+        }
+      }
+    }
+  }
+
+  // 51.2 common_mem_map
+  {
+    if (meta_increment.common_mem_s_size() > 0) {
+      DINGO_LOG(INFO) << "3.common_mem_s_size=" << meta_increment.common_mem_s_size();
+    }
+
+    for (int i = 0; i < meta_increment.common_mem_s_size(); i++) {
+      const auto& common_mem = meta_increment.common_mem_s(i);
+      if (common_mem.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = common_mem_meta_->Put(common_mem.id(), common_mem.common());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common_mem CREATE, but Put failed, [id=" << common_mem.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common_mem CREATE, success [id=" << common_mem.id() << "]";
+        }
+
+      } else if (common_mem.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto ret = common_mem_meta_->Put(common_mem.id(), common_mem.common());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common_mem UPDATE, but Put failed, [id=" << common_mem.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common_mem UPDATE, success [id=" << common_mem.id() << "]";
+        }
+
+      } else if (common_mem.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        auto ret = common_mem_meta_->Erase(common_mem.id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement common_mem DELETE, but Delete failed, [id=" << common_mem.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement common_mem DELETE, success [id=" << common_mem.id() << "]";
         }
       }
     }

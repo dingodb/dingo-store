@@ -47,7 +47,6 @@
 namespace dingodb {
 
 DEFINE_int32(max_create_id_count, 2048, "max create id count");
-DEFINE_bool(force_cluster_read_only, false, "force cluster read only");
 DEFINE_bool(async_hello, true, "async hello");
 DEFINE_int32(hello_latency_ms, 0, "hello latency seconds");
 
@@ -76,8 +75,13 @@ void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordin
 
   // response cluster state
   auto is_read_only = Server::GetInstance().IsReadOnly();
-  if (is_read_only || FLAGS_force_cluster_read_only) {
+  bool is_force_read_only = coordinator_control->GetForceReadOnly();
+
+  if (is_read_only || is_force_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+    response->mutable_cluster_state()->set_cluster_is_force_read_only(is_force_read_only);
+    DINGO_LOG(INFO) << "Hello response: cluster_is_read_only=" << is_read_only
+                    << ", cluster_is_force_read_only=" << is_force_read_only;
   }
 
   if (FLAGS_hello_latency_ms > 0) {
@@ -123,8 +127,13 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
 
     // response cluster state
     auto is_read_only = Server::GetInstance().IsReadOnly();
-    if (is_read_only || FLAGS_force_cluster_read_only) {
+    bool is_force_read_only = coordinator_control_->GetForceReadOnly();
+
+    if (is_read_only || is_force_read_only) {
       response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+      response->mutable_cluster_state()->set_cluster_is_force_read_only(is_force_read_only);
+      DINGO_LOG(INFO) << "Hello response: cluster_is_read_only=" << is_read_only
+                      << ", cluster_is_force_read_only=" << is_force_read_only;
     }
 
     if (FLAGS_hello_latency_ms > 0) {
@@ -140,7 +149,7 @@ void DoCreateExecutor(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Executor Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -180,7 +189,7 @@ void DoDeleteExecutor(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+                     << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -224,7 +233,7 @@ void DoCreateExecutorUser(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Executor User Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -271,7 +280,7 @@ void DoUpdateExecutorUser(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Update Executor User Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -316,7 +325,7 @@ void DoDeleteExecutorUser(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Delete Executor User Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -360,7 +369,7 @@ void DoGetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Get Executor User Map Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -383,7 +392,8 @@ void DoCreateStore(google::protobuf::RpcController * /*controller*/, const pb::c
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -428,7 +438,7 @@ void DoDeleteStore(google::protobuf::RpcController * /*controller*/, const pb::c
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive Create Store Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+                     << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -476,7 +486,8 @@ void DoUpdateStore(google::protobuf::RpcController * /*controller*/, const pb::c
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(INFO) << "Receive Update Store Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive Update Store Request: IsLeader:" << is_leader
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -520,7 +531,7 @@ void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Executor Heartbeat Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -584,7 +595,7 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
     DINGO_LOG(WARNING) << "Receive Store Heartbeat Request, IsLeader:" << is_leader
-                       << ", Request:" << request->DebugString();
+                       << ", Request:" << request->ShortDebugString();
     return coordinator_control->RedirectResponse(response);
   }
 
@@ -623,8 +634,13 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
 
   // response cluster state
   auto is_read_only = Server::GetInstance().IsReadOnly();
-  if (is_read_only || FLAGS_force_cluster_read_only) {
+  bool is_force_read_only = coordinator_control->GetForceReadOnly();
+
+  if (is_read_only || is_force_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+    response->mutable_cluster_state()->set_cluster_is_force_read_only(is_force_read_only);
+    DINGO_LOG(INFO) << "StoreHeartbeat response: cluster_is_read_only=" << is_read_only
+                    << ", cluster_is_force_read_only=" << is_force_read_only;
   }
 
   // if no need to update meta, just skip raft submit
@@ -656,7 +672,8 @@ void DoGetStoreMap(google::protobuf::RpcController * /*controller*/, const pb::c
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get StoreMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get StoreMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -677,7 +694,7 @@ void DoGetStoreMetrics(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -702,7 +719,7 @@ void DoDeleteStoreMetrics(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Delete StoreMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -720,7 +737,7 @@ void DoGetRegionMetrics(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -744,7 +761,7 @@ void DoDeleteRegionMetrics(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Delete RegionMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -763,7 +780,7 @@ void DoGetExecutorMap(google::protobuf::RpcController * /*controller*/,
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get ExecutorMap Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -783,7 +800,8 @@ void DoGetRegionMap(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -805,7 +823,8 @@ void DoGetDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -827,7 +846,8 @@ void DoAddDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -845,7 +865,8 @@ void DoCleanDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -863,7 +884,8 @@ void DoGetRegionCount(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     coordinator_control->RedirectResponse(response);
@@ -884,7 +906,7 @@ void DoGetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
                          std::shared_ptr<AutoIncrementControl> auto_increment_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << request->ShortDebugString();
 
   int64_t epoch;
   pb::common::Location leader_location;
@@ -917,13 +939,57 @@ void DoGetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
   *(response->mutable_auto_increment_leader_location()) = auto_increment_leader_location;
 }
 
+void DoConfigCoordinator(google::protobuf::RpcController * /*controller*/,
+                         const pb::coordinator::ConfigCoordinatorRequest *request,
+                         pb::coordinator::ConfigCoordinatorResponse *response, google::protobuf::Closure *done,
+                         std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->ShortDebugString();
+
+  auto is_leader = coordinator_control->IsLeader();
+  if (!is_leader) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  if (request->set_force_read_only()) {
+    // setup force_read_only
+    auto ret = coordinator_control->UpdateForceReadOnly(request->is_force_read_only(), meta_increment);
+    if (!ret.ok()) {
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  }
+
+  if (meta_increment.ByteSizeLong() == 0) {
+    DINGO_LOG(WARNING) << "ConfigCoordinator: meta_increment is empty";
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetRequestId(request->request_info().request_id());
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ConfigCoordinator Write failed, request: " << request->ShortDebugString();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "ConfigCoordinator Success, request: << " << request->ShortDebugString();
+}
+
 // Region services
 void DoCreateRegionId(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::CreateRegionIdRequest *request,
                       pb::coordinator::CreateRegionIdResponse *response, google::protobuf::Closure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -978,7 +1044,7 @@ void DoQueryRegion(google::protobuf::RpcController * /*controller*/, const pb::c
                    pb::coordinator::QueryRegionResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Query Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Query Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1003,7 +1069,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
                     pb::coordinator::CreateRegionResponse *response, google::protobuf::Closure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Create Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1060,7 +1126,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   }
 
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->DebugString();
+    DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->ShortDebugString();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
@@ -1089,7 +1155,7 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
                   pb::coordinator::DropRegionResponse *response, google::protobuf::Closure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Drop Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Drop Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1103,7 +1169,7 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
   // auto ret = coordinator_control->DropRegion(region_id, true, meta_increment);
   auto ret = coordinator_control->DropRegion(region_id, meta_increment);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Drop Region Failed, errno=" << ret << " Request:" << request->DebugString();
+    DINGO_LOG(ERROR) << "Drop Region Failed, errno=" << ret << " Request:" << request->ShortDebugString();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
@@ -1133,7 +1199,7 @@ void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
                              std::shared_ptr<CoordinatorControl> coordinator_control,
                              std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Drop Region Permanently Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Drop Region Permanently Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1174,7 +1240,7 @@ void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::c
                    pb::coordinator::SplitRegionResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Split Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Split Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1224,7 +1290,7 @@ void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::c
                    pb::coordinator::MergeRegionResponse *response, google::protobuf::Closure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Merge Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Merge Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1273,7 +1339,7 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
                         pb::coordinator::ChangePeerRegionResponse *response, google::protobuf::Closure *done,
                         std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Change Peer Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Change Peer Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1338,7 +1404,7 @@ void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
                             std::shared_ptr<CoordinatorControl> coordinator_control,
                             std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Transfer Leader Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Transfer Leader Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1387,7 +1453,7 @@ void DoGetOrphanRegion(google::protobuf::RpcController * /*controller*/,
                        std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Get Orphan Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get Orphan Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1420,7 +1486,7 @@ void DoGetStoreOperation(google::protobuf::RpcController * /*controller*/,
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -1449,7 +1515,7 @@ void DoCleanStoreOperation(google::protobuf::RpcController * /*controller*/,
                            std::shared_ptr<CoordinatorControl> coordinator_control,
                            std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive CleanStoreOperation Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive CleanStoreOperation Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1491,7 +1557,7 @@ void DoAddStoreOperation(google::protobuf::RpcController * /*controller*/,
                          pb::coordinator::AddStoreOperationResponse *response, google::protobuf::Closure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive AddStoreOperation Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive AddStoreOperation Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1534,7 +1600,7 @@ void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
                             std::shared_ptr<CoordinatorControl> coordinator_control,
                             std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive RemoveStoreOperation Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive RemoveStoreOperation Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1578,7 +1644,7 @@ void DoGetRegionCmd(google::protobuf::RpcController * /*controller*/,
                     pb::coordinator::GetRegionCmdResponse *response, google::protobuf::Closure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive GetRegionCmd Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive GetRegionCmd Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1617,7 +1683,7 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control->RedirectResponse(response);
@@ -1660,7 +1726,7 @@ void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
     DINGO_LOG(WARNING) << "Receive Clean TaskList Request, IsLeader:" << is_leader
-                       << ", Request:" << request->DebugString();
+                       << ", Request:" << request->ShortDebugString();
     return coordinator_control->RedirectResponse(response);
   }
 
@@ -1702,7 +1768,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
                    std::shared_ptr<AutoIncrementControl> auto_increment_control,
                    std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->DebugString();
+  DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->ShortDebugString();
 
   brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
   int64_t log_id = 0;
@@ -2075,7 +2141,7 @@ void CoordinatorServiceImpl::CreateExecutor(google::protobuf::RpcController *con
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Executor Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2100,7 +2166,7 @@ void CoordinatorServiceImpl::DeleteExecutor(google::protobuf::RpcController *con
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+                     << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2130,7 +2196,7 @@ void CoordinatorServiceImpl::CreateExecutorUser(google::protobuf::RpcController 
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Executor User Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2155,7 +2221,7 @@ void CoordinatorServiceImpl::UpdateExecutorUser(google::protobuf::RpcController 
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(INFO) << "Receive Update Executor User Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2180,7 +2246,7 @@ void CoordinatorServiceImpl::DeleteExecutorUser(google::protobuf::RpcController 
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(INFO) << "Receive Delete Executor User Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2205,7 +2271,7 @@ void CoordinatorServiceImpl::GetExecutorUserMap(google::protobuf::RpcController 
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(INFO) << "Receive Get Executor User Map Request: IsLeader:" << is_leader
-                  << ", Request: " << request->DebugString();
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2229,7 +2295,8 @@ void CoordinatorServiceImpl::CreateStore(google::protobuf::RpcController *contro
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2254,7 +2321,7 @@ void CoordinatorServiceImpl::DeleteStore(google::protobuf::RpcController *contro
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(WARNING) << "Receive Create Store Request: IsLeader:" << is_leader
-                     << ", Request: " << request->DebugString();
+                     << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2284,7 +2351,8 @@ void CoordinatorServiceImpl::UpdateStore(google::protobuf::RpcController *contro
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(INFO) << "Receive Update Store Request: IsLeader:" << is_leader << ", Request: " << request->DebugString();
+  DINGO_LOG(INFO) << "Receive Update Store Request: IsLeader:" << is_leader
+                  << ", Request: " << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2309,7 +2377,7 @@ void CoordinatorServiceImpl::ExecutorHeartbeat(google::protobuf::RpcController *
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Executor Heartbeat Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2356,7 +2424,7 @@ void CoordinatorServiceImpl::StoreHeartbeat(google::protobuf::RpcController *con
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Store Heartbeat Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2396,7 +2464,8 @@ void CoordinatorServiceImpl::GetStoreMap(google::protobuf::RpcController *contro
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get StoreMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get StoreMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2422,7 +2491,7 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController *co
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2447,7 +2516,7 @@ void CoordinatorServiceImpl::DeleteStoreMetrics(google::protobuf::RpcController 
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Delete StoreMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2472,7 +2541,7 @@ void CoordinatorServiceImpl::GetRegionMetrics(google::protobuf::RpcController *c
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2497,7 +2566,7 @@ void CoordinatorServiceImpl::DeleteRegionMetrics(google::protobuf::RpcController
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Delete RegionMetrics Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -2523,7 +2592,7 @@ void CoordinatorServiceImpl::GetExecutorMap(google::protobuf::RpcController *con
 
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get ExecutorMap Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2549,7 +2618,8 @@ void CoordinatorServiceImpl::GetRegionMap(google::protobuf::RpcController *contr
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2575,7 +2645,8 @@ void CoordinatorServiceImpl::GetDeletedRegionMap(google::protobuf::RpcController
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2601,7 +2672,8 @@ void CoordinatorServiceImpl::AddDeletedRegionMap(google::protobuf::RpcController
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2627,7 +2699,8 @@ void CoordinatorServiceImpl::CleanDeletedRegionMap(google::protobuf::RpcControll
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2653,7 +2726,8 @@ void CoordinatorServiceImpl::GetRegionCount(google::protobuf::RpcController *con
   brpc::ClosureGuard done_guard(done);
 
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader << ", Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     RedirectResponse(response);
@@ -2677,7 +2751,7 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
                                                pb::coordinator::GetCoordinatorMapResponse *response,
                                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << request->ShortDebugString();
 
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
@@ -2692,13 +2766,38 @@ void CoordinatorServiceImpl::GetCoordinatorMap(google::protobuf::RpcController *
   }
 }
 
+void CoordinatorServiceImpl::ConfigCoordinator(google::protobuf::RpcController *controller,
+                                               const pb::coordinator::ConfigCoordinatorRequest *request,
+                                               pb::coordinator::ConfigCoordinatorResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << "Receive Config Coordinator Request:" << request->ShortDebugString();
+
+  auto is_leader = coordinator_control_->IsLeader();
+  if (!is_leader) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoConfigCoordinator(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
 // Region services
 void CoordinatorServiceImpl::CreateRegionId(google::protobuf::RpcController *controller,
                                             const pb::coordinator::CreateRegionIdRequest *request,
                                             pb::coordinator::CreateRegionIdResponse *response,
                                             google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2722,7 +2821,7 @@ void CoordinatorServiceImpl::QueryRegion(google::protobuf::RpcController *contro
                                          pb::coordinator::QueryRegionResponse *response,
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Query Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Query Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2746,7 +2845,7 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
                                           pb::coordinator::CreateRegionResponse *response,
                                           google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Create Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2806,7 +2905,7 @@ void CoordinatorServiceImpl::DropRegion(google::protobuf::RpcController *control
                                         pb::coordinator::DropRegionResponse *response,
                                         google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Drop Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Drop Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2830,7 +2929,7 @@ void CoordinatorServiceImpl::DropRegionPermanently(google::protobuf::RpcControll
                                                    pb::coordinator::DropRegionPermanentlyResponse *response,
                                                    google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Drop Region Permanently Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Drop Region Permanently Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2854,7 +2953,7 @@ void CoordinatorServiceImpl::SplitRegion(google::protobuf::RpcController *contro
                                          pb::coordinator::SplitRegionResponse *response,
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Split Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Split Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2878,7 +2977,7 @@ void CoordinatorServiceImpl::MergeRegion(google::protobuf::RpcController *contro
                                          pb::coordinator::MergeRegionResponse *response,
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Merge Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Merge Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2902,7 +3001,7 @@ void CoordinatorServiceImpl::ChangePeerRegion(google::protobuf::RpcController *c
                                               pb::coordinator::ChangePeerRegionResponse *response,
                                               google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Change Peer Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Change Peer Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2926,7 +3025,7 @@ void CoordinatorServiceImpl::TransferLeaderRegion(google::protobuf::RpcControlle
                                                   pb::coordinator::TransferLeaderRegionResponse *response,
                                                   google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Transfer Leader Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Transfer Leader Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2950,7 +3049,7 @@ void CoordinatorServiceImpl::GetOrphanRegion(google::protobuf::RpcController *co
                                              pb::coordinator::GetOrphanRegionResponse *response,
                                              google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Get Orphan Region Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive Get Orphan Region Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -2977,7 +3076,7 @@ void CoordinatorServiceImpl::GetStoreOperation(google::protobuf::RpcController *
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -3000,7 +3099,7 @@ void CoordinatorServiceImpl::CleanStoreOperation(google::protobuf::RpcController
                                                  pb::coordinator::CleanStoreOperationResponse *response,
                                                  google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive CleanStoreOperation Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive CleanStoreOperation Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -3024,7 +3123,7 @@ void CoordinatorServiceImpl::AddStoreOperation(google::protobuf::RpcController *
                                                pb::coordinator::AddStoreOperationResponse *response,
                                                google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive AddStoreOperation Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive AddStoreOperation Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -3048,7 +3147,7 @@ void CoordinatorServiceImpl::RemoveStoreOperation(google::protobuf::RpcControlle
                                                   pb::coordinator::RemoveStoreOperationResponse *response,
                                                   google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive RemoveStoreOperation Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive RemoveStoreOperation Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -3072,7 +3171,7 @@ void CoordinatorServiceImpl::GetRegionCmd(google::protobuf::RpcController *contr
                                           pb::coordinator::GetRegionCmdResponse *response,
                                           google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive GetRegionCmd Request:" << request->DebugString();
+  DINGO_LOG(DEBUG) << "Receive GetRegionCmd Request:" << request->ShortDebugString();
 
   auto is_leader = coordinator_control_->IsLeader();
   if (!is_leader) {
@@ -3099,7 +3198,7 @@ void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController *contro
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -3124,7 +3223,7 @@ void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *cont
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Clean TaskList Request, IsLeader:" << is_leader
-                   << ", Request:" << request->DebugString();
+                   << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
@@ -3148,7 +3247,7 @@ void CoordinatorServiceImpl::RaftControl(google::protobuf::RpcController *contro
                                          pb::coordinator::RaftControlResponse *response,
                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->DebugString();
+  DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->ShortDebugString();
 
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);

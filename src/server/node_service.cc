@@ -124,7 +124,7 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*
   auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::ClosureGuard const done_guard(svr_done);
 
-  DINGO_LOG(INFO) << "GetLogLevel receive Request:" << request->DebugString();
+  DINGO_LOG(INFO) << "GetLogLevel receive Request:" << request->ShortDebugString();
 
   auto* log_detail = response->mutable_log_detail();
   log_detail->set_log_buf_secs(DingoLogger::GetLogBuffSecs());
