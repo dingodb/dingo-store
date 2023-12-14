@@ -141,6 +141,13 @@ class Helper {
   }
 
   template <typename T>
+  static void VectorToPbRepeated(const std::vector<T>& vec, google::protobuf::RepeatedField<T>* out) {
+    for (auto& item : vec) {
+      out->Add(item);
+    }
+  }
+
+  template <typename T>
   static std::string VectorToString(const std::vector<T>& vec) {
     std::string str;
     for (int i = 0; i < vec.size(); ++i) {
