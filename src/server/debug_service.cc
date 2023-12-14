@@ -341,6 +341,10 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
     auto store_region_meta = GET_STORE_REGION_META;
     auto regions = store_region_meta->GetAllRegion();
 
+    int32_t leader_count = 0;
+    int32_t follower_count = 0;
+    std::vector<int64_t> leader_region_ids;
+    std::vector<int64_t> follower_region_ids;
     std::map<std::string, int32_t> state_counts;
     for (auto& region : regions) {
       std::string name = pb::common::StoreRegionState_Name(region->State());
@@ -348,11 +352,24 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
         state_counts[name] = 0;
       }
       ++state_counts[name];
+
+      if (Server::GetInstance().IsLeader(region->Id())) {
+        ++leader_count;
+        leader_region_ids.push_back(region->Id());
+      } else {
+        ++follower_count;
+        follower_region_ids.push_back(region->Id());
+      }
     }
 
     for (auto [name, count] : state_counts) {
       response->mutable_region_meta_stat()->mutable_state_counts()->insert({name, count});
     }
+    response->mutable_region_meta_stat()->set_leader_count(leader_count);
+    response->mutable_region_meta_stat()->set_follower_count(follower_count);
+    Helper::VectorToPbRepeated(leader_region_ids, response->mutable_region_meta_stat()->mutable_leader_regoin_ids());
+    Helper::VectorToPbRepeated(follower_region_ids,
+                               response->mutable_region_meta_stat()->mutable_follower_regoin_ids());
 
   } else if (request->type() == pb::debug::DebugType::STORE_REGION_META_DETAILS) {
     auto store_region_meta = GET_STORE_REGION_META;

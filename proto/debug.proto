@@ -144,6 +144,10 @@ message DebugRequest {
 message DebugResponse {
   message RegionMetaStat {
     map<string, int32> state_counts = 1;
+    int32 leader_count = 2;
+    repeated int64 leader_regoin_ids = 3;
+    int32 follower_count = 4;
+    repeated int64 follower_regoin_ids = 5;
   }
 
   message RegionMetaDetails {
