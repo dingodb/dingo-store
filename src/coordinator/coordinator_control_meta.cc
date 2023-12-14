@@ -3089,12 +3089,19 @@ butil::Status CoordinatorControl::CalcTableInternalRange(const pb::meta::Partiti
 
 butil::Status CoordinatorControl::TranslateEngineToRawEngine(const pb::common::Engine& engine,
                                                              pb::common::RawEngine& raw_engine) {
-  if (engine == pb::common::Engine::ENG_ROCKSDB) {
-    raw_engine = pb::common::RawEngine::RAW_ENG_ROCKSDB;
-  } else if (engine == pb::common::Engine::ENG_BDB) {
-    raw_engine = pb::common::RawEngine::RAW_ENG_BDB;
-  } else {
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "engine not support");
+  switch (engine) {
+    case pb::common::Engine::ENG_ROCKSDB:
+    case pb::common::Engine::LSM:
+    case pb::common::Engine::TXN_LSM:
+      raw_engine = pb::common::RawEngine::RAW_ENG_ROCKSDB;
+      break;
+    case pb::common::Engine::ENG_BDB:
+    case pb::common::Engine::BDB:
+    case pb::common::Engine::TXN_BDB:
+      raw_engine = pb::common::RawEngine::RAW_ENG_BDB;
+      break;
+    default:
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "engine not support");
   }
 
   return butil::Status::OK();
