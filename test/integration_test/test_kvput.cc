@@ -31,7 +31,6 @@
 #include "sdk/status.h"
 
 DECLARE_string(coordinator_url);
-DECLARE_int32(create_region_wait_time_s);
 
 namespace dingodb {
 
@@ -47,9 +46,6 @@ class KvPutTest : public testing::Test {
 
   static void SetUpTestSuite() {
     region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix));
-
-    // waiting region create finish.
-    std::this_thread::sleep_for(std::chrono::seconds(FLAGS_create_region_wait_time_s));
   }
 
   static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }

@@ -58,38 +58,28 @@ class Helper {
     CHECK(start_key < end_key) << "start_key must < end_key";
     CHECK(replicas > 0) << "replicas must > 0";
 
-    pb::coordinator::CreateRegionRequest request;
-    pb::coordinator::CreateRegionResponse response;
+    auto client = Environment::GetInstance().GetClient();
 
-    request.set_region_name(name);
-    request.set_replica_num(replicas);
-    request.mutable_range()->set_start_key(EncodeRawKey(start_key));
-    request.mutable_range()->set_end_key(EncodeRawKey(end_key));
+    std::shared_ptr<sdk::RegionCreator> creator;
+    auto status = client->NewRegionCreator(creator);
+    CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
+    int64_t region_id;
+    status = creator->SetRegionName(name).SetReplicaNum(replicas).SetRange(EncodeRawKey(start_key), EncodeRawKey(end_key)).Create(region_id);
 
-    LOG(INFO) << "Create region request: " << request.ShortDebugString();
-
-    auto status = Environment::GetInstance().GetCoordinatorProxy()->CreateRegion(request, response);
     CHECK(status.IsOK()) << fmt::format("Create region failed, {}", status.ToString());
-    CHECK(response.region_id() != 0) << "region_id is invalid";
-    return response.region_id();
+    CHECK(region_id != 0) << "region_id is invalid";
+    return region_id;
   }
 
   static void DropRawRegion(int64_t region_id) {
     CHECK(region_id != 0) << "region_id is invalid";
-
-    pb::coordinator::DropRegionRequest request;
-    pb::coordinator::DropRegionResponse response;
-
-    request.set_region_id(region_id);
-
-    LOG(INFO) << "Drop region request: " << request.ShortDebugString();
-
-    auto status = Environment::GetInstance().GetCoordinatorProxy()->DropRegion(request, response);
+    auto client = Environment::GetInstance().GetClient();
+    auto status = client->DropRegion(region_id);
     CHECK(status.IsOK()) << fmt::format("Drop region failed, {}", status.ToString());
   }
 
   static bool IsContain(const std::vector<sdk::KVPair>& kvs, const std::string& key) {
-    for (auto& kv : kvs) {
+    for (const auto& kv : kvs) {
       if (kv.key == key) {
         return true;
       }

@@ -31,7 +31,6 @@
 #include "sdk/status.h"
 
 DECLARE_string(coordinator_url);
-DECLARE_int32(create_region_wait_time_s);
 
 namespace dingodb {
 
@@ -47,9 +46,6 @@ class KvPutIfAbsentTest : public testing::Test {
 
   static void SetUpTestSuite() {
     region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix));
-
-    // waiting region create finish.
-    std::this_thread::sleep_for(std::chrono::seconds(FLAGS_create_region_wait_time_s));
   }
 
   static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }
@@ -68,7 +64,7 @@ TEST_F(KvPutIfAbsentTest, Absent) {
   }
 
   {
-    const std::string key = Helper::EncodeRawKey(kKeyPrefix + "hello1");
+    const std::string key = Helper::EncodeRawKey(kKeyPrefix + "absent");
     std::string expect_value = "world1";
 
     bool state;
@@ -91,7 +87,7 @@ TEST_F(KvPutIfAbsentTest, NotAbsent) {
   }
 
   {
-    const std::string key = Helper::EncodeRawKey(kKeyPrefix + "hello2");
+    const std::string key = Helper::EncodeRawKey(kKeyPrefix + "not_absent");
     std::string expect_value = "world2";
 
     auto status = raw_kv->Put(key, expect_value);
@@ -123,7 +119,7 @@ TEST_F(KvPutIfAbsentTest, BatchAbsent) {
     std::vector<sdk::KVPair> expect_kvs;
     for (int i = 0; i < key_nums; ++i) {
       sdk::KVPair kv;
-      kv.key = Helper::EncodeRawKey(kKeyPrefix + "hello" + std::to_string(i));
+      kv.key = Helper::EncodeRawKey(kKeyPrefix + "batch_absent" + std::to_string(i));
       kv.value = "world" + std::to_string(i);
       expect_kvs.push_back(kv);
       keys.push_back(kv.key);
@@ -167,7 +163,7 @@ TEST_F(KvPutIfAbsentTest, BatchNotAbsent) {
     std::vector<sdk::KVPair> expect_kvs;
     for (int i = 0; i < key_nums; ++i) {
       sdk::KVPair kv;
-      kv.key = Helper::EncodeRawKey(kKeyPrefix + "hello" + std::to_string(i));
+      kv.key = Helper::EncodeRawKey(kKeyPrefix + "batch_not_absent" + std::to_string(i));
       kv.value = "world" + std::to_string(i);
       expect_kvs.push_back(kv);
       keys.push_back(kv.key);
@@ -216,7 +212,7 @@ TEST_F(KvPutIfAbsentTest, BatchPartialNotAbsent) {
     std::vector<sdk::KVPair> partial_kvs;
     for (int i = 0; i < key_nums; ++i) {
       sdk::KVPair kv;
-      kv.key = Helper::EncodeRawKey(kKeyPrefix + "hello" + std::to_string(i));
+      kv.key = Helper::EncodeRawKey(kKeyPrefix + "batch_partial_not_absent" + std::to_string(i));
       kv.value = "world" + std::to_string(i);
       expect_kvs.push_back(kv);
       keys.push_back(kv.key);
