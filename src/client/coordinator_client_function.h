@@ -176,6 +176,9 @@ void SendUpdateTso(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
 void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// set force_read_only
+void SendUpdateForceReadOnly(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // debug
 void SendDebug();
 std::string EncodeUint64(int64_t value);

@@ -1073,7 +1073,7 @@ class MetaMemMapStd {
 
   int64_t Size() { return Count(); }
 
-  int64_t Count() { return elements_->Count(); }
+  int64_t Count() { return elements_->Size(); }
 
   butil::Status Erase(const std::string &id) {
     elements_->Erase(id);

@@ -89,6 +89,7 @@ DECLARE_string(region_prefix);
 DECLARE_int64(start_id);
 DECLARE_int64(end_id);
 DECLARE_string(raw_engine);
+DECLARE_bool(force_read_only);
 
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -1958,6 +1959,20 @@ void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> 
   request.mutable_error()->set_errmsg(FLAGS_errmsg);
 
   auto status = coordinator_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendUpdateForceReadOnly(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::ConfigCoordinatorRequest request;
+  dingodb::pb::coordinator::ConfigCoordinatorResponse response;
+
+  request.set_set_force_read_only(true);
+  request.set_is_force_read_only(FLAGS_force_read_only);
+
+  DINGO_LOG(INFO) << "Try to set_force_read_only to " << FLAGS_force_read_only;
+
+  auto status = coordinator_interaction->SendRequest("ConfigCoordinator", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }

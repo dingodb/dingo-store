@@ -48,7 +48,6 @@
 
 namespace dingodb {
 
-DECLARE_bool(force_cluster_read_only);
 DECLARE_int32(executor_heartbeat_timeout);
 DECLARE_int32(store_heartbeat_timeout);
 DECLARE_int32(region_heartbeat_timeout);
@@ -1718,8 +1717,9 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
     return ret;
   }
 
-  if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
-    DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region";
+  if (Server::GetInstance().IsReadOnly() || GetForceReadOnly()) {
+    DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region, is_read_only = "
+                       << Server::GetInstance().IsReadOnly() << ", force_read_only = " << GetForceReadOnly();
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
   }
 
@@ -1879,8 +1879,9 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
     return ret;
   }
 
-  if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
-    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
+  if (Server::GetInstance().IsReadOnly() || GetForceReadOnly()) {
+    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region, is_read_only = "
+                       << Server::GetInstance().IsReadOnly() << ", force_read_only = " << GetForceReadOnly();
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
   }
 
@@ -2048,8 +2049,9 @@ butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", index_parameter=" << index_parameter.ShortDebugString();
 
-  if (Server::GetInstance().IsReadOnly() || FLAGS_force_cluster_read_only) {
-    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region";
+  if (Server::GetInstance().IsReadOnly() || GetForceReadOnly()) {
+    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region, is_read_only = "
+                       << Server::GetInstance().IsReadOnly() << ", force_read_only = " << GetForceReadOnly();
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
   }
 
@@ -4322,8 +4324,14 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_total_size(memory_info.total_size() + memory_info.table_index_map_size());
   }
   {
-    int64_t common_map_count = common_meta_->Count();
-    memory_info.set_common_map_count(common_map_count);
+    int64_t common_disk_map_count = common_disk_meta_->Count();
+    memory_info.set_common_disk_map_count(common_disk_map_count);
+  }
+  {
+    int64_t common_mem_map_count = common_mem_meta_->Count();
+    memory_info.set_common_mem_map_count(common_mem_map_count);
+    memory_info.set_common_mem_map_size(common_mem_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.common_mem_map_size());
   }
 }
 
@@ -5143,9 +5151,9 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
 
   // update gc_stop
   pb::coordinator_internal::CommonInternal gc_stop_element;
-  auto ret1 = common_meta_->Get(Constant::kGcStopKey, gc_stop_element);
+  auto ret1 = common_disk_meta_->Get(Constant::kGcStopKey, gc_stop_element);
   if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "common_meta_->Get(Constant::kGcStopKey) failed, errcode=" << ret1.error_code()
+    DINGO_LOG(ERROR) << "common_disk_meta_->Get(Constant::kGcStopKey) failed, errcode=" << ret1.error_code()
                      << " errmsg=" << ret1.error_str();
     return ret1;
   }
@@ -5161,7 +5169,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
       gc_stop_element.set_id(Constant::kGcStopKey);
       gc_stop_element.set_value(Constant::kGcStopValueTrue);
 
-      auto* increment = meta_increment.add_commons();
+      auto* increment = meta_increment.add_common_disk_s();
       increment->set_id(Constant::kGcStopKey);
       increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
       *(increment->mutable_common()) = gc_stop_element;
@@ -5173,7 +5181,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
       gc_stop_element.set_id(Constant::kGcStopKey);
       gc_stop_element.set_value(Constant::kGcStopValueFalse);
 
-      auto* increment = meta_increment.add_commons();
+      auto* increment = meta_increment.add_common_disk_s();
       increment->set_id(Constant::kGcStopKey);
       increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
       *(increment->mutable_common()) = gc_stop_element;
@@ -5202,7 +5210,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
 butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_stop) {
   safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
   pb::coordinator_internal::CommonInternal common;
-  common_meta_->Get(Constant::kGcStopKey, common);
+  common_disk_meta_->Get(Constant::kGcStopKey, common);
   gc_stop = (common.value() == Constant::kGcStopValueTrue);
   return butil::Status::OK();
 }
@@ -5838,6 +5846,68 @@ butil::Status CoordinatorControl::CheckStoreNormal(int64_t store_id) {
   }
 
   return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::UpdateForceReadOnly(bool is_force_read_only,
+                                                      pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << "UpdateForceReadOnly is_force_read_only = " << is_force_read_only;
+
+  // update gc_stop
+  pb::coordinator_internal::CommonInternal element;
+  auto ret1 = common_mem_meta_->Get(Constant::kForceReadOnlyKey, element);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "common_mem_meta_->Get(Constant::kForceReadOnlyKey) failed, errcode=" << ret1.error_code()
+                     << " errmsg=" << ret1.error_str();
+    return ret1;
+  }
+
+  DINGO_LOG(INFO) << "UpdateForceReadOnly old_force_read_only=" << element.value();
+
+  bool old_is_force_read_only = (element.value() == Constant::kForceReadOnlyValueTrue);
+  if (old_is_force_read_only == is_force_read_only) {
+    DINGO_LOG(INFO) << "UpdateForceReadOnly old_is_force_read_only=" << old_is_force_read_only
+                    << " == is_force_read_only=" << is_force_read_only << ", skip update";
+    return butil::Status::OK();
+  }
+
+  element.set_id(Constant::kForceReadOnlyKey);
+  if (is_force_read_only) {
+    element.set_value(Constant::kForceReadOnlyValueTrue);
+  } else {
+    element.set_value(Constant::kForceReadOnlyValueFalse);
+  }
+
+  auto* increment = meta_increment.add_common_mem_s();
+  increment->set_id(Constant::kForceReadOnlyKey);
+  increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  *(increment->mutable_common()) = element;
+
+  DINGO_LOG(INFO) << "UpdateForceReadOnly new_force_read_only=" << element.value();
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetForceReadOnly(bool& is_force_read_only) {
+  // update gc_stop
+  pb::coordinator_internal::CommonInternal element;
+  auto ret1 = common_mem_meta_->Get(Constant::kForceReadOnlyKey, element);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "common_mem_meta_->Get(Constant::kForceReadOnlyKey) failed, errcode=" << ret1.error_code()
+                     << " errmsg=" << ret1.error_str();
+    return ret1;
+  }
+
+  DINGO_LOG(DEBUG) << "GetForceReadOnly old_force_read_only=" << element.value();
+
+  is_force_read_only = (element.value() == Constant::kForceReadOnlyValueTrue);
+
+  return butil::Status::OK();
+}
+
+bool CoordinatorControl::GetForceReadOnly() {
+  bool is_force_read_only = false;
+  GetForceReadOnly(is_force_read_only);
+  return is_force_read_only;
 }
 
 }  // namespace dingodb
