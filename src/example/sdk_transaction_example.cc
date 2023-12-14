@@ -389,6 +389,7 @@ void OptimisticTxnLockConflict() {
   OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
 }
 
+
 void OptimisticTxnReadSnapshotAndReadCommiited() {
   std::string put_key = "xb01";
   std::string put_if_absent_key = "xc01";
@@ -430,6 +431,8 @@ void OptimisticTxnReadSnapshotAndReadCommiited() {
     DINGO_LOG(INFO) << "batch get:" << got.ToString();
     CHECK(got.ok());
     CHECK_EQ(kvs.size(), 0);
+    Status precommit = new_txn->PreCommit();
+    DINGO_LOG(INFO) << "new_txn precommit:" << precommit.ToString();
     Status commit = new_txn->Commit();
     DINGO_LOG(INFO) << "new_txn commit:" << commit.ToString();
   }
@@ -452,8 +455,61 @@ void OptimisticTxnReadSnapshotAndReadCommiited() {
       }
     }
 
+    Status precommit = read_commit_txn->PreCommit();
+    DINGO_LOG(INFO) << "read_commit_txn precommit:" << precommit.ToString();
     Status commit = read_commit_txn->Commit();
     DINGO_LOG(INFO) << "read_commit_txn commit:" << commit.ToString();
+  }
+
+  OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
+}
+
+void OptimisticTxnRollback() {
+
+  std::string put_key = "xb01";
+  std::string put_if_absent_key = "xc01";
+  std::string delete_key = "xd01";
+
+  auto txn = NewOptimisticTransaction(dingodb::sdk::kSnapshotIsolation);
+  {
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status got = txn->BatchGet(keys, kvs);
+    DINGO_LOG(INFO) << "batch get:" << got.ToString();
+    CHECK(got.ok());
+    CHECK_EQ(kvs.size(), 0);
+
+    txn->Put(put_key, key_values[put_key]);
+    txn->PutIfAbsent(put_if_absent_key, key_values[put_if_absent_key]);
+    txn->Delete(delete_key);
+
+    Status precommit = txn->PreCommit();
+    DINGO_LOG(INFO) << "precommit:" << precommit.ToString();
+  }
+
+  auto new_txn = NewOptimisticTransaction(dingodb::sdk::kSnapshotIsolation);
+  {
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status got = new_txn->BatchGet(keys, kvs);
+    DINGO_LOG(INFO) << "batch get:" << got.ToString();
+    CHECK(got.IsTxnLockConflict());
+  }
+
+  {
+    Status rollback = txn->Rollback();
+    DINGO_LOG(INFO) << "txn rollback:" << rollback.ToString();
+  }
+
+  {
+    // snapshot read nothing
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status got = new_txn->BatchGet(keys, kvs);
+    DINGO_LOG(INFO) << "batch get:" << got.ToString();
+    CHECK(got.ok());
+    CHECK_EQ(kvs.size(), 0);
+    Status precommit = new_txn->PreCommit();
+    DINGO_LOG(INFO) << "new_txn precommit:" << precommit.ToString();
+    Status commit = new_txn->Commit();
+    DINGO_LOG(INFO) << "new_txn commit:" << commit.ToString();
   }
 
   OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
@@ -464,6 +520,7 @@ int main(int argc, char* argv[]) {
   FLAGS_logtostdout = true;
   FLAGS_colorlogtostdout = true;
   FLAGS_logbufsecs = 0;
+  // FLAGS_v = dingodb::kGlobalValueOfDebug;
 
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
@@ -493,6 +550,8 @@ int main(int argc, char* argv[]) {
   OptimisticTxnBatch();
   OptimisticTxnSingleOp();
   OptimisticTxnLockConflict();
+  OptimisticTxnReadSnapshotAndReadCommiited();
+  OptimisticTxnRollback();
 
   PostClean();
 }

@@ -14,6 +14,7 @@
 
 #include "sdk/meta_cache.h"
 
+#include "common/logging.h"
 #include "glog/logging.h"
 #include "sdk/common.h"
 #include "sdk/param_config.h"
@@ -160,7 +161,7 @@ Status MetaCache::FastLookUpRegionByKeyUnlocked(const std::string& key, std::sha
         fmt::format("not found region for key:{} in cache, key is out of bounds, nearest found_region:{} range:({}-{})",
                     key, found_region->RegionId(), range.start_key(), range.end_key());
 
-    VLOG(1) << msg;
+    DINGO_LOG(DEBUG) << msg;
     return Status::NotFound(msg);
   } else {
     // lucky we found it
@@ -336,7 +337,7 @@ void MetaCache::AddRangeToCacheUnlocked(const std::shared_ptr<Region>& region) {
 
   region->UnMarkStale();
 
-  VLOG(1) << "add region success, region:" << region->ToString();
+  DINGO_LOG(DEBUG) << "add region success, region:" << region->ToString();
 }
 
 void MetaCache::Dump() {

@@ -69,7 +69,7 @@ void RawKV::RawKVImpl::ProcessSubBatchGet(SubBatchState* sub) {
       if (!kv.value().empty()) {
         sub->result_kvs.push_back({kv.key(), kv.value()});
       } else {
-        VLOG(1) << "Ignore kv key:" << kv.key() << " because value is empty";
+        DINGO_LOG(DEBUG) << "Ignore kv key:" << kv.key() << " because value is empty";
       }
     }
   }
