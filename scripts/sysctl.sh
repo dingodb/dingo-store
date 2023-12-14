@@ -5,7 +5,7 @@
 # setup kernel parameters
 
 NUM_FILE=1048576
-NUM_PROC=1048576
+NUM_PROC=4194304
 
 nr_open=$(sysctl fs.nr_open|awk '{print $3}')
 echo "nr_open="${nr_open}
@@ -28,7 +28,7 @@ fi
 file_max=$(sysctl fs.file-max|awk '{print $3}')
 echo "file-max="${file_max}
 
-if [ ${file_max} -lt ${NUM_PROC} ]
+if [ ${file_max} -lt ${NUM_FILE} ]
 then
     echo "try to increase file-max"
     echo "fs.file-max = ${NUM_FILE}" >>  /etc/sysctl.conf
@@ -36,36 +36,38 @@ then
     file_max=$(sysctl fs.file-max|awk '{print $3}')
     echo "new file-max="${file_max}
 
-    if [ ${file_max} -lt ${NUM_PROC} ]
+    if [ ${file_max} -lt ${NUM_FILE} ]
     then
         echo "increase faild, exit!"
         exit -1
     fi
 fi
 
-file_max=$(sysctl fs.file-max|awk '{print $3}')
-echo "file-max="${file_max}
+pid_max=$(sysctl kernel.pid_max|awk '{print $3}')
+echo "pid_max="${pid_max}
 
-if [ ${file_max} -lt ${NUM_PROC} ]
+if [ ${pid_max} -lt ${NUM_PROC} ]
 then
-    echo "try to increase file-max"
-    echo "fs.file-max = ${NUM_FILE}" >>  /etc/sysctl.conf
+    echo "try to increase pid_max"
+    echo "kernel.pid_max = ${NUM_PROC}" >>  /etc/sysctl.conf
     sysctl -p
-    file_max=$(sysctl fs.file-max|awk '{print $3}')
-    echo "new file-max="${file_max}
+    pid_max=$(sysctl kernel.pid_max|awk '{print $3}')
+    echo "new pid_max="${pid_max}
 
-    if [ ${file_max} -lt ${NUM_PROC} ]
+    if [ ${pid_max} -lt ${NUM_PROC} ]
     then
         echo "increase faild, exit!"
         exit -1
     fi
 fi
 
+echo "start to tun hugepage to madvise"
 echo madvise > /sys/kernel/mm/transparent_hugepage/enabled
 
-## setup limits.conf
+# setup limits.conf
+echo "start to setup limits.d/90-dingo.conf"
 echo "* - nofile ${NUM_FILE}"  >  /etc/security/limits.d/90-dingo.conf
-echo "* - nproc  ${NUM_FILE}"  >> /etc/security/limits.d/90-dingo.conf
+echo "* - nproc  ${NUM_PROC}"  >> /etc/security/limits.d/90-dingo.conf
 echo "Please re-login to make the new limits.conf to take effect!"
 
 ulimit -n ${NUM_FILE}
