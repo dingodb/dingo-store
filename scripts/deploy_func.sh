@@ -1,7 +1,7 @@
 #!/bin/bash
 # The ulimit is setup in start_program, the paramter of ulimit is:
 #   ulimit -n 1048576
-#   ulimit -u 1048576
+#   ulimit -u 4194304
 #   ulimit -c unlimited
 # If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit.
 
@@ -79,18 +79,18 @@ function deploy_store() {
 
 function set_ulimit() {
     NUM_FILE=1048576
-    NUM_PROC=1048576
+    NUM_PROC=4194304
 
     # 1. sysctl is the very-high-level hard limit:
     #     fs.nr_open = 1048576
-    #     fs.file-max = 1048576
+    #     fs.file-max = 4194304
     # 2. /etc/security/limits.conf is the second-level limit for users, this is not required to setup.
     #    CAUTION: values in limits.conf can't bigger than sysctl kernel values, or user login will fail.
     #     * - nofile 1048576
-    #     * - nproc  1048576
+    #     * - nproc  4194304
     # 3. we can use ulimit to set value before start service.
     #     ulimit -n 1048576
-    #     ulimit -u 1048576
+    #     ulimit -u 4194304
     #     ulimit -c unlimited
 
     # ulimit -n
