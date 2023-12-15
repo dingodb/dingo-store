@@ -52,6 +52,11 @@ DEFINE_int64(catchup_log_min_gap, 8, "catch up log min gap");
 
 namespace dingodb {
 
+std::string RebuildVectorIndexTask::Trace() {
+  return fmt::format("[vector_index.rebuild][id({}).start_time({}).job_id({})] {}", vector_index_wrapper_->Id(),
+                     Helper::FormatMsTime(start_time_), job_id_, trace_);
+}
+
 void RebuildVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.rebuild][index_id({})][trace({})] run, pending tasks({}/{}) total running({}/{}) wait_time({}).",
@@ -169,6 +174,11 @@ void RebuildVectorIndexTask::Run() {
   }
 }
 
+std::string SaveVectorIndexTask::Trace() {
+  return fmt::format("[vector_index.save][id({}).start_time({})] {}", vector_index_wrapper_->Id(),
+                     Helper::FormatMsTime(start_time_), trace_);
+}
+
 void SaveVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.save][index_id({})][trace({})] run, pending tasks({}/{}) total running({}/{}) wait_time({}).",
@@ -213,6 +223,11 @@ void SaveVectorIndexTask::Run() {
         vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str());
     return;
   }
+}
+
+std::string LoadOrBuildVectorIndexTask::Trace() {
+  return fmt::format("[vector_index.loadorbuild][id({}).start_time({}).job_id({})] {}", vector_index_wrapper_->Id(),
+                     Helper::FormatMsTime(start_time_), job_id_, trace_);
 }
 
 void LoadOrBuildVectorIndexTask::Run() {
@@ -1040,6 +1055,14 @@ bool VectorIndexManager::ExecuteTask(int64_t region_id, TaskRunnablePtr task) {
   }
 
   return workers_->ExecuteHashByRegionId(region_id, task);
+}
+
+std::vector<std::vector<std::string>> VectorIndexManager::GetPendingTaskTrace() {
+  if (workers_ == nullptr) {
+    return {};
+  }
+
+  return workers_->GetPendingTaskTrace();
 }
 
 }  // namespace dingodb

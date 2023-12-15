@@ -45,6 +45,8 @@ class RebuildVectorIndexTask : public TaskRunnable {
 
   void Run() override;
 
+  std::string Trace() override;
+
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
   bool force_;
@@ -65,6 +67,8 @@ class SaveVectorIndexTask : public TaskRunnable {
   std::string Type() override { return "SAVE_VECTOR_INDEX"; }
 
   void Run() override;
+
+  std::string Trace() override;
 
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
@@ -88,6 +92,8 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
   std::string Type() override { return "LOADORBUILD_VECTOR_INDEX"; }
 
   void Run() override;
+
+  std::string Trace() override;
 
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
@@ -152,6 +158,8 @@ class VectorIndexManager {
   static void DecVectorIndexLoadorbuildTaskRunningNum() { vector_index_loadorbuild_task_running_num.fetch_sub(1); }
 
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
+
+  std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
  private:
   static butil::Status LoadVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch,

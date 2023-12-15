@@ -15,40 +15,50 @@
 #include "common/runnable.h"
 
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 
 #include "butil/compiler_specific.h"
 #include "client/coordinator_client_function.h"
+#include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 
 namespace dingodb {
 
-TaskRunnable::TaskRunnable() {}   // NOLINT
-TaskRunnable::~TaskRunnable() {}  // NOLINT
+TaskRunnable::TaskRunnable() : id_(GenId()) {}  // NOLINT
+TaskRunnable::~TaskRunnable() {}                // NOLINT
+
+uint64_t TaskRunnable::Id() const { return id_; }
+
+uint64_t TaskRunnable::GenId() {
+  static std::atomic<uint64_t> gen_id = 1;
+  return gen_id.fetch_add(1, std::memory_order_relaxed);
+}
 
 int ExecuteRoutine(void* meta, bthread::TaskIterator<TaskRunnablePtr>& iter) {  // NOLINT
   Worker* worker = static_cast<Worker*>(meta);
 
   for (; iter; ++iter) {
-    if (iter.is_queue_stopped()) {
+    if (BAIDU_UNLIKELY(*iter == nullptr)) {
+      DINGO_LOG(WARNING) << fmt::format("[execqueue][type()] task is nullptr.");
+      continue;
+    }
+
+    if (BAIDU_LIKELY(!iter.is_queue_stopped())) {
+      int64_t start_time = Helper::TimestampMs();
+      (*iter)->Run();
+      DINGO_LOG(DEBUG) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
+                                      Helper::TimestampMs() - start_time);
+    } else {
       DINGO_LOG(INFO) << fmt::format("[execqueue][type({})] task is stopped.", (*iter)->Type());
-      continue;
-    }
-    if (*iter == nullptr) {
-      DINGO_LOG(WARNING) << fmt::format("[execqueue][type({})] task is nullptr.", (*iter)->Type());
-      continue;
     }
 
-    int64_t start_time = Helper::TimestampMs();
-    (*iter)->Run();
-    DINGO_LOG(DEBUG) << fmt::format("[execqueue][type({})] run task elapsed time {}(ms).", (*iter)->Type(),
-                                    Helper::TimestampMs() - start_time);
-
-    if (worker != nullptr) {
+    if (BAIDU_LIKELY(worker != nullptr)) {
+      worker->PopPendingTaskTrace((*iter)->Id());
       worker->DecPendingTaskCount();
       worker->Nodify(Worker::EventType::kFinishTask);
     }
@@ -56,6 +66,12 @@ int ExecuteRoutine(void* meta, bthread::TaskIterator<TaskRunnablePtr>& iter) {  
 
   return 0;
 }
+
+Worker::Worker(NotifyFuncer notify_func) : is_available_(false), notify_func_(notify_func) {
+  bthread_mutex_init(&trace_mutex_, nullptr);
+}
+
+Worker::~Worker() { bthread_mutex_destroy(&trace_mutex_); }
 
 bool Worker::Init() {
   bthread::ExecutionQueueOptions options;
@@ -95,8 +111,11 @@ bool Worker::Execute(TaskRunnablePtr task) {
     return false;
   }
 
+  AppendPendingTaskTrace(task->Id(), task->Trace());
+
   if (bthread::execution_queue_execute(queue_id_, task) != 0) {
     DINGO_LOG(ERROR) << fmt::format("[execqueue][type({})] worker execution queue execute failed", task->Type());
+    PopPendingTaskTrace(task->Id());
     return false;
   }
 
@@ -119,6 +138,33 @@ void Worker::Nodify(EventType type) {
   if (notify_func_ != nullptr) {
     notify_func_(type);
   }
+}
+
+void Worker::AppendPendingTaskTrace(uint64_t task_id, const std::string& trace) {
+  if (!trace.empty()) {
+    BAIDU_SCOPED_LOCK(trace_mutex_);
+    pending_task_traces_.insert_or_assign(task_id, trace);
+  }
+}
+
+void Worker::PopPendingTaskTrace(uint64_t task_id) {
+  BAIDU_SCOPED_LOCK(trace_mutex_);
+
+  auto it = pending_task_traces_.find(task_id);
+  if (it != pending_task_traces_.end()) {
+    pending_task_traces_.erase(it);
+  }
+}
+
+std::vector<std::string> Worker::GetPendingTaskTrace() {
+  BAIDU_SCOPED_LOCK(trace_mutex_);
+
+  std::vector<std::string> traces;
+  traces.reserve(pending_task_traces_.size());
+  for (auto& [_, trace] : pending_task_traces_) {
+    traces.push_back(trace);
+  }
+  return traces;
 }
 
 WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
@@ -203,6 +249,17 @@ void WorkerSet::IncPendingTaskCount() {
 void WorkerSet::DecPendingTaskCount() {
   pending_task_count_metrics_ << -1;
   pending_task_count_.fetch_sub(1, std::memory_order_relaxed);
+}
+
+std::vector<std::vector<std::string>> WorkerSet::GetPendingTaskTrace() {
+  std::vector<std::vector<std::string>> traces;
+
+  traces.reserve(workers_.size());
+  for (auto& worker : workers_) {
+    traces.push_back(worker->GetPendingTaskTrace());
+  }
+
+  return traces;
 }
 
 }  // namespace dingodb

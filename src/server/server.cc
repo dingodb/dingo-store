@@ -820,6 +820,48 @@ bool Server::IsLeader(int64_t region_id) { return storage_->IsLeader(region_id);
 
 std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split_checker_; }
 
+void Server::SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set) { store_service_read_worker_set_ = worker_set; }
+
+void Server::SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set) { store_service_write_worker_set_ = worker_set; }
+void Server::SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set) { index_service_read_worker_set_ = worker_set; }
+
+void Server::SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set) { index_service_write_worker_set_ = worker_set; }
+
+std::vector<std::vector<std::string>> Server::GetStoreServiceReadWorkerSetTrace() {
+  if (store_service_read_worker_set_ == nullptr) {
+    return {};
+  }
+  return store_service_read_worker_set_->GetPendingTaskTrace();
+}
+
+std::vector<std::vector<std::string>> Server::GetStoreServiceWriteWorkerSetTrace() {
+  if (store_service_write_worker_set_ == nullptr) {
+    return {};
+  }
+  return store_service_write_worker_set_->GetPendingTaskTrace();
+}
+
+std::vector<std::vector<std::string>> Server::GetIndexServiceReadWorkerSetTrace() {
+  if (index_service_read_worker_set_ == nullptr) {
+    return {};
+  }
+  return index_service_read_worker_set_->GetPendingTaskTrace();
+}
+
+std::vector<std::vector<std::string>> Server::GetIndexServiceWriteWorkerSetTrace() {
+  if (index_service_write_worker_set_ == nullptr) {
+    return {};
+  }
+  return index_service_write_worker_set_->GetPendingTaskTrace();
+}
+
+std::vector<std::vector<std::string>> Server::GetVectorIndexBackgroundWorkerSetTrace() {
+  if (vector_index_manager_ == nullptr) {
+    return {};
+  }
+  return vector_index_manager_->GetPendingTaskTrace();
+}
+
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
                                                                               const int64_t region_id,
                                                                               const std::string& region_name

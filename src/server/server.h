@@ -177,6 +177,17 @@ class Server {
   bool IsLeader(int64_t region_id);
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker();
 
+  void SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set);
+  void SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set);
+  void SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set);
+  void SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set);
+
+  std::vector<std::vector<std::string>> GetStoreServiceReadWorkerSetTrace();
+  std::vector<std::vector<std::string>> GetStoreServiceWriteWorkerSetTrace();
+  std::vector<std::vector<std::string>> GetIndexServiceReadWorkerSetTrace();
+  std::vector<std::vector<std::string>> GetIndexServiceWriteWorkerSetTrace();
+  std::vector<std::vector<std::string>> GetVectorIndexBackgroundWorkerSetTrace();
+
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
 
@@ -268,6 +279,12 @@ class Server {
 
   // Is cluster read-only
   bool is_read_only_ = false;
+
+  // reference worker queue, just for trace
+  WorkerSetPtr store_service_read_worker_set_;
+  WorkerSetPtr store_service_write_worker_set_;
+  WorkerSetPtr index_service_read_worker_set_;
+  WorkerSetPtr index_service_write_worker_set_;
 };
 
 // Shortcut

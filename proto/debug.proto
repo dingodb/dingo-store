@@ -259,6 +259,41 @@ message ReleaseFreeMemoryResponse {
   dingodb.pb.error.Error error = 2;
 }
 
+enum WorkQueueType {
+  WORK_QUEUE_NONE = 0;
+
+  WORK_QUEUE_STORE_SERVICE_READ = 10;
+  WORK_QUEUE_STORE_SERVICE_WRITE =11;
+
+  WORK_QUEUE_INDEX_SERVICE_READ  =20;
+  WORK_QUEUE_INDEX_SERVICE_WRITE  =21;
+  WORK_QUEUE_VECTOR_INDEX_BACKGROUND = 22;
+}
+
+message TraceWorkQueueRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+
+  WorkQueueType type = 10;
+}
+
+message TraceWorkQueueResponse {
+  message WorkerTrace {
+    uint32 count = 1;
+    repeated string traces = 2;
+  }
+
+  message WorkerSetTrace {
+    uint32 count = 1;
+    repeated WorkerTrace worker_traces = 2;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  repeated WorkerSetTrace worker_set_traces = 10;
+}
+
+
 service DebugService {
   // region
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
@@ -279,4 +314,7 @@ service DebugService {
   // tcmalloc
   rpc GetMemoryStats(GetMemoryStatsRequest) returns (GetMemoryStatsResponse);
   rpc ReleaseFreeMemory(ReleaseFreeMemoryRequest) returns (ReleaseFreeMemoryResponse);
+
+  // Work queue
+  rpc TraceWorkQueue(TraceWorkQueueRequest) returns (TraceWorkQueueResponse);
 }

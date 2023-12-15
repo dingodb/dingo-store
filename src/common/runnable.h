@@ -19,7 +19,10 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <queue>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "bthread/execution_queue.h"
 #include "common/failpoint.h"
@@ -32,9 +35,17 @@ class TaskRunnable {
   TaskRunnable();
   virtual ~TaskRunnable();
 
+  uint64_t Id() const;
+  static uint64_t GenId();
+
   virtual std::string Type() = 0;
 
   virtual void Run() = 0;
+
+  virtual std::string Trace() { return ""; }
+
+ private:
+  uint64_t id_;
 };
 
 using TaskRunnablePtr = std::shared_ptr<TaskRunnable>;
@@ -50,8 +61,8 @@ class Worker {
   };
   using NotifyFuncer = std::function<void(EventType)>;
 
-  Worker(NotifyFuncer notify_func) : is_available_(false), notify_func_(notify_func) {}
-  ~Worker() = default;
+  Worker(NotifyFuncer notify_func);
+  ~Worker();
 
   static std::shared_ptr<Worker> New() { return std::make_shared<Worker>(nullptr); }
   static std::shared_ptr<Worker> New(NotifyFuncer notify_func) { return std::make_shared<Worker>(notify_func); }
@@ -70,6 +81,10 @@ class Worker {
 
   void Nodify(EventType type);
 
+  void AppendPendingTaskTrace(uint64_t task_id, const std::string& trace);
+  void PopPendingTaskTrace(uint64_t task_id);
+  std::vector<std::string> GetPendingTaskTrace();
+
  private:
   // Execution queue is available.
   std::atomic<bool> is_available_;
@@ -81,6 +96,11 @@ class Worker {
 
   // Notify
   NotifyFuncer notify_func_;
+
+  // trace
+  bool is_use_trace_;
+  bthread_mutex_t trace_mutex_;
+  std::map<uint64_t, std::string> pending_task_traces_;
 };
 
 using WorkerPtr = std::shared_ptr<Worker>;
@@ -108,6 +128,8 @@ class WorkerSet {
   uint64_t PendingTaskCount();
   void IncPendingTaskCount();
   void DecPendingTaskCount();
+
+  std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
  private:
   const std::string name_;

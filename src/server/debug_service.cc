@@ -341,8 +341,6 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
     auto store_region_meta = GET_STORE_REGION_META;
     auto regions = store_region_meta->GetAllRegion();
 
-    int32_t leader_count = 0;
-    int32_t follower_count = 0;
     std::vector<int64_t> leader_region_ids;
     std::vector<int64_t> follower_region_ids;
     std::map<std::string, int32_t> state_counts;
@@ -354,10 +352,8 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
       ++state_counts[name];
 
       if (Server::GetInstance().IsLeader(region->Id())) {
-        ++leader_count;
         leader_region_ids.push_back(region->Id());
       } else {
-        ++follower_count;
         follower_region_ids.push_back(region->Id());
       }
     }
@@ -365,8 +361,8 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
     for (auto [name, count] : state_counts) {
       response->mutable_region_meta_stat()->mutable_state_counts()->insert({name, count});
     }
-    response->mutable_region_meta_stat()->set_leader_count(leader_count);
-    response->mutable_region_meta_stat()->set_follower_count(follower_count);
+    response->mutable_region_meta_stat()->set_leader_count(leader_region_ids.size());
+    response->mutable_region_meta_stat()->set_follower_count(follower_region_ids.size());
     Helper::VectorToPbRepeated(leader_region_ids, response->mutable_region_meta_stat()->mutable_leader_regoin_ids());
     Helper::VectorToPbRepeated(follower_region_ids,
                                response->mutable_region_meta_stat()->mutable_follower_regoin_ids());
@@ -649,6 +645,71 @@ void DebugServiceImpl::ReleaseFreeMemory(google::protobuf::RpcController* contro
   response->mutable_error()->set_errcode(pb::error::EINTERNAL);
   response->mutable_error()->set_errmsg("No use tcmalloc");
 #endif
+}
+
+void DebugServiceImpl::TraceWorkQueue(google::protobuf::RpcController* controller,
+                                      const ::dingodb::pb::debug::TraceWorkQueueRequest* request,
+                                      ::dingodb::pb::debug::TraceWorkQueueResponse* response,
+                                      ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  if (request->type() == pb::debug::WORK_QUEUE_STORE_SERVICE_READ) {
+    auto worker_set_traces = Server::GetInstance().GetStoreServiceReadWorkerSetTrace();
+
+    auto* mut_worker_set_traces = response->add_worker_set_traces();
+    for (auto& worker_trace : worker_set_traces) {
+      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
+      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
+      worker_traces->set_count(worker_trace.size());
+    }
+    mut_worker_set_traces->set_count(worker_set_traces.size());
+
+  } else if (request->type() == pb::debug::WORK_QUEUE_STORE_SERVICE_WRITE) {
+    auto worker_set_traces = Server::GetInstance().GetStoreServiceWriteWorkerSetTrace();
+
+    auto* mut_worker_set_traces = response->add_worker_set_traces();
+    for (auto& worker_trace : worker_set_traces) {
+      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
+      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
+      worker_traces->set_count(worker_trace.size());
+    }
+    mut_worker_set_traces->set_count(worker_set_traces.size());
+
+  } else if (request->type() == pb::debug::WORK_QUEUE_INDEX_SERVICE_READ) {
+    auto worker_set_traces = Server::GetInstance().GetIndexServiceReadWorkerSetTrace();
+
+    auto* mut_worker_set_traces = response->add_worker_set_traces();
+    for (auto& worker_trace : worker_set_traces) {
+      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
+      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
+      worker_traces->set_count(worker_trace.size());
+    }
+    mut_worker_set_traces->set_count(worker_set_traces.size());
+
+  } else if (request->type() == pb::debug::WORK_QUEUE_INDEX_SERVICE_WRITE) {
+    auto worker_set_traces = Server::GetInstance().GetIndexServiceWriteWorkerSetTrace();
+
+    auto* mut_worker_set_traces = response->add_worker_set_traces();
+    for (auto& worker_trace : worker_set_traces) {
+      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
+      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
+      worker_traces->set_count(worker_trace.size());
+    }
+    mut_worker_set_traces->set_count(worker_set_traces.size());
+
+  } else if (request->type() == pb::debug::WORK_QUEUE_VECTOR_INDEX_BACKGROUND) {
+    auto worker_set_traces = Server::GetInstance().GetVectorIndexBackgroundWorkerSetTrace();
+
+    auto* mut_worker_set_traces = response->add_worker_set_traces();
+    for (auto& worker_trace : worker_set_traces) {
+      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
+      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
+      worker_traces->set_count(worker_trace.size());
+    }
+    mut_worker_set_traces->set_count(worker_set_traces.size());
+  }
 }
 
 }  // namespace dingodb
