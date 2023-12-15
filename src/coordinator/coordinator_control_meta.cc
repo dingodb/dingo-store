@@ -3096,8 +3096,8 @@ butil::Status CoordinatorControl::TranslateEngineToRawEngine(const pb::common::E
       raw_engine = pb::common::RawEngine::RAW_ENG_ROCKSDB;
       break;
     case pb::common::Engine::ENG_BDB:
-    case pb::common::Engine::BDB:
-    case pb::common::Engine::TXN_BDB:
+    case pb::common::Engine::BTREE:
+    case pb::common::Engine::TXN_BTREE:
       raw_engine = pb::common::RawEngine::RAW_ENG_BDB;
       break;
     default:
