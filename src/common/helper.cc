@@ -876,6 +876,8 @@ std::string Helper::FormatMsTime(int64_t timestamp, const std::string& format) {
   return ss.str();
 }
 
+std::string Helper::FormatMsTime(int64_t timestamp) { return FormatMsTime(timestamp, "%Y-%m-%d %H:%M:%S"); }
+
 std::string Helper::FormatTime(int64_t timestamp, const std::string& format) {
   std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> tp((std::chrono::seconds(timestamp)));
 

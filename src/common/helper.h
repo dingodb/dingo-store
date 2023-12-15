@@ -234,6 +234,7 @@ class Helper {
 
   // format millisecond timestamp
   static std::string FormatMsTime(int64_t timestamp, const std::string& format);
+  static std::string FormatMsTime(int64_t timestamp);
   // format second timestamp
   static std::string FormatTime(int64_t timestamp, const std::string& format);
 

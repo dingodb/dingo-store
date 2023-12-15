@@ -942,6 +942,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     store_service.SetReadWorkSet(read_worker_set);
+    dingo_server.SetStoreServiceReadWorkerSet(read_worker_set);
 
     dingodb::WorkerSetPtr write_worker_set =
         dingodb::WorkerSet::New("WriteWorkerSet", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
@@ -950,6 +951,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     store_service.SetWriteWorkSet(write_worker_set);
+    dingo_server.SetStoreServiceWriteWorkerSet(write_worker_set);
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
@@ -1038,6 +1040,7 @@ int main(int argc, char *argv[]) {
     }
     index_service.SetReadWorkSet(read_worker_set);
     util_service.SetReadWorkSet(read_worker_set);
+    dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
     dingodb::WorkerSetPtr write_worker_set =
         dingodb::WorkerSet::New("WriteWorkerSet", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
@@ -1046,6 +1049,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     index_service.SetWriteWorkSet(write_worker_set);
+    dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";

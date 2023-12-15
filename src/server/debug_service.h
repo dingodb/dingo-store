@@ -67,6 +67,11 @@ class DebugServiceImpl : public pb::debug::DebugService {
                          const ::dingodb::pb::debug::ReleaseFreeMemoryRequest* request,
                          ::dingodb::pb::debug::ReleaseFreeMemoryResponse* response,
                          ::google::protobuf::Closure* done) override;
+
+  void TraceWorkQueue(google::protobuf::RpcController* controller,
+                      const ::dingodb::pb::debug::TraceWorkQueueRequest* request,
+                      ::dingodb::pb::debug::TraceWorkQueueResponse* response,
+                      ::google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb
