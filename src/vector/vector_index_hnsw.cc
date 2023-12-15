@@ -58,13 +58,14 @@ HnswThreadConig& HnswThreadConig::GetInstance() {
   return instance;
 }
 
-HnswThreadConig::HnswThreadConig() {
+HnswThreadConig::HnswThreadConig() : running_thread_num_metrics_("dingo_hnsw_thread_running_count") {
   bthread_mutex_init(&mutex_, nullptr);
   if (FLAGS_max_hnsw_parallel_thread_num > 0) {
     max_thread_num_ = FLAGS_max_hnsw_parallel_thread_num;
   } else {
     max_thread_num_ = std::thread::hardware_concurrency();
   }
+
   DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw] max hnsw parallel thread num is set to {}", max_thread_num_);
 }
 
@@ -76,6 +77,7 @@ uint32_t HnswThreadConig::AcquireThreads(uint32_t num) {
   } else {
     uint32_t acquire_num = std::min(num, max_thread_num_ - running_thread_num_);
     running_thread_num_ += acquire_num;
+    running_thread_num_metrics_ << acquire_num;
     return acquire_num;
   }
 }
@@ -84,11 +86,13 @@ void HnswThreadConig::ReleaseThreads(uint32_t num) {
   CHECK(num > 0);
   BAIDU_SCOPED_LOCK(mutex_);
   running_thread_num_ -= num;
+  running_thread_num_metrics_ << -num;
   if (BAIDU_UNLIKELY(running_thread_num_ < 0)) {
     DINGO_LOG(ERROR) << fmt::format(
         "[vector_index.hnsw] running_thread_num_ is illegal, running_thread_num_={} max_thread_num_={} num={}",
         running_thread_num_, max_thread_num_, num);
     running_thread_num_ = 0;
+    running_thread_num_metrics_.reset();
   }
 }
 
