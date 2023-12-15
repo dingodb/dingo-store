@@ -143,31 +143,33 @@ public class IndexServiceClient {
         if (parameter.getVectorFilterType() != null) {
             builder.setVectorFilterType(Common.VectorFilterType.valueOf(parameter.getVectorFilterType().name()));
         }
-        if (search.getFlat() != null) {
-            builder.setFlat(Common.SearchFlatParam.newBuilder()
-                    .setParallelOnQueries(search.getFlat().getParallelOnQueries())
-                    .build());
-        }
-        if (search.getIvfFlatParam() != null) {
-            builder.setIvfFlat(Common.SearchIvfFlatParam.newBuilder()
-                    .setNprobe(search.getIvfFlatParam().getNprobe())
-                    .setParallelOnQueries(search.getIvfFlatParam().getParallelOnQueries())
-                    .build());
-        }
-        if (search.getIvfPqParam() != null) {
-            builder.setIvfPq(Common.SearchIvfPqParam.newBuilder()
-                    .setNprobe(search.getIvfPqParam().getNprobe())
-                    .setParallelOnQueries(search.getIvfPqParam().getParallelOnQueries())
-                    .setRecallNum(search.getIvfPqParam().getRecallNum())
-                    .build());
-        }
-        if (search.getHnswParam() != null) {
-            builder.setHnsw(Common.SearchHNSWParam.newBuilder()
-                    .setEfSearch(search.getHnswParam().getEfSearch())
-                    .build());
-        }
-        if (search.getDiskAnnParam() != null) {
+        if (search != null) {
+            if (search.getFlat() != null) {
+                builder.setFlat(Common.SearchFlatParam.newBuilder()
+                        .setParallelOnQueries(search.getFlat().getParallelOnQueries())
+                        .build());
+            }
+            if (search.getIvfFlatParam() != null) {
+                builder.setIvfFlat(Common.SearchIvfFlatParam.newBuilder()
+                        .setNprobe(search.getIvfFlatParam().getNprobe())
+                        .setParallelOnQueries(search.getIvfFlatParam().getParallelOnQueries())
+                        .build());
+            }
+            if (search.getIvfPqParam() != null) {
+                builder.setIvfPq(Common.SearchIvfPqParam.newBuilder()
+                        .setNprobe(search.getIvfPqParam().getNprobe())
+                        .setParallelOnQueries(search.getIvfPqParam().getParallelOnQueries())
+                        .setRecallNum(search.getIvfPqParam().getRecallNum())
+                        .build());
+            }
+            if (search.getHnswParam() != null) {
+                builder.setHnsw(Common.SearchHNSWParam.newBuilder()
+                        .setEfSearch(search.getHnswParam().getEfSearch())
+                        .build());
+            }
+            if (search.getDiskAnnParam() != null) {
 
+            }
         }
         Index.VectorSearchRequest.Builder reqBuilder = Index.VectorSearchRequest.newBuilder()
                 .addAllVectorWithIds(vectors.stream().map(EntityConversion::mapping).collect(Collectors.toList()))
