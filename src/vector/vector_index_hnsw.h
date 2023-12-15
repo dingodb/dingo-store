@@ -54,7 +54,9 @@ class HnswThreadConig {
  private:
   bthread_mutex_t mutex_;
   uint32_t max_thread_num_;
-  uint32_t running_thread_num_;
+  int32_t running_thread_num_;
+
+  bvar::Adder<int32_t> running_thread_num_metrics_;
 };
 
 class VectorIndexHnsw : public VectorIndex {
