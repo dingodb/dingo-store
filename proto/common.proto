@@ -32,8 +32,8 @@ enum Engine {
   ENG_BDB = 1;
   LSM = 2;
   TXN_LSM = 3;
-  BDB = 4;
-  TXN_BDB = 5;
+  BTREE = 4;
+  TXN_BTREE = 5;
 };
 
 enum StorageEngine {
