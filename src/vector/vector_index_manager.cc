@@ -679,15 +679,16 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
       vector_index->Add(vectors);
 
-      upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
-      vectors.clear();
+      int32_t this_upsert_time = Helper::TimestampMs() - upsert_start_time;
+      upsert_use_time += this_upsert_time;
 
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.build][index_id({})][trace({})] Build vector index progress, parallel({}) count({}) elapsed "
+          "[vector_index.build][index_id({})][trace({})] Build vector index progress, speed({:.3}) count({}) elapsed "
           "time({}/{}ms)",
-          vector_index_id, trace, vector_index->WriteOpParallelNum(), count, upsert_use_time,
+          vector_index_id, trace, static_cast<double>(this_upsert_time) / vectors.size(), count, upsert_use_time,
           Helper::TimestampMs() - start_time);
 
+      vectors.clear();
       // yield, for other bthread run.
       bthread_yield();
     }
