@@ -329,7 +329,8 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   pb::node::GetVectorIndexSnapshotRequest request;
   request.set_vector_index_id(vector_index_id);
 
-  int64_t max_snapshot_log_index = 0;
+  int64_t peer_max_snapshot_log_index = 0;
+  int32_t peer_snapshot_version = 0;
   butil::EndPoint endpoint;
 
   auto self_peer = raft_node->GetPeerId();
@@ -360,25 +361,29 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
       continue;
     }
 
-    if (max_snapshot_log_index < response.meta().snapshot_log_index()) {
-      max_snapshot_log_index = response.meta().snapshot_log_index();
+    if (peer_max_snapshot_log_index < response.meta().snapshot_log_index()) {
+      peer_max_snapshot_log_index = response.meta().snapshot_log_index();
+      peer_snapshot_version = response.meta().epoch().version();
       endpoint = peer.addr;
     }
   }
 
   // Not found vector index snapshot, abandon.
-  if (max_snapshot_log_index == 0) {
+  if (peer_max_snapshot_log_index == 0) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] other peers not exist vector index snapshot.",
                                    vector_index_id);
     return butil::Status(pb::error::EVECTOR_SNAPSHOT_NOT_FOUND, "Not found peer snapshot");
   }
 
   auto last_snapshot = snapshot_set->GetLastSnapshot();
-  if (last_snapshot != nullptr &&
-      last_snapshot->SnapshotLogId() + Constant::kVectorIndexSnapshotCatchupMargin > max_snapshot_log_index) {
+  if (last_snapshot != nullptr && (last_snapshot->Epoch().version() > peer_snapshot_version ||
+                                   last_snapshot->Epoch().version() == peer_snapshot_version &&
+                                       last_snapshot->SnapshotLogId() + Constant::kVectorIndexSnapshotCatchupMargin >
+                                           peer_max_snapshot_log_index)) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.snapshot][index({})] snapshot log id gap({} {}) too small, give up pull.", vector_index_id,
-        last_snapshot->SnapshotLogId(), max_snapshot_log_index);
+        "[vector_index.snapshot][index({})] local snapshot is enough fresh, version({}/{}) log_id({} / {}).",
+        vector_index_id, last_snapshot->Epoch().version(), peer_snapshot_version, last_snapshot->SnapshotLogId(),
+        peer_max_snapshot_log_index);
     return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, "local snapshot is enough fresh");
   }
 
@@ -388,14 +393,14 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
     if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
       DINGO_LOG(ERROR) << fmt::format(
           "[vector_index.snapshot][index({})] pull vector index snapshot {} from {} failed, error: {}", vector_index_id,
-          max_snapshot_log_index, Helper::EndPointToStr(endpoint), status.error_str());
+          peer_max_snapshot_log_index, Helper::EndPointToStr(endpoint), status.error_str());
     }
     return status;
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.snapshot][index({})] pull vector index snapshot {} finish, elapsed time {}ms", vector_index_id,
-      max_snapshot_log_index, Helper::TimestampMs() - start_time);
+      "[vector_index.snapshot][index({})] pull vector index snapshot {} {} finish, elapsed time {}ms", vector_index_id,
+      peer_snapshot_version, peer_max_snapshot_log_index, Helper::TimestampMs() - start_time);
 
   return butil::Status();
 }
