@@ -16,6 +16,7 @@
 
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "proto/store.pb.h"
 #include "sdk/client.h"
 #include "sdk/status.h"
@@ -88,6 +89,28 @@ Status TxnBuffer::BatchDelete(const std::vector<std::string>& keys) {
   for (const auto& key : keys) {
     Delete(key);
   }
+  return Status::OK();
+}
+
+Status TxnBuffer::Range(const std::string& start_key, const std::string& end_key, std::vector<TxnMutation>& mutations) {
+  CHECK(start_key < end_key) << "start key must smaller than end_key";
+  if (IsEmpty()) {
+    return Status::OK();
+  }
+
+  auto start_iter = mutation_map_.lower_bound(start_key);
+  if (start_iter == mutation_map_.end()) {
+    return Status::OK();
+  }
+
+  const auto end_iter = mutation_map_.lower_bound(end_key);
+  CHECK(end_iter != mutation_map_.begin());
+
+  while (start_iter != end_iter) {
+    mutations.push_back(start_iter->second);
+    start_iter++;
+  }
+
   return Status::OK();
 }
 

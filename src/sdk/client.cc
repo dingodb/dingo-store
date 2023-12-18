@@ -217,6 +217,11 @@ Status Transaction::Delete(const std::string& key) { return impl_->Delete(key); 
 
 Status Transaction::BatchDelete(const std::vector<std::string>& keys) { return impl_->BatchDelete(keys); }
 
+Status Transaction::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit,
+                         std::vector<KVPair>& kvs) {
+  return impl_->Scan(start_key, end_key, limit, kvs);
+}
+
 Status Transaction::PreCommit() { return impl_->PreCommit(); }
 
 Status Transaction::Commit() { return impl_->Commit(); }

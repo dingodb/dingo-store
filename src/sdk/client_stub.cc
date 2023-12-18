@@ -21,6 +21,7 @@
 #include "sdk/rpc_interaction.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_lock_resolver.h"
+#include "sdk/transaction/txn_region_scanner_impl.h"
 
 namespace dingodb {
 
@@ -45,6 +46,8 @@ Status ClientStub::Open(std::string naming_service_url) {
   meta_cache_.reset(new MetaCache(coordinator_proxy_));
 
   region_scanner_factory_.reset(new RegionScannerFactoryImpl());
+
+  txn_region_scanner_factory_.reset(new TxnRegionScannerFactoryImpl());
 
   admin_tool_.reset(new AdminTool(coordinator_proxy_));
 

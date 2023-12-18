@@ -93,6 +93,8 @@ class TxnBuffer {
 
   Status BatchDelete(const std::vector<std::string>& keys);
 
+  Status Range(const std::string& start_key, const std::string& end_key, std::vector<TxnMutation>& mutations);
+
   bool IsEmpty() const { return mutation_map_.empty(); }
 
   int64_t MutationsSize() const { return mutation_map_.size(); }

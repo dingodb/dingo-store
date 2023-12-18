@@ -92,6 +92,8 @@ class Transaction::TxnImpl {
 
   Status BatchDelete(const std::vector<std::string>& keys);
 
+  Status Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs);
+
   Status PreCommit();
 
   Status Commit();
@@ -141,8 +143,6 @@ class Transaction::TxnImpl {
   void ProcessBatchRollbackSubTask(TxnSubTask* sub_task);
 
   Status HeartBeat();
-
-  static Status CheckTxnResultInfo(const pb::store::TxnResultInfo& txn_result_info);
 
   static bool NeedRetryAndInc(int& times);
 

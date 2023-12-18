@@ -233,7 +233,7 @@ Status MetaCache::ProcessScanRegionsBetweenRangeResponse(const pb::coordinator::
 
     return Status::OK();
   } else {
-    DINGO_LOG(INFO) << "no scan_region_info in ScanRegionsResponse, response:" << response.DebugString();
+    DINGO_LOG(DEBUG) << "no scan_region_info in ScanRegionsResponse, response:" << response.DebugString();
     return Status::NotFound("regions not found");
   }
 }

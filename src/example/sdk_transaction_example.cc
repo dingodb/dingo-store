@@ -114,23 +114,23 @@ static std::shared_ptr<dingodb::sdk::Transaction> NewOptimisticTransaction(dingo
 
 static void OptimisticTxnPostClean(dingodb::sdk::TransactionIsolation isolation) {
   {
-    auto txn = NewOptimisticTransaction(isolation);
+    auto post_clean_txn = NewOptimisticTransaction(isolation);
 
-    Status s = txn->BatchDelete(keys);
+    Status s = post_clean_txn->BatchDelete(keys);
     CHECK(s.ok());
 
-    Status precommit = txn->PreCommit();
-    DINGO_LOG(INFO) << "precommit:" << precommit.ToString();
-    Status commit = txn->Commit();
-    DINGO_LOG(INFO) << "commit:" << commit.ToString();
+    Status precommit = post_clean_txn->PreCommit();
+    DINGO_LOG(INFO) << "post_clean_txn precommit:" << precommit.ToString();
+    Status commit = post_clean_txn->Commit();
+    DINGO_LOG(INFO) << "post_clean_txn commit:" << commit.ToString();
   }
 
   {
-    auto txn = NewOptimisticTransaction(isolation);
+    auto post_clean_check_txn = NewOptimisticTransaction(isolation);
     {
       std::vector<dingodb::sdk::KVPair> kvs;
-      Status got = txn->BatchGet(keys, kvs);
-      DINGO_LOG(INFO) << "batch get:" << got.ToString();
+      Status got = post_clean_check_txn->BatchGet(keys, kvs);
+      DINGO_LOG(INFO) << "post_clean_check_txn batch get:" << got.ToString();
       CHECK(got.ok());
       CHECK_EQ(kvs.size(), 0);
     }
@@ -389,7 +389,6 @@ void OptimisticTxnLockConflict() {
   OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
 }
 
-
 void OptimisticTxnReadSnapshotAndReadCommiited() {
   std::string put_key = "xb01";
   std::string put_if_absent_key = "xc01";
@@ -410,6 +409,8 @@ void OptimisticTxnReadSnapshotAndReadCommiited() {
     Status precommit = txn->PreCommit();
     DINGO_LOG(INFO) << "precommit:" << precommit.ToString();
   }
+
+  auto read_commit_txn = NewOptimisticTransaction(dingodb::sdk::kReadCommitted);
 
   auto new_txn = NewOptimisticTransaction(dingodb::sdk::kSnapshotIsolation);
   {
@@ -439,7 +440,6 @@ void OptimisticTxnReadSnapshotAndReadCommiited() {
 
   {
     // readCommiited should read txn commit data
-    auto read_commit_txn = NewOptimisticTransaction(dingodb::sdk::kReadCommitted);
     std::vector<dingodb::sdk::KVPair> kvs;
     Status got = read_commit_txn->BatchGet(keys, kvs);
     DINGO_LOG(INFO) << "batch get:" << got.ToString();
@@ -465,7 +465,6 @@ void OptimisticTxnReadSnapshotAndReadCommiited() {
 }
 
 void OptimisticTxnRollback() {
-
   std::string put_key = "xb01";
   std::string put_if_absent_key = "xc01";
   std::string delete_key = "xd01";
@@ -515,6 +514,208 @@ void OptimisticTxnRollback() {
   OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
 }
 
+void OptimisticTxnScan() {
+  std::string put_key = "xb01";
+  std::string put_if_absent_key = "xc01";
+  std::string delete_key = "xd01";
+
+  auto txn = NewOptimisticTransaction(dingodb::sdk::kSnapshotIsolation);
+  {
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status got = txn->BatchGet(keys, kvs);
+    DINGO_LOG(INFO) << "batch get:" << got.ToString();
+    CHECK(got.ok());
+    CHECK_EQ(kvs.size(), 0);
+
+    txn->Put(put_key, key_values[put_key]);
+    txn->PutIfAbsent(put_if_absent_key, key_values[put_if_absent_key]);
+    txn->Delete(delete_key);
+
+    Status precommit = txn->PreCommit();
+    DINGO_LOG(INFO) << "precommit:" << precommit.ToString();
+    Status commit = txn->Commit();
+    DINGO_LOG(INFO) << "txn commit:" << commit.ToString();
+  }
+
+  auto read_commit_txn = NewOptimisticTransaction(dingodb::sdk::kReadCommitted);
+  {
+    // readCommiited should read txn commit data
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status got = read_commit_txn->BatchGet(keys, kvs);
+    DINGO_LOG(INFO) << "batch get:" << got.ToString();
+    CHECK(got.ok());
+    CHECK_EQ(kvs.size(), 2);
+
+    for (const auto& kv : kvs) {
+      CHECK(kv.key == put_key || kv.key == put_if_absent_key);
+      DINGO_LOG(INFO) << "batch get, key:" << kv.key << ",value:" << kv.value;
+      if (kv.key == put_key) {
+        CHECK_EQ(kv.value, key_values[put_key]);
+      } else if (kv.key == put_if_absent_key) {
+        CHECK_EQ(kv.value, key_values[put_if_absent_key]);
+      }
+    }
+  }
+
+  {
+    // readCommiited should read txn commit data
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status scan = read_commit_txn->Scan("xa00000000", "xz00000000", 0, kvs);
+    DINGO_LOG(INFO) << "read_commit_txn scan:" << scan.ToString();
+    CHECK(scan.ok());
+    if (kvs.size() != 2) {
+      DINGO_LOG(WARNING) << "Internal error, expected kvs size:" << 2 << ", ectual:" << kvs.size();
+    }
+    CHECK_EQ(kvs.size(), 2);
+
+    for (const auto& kv : kvs) {
+      CHECK(kv.key == put_key || kv.key == put_if_absent_key);
+      if (kv.key == put_key) {
+        CHECK_EQ(kv.value, key_values[put_key]);
+      } else if (kv.key == put_if_absent_key) {
+        CHECK_EQ(kv.value, key_values[put_if_absent_key]);
+      }
+    }
+
+    Status precommit = read_commit_txn->PreCommit();
+    DINGO_LOG(INFO) << "read_commit_txn precommit:" << precommit.ToString();
+    Status commit = read_commit_txn->Commit();
+    DINGO_LOG(INFO) << "read_commit_txn commit:" << commit.ToString();
+  }
+
+  OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
+}
+
+void OptimisticTxnScanReadSelf() {
+  std::string put_key = "xb01";
+  std::string put_if_absent_key = "xc01";
+  std::string delete_key = "xd01";
+  std::string put_keyf = "xf01";
+  std::string put_keyl = "xl01";
+
+  std::set<std::string> to_check;
+  to_check.emplace(put_key);
+  to_check.emplace(put_if_absent_key);
+  to_check.emplace(delete_key);
+  to_check.emplace(put_keyf);
+  to_check.emplace(put_keyl);
+
+  auto txn = NewOptimisticTransaction(dingodb::sdk::kSnapshotIsolation);
+  {
+    std::vector<dingodb::sdk::KVPair> kvs;
+    Status got = txn->BatchGet(keys, kvs);
+    DINGO_LOG(INFO) << "batch get:" << got.ToString();
+    CHECK(got.ok());
+    CHECK_EQ(kvs.size(), 0);
+
+    txn->Put(put_key, key_values[put_key]);
+    txn->PutIfAbsent(put_if_absent_key, key_values[put_if_absent_key]);
+    txn->Delete(delete_key);
+    txn->Put(put_keyf, key_values[put_keyf]);
+
+    Status precommit = txn->PreCommit();
+    DINGO_LOG(INFO) << "precommit:" << precommit.ToString();
+    Status commit = txn->Commit();
+    DINGO_LOG(INFO) << "txn commit:" << commit.ToString();
+  }
+
+  auto read_commit_txn = NewOptimisticTransaction(dingodb::sdk::kReadCommitted);
+  {
+    std::string self_put_key = "xb02";
+    std::string self_put_if_absent_key = "xc02";
+    std::string self_delete_key = "xd02";
+
+    to_check.emplace(self_put_key);
+    to_check.emplace(self_put_if_absent_key);
+    to_check.emplace(self_delete_key);
+    {
+      {
+        // overwrite
+        read_commit_txn->Put(put_key, put_key);
+        read_commit_txn->PutIfAbsent(put_if_absent_key, put_if_absent_key);
+        read_commit_txn->Delete(delete_key);
+        read_commit_txn->Delete(put_keyl);
+      }
+
+      read_commit_txn->Put(self_put_key, self_put_key);
+      read_commit_txn->PutIfAbsent(self_put_if_absent_key, self_put_if_absent_key);
+      read_commit_txn->Delete(self_delete_key);
+    }
+
+    {
+      // scan without limit
+      std::vector<dingodb::sdk::KVPair> kvs;
+      Status scan = read_commit_txn->Scan("xa00000000", "xz00000000", 0, kvs);
+      DINGO_LOG(INFO) << "read_commit_txn scan:" << scan.ToString();
+      CHECK(scan.ok());
+      for (const auto& kv : kvs) {
+        DINGO_LOG(INFO) << "read_commit_txn scan key:" << kv.key << ", value:" << kv.value;
+      }
+      if (kvs.size() != 5) {
+        DINGO_LOG(WARNING) << "Internal error, expected kvs size:" << 2 << ", ectual:" << kvs.size();
+      }
+      CHECK_EQ(kvs.size(), 5);
+
+      for (const auto& kv : kvs) {
+        if (kv.key != put_if_absent_key && kv.key != put_keyf) {
+          CHECK_EQ(kv.value, kv.key);
+        } else {
+          CHECK_EQ(kv.value, key_values[kv.key]);
+        }
+        to_check.erase(kv.key);
+      }
+      CHECK_EQ(to_check.size(), 3);
+      CHECK(to_check.find(delete_key) != to_check.cend());
+      CHECK(to_check.find(self_delete_key) != to_check.cend());
+      CHECK(to_check.find(put_keyl) != to_check.cend());
+    }
+
+    {
+      // scan without limit
+      int limit = 2;
+      std::vector<dingodb::sdk::KVPair> kvs;
+      Status scan = read_commit_txn->Scan("xa00000000", "xz00000000", limit, kvs);
+      DINGO_LOG(INFO) << "read_commit_txn scan:" << scan.ToString();
+      CHECK(scan.ok());
+      for (const auto& kv : kvs) {
+        DINGO_LOG(INFO) << "read_commit_txn scan key:" << kv.key << ", value:" << kv.value;
+      }
+      CHECK_EQ(kvs.size(), 2);
+      // TODO: check key prefix is xb
+    }
+
+    Status precommit = read_commit_txn->PreCommit();
+    DINGO_LOG(INFO) << "read_commit_txn precommit:" << precommit.ToString();
+    Status commit = read_commit_txn->Commit();
+    DINGO_LOG(INFO) << "read_commit_txn commit:" << commit.ToString();
+  }
+
+  {
+    std::vector<std::string> keys(to_check.begin(), to_check.end());
+    {
+      auto clean_txn = NewOptimisticTransaction(dingodb::sdk::kSnapshotIsolation);
+      Status s = clean_txn->BatchDelete(keys);
+      CHECK(s.ok());
+
+      Status precommit = clean_txn->PreCommit();
+      DINGO_LOG(INFO) << "clean_txn precommit:" << precommit.ToString();
+      Status commit = clean_txn->Commit();
+      DINGO_LOG(INFO) << "clean_txn commit:" << commit.ToString();
+    }
+
+    {
+      auto clean_check_txn = NewOptimisticTransaction(dingodb::sdk::kReadCommitted);
+      std::vector<dingodb::sdk::KVPair> kvs;
+      Status got = clean_check_txn->BatchGet(keys, kvs);
+      DINGO_LOG(INFO) << "clean_check_txn batch get:" << got.ToString();
+      CHECK(got.ok());
+      CHECK_EQ(kvs.size(), 0);
+    }
+  }
+
+  OptimisticTxnPostClean(dingodb::sdk::kSnapshotIsolation);
+}
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = true;
@@ -552,6 +753,8 @@ int main(int argc, char* argv[]) {
   OptimisticTxnLockConflict();
   OptimisticTxnReadSnapshotAndReadCommiited();
   OptimisticTxnRollback();
+  OptimisticTxnScan();
+  OptimisticTxnScanReadSelf();
 
   PostClean();
 }

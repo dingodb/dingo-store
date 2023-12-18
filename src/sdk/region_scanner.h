@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "sdk/client.h"
@@ -51,6 +52,20 @@ class RegionScanner {
   std::shared_ptr<Region> region;
 };
 
+struct ScannerOptions {
+  const ClientStub& stub;
+  std::shared_ptr<Region> region;
+  std::optional<const TransactionOptions> txn_options;
+  std::optional<int64_t> start_ts;
+
+  explicit ScannerOptions(const ClientStub& p_stub, std::shared_ptr<Region> p_region)
+      : stub(p_stub), region(std::move(p_region)) {}
+
+  explicit ScannerOptions(const ClientStub& p_stub, std::shared_ptr<Region> p_region,
+                          const TransactionOptions p_txn_options, int64_t p_start_ts)
+      : stub(p_stub), region(std::move(p_region)), txn_options(p_txn_options), start_ts(p_start_ts) {}
+};
+
 class RegionScannerFactory {
  public:
   RegionScannerFactory(const RegionScannerFactory&) = delete;
@@ -62,6 +77,13 @@ class RegionScannerFactory {
 
   virtual Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
                                   std::unique_ptr<RegionScanner>& scanner) = 0;
+
+  virtual Status NewRegionScanner(const ScannerOptions& options, std::unique_ptr<RegionScanner>& scanner) {
+    // TODO: check options
+    (void)options;
+    (void)scanner;
+    return Status::NotSupported("no implement");
+  }
 };
 
 }  // namespace sdk

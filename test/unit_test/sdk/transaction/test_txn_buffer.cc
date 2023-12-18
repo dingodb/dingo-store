@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <memory>
+#include <set>
 
 #include "gtest/gtest.h"
 #include "transaction/txn_buffer.h"
@@ -86,7 +87,34 @@ TEST_F(TxnBufferTest, TestSingleOp) {
     std::string pk = txn_buffer->GetPrimaryKey();
     EXPECT_EQ(pk, "a");
   }
+}
 
+TEST_F(TxnBufferTest, Range) {
+  Status tmp;
+  // put
+  tmp = txn_buffer->Put("a", "ra");
+  EXPECT_TRUE(tmp.ok());
+
+  // put if absent
+  tmp = txn_buffer->PutIfAbsent("b", "rb");
+  EXPECT_TRUE(tmp.ok());
+
+  // delete
+  tmp = txn_buffer->Delete("c");
+  EXPECT_TRUE(tmp.ok());
+
+  std::vector<TxnMutation> mutations;
+  tmp = txn_buffer->Range("a", "c", mutations);
+  EXPECT_TRUE(tmp.ok());
+
+  EXPECT_EQ(mutations.size(), 2);
+
+  std::set<std::string> to_check = {"a", "b", "c"};
+  for(const auto& mutation : mutations) {
+    to_check.erase(mutation.key);
+  }
+  EXPECT_EQ(to_check.size(), 1);
+  EXPECT_TRUE(to_check.find("c") != to_check.cend());
 }
 
 }  // namespace sdk
