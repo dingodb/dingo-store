@@ -25,123 +25,14 @@
 #include "gtest/gtest.h"
 #include "helper.h"
 #include "report/allure.h"
+#include "report/web.h"
 
 DEFINE_string(coordinator_url, "file://./coor_list", "coordinator url");
 DEFINE_int32(create_region_wait_time_s, 3, "create region wait time");
 
-DEFINE_bool(generate_allure, false, "generate allure");
-DEFINE_string(allure_report, "./allure_report", "allure report");
-
-static std::string TransformStatus(const testing::TestResult* test_case_result) {
-  if (test_case_result->Passed()) {
-    return "passed";
-  } else if (test_case_result->Failed()) {
-    return "failed";
-  } else if (test_case_result->Skipped()) {
-    return "skipped";
-  } else if (test_case_result->HasFatalFailure()) {
-    return "broken";
-  }
-
-  return "unknown";
-}
-
-static std::string TransformStatus(const testing::TestPartResult& test_case_part_result) {
-  if (test_case_part_result.passed()) {
-    return "passed";
-  } else if (test_case_part_result.failed()) {
-    return "failed";
-  } else if (test_case_part_result.skipped()) {
-    return "skipped";
-  } else if (test_case_part_result.fatally_failed()) {
-    return "broken";
-  }
-
-  return "unknown";
-}
-
-static std::string GetPropertyValue(const std::map<std::string, std::string>& properties, const std::string& key) {
-  auto it = properties.find(key);
-  return it == properties.end() ? "" : it->second;
-}
-
-void GenAllureReport() {
-  LOG(INFO) << fmt::format(
-      "Test summary: test_suite(total({})/success({})/fail({})) test_case(total({})/success({})/fail({})/skip({})) ",
-      testing::UnitTest::GetInstance()->total_test_suite_count(),
-      testing::UnitTest::GetInstance()->successful_test_suite_count(),
-      testing::UnitTest::GetInstance()->failed_test_suite_count(), testing::UnitTest::GetInstance()->total_test_count(),
-      testing::UnitTest::GetInstance()->successful_test_count(), testing::UnitTest::GetInstance()->failed_test_count(),
-      testing::UnitTest::GetInstance()->skipped_test_count());
-
-  std::vector<dingodb::integration_test::allure::TestSuite> allure_test_suites;
-  int total_count = testing::UnitTest::GetInstance()->total_test_suite_count();
-  for (int i = 0; i < total_count; ++i) {
-    dingodb::integration_test::allure::TestSuite allure_test_suite;
-    const auto* test_suite = testing::UnitTest::GetInstance()->GetTestSuite(i);
-    allure_test_suite.uuid = dingodb::UUIDGenerator::GenerateUUID();
-    allure_test_suite.history_id = dingodb::UUIDGenerator::GenerateUUIDV3(test_suite->name());
-    allure_test_suite.name = test_suite->name();
-    allure_test_suite.start = test_suite->start_timestamp();
-    allure_test_suite.stop = test_suite->start_timestamp() + test_suite->elapsed_time();
-
-    int total_case_count = test_suite->total_test_count();
-    for (int j = 0; j < total_case_count; ++j) {
-      dingodb::integration_test::allure::TestCase allure_test_case;
-      const auto* test_case_info = test_suite->GetTestInfo(j);
-      const auto* test_case_result = test_case_info->result();
-
-      // Generate property map
-      std::map<std::string, std::string> properties;
-      int total_property_count = test_case_result->test_property_count();
-      for (int k = 0; k < total_property_count; ++k) {
-        const auto& property = test_case_result->GetTestProperty(k);
-        properties[property.key()] = property.value();
-      }
-
-      allure_test_case.uuid = dingodb::UUIDGenerator::GenerateUUID();
-      allure_test_case.history_id = dingodb::UUIDGenerator::GenerateUUIDV3(test_case_info->name());
-      allure_test_case.test_case_id = dingodb::UUIDGenerator::GenerateUUIDV3(test_case_info->name());
-      allure_test_case.full_name = fmt::format("{}.{}", test_suite->name(), test_case_info->name());
-      allure_test_case.name = test_case_info->name();
-      allure_test_case.status = TransformStatus(test_case_result);
-      allure_test_case.start = test_case_result->start_timestamp();
-      allure_test_case.stop = test_case_result->start_timestamp() + test_case_result->elapsed_time();
-      allure_test_case.labels = {
-          {"framework", "gtest"},
-          {"language", "c++"},
-          {"suite", test_suite->name()},
-          {"subSuite", test_case_info->name()},
-          {"testMethod", test_case_info->name()},
-      };
-      allure_test_case.description = GetPropertyValue(properties, "description");
-
-      int total_part_count = test_case_result->total_part_count();
-      for (int k = 0; k < total_part_count; ++k) {
-        dingodb::integration_test::allure::Step allure_test_step;
-        const auto& test_case_part_result = test_case_result->GetTestPartResult(k);
-        allure_test_step.name = fmt::format("{}.{}", test_case_info->name(), test_case_part_result.line_number());
-        allure_test_step.stage = "finished";
-        allure_test_step.status = TransformStatus(test_case_part_result);
-        allure_test_step.status_details.known = true;
-        allure_test_step.status_details.message = test_case_part_result.message();
-        allure_test_step.status_details.trace = test_case_part_result.summary();
-        allure_test_case.steps.push_back(allure_test_step);
-      }
-
-      allure_test_suite.test_cases.push_back(allure_test_case);
-    }
-
-    allure_test_suites.push_back(allure_test_suite);
-  }
-
-  dingodb::Helper::RemoveAllFileOrDirectory(FLAGS_allure_report);
-  dingodb::Helper::CreateDirectory(FLAGS_allure_report);
-
-  dingodb::integration_test::allure::Allure allure(allure_test_suites);
-  allure.GenReport(FLAGS_allure_report, dingodb::integration_test::Helper::TransformVersionInfo(
-                                            dingodb::integration_test::Environment::GetInstance().VersionInfo()));
-}
+DEFINE_string(allure_report, "", "allure report directory");
+DEFINE_string(allure_url, "", "jenkins allure url");
+DEFINE_string(web_report, "", "web report directory");
 
 int main(int argc, char* argv[]) {
   testing::AddGlobalTestEnvironment(&dingodb::integration_test::Environment::GetInstance());
@@ -150,8 +41,18 @@ int main(int argc, char* argv[]) {
 
   int ret = RUN_ALL_TESTS();
 
-  if (FLAGS_generate_allure) {
-    GenAllureReport();
+  // Generate allure report.
+  if (!FLAGS_allure_report.empty()) {
+    dingodb::integration_test::allure::Allure::GenReport(
+        testing::UnitTest::GetInstance(), dingodb::integration_test::Environment::GetInstance().VersionInfo(),
+        FLAGS_allure_report);
+  }
+
+  // Generate web report.
+  if (!FLAGS_web_report.empty()) {
+    dingodb::integration_test::web::Web::GenReport(testing::UnitTest::GetInstance(),
+                                                   dingodb::integration_test::Environment::GetInstance().VersionInfo(),
+                                                   FLAGS_allure_url, FLAGS_web_report);
   }
 
   return ret;
