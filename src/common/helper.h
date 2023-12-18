@@ -220,6 +220,9 @@ class Helper {
   static std::vector<std::string> GetColumnFamilyNamesByRole();
   static std::vector<std::string> GetColumnFamilyNamesExecptMetaByRole();
   static std::vector<std::string> GetColumnFamilyNames(const std::string& key);
+  static void GetColumnFamilyNames(const std::string& key, std::vector<std::string>& raw_cf_names,
+                                   std::vector<std::string>& txn_cf_names);
+  static bool IsTxnColumnFamilyName(const std::string& cf_name);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
@@ -311,6 +314,7 @@ class Helper {
   static butil::Status DecodeTxnKey(const std::string_view& txn_key, std::string& key, int64_t& ts);
   // for txn, truncate ts
   static std::string TruncateTxnKeyTs(const std::string& txn_key);
+  static std::string GetUserKeyFromTxnKey(const std::string& txn_key);
 
   // Upper string
   static std::string ToUpper(const std::string& str);

@@ -28,6 +28,7 @@
 #include "engine/raw_engine.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
+#include "proto/common.pb.h"
 
 namespace dingodb {
 
@@ -85,7 +86,8 @@ class SplitChecker {
   };
 
   // Calculate region split key.
-  virtual std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) = 0;
+  virtual std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                               const std::vector<std::string>& cf_names, uint32_t& count) = 0;
 
  private:
   Policy policy_;
@@ -102,7 +104,8 @@ class HalfSplitChecker : public SplitChecker {
   ~HalfSplitChecker() override = default;
 
   // base physics key, contain key of multi version.
-  std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) override;
+  std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                       const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
   // Split region when exceed the split_threshold_size.
@@ -123,7 +126,8 @@ class SizeSplitChecker : public SplitChecker {
   ~SizeSplitChecker() override = default;
 
   // base physics key, contain key of multi version.
-  std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) override;
+  std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                       const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
   // Split when region exceed the split_size.
@@ -144,7 +148,8 @@ class KeysSplitChecker : public SplitChecker {
   ~KeysSplitChecker() override = default;
 
   // base logic key, ignore key of multi version.
-  std::string SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names, uint32_t& count) override;
+  std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                       const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
   // Split when region key number exceed split_key_number.

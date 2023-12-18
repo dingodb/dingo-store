@@ -259,16 +259,16 @@ class StoreRegionMetrics : public TransformKvAble {
   store::RegionMetricsPtr GetMetrics(int64_t region_id);
   std::vector<store::RegionMetricsPtr> GetAllMetrics();
 
-  std::string GetRegionMinKey(store::RegionPtr region);
-  std::string GetRegionMaxKey(store::RegionPtr region);
+  static std::string GetRegionMinKey(store::RegionPtr region);
+  static std::string GetRegionMaxKey(store::RegionPtr region);
 
  private:
   std::shared_ptr<pb::common::KeyValue> TransformToKv(std::any obj) override;
   void TransformFromKv(const std::vector<pb::common::KeyValue>& kvs) override;
 
-  // Todo: later optimize
-  int64_t GetRegionKeyCount(store::RegionPtr region);
-  std::vector<std::pair<int64_t, int64_t>> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
+  // TODO: later optimize
+  static int64_t GetRegionKeyCount(store::RegionPtr region);
+  static std::vector<std::pair<int64_t, int64_t>> GetRegionApproximateSize(std::vector<store::RegionPtr> regions);
 
   // Read meta data from persistence storage.
   std::shared_ptr<MetaReader> meta_reader_;

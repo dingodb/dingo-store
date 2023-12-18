@@ -261,10 +261,30 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
 
   auto raw_engine = Server::GetInstance().GetRawEngine(regions[0]->GetRawEngineType());
   auto column_family_names = Helper::GetColumnFamilyNamesExecptMetaByRole();
-  for (const auto& name : column_family_names) {
-    auto sizes = raw_engine->GetApproximateSizes(name, ranges);
-    for (int i = 0; i < sizes.size(); ++i) {
-      region_sizes[i].second += sizes[i];
+
+  // generate txn range
+  std::vector<pb::common::Range> txn_ranges;
+  txn_ranges.reserve(ranges.size());
+  for (const auto& range : ranges) {
+    pb::common::Range txn_range;
+    txn_range.set_start_key(Helper::PaddingUserKey(range.start_key()));
+    txn_range.set_end_key(Helper::PaddingUserKey(range.end_key()));
+    txn_ranges.push_back(txn_range);
+  }
+
+  // for raw cf, use region's range to get approximate size
+  // for txn cf, use txn range to get approximate size
+  for (const auto& cf_name : column_family_names) {
+    if (Helper::IsTxnColumnFamilyName(cf_name)) {
+      auto sizes = raw_engine->GetApproximateSizes(cf_name, txn_ranges);
+      for (int i = 0; i < sizes.size(); ++i) {
+        region_sizes[i].second += sizes[i];
+      }
+    } else {
+      auto sizes = raw_engine->GetApproximateSizes(cf_name, ranges);
+      for (int i = 0; i < sizes.size(); ++i) {
+        region_sizes[i].second += sizes[i];
+      }
     }
   }
 

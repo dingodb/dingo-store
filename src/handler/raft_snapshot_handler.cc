@@ -257,11 +257,30 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   }
 
   // Delete old region datas
-  status = engine_->Writer()->KvDeleteRange(Helper::GetColumnFamilyNames(region->Range().start_key()), region->Range());
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data failed, error: {}",
-                                    region->Id(), status.error_str());
-    return status;
+  std::vector<std::string> raw_cf_names;
+  std::vector<std::string> txn_cf_names;
+
+  Helper::GetColumnFamilyNames(region->Range().start_key(), raw_cf_names, txn_cf_names);
+
+  if (!raw_cf_names.empty()) {
+    status = engine_->Writer()->KvDeleteRange(raw_cf_names, region->Range());
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data raw failed, error: {}",
+                                      region->Id(), status.error_str());
+      return status;
+    }
+  }
+
+  if (!txn_cf_names.empty()) {
+    pb::common::Range txn_range;
+    txn_range.set_start_key(Helper::PaddingUserKey(region->Range().start_key()));
+    txn_range.set_start_key(Helper::PaddingUserKey(region->Range().end_key()));
+    status = engine_->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data txn failed, error: {}",
+                                      region->Id(), status.error_str());
+      return status;
+    }
   }
 
   // update store_state_machine's applied_index from snapshot meta.

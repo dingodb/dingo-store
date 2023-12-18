@@ -703,8 +703,15 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
     iter_context->region_id = region_id_;
     iter_context->cf_name = cf_name;
     iter_context->reading = false;
-    iter_context->lower_bound = snapshot_context->range.start_key();
-    iter_context->upper_bound = snapshot_context->range.end_key();
+
+    if (Helper::IsTxnColumnFamilyName(cf_name)) {
+      iter_context->lower_bound = Helper::PaddingUserKey(snapshot_context->range.start_key());
+      iter_context->upper_bound = Helper::PaddingUserKey(snapshot_context->range.end_key());
+    } else {
+      iter_context->lower_bound = snapshot_context->range.start_key();
+      iter_context->upper_bound = snapshot_context->range.end_key();
+    }
+
     iter_context->applied_index = snapshot_context->applied_index;
     iter_context->snapshot_context = snapshot_context.get();
 
@@ -820,7 +827,9 @@ bool DingoFileSystemAdaptor::open_snapshot(const std::string& path) {
   DINGO_LOG(INFO) << "region_id: " << region_id_ << " open snapshot path: " << path
                   << ", applied_term: " << snapshot_context_env_map_[path].snapshot_context->applied_term
                   << ", applied_index: " << snapshot_context_env_map_[path].snapshot_context->applied_index
-                  << ", range: " << snapshot_context_env_map_[path].snapshot_context->range.ShortDebugString()
+                  << ", range: ["
+                  << Helper::StringToHex(snapshot_context_env_map_[path].snapshot_context->range.start_key()) << ", "
+                  << Helper::StringToHex(snapshot_context_env_map_[path].snapshot_context->range.end_key()) << "]"
                   << ", epoch: " << snapshot_context_env_map_[path].snapshot_context->region_epoch.ShortDebugString();
 
   DINGO_LOG(WARNING) << "region_id: " << region_id_ << " open snapshot path: " << path << ", UnockRegionRaft";
