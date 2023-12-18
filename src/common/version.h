@@ -36,6 +36,18 @@ namespace dingodb {
 #define GIT_TAG_NAME "v0.8.0"
 #endif
 
+#ifndef GIT_COMMIT_USER
+#define GIT_COMMIT_USER "unknown"
+#endif
+
+#ifndef GIT_COMMIT_MAIL
+#define GIT_COMMIT_MAIL "unknown"
+#endif
+
+#ifndef GIT_COMMIT_TIME
+#define GIT_COMMIT_TIME "unknown"
+#endif
+
 #ifndef DINGO_BUILD_TYPE
 #define DINGO_BUILD_TYPE "unknown"
 #endif

@@ -85,6 +85,9 @@ class Environment : public testing::Environment {
   static void PrintVersionInfo(const pb::common::VersionInfo& version_info) {
     LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_commit_hash", version_info.git_commit_hash());
     LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_tag_name", version_info.git_tag_name());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_commit_user", version_info.git_commit_user());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_commit_mail", version_info.git_commit_mail());
+    LOG(INFO) << fmt::format("{:<24}: {:>64}", "git_commit_time", version_info.git_commit_time());
     LOG(INFO) << fmt::format("{:<24}: {:>64}", "major_version", version_info.major_version());
     LOG(INFO) << fmt::format("{:<24}: {:>64}", "minor_version", version_info.minor_version());
     LOG(INFO) << fmt::format("{:<24}: {:>64}", "dingo_build_type", version_info.dingo_build_type());

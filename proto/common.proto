@@ -850,6 +850,9 @@ message ResponseInfo {
 message VersionInfo {
   string git_commit_hash = 10;
   string git_tag_name = 20;
+  string git_commit_user = 21;
+  string git_commit_mail = 22;
+  string git_commit_time = 23;
   string major_version = 30;
   string minor_version = 40;
   string dingo_build_type = 50;
