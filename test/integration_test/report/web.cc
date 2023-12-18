@@ -41,13 +41,15 @@ std::string Web::GenVersionContent(const pb::common::VersionInfo& version_info) 
 
   content += "<h2>Version Information:</h2>";
   content += "<ul>";
-  content += fmt::format("<li>{:<24}: {:>64}</li>", "git_commit_hash", version_info.git_commit_hash());
-  content += fmt::format("<li>{:<24}: {:>64}</li>", "git_tag_name", version_info.git_tag_name());
-  content += fmt::format("<li>{:<24}: {:>64}</li>", "major_version", version_info.major_version());
-  content += fmt::format("<li>{:<24}: {:>64}</li>", "minor_version", version_info.minor_version());
-  content += fmt::format("<li>{:<24}: {:>64}</li>", "dingo_build_type", version_info.dingo_build_type());
-  content +=
-      fmt::format("<li>{:<24}: {:>64}</li>", "dingo_contrib_build_type", version_info.dingo_contrib_build_type());
+  content += fmt::format("<li>{}: {}</li>", "commit_hash", version_info.git_commit_hash());
+  content += fmt::format("<li>{}: {}</li>", "commit_user", version_info.git_commit_user());
+  content += fmt::format("<li>{}: {}</li>", "commit_mail", version_info.git_commit_mail());
+  content += fmt::format("<li>{}: {}</li>", "commit_time", version_info.git_commit_time());
+  content += fmt::format("<li>{}: {}</li>", "tag_name", version_info.git_tag_name());
+  content += fmt::format("<li>{}: {}</li>", "major_version", version_info.major_version());
+  content += fmt::format("<li>{}: {}</li>", "minor_version", version_info.minor_version());
+  content += fmt::format("<li>{}: {}</li>", "build_type", version_info.dingo_build_type());
+  content += fmt::format("<li>{:<24}: {:>64}</li>", "contrib_build_type", version_info.dingo_contrib_build_type());
   content +=
       fmt::format("<li>flags: use_mkl({}) use_openblas({}) use_tcmalloc({}) use_profiler({}) use_sanitizer({})</li>",
                   (version_info.use_mkl() ? "true" : "false"), (version_info.use_openblas() ? "true" : "false"),

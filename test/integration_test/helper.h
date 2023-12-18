@@ -90,6 +90,9 @@ class Helper {
     std::vector<std::pair<std::string, std::string>> result = {
         std::make_pair("git_commit_hash", version_info.git_commit_hash()),
         std::make_pair("git_tag_name", version_info.git_tag_name()),
+        std::make_pair("git_commit_user", version_info.git_commit_user()),
+        std::make_pair("git_commit_mail", version_info.git_commit_mail()),
+        std::make_pair("git_commit_time", version_info.git_commit_time()),
         std::make_pair("major_version", version_info.major_version()),
         std::make_pair("minor_version", version_info.minor_version()),
         std::make_pair("dingo_build_type", version_info.dingo_build_type()),

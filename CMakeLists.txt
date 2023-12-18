@@ -413,6 +413,24 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
+execute_process(
+    COMMAND git log --pretty=format:%an -1
+    OUTPUT_VARIABLE GIT_COMMIT_USER
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+execute_process(
+    COMMAND git log --pretty=format:%ae -1
+    OUTPUT_VARIABLE GIT_COMMIT_MAIL
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+execute_process(
+    COMMAND git log --pretty=format:%ai -1
+    OUTPUT_VARIABLE GIT_COMMIT_TIME
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
 if (NOT GIT_VERSION)
     set(GIT_VERSION "unknown")
 endif()
@@ -424,6 +442,9 @@ endif()
 add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT=ON)
 add_definitions(-DGIT_VERSION="${GIT_VERSION}")
 add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
+add_definitions(-DGIT_COMMIT_USER="${GIT_COMMIT_USER}")
+add_definitions(-DGIT_COMMIT_MAIL="${GIT_COMMIT_MAIL}")
+add_definitions(-DGIT_COMMIT_TIME="${GIT_COMMIT_TIME}")
 add_definitions(-DDINGO_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 add_definitions(-DDINGO_CONTRIB_BUILD_TYPE="${THIRD_PARTY_BUILD_TYPE}")
 

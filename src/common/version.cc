@@ -23,6 +23,9 @@ namespace dingodb {
 
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo git tag version");
+DEFINE_string(git_commit_user, GIT_COMMIT_USER, "current dingo git commit user");
+DEFINE_string(git_commit_mail, GIT_COMMIT_MAIL, "current dingo git commit mail");
+DEFINE_string(git_commit_time, GIT_COMMIT_TIME, "current dingo git commit time");
 DEFINE_string(major_version, MAJOR_VERSION, "current dingo major version");
 DEFINE_string(minor_version, MINOR_VERSION, "current dingo mino version");
 DEFINE_string(dingo_build_type, DINGO_BUILD_TYPE, "current dingo build type");
@@ -93,6 +96,9 @@ pb::common::VersionInfo GetVersionInfo() {
   pb::common::VersionInfo version_info;
   version_info.set_git_commit_hash(FLAGS_git_commit_hash);
   version_info.set_git_tag_name(FLAGS_git_tag_name);
+  version_info.set_git_commit_user(FLAGS_git_commit_user);
+  version_info.set_git_commit_mail(FLAGS_git_commit_mail);
+  version_info.set_git_commit_time(FLAGS_git_commit_time);
   version_info.set_major_version(FLAGS_major_version);
   version_info.set_minor_version(FLAGS_minor_version);
   version_info.set_dingo_build_type(FLAGS_dingo_build_type);
