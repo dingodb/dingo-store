@@ -20,6 +20,9 @@
 #include <string>
 #include <vector>
 
+#include "gtest/gtest.h"
+#include "proto/common.pb.h"
+
 namespace dingodb {
 
 namespace integration_test {
@@ -97,22 +100,19 @@ struct TestSuite {
 
 class Allure {
  public:
-  Allure(std::vector<TestSuite> test_suites) : test_suites_(test_suites) {}
+  Allure() = default;
   ~Allure() = default;
 
-  void GenReport(const std::string& directory_path, const std::vector<std::pair<std::string, std::string>>& properties);
+  static void GenReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
+                        const std::string& directory_path);
 
  private:
-  void GenTestResultFile(const std::string& directory_path);
-  void GenContainerFile(const std::string& directory_path);
-  void GenCategoriesFile(const std::string& directory_path);
-  void GenEnvironmentFile(const std::string& directory_path,
-                          const std::vector<std::pair<std::string, std::string>>& properties);
-  void GenHistoryFile(const std::string& directory_path);
-
-  static bool SaveFile(const std::string& filepath, const std::string& data);
-
-  std::vector<TestSuite> test_suites_;
+  static void GenTestResultFile(std::vector<TestSuite>& test_suites, const std::string& directory_path);
+  static void GenContainerFile(std::vector<TestSuite>& test_suites, const std::string& directory_path);
+  static void GenCategoriesFile(std::vector<TestSuite>& test_suites, const std::string& directory_path);
+  static void GenEnvironmentFile(std::vector<TestSuite>& test_suites, const std::string& directory_path,
+                                 const std::vector<std::pair<std::string, std::string>>& properties);
+  static void GenHistoryFile(std::vector<TestSuite>& test_suites, const std::string& directory_path);
 };
 
 }  // namespace allure

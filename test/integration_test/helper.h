@@ -16,6 +16,7 @@
 #define DINGODB_INTEGRATION_TEST_HELPER_
 
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -112,6 +113,18 @@ class Helper {
     }
 
     return false;
+  }
+
+  static bool SaveFile(const std::string& filepath, const std::string& data) {
+    std::ofstream file(filepath);
+    if (!file.is_open()) {
+      return false;
+    }
+
+    file << data;
+    file.close();
+
+    return true;
   }
 };
 
