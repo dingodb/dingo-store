@@ -97,10 +97,10 @@ void MergedIterator::Next(IteratorPtr iter, int iter_pos) {
 }
 
 // base physics key, contain key of multi version.
-std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names,
-                                       uint32_t& count) {
+std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                                       const std::vector<std::string>& cf_names, uint32_t& count) {
   MergedIterator iter(raw_engine_, cf_names, region->Range().end_key());
-  iter.Seek(region->Range().start_key());
+  iter.Seek(physical_range.start_key());
 
   int64_t size = 0;
   int64_t chunk_size = 0;
@@ -129,7 +129,8 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const std::vecto
 
   // Is transaction, truncate key ts.
   if (Helper::IsClientTxn(region->Range().start_key()) || Helper::IsExecutorTxn(region->Range().start_key())) {
-    split_key = Helper::TruncateTxnKeyTs(split_key);
+    // split_key = Helper::TruncateTxnKeyTs(split_key);
+    split_key = Helper::GetUserKeyFromTxnKey(split_key);
   }
 
   DINGO_LOG(INFO) << fmt::format(
@@ -140,10 +141,10 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const std::vecto
 }
 
 // base physics key, contain key of multi version.
-std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names,
-                                       uint32_t& count) {
+std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                                       const std::vector<std::string>& cf_names, uint32_t& count) {
   MergedIterator iter(raw_engine_, cf_names, region->Range().end_key());
-  iter.Seek(region->Range().start_key());
+  iter.Seek(physical_range.start_key());
 
   int64_t size = 0;
   std::string prev_key;
@@ -166,7 +167,8 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const std::vecto
 
   // Is transaction, truncate key ts.
   if (Helper::IsClientTxn(region->Range().start_key()) || Helper::IsExecutorTxn(region->Range().start_key())) {
-    split_key = Helper::TruncateTxnKeyTs(split_key);
+    // split_key = Helper::TruncateTxnKeyTs(split_key);
+    split_key = Helper::GetUserKeyFromTxnKey(split_key);
   }
 
   DINGO_LOG(INFO) << fmt::format(
@@ -177,10 +179,10 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const std::vecto
 }
 
 // base logic key, ignore key of multi version.
-std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const std::vector<std::string>& cf_names,
-                                       uint32_t& count) {
+std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+                                       const std::vector<std::string>& cf_names, uint32_t& count) {
   MergedIterator iter(raw_engine_, cf_names, region->Range().end_key());
-  iter.Seek(region->Range().start_key());
+  iter.Seek(physical_range.start_key());
 
   int64_t size = 0;
   int64_t split_key_count = 0;
@@ -205,7 +207,8 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const std::vecto
 
   // Is transaction, truncate key ts.
   if (Helper::IsClientTxn(region->Range().start_key()) || Helper::IsExecutorTxn(region->Range().start_key())) {
-    split_key = Helper::TruncateTxnKeyTs(split_key);
+    // split_key = Helper::TruncateTxnKeyTs(split_key);
+    split_key = Helper::GetUserKeyFromTxnKey(split_key);
   }
 
   DINGO_LOG(INFO) << fmt::format(
@@ -251,11 +254,25 @@ void SplitCheckTask::SplitCheck() {
 
   int64_t start_time = Helper::TimestampMs();
   auto epoch = region_->Epoch();
+  uint32_t key_count = 0;
+  std::string split_key{};
+
+  std::vector<std::string> raw_cf_names;
+  std::vector<std::string> txn_cf_names;
+
+  Helper::GetColumnFamilyNames(region_->Range().start_key(), raw_cf_names, txn_cf_names);
 
   // Get split key.
-  uint32_t key_count = 0;
-  std::string split_key =
-      split_checker_->SplitKey(region_, Helper::GetColumnFamilyNames(region_->Range().start_key()), key_count);
+  // for txn region, we need to translate the user key to padding key.
+  // for raw region, we use the user key directly.
+  if (!txn_cf_names.empty()) {
+    pb::common::Range physical_range;
+    physical_range.set_start_key(Helper::PaddingUserKey(region_->Range().start_key()));
+    physical_range.set_end_key(Helper::PaddingUserKey(region_->Range().end_key()));
+    split_key = split_checker_->SplitKey(region_, physical_range, txn_cf_names, key_count);
+  } else {
+    split_key = split_checker_->SplitKey(region_, region_->Range(), raw_cf_names, key_count);
+  }
 
   // Update region key count metrics.
   if (region_metrics_ != nullptr && key_count > 0) {

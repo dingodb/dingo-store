@@ -869,6 +869,44 @@ std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   return {};
 }
 
+void Helper::GetColumnFamilyNames(const std::string& key, std::vector<std::string>& raw_cf_names,
+                                  std::vector<std::string>& txn_cf_names) {
+  if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
+    raw_cf_names.push_back(Constant::kStoreDataCF);
+    return;
+  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+    if (IsExecutorTxn(key) || IsClientTxn(key)) {
+      txn_cf_names.push_back(Constant::kTxnDataCF);
+      txn_cf_names.push_back(Constant::kTxnLockCF);
+      txn_cf_names.push_back(Constant::kTxnWriteCF);
+      return;
+    } else {
+      raw_cf_names.push_back(Constant::kStoreDataCF);
+      return;
+    }
+  } else if (GetRole() == pb::common::ClusterRole::INDEX) {
+    if (IsExecutorTxn(key) || IsClientTxn(key)) {
+      txn_cf_names.push_back(Constant::kTxnDataCF);
+      txn_cf_names.push_back(Constant::kTxnLockCF);
+      txn_cf_names.push_back(Constant::kTxnWriteCF);
+
+      raw_cf_names.push_back(Constant::kVectorDataCF);
+      raw_cf_names.push_back(Constant::kVectorScalarCF);
+      raw_cf_names.push_back(Constant::kVectorTableCF);
+
+      return;
+    } else {
+      raw_cf_names.push_back(Constant::kVectorDataCF);
+      raw_cf_names.push_back(Constant::kVectorScalarCF);
+      raw_cf_names.push_back(Constant::kVectorTableCF);
+    }
+  }
+}
+
+bool Helper::IsTxnColumnFamilyName(const std::string& cf_name) {
+  return cf_name == Constant::kTxnDataCF || cf_name == Constant::kTxnLockCF || cf_name == Constant::kTxnWriteCF;
+}
+
 int64_t Helper::TimestampNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();
@@ -1512,8 +1550,8 @@ std::string Helper::UnpaddingUserKey(const std::string& padding_key) {
 
 // for txn, encode data/write key
 std::string Helper::EncodeTxnKey(const std::string& key, int64_t ts) {
-  // std::string padding_key = Helper::PaddingUserKey(key);
-  const std::string& padding_key = key;
+  std::string padding_key = Helper::PaddingUserKey(key);
+  // const std::string& padding_key = key;
   Buf buf(padding_key.length() + 8);
   buf.Write(padding_key);
   buf.WriteLongWithNegation(ts);
@@ -1522,8 +1560,8 @@ std::string Helper::EncodeTxnKey(const std::string& key, int64_t ts) {
 }
 
 std::string Helper::EncodeTxnKey(const std::string_view& key, int64_t ts) {
-  // std::string padding_key = Helper::PaddingUserKey(std::string(key));
-  std::string padding_key = std::string(key);
+  std::string padding_key = Helper::PaddingUserKey(std::string(key));
+  // std::string padding_key = std::string(key);
   Buf buf(padding_key.length() + 8);
   buf.Write(padding_key);
   buf.WriteLongWithNegation(ts);
@@ -1538,8 +1576,8 @@ butil::Status Helper::DecodeTxnKey(const std::string& txn_key, std::string& key,
   }
 
   auto padding_key = txn_key.substr(0, txn_key.length() - 8);
-  // key = Helper::UnpaddingUserKey(padding_key);
-  key = padding_key;
+  key = Helper::UnpaddingUserKey(padding_key);
+  // key = padding_key;
   if (key.empty()) {
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, padding_key is empty");
   }
@@ -1558,8 +1596,8 @@ butil::Status Helper::DecodeTxnKey(const std::string_view& txn_key, std::string&
   }
 
   auto padding_key = txn_key.substr(0, txn_key.length() - 8);
-  // key = Helper::UnpaddingUserKey(std::string(padding_key));
-  key = std::string(padding_key);
+  key = Helper::UnpaddingUserKey(std::string(padding_key));
+  // key = std::string(padding_key);
   if (key.empty()) {
     return butil::Status(pb::error::EINTERNAL, "DecodeTxnKey failed, padding_key is empty");
   }
@@ -1577,6 +1615,18 @@ std::string Helper::TruncateTxnKeyTs(const std::string& txn_key) {
     return txn_key;
   }
   return txn_key.substr(0, txn_key.size() - 8);
+}
+
+std::string Helper::GetUserKeyFromTxnKey(const std::string& txn_key) {
+  std::string user_key;
+  int64_t ts = 0;
+
+  auto status = DecodeTxnKey(txn_key, user_key, ts);
+  if (!status.ok()) {
+    return "";
+  }
+
+  return user_key;
 }
 
 std::string Helper::ToUpper(const std::string& str) {
