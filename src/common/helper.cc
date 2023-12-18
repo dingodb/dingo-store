@@ -270,8 +270,17 @@ butil::EndPoint Helper::StrToEndPoint(const std::string str) {
 
   butil::EndPoint endpoint;
   if (strs.size() >= 2) {
-    butil::str2endpoint(strs[0].c_str(), std::stoi(strs[1]), &endpoint);
+    try {
+      butil::str2endpoint(strs[0].c_str(), std::stoi(strs[1]), &endpoint);
+    } catch (const std::invalid_argument& ia) {
+      DINGO_LOG(ERROR) << "StrToEndPoint error Irnvalid argument: " << ia.what() << '\n';
+      return endpoint;
+    } catch (const std::out_of_range& oor) {
+      DINGO_LOG(ERROR) << "StrToEndPoint error Out of Range error: " << oor.what() << '\n';
+      return endpoint;
+    }
   }
+
   return endpoint;
 }
 
@@ -416,14 +425,24 @@ std::string Helper::StringToHex(const std::string_view& str) {
 
 std::string Helper::HexToString(const std::string& hex_str) {
   std::string result;
-  // The hex_string must be of even length
-  for (size_t i = 0; i < hex_str.length(); i += 2) {
-    std::string hex_byte = hex_str.substr(i, 2);
-    // Convert the hex byte to an integer
-    int byte_value = std::stoi(hex_byte, nullptr, 16);
-    // Cast the integer to a char and append it to the result string
-    result += static_cast<unsigned char>(byte_value);
+
+  try {
+    // The hex_string must be of even length
+    for (size_t i = 0; i < hex_str.length(); i += 2) {
+      std::string hex_byte = hex_str.substr(i, 2);
+      // Convert the hex byte to an integer
+      int byte_value = std::stoi(hex_byte, nullptr, 16);
+      // Cast the integer to a char and append it to the result string
+      result += static_cast<unsigned char>(byte_value);
+    }
+  } catch (const std::invalid_argument& ia) {
+    DINGO_LOG(ERROR) << "HexToString error Irnvalid argument: " << ia.what() << '\n';
+    return "";
+  } catch (const std::out_of_range& oor) {
+    DINGO_LOG(ERROR) << "HexToString error Out of Range error: " << oor.what() << '\n';
+    return "";
   }
+
   return result;
 }
 

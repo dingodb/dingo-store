@@ -1304,19 +1304,19 @@ void SendTxnDump(int64_t region_id) {
   DINGO_LOG(INFO) << "write_size: " << response.write_keys_size();
 
   for (int i = 0; i < response.data_keys_size(); i++) {
-    DINGO_LOG(INFO) << "data[" << i << "] hex_key: [" << HexToString(response.data_keys(i).key()) << "] key: ["
+    DINGO_LOG(INFO) << "data[" << i << "] hex_key: [" << StringToHex(response.data_keys(i).key()) << "] key: ["
                     << response.data_keys(i).ShortDebugString() << "], value: ["
                     << response.data_values(i).ShortDebugString() << "]";
   }
 
   for (int i = 0; i < response.lock_keys_size(); i++) {
-    DINGO_LOG(INFO) << "lock[" << i << "] hex_key: [" << HexToString(response.lock_keys(i).key()) << "] key: ["
+    DINGO_LOG(INFO) << "lock[" << i << "] hex_key: [" << StringToHex(response.lock_keys(i).key()) << "] key: ["
                     << response.lock_keys(i).ShortDebugString() << "], value: ["
                     << response.lock_values(i).ShortDebugString() << "]";
   }
 
   for (int i = 0; i < response.write_keys_size(); i++) {
-    DINGO_LOG(INFO) << "write[" << i << "] hex_key: [" << HexToString(response.write_keys(i).key()) << "] key: ["
+    DINGO_LOG(INFO) << "write[" << i << "] hex_key: [" << StringToHex(response.write_keys(i).key()) << "] key: ["
                     << response.write_keys(i).ShortDebugString() << "], value: ["
                     << response.write_values(i).ShortDebugString() << "]";
   }
