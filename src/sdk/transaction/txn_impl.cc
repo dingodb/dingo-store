@@ -14,9 +14,11 @@
 
 #include "sdk/transaction/txn_impl.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "common/logging.h"
@@ -321,6 +323,149 @@ Status Transaction::TxnImpl::Delete(const std::string& key) { return buffer_->De
 
 Status Transaction::TxnImpl::BatchDelete(const std::vector<std::string>& keys) { return buffer_->BatchDelete(keys); }
 
+Status Transaction::TxnImpl::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit,
+                                  std::vector<KVPair>& kvs) {
+  if (start_key.empty() || end_key.empty()) {
+    return Status::InvalidArgument("start_key and end_key must not empty, check params");
+  }
+
+  if (start_key >= end_key) {
+    return Status::InvalidArgument("end_key must greater than start_key, check params");
+  }
+
+  auto meta_cache = stub_.GetMetaCache();
+  {
+    // precheck: return not found if no region in [start, end_key)
+    std::shared_ptr<Region> region;
+    Status ret = meta_cache->LookupRegionBetweenRange(start_key, end_key, region);
+    if (!ret.IsOK()) {
+      if (ret.IsNotFound()) {
+        DINGO_LOG(WARNING) << fmt::format("region not found between [{},{}), no need retry, status:{}", start_key,
+                                          end_key, ret.ToString());
+      } else {
+        DINGO_LOG(WARNING) << fmt::format("lookup region fail between [{},{}), need retry, status:{}", start_key,
+                                          end_key, ret.ToString());
+      }
+      return ret;
+    }
+  }
+
+  std::vector<TxnMutation> range_mutations;
+  CHECK(buffer_->Range(start_key, end_key, range_mutations).ok());
+
+  uint64_t redundant_limit = limit;
+  if (redundant_limit != 0) {
+    uint64_t delete_count = 0;
+    for (const auto& mutaion : range_mutations) {
+      if (mutaion.type == TxnMutationType::kDelete) {
+        delete_count++;
+      }
+    }
+    redundant_limit = limit + delete_count;
+  }
+
+  std::string next_start = start_key;
+  std::map<std::string, std::string> tmp_kvs;
+
+  DINGO_LOG(INFO) << fmt::format("txn scan start between [{},{}), next_start:{}, limit:{}, redundant_limit:{}",
+                                 start_key, end_key, next_start, limit, redundant_limit);
+
+  while (next_start < end_key) {
+    std::shared_ptr<Region> region;
+    Status ret = meta_cache->LookupRegionBetweenRange(next_start, end_key, region);
+
+    if (ret.IsNotFound()) {
+      DINGO_LOG(INFO) << fmt::format("Break scan because region not found  between [{},{}), start_key:{} status:{}",
+                                     next_start, end_key, start_key, ret.ToString());
+      break;
+    }
+
+    if (!ret.IsOK()) {
+      DINGO_LOG(WARNING) << fmt::format("region look fail between [{},{}), start_key:{} status:{}", next_start, end_key,
+                                        start_key, ret.ToString());
+      return ret;
+    }
+
+    ScannerOptions scan_options(stub_, region, options_, start_ts_);
+    std::unique_ptr<RegionScanner> scanner;
+    CHECK(stub_.GetTxnRegionScannerFactory()->NewRegionScanner(scan_options, scanner).IsOK());
+    ret = scanner->Open();
+    CHECK(ret.ok());
+
+    DINGO_LOG(INFO) << fmt::format("region:{} scan start, region range:({}-{})", region->RegionId(),
+                                   region->Range().start_key(), region->Range().end_key());
+
+    while (scanner->HasMore()) {
+      DINGO_LOG(DEBUG) << fmt::format("start call next batch, limit:{}, redundant_limit:{}, tmp_kvs_size:{}", limit,
+                                      redundant_limit, tmp_kvs.size());
+      std::vector<KVPair> scan_kvs;
+      ret = scanner->NextBatch(scan_kvs);
+      if (!ret.IsOK()) {
+        DINGO_LOG(WARNING) << fmt::format("txn region scanner NextBatch fail, region:{}, status:{}", region->RegionId(),
+                                          ret.ToString());
+        return ret;
+      }
+
+      if (!scan_kvs.empty()) {
+        for (auto& scan_kv : scan_kvs) {
+          CHECK(tmp_kvs.insert(std::make_pair(std::move(scan_kv.key), std::move(scan_kv.value))).second);
+        }
+
+        if (redundant_limit != 0 && (tmp_kvs.size() >= redundant_limit)) {
+          break;
+        }
+      } else {
+        DINGO_LOG(INFO) << fmt::format("txn region:{} scanner NextBatch is empty", region->RegionId());
+        CHECK(!scanner->HasMore());
+      }
+    }
+
+    if (redundant_limit != 0 && (tmp_kvs.size() >= redundant_limit)) {
+      DINGO_LOG(INFO) << fmt::format(
+          "region:{} scan finished, stop to scan between [{},{}), next_start:{}, limit:{}, redundant_limit:{}, "
+          "scan_cnt:{}",
+          region->RegionId(), start_key, end_key, next_start, limit, redundant_limit, tmp_kvs.size());
+      break;
+    } else {
+      next_start = region->Range().end_key();
+      DINGO_LOG(INFO) << fmt::format("region:{} scan finished, continue to scan between [{},{}), next_start:{}, ",
+                                     region->RegionId(), start_key, end_key, next_start);
+      continue;
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("scan end between [{},{}), next_start:{}", start_key, end_key, next_start);
+
+  // overwide use local buffer
+  for (const auto& mutaion : range_mutations) {
+    if (mutaion.type == TxnMutationType::kDelete) {
+      tmp_kvs.erase(mutaion.key);
+    } else if (mutaion.type == TxnMutationType::kPut) {
+      tmp_kvs.insert_or_assign(mutaion.key, mutaion.value);
+    } else if (mutaion.type == TxnMutationType::kPutIfAbsent) {
+      auto iter = tmp_kvs.find(mutaion.key);
+      if (iter == tmp_kvs.end()) {
+        CHECK(tmp_kvs.insert(std::make_pair(mutaion.key, mutaion.value)).second);
+      }
+    } else {
+      CHECK(false) << "unexpect txn mutation:" << mutaion.ToString();
+    }
+  }
+
+  std::vector<KVPair> to_return;
+  to_return.reserve(tmp_kvs.size());
+  for (auto& pair : tmp_kvs) {
+    to_return.push_back({pair.first, std::move(pair.second)});
+  }
+  if (limit != 0 && (to_return.size() >= limit)) {
+    to_return.resize(limit);
+  }
+
+  kvs = std::move(to_return);
+
+  return Status::OK();
+}
+
 std::unique_ptr<TxnPrewriteRpc> Transaction::TxnImpl::PrepareTxnPrewriteRpc(
     const std::shared_ptr<Region>& region) const {
   auto rpc = std::make_unique<TxnPrewriteRpc>();
@@ -564,7 +709,7 @@ std::unique_ptr<TxnCommitRpc> Transaction::TxnImpl::PrepareTxnCommitRpc(const st
 Status Transaction::TxnImpl::ProcessTxnCommitResponse(const pb::store::TxnCommitResponse* response,
                                                       bool is_primary) const {
   std::string pk = buffer_->GetPrimaryKey();
-  DINGO_LOG(DEBUG) << "Fail commit txn, start_ts:" << start_ts_ << " pk:" << pk
+  DINGO_LOG(DEBUG) << "After commit txn, start_ts:" << start_ts_ << " pk:" << pk
                    << ", response:" << response->DebugString();
 
   if (response->has_txn_result()) {
@@ -885,26 +1030,6 @@ bool Transaction::TxnImpl::NeedRetryAndInc(int& times) {
 }
 
 void Transaction::TxnImpl::DelayRetry(int64_t delay_ms) { (void)usleep(delay_ms); }
-
-Status Transaction::TxnImpl::CheckTxnResultInfo(const pb::store::TxnResultInfo& txn_result_info) {
-  if (txn_result_info.has_locked()) {
-    return Status::TxnLockConflict(txn_result_info.locked().DebugString());
-  }
-
-  if (txn_result_info.has_write_conflict()) {
-    return Status::TxnWriteConflict(txn_result_info.write_conflict().DebugString());
-  }
-
-  if (txn_result_info.has_txn_not_found()) {
-    return Status::TxnNotFound(txn_result_info.txn_not_found().DebugString());
-  }
-
-  if (txn_result_info.has_primary_mismatch()) {
-    return Status::TxnPrimaryMismatch(txn_result_info.primary_mismatch().DebugString());
-  }
-
-  return Status::OK();
-}
 
 }  // namespace sdk
 }  // namespace dingodb

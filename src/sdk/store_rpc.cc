@@ -48,6 +48,7 @@ DEFINE_STORE_RPC(TxnBatchGet);
 DEFINE_STORE_RPC(TxnPrewrite);
 DEFINE_STORE_RPC(TxnCommit);
 DEFINE_STORE_RPC(TxnBatchRollback);
+DEFINE_STORE_RPC(TxnScan);
 
 DEFINE_STORE_RPC(TxnHeartBeat);
 DEFINE_STORE_RPC(TxnCheckTxnStatus);

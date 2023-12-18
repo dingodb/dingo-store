@@ -757,8 +757,8 @@ Status RawKV::RawKVImpl::Scan(const std::string& start_key, const std::string& e
     Status ret = meta_cache->LookupRegionBetweenRange(next_start, end_key, region);
 
     if (ret.IsNotFound()) {
-      DINGO_LOG(WARNING) << fmt::format("region not found  between [{},{}), start_key:{} status:{}", next_start,
-                                        end_key, start_key, ret.ToString());
+      DINGO_LOG(INFO) << fmt::format("region not found  between [{},{}), start_key:{} status:{}", next_start, end_key,
+                                     start_key, ret.ToString());
       kvs = std::move(tmp_kvs);
       return Status::OK();
     }
