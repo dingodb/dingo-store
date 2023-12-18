@@ -895,14 +895,14 @@ int CoordinatorSender() {
   }
 
   // tools
-  else if (method == "KeyToHex") {
+  else if (method == "StringToHex") {
     if (FLAGS_key.empty()) {
       DINGO_LOG(ERROR) << "key is empty";
       exit(-1);
     }
     auto str = client::StringToHex(FLAGS_key);
     DINGO_LOG(INFO) << fmt::format("key: {} to hex: {}", FLAGS_key, str);
-  } else if (method == "HexToKey") {
+  } else if (method == "HexToString") {
     if (FLAGS_key.empty()) {
       DINGO_LOG(ERROR) << "key is empty";
       exit(-1);

@@ -561,17 +561,27 @@ void SendTxnScan(int64_t region_id) {
     request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
 
+  dingodb::pb::common::RangeWithOptions range;
   if (FLAGS_start_key.empty()) {
     DINGO_LOG(ERROR) << "start_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_start_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_start_key);
+    }
+    range.mutable_range()->set_start_key(key);
   }
   if (FLAGS_end_key.empty()) {
     DINGO_LOG(ERROR) << "end_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_end_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_end_key);
+    }
+    range.mutable_range()->set_end_key(key);
   }
-  dingodb::pb::common::RangeWithOptions range;
-  range.mutable_range()->set_start_key(FLAGS_start_key);
-  range.mutable_range()->set_end_key(FLAGS_end_key);
   range.set_with_start(FLAGS_with_start);
   range.set_with_end(FLAGS_with_end);
   *request.mutable_range() = range;
@@ -621,8 +631,13 @@ void SendTxnPessimisticLock(int64_t region_id) {
   if (FLAGS_primary_lock.empty()) {
     DINGO_LOG(ERROR) << "primary_lock is empty";
     return;
+  } else {
+    std::string key = FLAGS_primary_lock;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_primary_lock);
+    }
+    request.set_primary_lock(key);
   }
-  request.set_primary_lock(FLAGS_primary_lock);
 
   if (FLAGS_start_ts == 0) {
     DINGO_LOG(ERROR) << "start_ts is empty";
@@ -840,8 +855,13 @@ void SendTxnCheckTxnStatus(int64_t region_id) {
   if (FLAGS_primary_key.empty()) {
     DINGO_LOG(ERROR) << "primary_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_primary_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_primary_key);
+    }
+    request.set_primary_key(key);
   }
-  request.set_primary_key(FLAGS_primary_key);
 
   if (FLAGS_lock_ts == 0) {
     DINGO_LOG(ERROR) << "lock_ts is 0";
@@ -1003,7 +1023,11 @@ void SendTxnBatchRollback(int64_t region_id) {
   request.add_keys()->assign(key);
 
   if (!FLAGS_key2.empty()) {
-    request.add_keys()->assign(FLAGS_key2);
+    std::string key2 = FLAGS_key2;
+    if (FLAGS_key_is_hex) {
+      key2 = HexToString(FLAGS_key2);
+    }
+    request.add_keys()->assign(key2);
   }
 
   if (FLAGS_start_ts == 0) {
@@ -1048,14 +1072,24 @@ void SendTxnScanLock(int64_t region_id) {
   if (FLAGS_start_key.empty()) {
     DINGO_LOG(ERROR) << "start_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_start_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_start_key);
+    }
+    request.set_start_key(key);
   }
-  request.set_start_key(FLAGS_start_key);
 
   if (FLAGS_end_key.empty()) {
     DINGO_LOG(ERROR) << "end_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_end_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_end_key);
+    }
+    request.set_end_key(key);
   }
-  request.set_end_key(FLAGS_end_key);
 
   if (FLAGS_limit == 0) {
     DINGO_LOG(ERROR) << "limit is empty";
@@ -1093,8 +1127,13 @@ void SendTxnHeartBeat(int64_t region_id) {
   if (FLAGS_primary_lock.empty()) {
     DINGO_LOG(ERROR) << "primary_lock is empty";
     return;
+  } else {
+    std::string key = FLAGS_primary_lock;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_primary_lock);
+    }
+    request.set_primary_lock(key);
   }
-  request.set_primary_lock(FLAGS_primary_lock);
 
   if (FLAGS_start_ts == 0) {
     DINGO_LOG(ERROR) << "start_ts is empty";
@@ -1171,14 +1210,24 @@ void SendTxnDeleteRange(int64_t region_id) {
   if (FLAGS_start_key.empty()) {
     DINGO_LOG(ERROR) << "start_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_start_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_start_key);
+    }
+    request.set_start_key(key);
   }
-  request.set_start_key(FLAGS_start_key);
 
   if (FLAGS_end_key.empty()) {
     DINGO_LOG(ERROR) << "end_key is empty";
     return;
+  } else {
+    std::string key = FLAGS_end_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_end_key);
+    }
+    request.set_end_key(key);
   }
-  request.set_end_key(FLAGS_end_key);
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
@@ -1255,17 +1304,20 @@ void SendTxnDump(int64_t region_id) {
   DINGO_LOG(INFO) << "write_size: " << response.write_keys_size();
 
   for (int i = 0; i < response.data_keys_size(); i++) {
-    DINGO_LOG(INFO) << "data[" << i << "]key: [" << response.data_keys(i).ShortDebugString() << "], value: ["
+    DINGO_LOG(INFO) << "data[" << i << "] hex_key: [" << HexToString(response.data_keys(i).key()) << "] key: ["
+                    << response.data_keys(i).ShortDebugString() << "], value: ["
                     << response.data_values(i).ShortDebugString() << "]";
   }
 
   for (int i = 0; i < response.lock_keys_size(); i++) {
-    DINGO_LOG(INFO) << "lock[" << i << "]key: [" << response.lock_keys(i).ShortDebugString() << "], value: ["
+    DINGO_LOG(INFO) << "lock[" << i << "] hex_key: [" << HexToString(response.lock_keys(i).key()) << "] key: ["
+                    << response.lock_keys(i).ShortDebugString() << "], value: ["
                     << response.lock_values(i).ShortDebugString() << "]";
   }
 
   for (int i = 0; i < response.write_keys_size(); i++) {
-    DINGO_LOG(INFO) << "write[" << i << "]key: [" << response.write_keys(i).ShortDebugString() << "], value: ["
+    DINGO_LOG(INFO) << "write[" << i << "] hex_key: [" << HexToString(response.write_keys(i).key()) << "] key: ["
+                    << response.write_keys(i).ShortDebugString() << "], value: ["
                     << response.write_values(i).ShortDebugString() << "]";
   }
 }
