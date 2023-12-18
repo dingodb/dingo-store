@@ -45,7 +45,9 @@ class TxnIterator {
   ~TxnIterator() = default;
   butil::Status Init();
   butil::Status Seek(const std::string &key);
+  butil::Status InnerSeek(const std::string &key);
   butil::Status Next();
+  butil::Status InnerNext();
   bool Valid(pb::store::TxnResultInfo &txn_result_info);
   std::string Key();
   std::string Value();
