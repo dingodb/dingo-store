@@ -907,6 +907,14 @@ bool Helper::IsTxnColumnFamilyName(const std::string& cf_name) {
   return cf_name == Constant::kTxnDataCF || cf_name == Constant::kTxnLockCF || cf_name == Constant::kTxnWriteCF;
 }
 
+pb::common::Range Helper::GetMemComparableRange(const pb::common::Range& range) {
+  CHECK(range.start_key() < range.end_key());
+  pb::common::Range txn_range;
+  txn_range.set_start_key(Helper::PaddingUserKey(range.start_key()));
+  txn_range.set_start_key(Helper::PaddingUserKey(range.end_key()));
+  return range;
+}
+
 int64_t Helper::TimestampNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
       .count();

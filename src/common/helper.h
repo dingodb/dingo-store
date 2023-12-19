@@ -223,6 +223,7 @@ class Helper {
   static void GetColumnFamilyNames(const std::string& key, std::vector<std::string>& raw_cf_names,
                                    std::vector<std::string>& txn_cf_names);
   static bool IsTxnColumnFamilyName(const std::string& cf_name);
+  static pb::common::Range GetMemComparableRange(const pb::common::Range& range);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);

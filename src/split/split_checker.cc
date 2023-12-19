@@ -266,10 +266,8 @@ void SplitCheckTask::SplitCheck() {
   // for txn region, we need to translate the user key to padding key.
   // for raw region, we use the user key directly.
   if (!txn_cf_names.empty()) {
-    pb::common::Range physical_range;
-    physical_range.set_start_key(Helper::PaddingUserKey(region_->Range().start_key()));
-    physical_range.set_end_key(Helper::PaddingUserKey(region_->Range().end_key()));
-    split_key = split_checker_->SplitKey(region_, physical_range, txn_cf_names, key_count);
+    pb::common::Range txn_range = Helper::GetMemComparableRange(region_->Range());
+    split_key = split_checker_->SplitKey(region_, txn_range, txn_cf_names, key_count);
   } else {
     split_key = split_checker_->SplitKey(region_, region_->Range(), raw_cf_names, key_count);
   }
