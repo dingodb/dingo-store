@@ -804,10 +804,10 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr coordinator_worker_set =
-        dingodb::WorkerSet::New("CoordinatorServiceWorkerSet", FLAGS_coordinator_service_worker_num,
+        dingodb::WorkerSet::New("CoordinatorService", FLAGS_coordinator_service_worker_num,
                                 FLAGS_coordinator_service_worker_max_pending_num);
     if (!coordinator_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init Coordinator WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init CoordinatorService WorkerSet failed!";
       return -1;
     }
 
@@ -824,9 +824,9 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr meta_worker_set = dingodb::WorkerSet::New(
-        "MetaServiceWorkerSet", FLAGS_meta_service_worker_num, FLAGS_meta_service_worker_max_pending_num);
+        "MetaService", FLAGS_meta_service_worker_num, FLAGS_meta_service_worker_max_pending_num);
     if (!meta_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init meta WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init MetaService WorkerSet failed!";
       return -1;
     }
 
@@ -843,9 +843,9 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr version_worker_set = dingodb::WorkerSet::New(
-        "VersionServiceWorkerSet", FLAGS_version_service_worker_num, FLAGS_version_service_worker_max_pending_num);
+        "VersionService", FLAGS_version_service_worker_num, FLAGS_version_service_worker_max_pending_num);
     if (!version_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init version WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init VersionService WorkerSet failed!";
       return -1;
     }
 
@@ -936,18 +936,18 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr read_worker_set =
-        dingodb::WorkerSet::New("ReadWorkerSet", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
+        dingodb::WorkerSet::New("StoreServiceRead", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init ReadWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init StoreServiceRead WorkerSet failed!";
       return -1;
     }
     store_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetStoreServiceReadWorkerSet(read_worker_set);
 
     dingodb::WorkerSetPtr write_worker_set =
-        dingodb::WorkerSet::New("WriteWorkerSet", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
+        dingodb::WorkerSet::New("StoreServiceWrite", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init WriteWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init StoreServiceWrite WorkerSet failed!";
       return -1;
     }
     store_service.SetWriteWorkSet(write_worker_set);
@@ -1033,9 +1033,9 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr read_worker_set =
-        dingodb::WorkerSet::New("ReadWorkerSet", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
+        dingodb::WorkerSet::New("IndexServiceRead", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init ReadWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init IndexServiceRead WorkerSet failed!";
       return -1;
     }
     index_service.SetReadWorkSet(read_worker_set);
@@ -1043,9 +1043,9 @@ int main(int argc, char *argv[]) {
     dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
     dingodb::WorkerSetPtr write_worker_set =
-        dingodb::WorkerSet::New("WriteWorkerSet", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
+        dingodb::WorkerSet::New("IndexServiceWrite", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init WriteWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init IndexServiceWrite WorkerSet failed!";
       return -1;
     }
     index_service.SetWriteWorkSet(write_worker_set);

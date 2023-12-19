@@ -632,7 +632,10 @@ void Server::Destroy() {
   heartbeat_->Destroy();
   region_controller_->Destroy();
   store_controller_->Destroy();
-  vector_index_manager_->Destroy();
+
+  if (GetRole() == pb::common::INDEX) {
+    vector_index_manager_->Destroy();
+  }
 
   google::ShutdownGoogleLogging();
 }

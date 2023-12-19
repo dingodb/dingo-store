@@ -147,7 +147,8 @@ inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function f
 
     for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
       threads.push_back(std::thread([&, thread_id] {
-        // threads.push_back(Bthread([&, thread_id] {
+        pthread_setname_np(pthread_self(), "vector_index");
+
         while (true) {
           size_t id = current.fetch_add(1);
 
