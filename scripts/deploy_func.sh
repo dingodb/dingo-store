@@ -148,8 +148,15 @@ function set_ulimit() {
 function start_program() {
   role=$1
   root_dir=$2
-  echo "set ulimit"
-  set_ulimit
+
+  USER=`whoami`
+  echo "user: ${USER}"
+
+  if [ "$USER" == "root" ]; then
+    echo "set ulimit"
+    set_ulimit
+  fi
+
   echo "start server: ${root_dir}"
 
   cd ${root_dir}
