@@ -172,8 +172,8 @@ WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_
       worker_num_(worker_num),
       max_pending_task_count_(max_pending_task_count),
       active_worker_id_(0),
-      total_task_count_metrics_(fmt::format("dingo_{}_total_task_count", name)),
-      pending_task_count_metrics_(fmt::format("dingo_{}_pending_task_count", name)) {}
+      total_task_count_metrics_(fmt::format("dingo_worker_set_{}_total_task_count", name)),
+      pending_task_count_metrics_(fmt::format("dingo_worker_set_{}_pending_task_count", name)) {}
 
 WorkerSet::~WorkerSet() = default;
 
