@@ -20,16 +20,16 @@ import static io.dingodb.sdk.service.entity.Message.Response;
 public class RpcHandler<REQ extends Request, RES extends Response> implements io.dingodb.sdk.service.RpcHandler<REQ, RES> {
 
     @Slf4j
-    public static final class RpcEnter { }
+    public static final class Enter { }
 
     @Slf4j
-    public static final class RpcBefore { }
+    public static final class Before { }
 
     @Slf4j
-    public static final class RpcAfter { }
+    public static final class After { }
 
     @Slf4j
-    public static final class RpcOnNonResponse { }
+    public static final class OnNonResponse { }
 
     @EqualsAndHashCode.Include
     public final MethodDescriptor<REQ, RES> method;
@@ -54,8 +54,8 @@ public class RpcHandler<REQ extends Request, RES extends Response> implements io
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.enter(req, options, remote, trace);
         }));
-        if (RpcEnter.log.isDebugEnabled()) {
-            RpcEnter.log.debug(
+        if (Enter.log.isDebugEnabled()) {
+            Enter.log.debug(
                 "Call [{}:{}] enter on [{}], trace [{}], request: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
             );
@@ -68,8 +68,8 @@ public class RpcHandler<REQ extends Request, RES extends Response> implements io
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.before(req, options, remote, trace);
         }));
-        if (RpcBefore.log.isDebugEnabled()) {
-            RpcBefore.log.debug(
+        if (Before.log.isDebugEnabled()) {
+            Before.log.debug(
                 "Call [{}:{}] before on [{}], trace [{}], request: {}, options: {}",
                 method.getFullMethodName(), remote, System.currentTimeMillis(), trace, req, options
             );
@@ -81,8 +81,8 @@ public class RpcHandler<REQ extends Request, RES extends Response> implements io
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.after(req, res, options, remote, trace);
         }));
-        if (RpcAfter.log.isDebugEnabled()) {
-            RpcAfter.log.debug(
+        if (After.log.isDebugEnabled()) {
+            After.log.debug(
                 "Call [{}:{}] after on {}, trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -94,8 +94,8 @@ public class RpcHandler<REQ extends Request, RES extends Response> implements io
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onNonResponse(req, options, remote, trace, statusMessage);
         }));
-        if (RpcOnNonResponse.log.isDebugEnabled()) {
-            RpcOnNonResponse.log.debug(
+        if (OnNonResponse.log.isDebugEnabled()) {
+            OnNonResponse.log.debug(
                 "Call [{}:{}] error on {}, message [{}], trace [{}], request: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), statusMessage, trace, req, options
             );

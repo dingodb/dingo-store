@@ -13,6 +13,7 @@ import io.grpc.ManagedChannel;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 public class CoordinatorChannelProvider implements ChannelProvider {
@@ -39,43 +40,38 @@ public class CoordinatorChannelProvider implements ChannelProvider {
         if (oldChannel != channel) {
             return;
         }
-        Optional<ManagedChannel> channelOptional = Optional.empty();
+        AtomicBoolean findLeader = new AtomicBoolean(false);
         for (Location location : locations) {
             ManagedChannel channel = ChannelManager.getChannel(location);
             try {
-                GetCoordinatorMapResponse response = RpcCaller
-                    .call(
-                        CoordinatorService.getCoordinatorMap,
-                        new GetCoordinatorMapRequest(),
-                        CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
-                        channel,
-                        trace
-                    );
-                channelOptional = Optional.ofNullable(response)
+                GetCoordinatorMapResponse response = requestCoordinatorMap(trace, channel);
+                Optional.ofNullable(response)
                     .map(locationGetter)
                     .ifPresent(leader -> Parameters.nonNull(leader.getHost(), "location"))
                     .map(ChannelManager::getChannel)
                     .ifPresent(ch -> this.channel = ch)
-                    .ifPresent(ch -> {
-                        if (response.getCoordinatorLocations() == null || response.getCoordinatorLocations().isEmpty()) {
-                            locations = new HashSet<>(RpcCaller
-                                .call(
-                                    CoordinatorService.getCoordinatorMap,
-                                    new GetCoordinatorMapRequest(),
-                                    CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
-                                    ChannelManager.getChannel(response.getLeaderLocation()),
-                                    trace
-                                ).getCoordinatorLocations());
-                        } else {
-                            locations = new HashSet<>(response.getCoordinatorLocations());
-                        }
-                    });
+                    .ifPresent($ -> findLeader.set(true))
+                    .map(ch ->requestCoordinatorMap(trace, ch))
+                    .map(GetCoordinatorMapResponse::getCoordinatorLocations)
+                    .filter($ -> !$.isEmpty())
+                    .ifPresent($ -> locations = new HashSet<>($));
             } catch (Exception ignore) {
             }
-            if (channelOptional.isPresent()) {
+            if (findLeader.get()) {
                 break;
             }
         }
+    }
+
+    private GetCoordinatorMapResponse requestCoordinatorMap(long trace, Channel channel) {
+        return RpcCaller
+            .call(
+                CoordinatorService.getCoordinatorMap,
+                new GetCoordinatorMapRequest(),
+                CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
+                channel,
+                trace
+            );
     }
 
 }
