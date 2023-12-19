@@ -2445,20 +2445,23 @@ static butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::Txn
     return status;
   }
 
-  if (request->start_key().empty()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is empty");
+  pb::common::Range req_range;
+  req_range.set_start_key(request->start_key());
+  req_range.set_end_key(request->end_key());
+
+  status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
   }
 
-  if (request->end_key().empty()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "end_key is empty");
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  if (!status.ok()) {
+    return status;
   }
 
-  if (request->start_key() == request->end_key()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is equal to end_key");
-  }
-
-  if (request->start_key().compare(request->end_key()) > 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key is greater than end_key");
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
   }
 
   status = ServiceHelper::ValidateClusterReadOnly();
