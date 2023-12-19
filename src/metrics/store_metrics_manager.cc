@@ -266,9 +266,7 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
   std::vector<pb::common::Range> txn_ranges;
   txn_ranges.reserve(ranges.size());
   for (const auto& range : ranges) {
-    pb::common::Range txn_range;
-    txn_range.set_start_key(Helper::PaddingUserKey(range.start_key()));
-    txn_range.set_end_key(Helper::PaddingUserKey(range.end_key()));
+    pb::common::Range txn_range = Helper::GetMemComparableRange(range);
     txn_ranges.push_back(txn_range);
   }
 

@@ -705,8 +705,9 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
     iter_context->reading = false;
 
     if (Helper::IsTxnColumnFamilyName(cf_name)) {
-      iter_context->lower_bound = Helper::PaddingUserKey(snapshot_context->range.start_key());
-      iter_context->upper_bound = Helper::PaddingUserKey(snapshot_context->range.end_key());
+      pb::common::Range txn_range = Helper::GetMemComparableRange(snapshot_context->range);
+      iter_context->lower_bound = txn_range.start_key();
+      iter_context->upper_bound = txn_range.end_key();
     } else {
       iter_context->lower_bound = snapshot_context->range.start_key();
       iter_context->upper_bound = snapshot_context->range.end_key();

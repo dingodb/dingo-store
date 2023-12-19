@@ -265,9 +265,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
     }
 
     if (!txn_cf_names.empty()) {
-      pb::common::Range txn_range;
-      txn_range.set_start_key(Helper::PaddingUserKey(region->Range().start_key()));
-      txn_range.set_start_key(Helper::PaddingUserKey(region->Range().end_key()));
+      pb::common::Range txn_range = Helper::GetMemComparableRange(region->Range());
       status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
       if (!status.ok()) {
         DINGO_LOG(FATAL) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
@@ -1194,7 +1192,8 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
       store_region_meta->UpdateRegion(region);
 
       DINGO_LOG(INFO) << fmt::format(
-          "[control.region][region({})] update definition new max elements {} > old max elements {}, resize success",
+          "[control.region][region({})] update definition new max elements {} > old max elements {}, resize "
+          "success",
           region_id, new_max_elements, old_max_elements);
 
       return butil::Status::OK();
