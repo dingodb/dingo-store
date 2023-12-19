@@ -9,11 +9,13 @@ import io.dingodb.sdk.service.entity.coordinator.ScanRegionsRequest;
 import io.dingodb.sdk.service.entity.meta.DingoCommonId;
 import io.dingodb.sdk.service.entity.store.Context;
 import io.grpc.Channel;
+import lombok.Getter;
 
 public class RegionChannelProvider implements ChannelProvider {
 
-    private final CoordinatorService coordinatorService;
+    @Getter
     private final long regionId;
+    private final CoordinatorService coordinatorService;
     private Location location;
     private Channel channel;
     private RegionEpoch regionEpoch;

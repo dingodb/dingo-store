@@ -51,12 +51,25 @@ public class CoordinatorChannelProvider implements ChannelProvider {
                         channel,
                         trace
                     );
-                channelOptional = Optional.of(response)
-                    .ifPresent(res -> locations = new HashSet<>(res.getCoordinatorLocations()))
+                channelOptional = Optional.ofNullable(response)
                     .map(locationGetter)
                     .ifPresent(leader -> Parameters.nonNull(leader.getHost(), "location"))
                     .map(ChannelManager::getChannel)
-                    .ifPresent(ch -> this.channel = ch);
+                    .ifPresent(ch -> this.channel = ch)
+                    .ifPresent(ch -> {
+                        if (response.getCoordinatorLocations() == null || response.getCoordinatorLocations().isEmpty()) {
+                            locations = new HashSet<>(RpcCaller
+                                .call(
+                                    CoordinatorService.getCoordinatorMap,
+                                    new GetCoordinatorMapRequest(),
+                                    CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
+                                    ChannelManager.getChannel(response.getLeaderLocation()),
+                                    trace
+                                ).getCoordinatorLocations());
+                        } else {
+                            locations = new HashSet<>(response.getCoordinatorLocations());
+                        }
+                    });
             } catch (Exception ignore) {
             }
             if (channelOptional.isPresent()) {

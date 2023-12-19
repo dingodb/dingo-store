@@ -29,7 +29,6 @@ import io.dingodb.sdk.service.entity.version.RangeRequest;
 import io.dingodb.sdk.service.entity.version.RangeResponse;
 import io.dingodb.sdk.service.entity.version.WatchRequest;
 import io.dingodb.sdk.service.entity.version.WatchRequest.RequestUnionNest.OneTimeRequest;
-import io.dingodb.sdk.service.lock.LockInfo;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -46,7 +45,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -140,10 +138,8 @@ public class LockService {
         return lease;
     }
 
-    public List<LockInfo> listLock() {
-        return kvService.kvRange(rangeRequest()).getKvs().stream()
-            .map(kv -> new LockInfo(kv.getKv().getKey(), kv.getKv().getValue(), kv.getModRevision()))
-            .collect(Collectors.toList());
+    public List<Kv> listLock() {
+        return kvService.kvRange(rangeRequest()).getKvs();
     }
 
     public void close() {

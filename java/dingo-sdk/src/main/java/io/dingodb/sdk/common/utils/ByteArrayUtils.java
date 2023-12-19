@@ -25,8 +25,6 @@ import lombok.Setter;
 import lombok.ToString;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -126,12 +124,15 @@ public class ByteArrayUtils {
         return compareWithoutLen(bytes1, bytes2) >= 0;
     }
 
-    public static String enCodeBytes2Base64(byte[] input) {
-        return new String(Base64.getEncoder().encode(input), StandardCharsets.UTF_8);
-    }
-
-    public static byte[] deCodeBase64String2Bytes(final String input) {
-        return Base64.getDecoder().decode(input);
+    public static String toHex(byte[] bytes) {
+        if (bytes == null) {
+            return "null";
+        }
+        StringBuilder stringBuilder = new StringBuilder();
+        for (byte b : bytes) {
+            stringBuilder.append(String.format("%02X", b));
+        }
+        return stringBuilder.toString();
     }
 
     public static byte[] increment(@NonNull byte[] input) {

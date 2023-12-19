@@ -10,10 +10,7 @@ public interface ServiceHandler<REQ extends Request, RES extends Response> {
 
     MethodDescriptor<REQ, RES> matchMethod();
 
-    default void enter(long reqProviderIdentity, CallOptions options, long trace) {
-    }
-
-    default void before(REQ req, CallOptions options, String remote, long trace) {
+    default void before(long reqProviderIdentity, CallOptions options, long trace) {
     }
 
     default void after(REQ req, RES res, CallOptions options, String remote, long trace) {

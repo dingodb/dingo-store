@@ -44,9 +44,7 @@ public class RecordEncoder {
     }
 
     private void encodePrefix(Buf buf) {
-        // TODO for 0.7.1, set default namespace 'r' for not txn region
         buf.write((byte) 'r');
-
         buf.writeLong(id);
     }
 

@@ -13,6 +13,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ClientCalls;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
@@ -41,8 +42,11 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
         handlers.computeIfAbsent(method.getFullMethodName(), n -> new RpcHandler<>(method)).removeHandler(handler);
     }
 
+    @Getter
     private final Channel channel;
+    @Getter
     private final CallOptions options;
+    @Getter
     private final S service;
 
     public RpcCaller(Channel channel, CallOptions options, Class<S> genericClass) {

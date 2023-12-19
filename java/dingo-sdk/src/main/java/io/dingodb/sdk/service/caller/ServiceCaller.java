@@ -9,10 +9,12 @@ import io.dingodb.sdk.service.ChannelProvider;
 import io.dingodb.sdk.service.Service;
 import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
+import io.dingodb.sdk.service.entity.error.Errno;
 import io.dingodb.sdk.service.entity.error.Error;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
@@ -27,6 +29,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.errorToStrategy;
+import static io.dingodb.sdk.common.utils.Optional.ofNullable;
 
 @Slf4j
 public class ServiceCaller<S extends Service<S>> implements InvocationHandler, Caller<S> {
@@ -52,7 +55,9 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
 
     private final ChannelProvider channelProvider;
 
+    @Getter
     private final Class<S> genericType;
+    @Getter
     private final S service;
 
     private final Set<MethodDescriptor> directCallOnce = new HashSet<>();
@@ -135,7 +140,7 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
         ServiceHandler<REQ, RES> handler = handlers.computeIfAbsent(
             method.getFullMethodName(), n -> new ServiceHandler(method)
         );
-        handler.enter(System.identityHashCode(provider), options, requestId);
+        handler.before(System.identityHashCode(provider), options, requestId);
         Channel channel = channelProvider.channel();
         int retry = this.retry;
         boolean connected = false;
@@ -145,7 +150,6 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
         while (retry-- > 0) {
             try {
                 REQ request = lastRequest = provider.get();
-                handler.before(request, options, channel == null ? null : channel.authority(), requestId);
                 channelProvider.before(request);
                 RES response = RpcCaller.call(method, request, options, channel, requestId);
                 if (response == null) {
@@ -154,7 +158,7 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
                 }
                 connected = true;
                 channelProvider.after(response);
-                if (response.getError() != null && response.getError().getErrcode().number() != 0) {
+                if (ofNullable(response.getError()).map(Error::getErrcode).filter($ -> $ == Errno.OK).isPresent()) {
                     Error error = response.getError();
                     int errCode = error.getErrcode().number();
                     errMsgs.compute(

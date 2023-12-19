@@ -13,10 +13,11 @@ import io.dingodb.sdk.service.entity.coordinator.RangeRegion;
 import io.dingodb.sdk.service.entity.meta.DingoCommonId;
 import lombok.SneakyThrows;
 
-import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.List;
+import java.util.NavigableMap;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -35,13 +36,9 @@ public class Services {
         .build(new CacheLoader<Set<Location>, CoordinatorService>() {
             @Override
             public CoordinatorService load(Set<Location> key) {
-                return (CoordinatorService) Proxy.newProxyInstance(
-                    CoordinatorService.class.getClassLoader(),
-                    new Class[] {CoordinatorService.class},
-                    new ServiceCaller<CoordinatorService>(
+                return new ServiceCaller<CoordinatorService>(
                         coordinatorServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}
-                );
+                    ){}.getService();
             }
         });
 
@@ -53,13 +50,9 @@ public class Services {
         .build(new CacheLoader<Set<Location>, MetaService>() {
             @Override
             public MetaService load(Set<Location> key) {
-                return (MetaService) Proxy.newProxyInstance(
-                    MetaService.class.getClassLoader(),
-                    new Class[] {MetaService.class},
-                    new ServiceCaller<MetaService>(
+                return new ServiceCaller<MetaService>(
                         autoIncrementChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}
-                );
+                    ){}.getService();
             }
         });
 
@@ -71,13 +64,23 @@ public class Services {
         .build(new CacheLoader<Set<Location>, MetaService>() {
             @Override
             public MetaService load(Set<Location> key) {
-                return (MetaService) Proxy.newProxyInstance(
-                    MetaService.class.getClassLoader(),
-                    new Class[] {MetaService.class},
-                    new ServiceCaller<MetaService>(
+                return new ServiceCaller<MetaService>(
                         metaServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}
-                );
+                    ){}.getService();
+            }
+        });
+
+    private static final LoadingCache<Set<Location>, MetaService> tsoServiceCache = CacheBuilder
+        .newBuilder()
+        .expireAfterAccess(60, TimeUnit.MINUTES)
+        .expireAfterWrite(60, TimeUnit.MINUTES)
+        .maximumSize(8)
+        .build(new CacheLoader<Set<Location>, MetaService>() {
+            @Override
+            public MetaService load(Set<Location> key) {
+                return new ServiceCaller<MetaService>(
+                        tsoServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
+                    ){}.getService();
             }
         });
 
@@ -89,13 +92,9 @@ public class Services {
         .build(new CacheLoader<Set<Location>, VersionService>() {
             @Override
             public VersionService load(Set<Location> key) {
-                return (VersionService) Proxy.newProxyInstance(
-                    VersionService.class.getClassLoader(),
-                    new Class[] {VersionService.class},
-                    new ServiceCaller<VersionService>(
-                        kvServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}
-                );
+                return new ServiceCaller<VersionService>(
+                    kvServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
+                ){}.getService();
             }
         });
 
@@ -141,12 +140,18 @@ public class Services {
                 }
             });
 
+    private static final NavigableMap<byte[], RangeRegion> rangeRegions = new TreeMap<>(ByteArrayUtils::compare);
+
     public static CoordinatorChannelProvider coordinatorServiceChannelProvider(Set<Location> locations) {
         return new CoordinatorChannelProvider(locations, GetCoordinatorMapResponse::getLeaderLocation);
     }
 
     public static CoordinatorChannelProvider metaServiceChannelProvider(Set<Location> locations) {
         return new CoordinatorChannelProvider(locations, GetCoordinatorMapResponse::getLeaderLocation);
+    }
+
+    public static CoordinatorChannelProvider tsoServiceChannelProvider(Set<Location> locations) {
+        return new CoordinatorChannelProvider(locations, GetCoordinatorMapResponse::getTsoLeaderLocation);
     }
 
     public static CoordinatorChannelProvider kvServiceChannelProvider(Set<Location> locations) {
@@ -175,6 +180,11 @@ public class Services {
     }
 
     @SneakyThrows
+    public static MetaService tsoService(Set<Location> locations) {
+        return tsoServiceCache.get(Parameters.notEmpty(locations, "locations"));
+    }
+
+    @SneakyThrows
     public static MetaService autoIncrementMetaService(Set<Location> locations) {
         return autoIncrementServiceCache.get(Parameters.notEmpty(locations, "locations"));
     }
@@ -192,16 +202,21 @@ public class Services {
     }
 
     @SneakyThrows
-    public static ChannelProvider regionChannelProvider(
+    public static synchronized RegionChannelProvider regionChannelProvider(
         Set<Location> locations, byte[] key
     ) {
         CoordinatorService coordinatorService = coordinatorService(locations);
+        RangeRegion region = rangeRegions.floorEntry(key).getValue();
+        if (region != null && compare(key, region.getStartKey()) >= 0 && compare(key, region.getEndKey()) < 0) {
+            return regionCache.get(locations).get(region.getRegionId());
+        }
         List<RangeRegion> regions = coordinatorService
             .getRangeRegionMap(GetRangeRegionMapRequest::new).getRangeRegions();
-        for (RangeRegion region : regions) {
-            if (compare(key, region.getStartKey()) >= 0 && compare(key, region.getEndKey()) < 0) {
-                return regionCache.get(locations).get(region.getRegionId());
-            }
+        rangeRegions.clear();
+        regions.forEach($ -> rangeRegions.put($.getStartKey(), $));
+        region = rangeRegions.floorEntry(key).getValue();
+        if (region != null && compare(key, region.getStartKey()) >= 0 && compare(key, region.getEndKey()) < 0) {
+            return regionCache.get(locations).get(region.getRegionId());
         }
         throw new RuntimeException("Cannot found " + Arrays.toString(key) + " region");
     }
@@ -210,26 +225,18 @@ public class Services {
     public static StoreService storeRegionService(
         Set<Location> locations, byte[] key, int retry
     ) {
-        ServiceCaller<StoreService> serviceCaller = new ServiceCaller<StoreService>(
+        return new ServiceCaller<StoreService>(
             regionChannelProvider(locations, key), retry, DEFAULT
-        ){};
-        return (StoreService) Proxy.newProxyInstance(
-            StoreService.class.getClassLoader(),
-            new Class[] {StoreService.class}, serviceCaller
-        );
+        ){}.getService();
     }
 
     @SneakyThrows
     public static IndexService indexRegionService(
         Set<Location> locations, byte[] key, int retry
     ) {
-        ServiceCaller<IndexService> serviceCaller = new ServiceCaller<IndexService>(
+        return new ServiceCaller<IndexService>(
             regionChannelProvider(locations, key), retry, DEFAULT
-        ){};
-        return (IndexService) Proxy.newProxyInstance(
-            StoreService.class.getClassLoader(),
-            new Class[] {IndexService.class}, serviceCaller
-        );
+        ){}.getService();
     }
 
     @SneakyThrows
@@ -243,10 +250,7 @@ public class Services {
         ){};
         serviceCaller.addExcludeErrorCheck(StoreService.kvScanContinue);
         serviceCaller.addExcludeErrorCheck(StoreService.kvScanRelease);
-        return (StoreService) Proxy.newProxyInstance(
-            StoreService.class.getClassLoader(),
-            new Class[] {StoreService.class}, serviceCaller
-        );
+        return serviceCaller.getService();
     }
 
     @SneakyThrows
@@ -255,13 +259,9 @@ public class Services {
     ) {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
-        ServiceCaller<IndexService> serviceCaller = new ServiceCaller<IndexService>(
+        return new ServiceCaller<IndexService>(
             regionProvider, retry, DEFAULT
-        ){};
-        return (IndexService) Proxy.newProxyInstance(
-            IndexService.class.getClassLoader(),
-            new Class[] {IndexService.class}, serviceCaller
-        );
+        ){}.getService();
     }
 
     @SneakyThrows
@@ -276,10 +276,7 @@ public class Services {
         ){};
         serviceCaller.addExcludeErrorCheck(StoreService.kvScanContinue);
         serviceCaller.addExcludeErrorCheck(StoreService.kvScanRelease);
-        return (StoreService) Proxy.newProxyInstance(
-            StoreService.class.getClassLoader(),
-            new Class[] {StoreService.class}, serviceCaller
-        );
+        return serviceCaller.getService();
     }
 
     @SneakyThrows
@@ -289,13 +286,9 @@ public class Services {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = tableFailOverCache.get(locationsStr).get(indexId)
             .createRegionProvider(regionId);
-        ServiceCaller<IndexService> serviceCaller = new ServiceCaller<IndexService>(
+        return new ServiceCaller<IndexService>(
             regionProvider, retry, DEFAULT
-        ){};
-        return (IndexService) Proxy.newProxyInstance(
-            IndexService.class.getClassLoader(),
-            new Class[] {IndexService.class}, serviceCaller
-        );
+        ){}.getService();
     }
 
 }
