@@ -34,13 +34,7 @@ public class RecordDecoder {
     }
 
     private void checkPrefix(Buf buf) {
-        // TODO for 0.7.1 check default namespace 'r' for not txn region
-        if (buf.peek() != 'r') {
-            throw new RuntimeException(
-                "Namespace not support, please check data or upgrade, data: " + Arrays.toString(buf.getBytes())
-            );
-        }
-        buf.read();
+        buf.skip(1);
 
         long keyId = buf.readLong();
         if (keyId != id) {
@@ -124,12 +118,7 @@ public class RecordDecoder {
     public Object[] decodeKeyPrefix(byte[] keyPrefix) {
         Buf keyPrefixBuf = new BufImpl(keyPrefix);
 
-        // TODO for 0.7.1 check namespace 'r' for not txn region
-        if (keyPrefixBuf.peek() != 0 && keyPrefixBuf.read() != 'r') {
-            throw new RuntimeException(
-                "Namespace not support, please check data or upgrade, data: " + Arrays.toString(keyPrefix)
-            );
-        }
+        keyPrefixBuf.skip(1);
 
         if (keyPrefixBuf.readLong() != id) {
             throw new RuntimeException("Wrong Common Id");

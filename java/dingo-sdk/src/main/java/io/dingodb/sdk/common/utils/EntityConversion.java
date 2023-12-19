@@ -867,11 +867,16 @@ public class EntityConversion {
         byte[] minKeyPrefix = codec.encodeMinKeyPrefix();
         byte[] maxKeyPrefix = codec.encodeMaxKeyPrefix();
         Meta.PartitionRule.Builder builder = Meta.PartitionRule.newBuilder();
-
+        boolean isTxn = Parameters.cleanNull(table.getEngine(), "").startsWith("TXN");
+        if (isTxn) {
+            minKeyPrefix[0] = 't';
+            maxKeyPrefix[0] = 't';
+        }
         Iterator<byte[]> keys = Optional.<Partition, Stream<byte[]>>mapOrGet(
-                table.getPartition(), __ -> encodePartitionDetails(__.getDetails(), codec),
-                        Stream::empty)
-                .sorted(ByteArrayUtils::compare).iterator();
+                table.getPartition(), __ -> encodePartitionDetails(__.getDetails(), codec), Stream::empty
+            ).sorted(ByteArrayUtils::compare)
+            .peek($ -> $[0] = (byte) (isTxn ? 't' : 'r'))
+            .iterator();
 
         byte[] start = minKeyPrefix;
         for (Meta.DingoCommonId id : partitionIds) {

@@ -18,6 +18,34 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @AllArgsConstructor
 public class ServiceHandler<REQ extends Request, RES extends Response> implements io.dingodb.sdk.service.ServiceHandler<REQ, RES> {
 
+
+    @Slf4j
+    public static final class Before { }
+
+    @Slf4j
+    public static final class After { }
+
+    @Slf4j
+    public static final class OnException { }
+
+    @Slf4j
+    public static final class OnRetry { }
+
+    @Slf4j
+    public static final class OnFailed { }
+
+    @Slf4j
+    public static final class OnIgnore { }
+
+    @Slf4j
+    public static final class OnRefresh { }
+
+    @Slf4j
+    public static final class OnNonConnection { }
+
+    @Slf4j
+    public static final class onThrow { }
+
     @EqualsAndHashCode.Include
     public final MethodDescriptor<REQ, RES> method;
 
@@ -37,27 +65,14 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
     }
 
     @Override
-    public void enter(long reqProviderIdentity, CallOptions options, long trace) {
+    public void before(long reqProviderIdentity, CallOptions options, long trace) {
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
-            handler.enter(reqProviderIdentity, options, trace);
+            handler.before(reqProviderIdentity, options, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (Before.log.isDebugEnabled()) {
+            Before.log.debug(
                 "Service call [{}] enter on [{}], trace [{}], request: {}, options: {}",
                 method.getFullMethodName(), System.currentTimeMillis(), trace, reqProviderIdentity, options
-            );
-        }
-    }
-
-    @Override
-    public void before(REQ req, CallOptions options, String remote, long trace) {
-        handlers.forEach(NoBreakFunctions.wrap(handler -> {
-            handler.before(req, options, remote, trace);
-        }));
-        if (log.isDebugEnabled()) {
-            log.debug(
-                "Service call [{}:{}] before on [{}], trace [{}], request: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
             );
         }
     }
@@ -67,8 +82,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.after(req, res, options, remote, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (After.log.isDebugEnabled()) {
+            After.log.debug(
                 "Service call [{}:{}] after on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -80,8 +95,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onException(req, ex, options, remote, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (OnException.log.isDebugEnabled()) {
+            OnException.log.debug(
                 "Service call [{}:{}] exception on [{}], trace [{}], request: {}, ex: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, ex, options, ex
             );
@@ -93,8 +108,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onRetry(req, res, options, remote, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (OnRetry.log.isDebugEnabled()) {
+            OnRefresh.log.debug(
                 "Service call [{}:{}] need retry on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -106,8 +121,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onFailed(req, res, options, remote, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (OnFailed.log.isDebugEnabled()) {
+            OnFailed.log.debug(
                 "Service call [{}:{}] failed on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -119,8 +134,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onIgnore(req, res, options, remote, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (OnIgnore.log.isDebugEnabled()) {
+            OnIgnore.log.debug(
                 "Service call [{}:{}] ignore error on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -132,8 +147,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onRefresh(req, res, options, remote, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (OnRefresh.log.isDebugEnabled()) {
+            OnRefresh.log.debug(
                 "Service call [{}:{}] need refresh on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -145,8 +160,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onNonConnection(req, options, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (OnNonConnection.log.isDebugEnabled()) {
+            OnNonConnection.log.debug(
                 "Service call [{}] non connection on [{}], trace [{}], request: {}, options: {}",
                 method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
             );
@@ -158,8 +173,8 @@ public class ServiceHandler<REQ extends Request, RES extends Response> implement
         handlers.forEach(NoBreakFunctions.wrap(handler -> {
             handler.onThrow(req, ex, options, trace);
         }));
-        if (log.isDebugEnabled()) {
-            log.debug(
+        if (onThrow.log.isDebugEnabled()) {
+            onThrow.log.debug(
                 "Service call [{}] throw ex on [{}], trace [{}], request: {}, options: {}, message: {}",
                 method.getFullMethodName(), System.currentTimeMillis(), trace, req, options, ex.getMessage()
             );

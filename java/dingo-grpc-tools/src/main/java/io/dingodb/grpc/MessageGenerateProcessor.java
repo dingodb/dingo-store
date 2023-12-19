@@ -17,6 +17,7 @@ import com.squareup.javapoet.TypeSpec;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.experimental.Delegate;
 import lombok.experimental.SuperBuilder;
 
@@ -79,6 +80,7 @@ import static javax.lang.model.element.Modifier.STATIC;
 
 public class MessageGenerateProcessor {
 
+    public static final ArrayTypeName BYTE_ARRARY = ArrayTypeName.of(byte.class);
     private final Types types;
     private final Elements elements;
 
@@ -130,7 +132,7 @@ public class MessageGenerateProcessor {
         }
 
         if (ByteString.class.getName().equals(type.toString())) {
-            return ArrayTypeName.of(byte.class);
+            return BYTE_ARRARY;
         }
 
         if (Object.class.getPackage().getName().equals(elements.getPackageOf(types.asElement(type)).toString())) {
@@ -308,6 +310,13 @@ public class MessageGenerateProcessor {
             }
             real.put(fieldName, number);
 
+            if (fieldType.equals(BYTE_ARRARY)) {
+                builder.addMethod(methodBuilder(fieldName + "Hex$", TypeName.get(String.class), PUBLIC)
+                    .addAnnotation(ToString.Include.class)
+                    .addCode("return io.dingodb.sdk.common.utils.ByteArrayUtils.toHex(" + fieldName + ");")
+                    .build()
+                );
+            }
             builder.addField(FieldSpec.builder(fieldType, fieldName, PRIVATE).build());
 
         }
@@ -397,7 +406,15 @@ public class MessageGenerateProcessor {
                     ).addAnnotation(
                         AnnotationSpec.builder(AllArgsConstructor.class).addMember("staticName", "$S", "of").build()
                     ).addAnnotation(NoArgsConstructor.class)
+                    .addAnnotation(ToString.class)
                     .addField(realValueField.build());
+                if (realTypeName.equals(BYTE_ARRARY)) {
+                    nestClassBuilder.addMethod(methodBuilder("valueHex$", TypeName.get(String.class), PUBLIC)
+                        .addAnnotation(ToString.Include.class)
+                        .addCode("return io.dingodb.sdk.common.utils.ByteArrayUtils.toHex(value);")
+                        .build()
+                    );
+                }
             } else {
                 nestClassBuilder.superclass(realTypeName)
                     .addAnnotation(NoArgsConstructor.class).addAnnotation(SuperBuilder.class);
