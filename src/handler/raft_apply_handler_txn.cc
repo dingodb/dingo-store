@@ -58,41 +58,13 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       }
     }
   }
+
   if (request.deletes_with_cf_size() > 0) {
     for (const auto &dels : request.deletes_with_cf()) {
       for (const auto &key : dels.keys()) {
         DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                        region->Id(), term_id, log_id)
                         << ", delete cf: " << dels.cf_name() << ", delete key: " << Helper::StringToHex(key);
-      }
-    }
-  }
-
-  butil::Status status;
-
-  // region is spliting, check key out range
-  if (region->State() == pb::common::StoreRegionState::SPLITTING) {
-    const auto &range = region->Range();
-    for (const auto &puts : request.puts_with_cf()) {
-      for (const auto &kv : puts.kvs()) {
-        if (range.end_key().compare(kv.key()) <= 0) {
-          if (ctx) {
-            status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-            ctx->SetStatus(status);
-          }
-          return;
-        }
-      }
-    }
-    for (const auto &dels : request.deletes_with_cf()) {
-      for (const auto &key : dels.keys()) {
-        if (range.end_key().compare(key) <= 0) {
-          if (ctx) {
-            status.set_error(pb::error::EREGION_REDIRECT, "Region is spliting, please update route");
-            ctx->SetStatus(status);
-          }
-          return;
-        }
       }
     }
   }
@@ -120,7 +92,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   }
 
   auto writer = engine->Writer();
-  status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+  auto status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
   if (!status.ok()) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
                                     region->Id(), term_id, log_id)
@@ -134,12 +106,14 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
                                    log_id)
                     << ", commit to vector index count: " << vector_add.vectors_size()
                     << ", vector_add: " << vector_add.ShortDebugString();
+
     auto handler = std::make_shared<VectorAddHandler>();
     if (handler == nullptr) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
                                       log_id)
                        << ", new vector add handler failed, vector add count: " << vector_add.vectors_size();
     }
+
     auto add_ctx = std::make_shared<Context>();
     add_ctx->SetRegionId(region->Id());
     add_ctx->SetCfName(Constant::kVectorDataCF);
@@ -150,6 +124,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
       *new_vector = vector;
     }
+
     handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
     if (!add_ctx->Status().ok() && ctx != nullptr) {
       ctx->SetStatus(add_ctx->Status());

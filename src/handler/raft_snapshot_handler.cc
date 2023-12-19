@@ -612,10 +612,13 @@ int RaftSaveSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
   std::string policy = FLAGS_raft_snapshot_policy;
   if (BAIDU_LIKELY(policy == Constant::kRaftSnapshotPolicyDingo)) {
     SaveSnapshotByDingo(region, engine, term, log_index, writer, done);
-  } else if (policy == Constant::kRaftSnapshotPolicyCheckpoint) {
-    SaveSnapshotByCheckpoint(region, engine, term, log_index, writer, done);
-  } else if (policy == Constant::kRaftSnapshotPolicyScan) {
-    AsyncSaveSnapshotByScan(region, engine, term, log_index, writer, done);
+    // because we do not implement the raw_cf and txn_cf mixed with different ranges in SaveSnapshotByCheckpoint and
+    // SaveSnapshotByScan, so here just disable the latter two snapshot methods.
+    // } else if (policy ==
+    // Constant::kRaftSnapshotPolicyCheckpoint) {
+    //   SaveSnapshotByCheckpoint(region, engine, term, log_index, writer, done);
+    // } else if (policy == Constant::kRaftSnapshotPolicyScan) {
+    //   AsyncSaveSnapshotByScan(region, engine, term, log_index, writer, done);
   } else {
     DINGO_LOG(FATAL) << fmt::format("[raft.snapshot][region({})] unknown snapshot policy: {}", region->Id(), policy);
   }
