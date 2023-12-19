@@ -868,10 +868,8 @@ public class EntityConversion {
         byte[] maxKeyPrefix = codec.encodeMaxKeyPrefix();
         Meta.PartitionRule.Builder builder = Meta.PartitionRule.newBuilder();
         boolean isTxn = Parameters.cleanNull(table.getEngine(), "").startsWith("TXN");
-        if (isTxn) {
-            minKeyPrefix[0] = 't';
-            maxKeyPrefix[0] = 't';
-        }
+        minKeyPrefix[0] = (byte) (isTxn ? 't' : 'r');
+        maxKeyPrefix[0] = (byte) (isTxn ? 't' : 'r');
         Iterator<byte[]> keys = Optional.<Partition, Stream<byte[]>>mapOrGet(
                 table.getPartition(), __ -> encodePartitionDetails(__.getDetails(), codec), Stream::empty
             ).sorted(ByteArrayUtils::compare)

@@ -158,7 +158,7 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
                 }
                 connected = true;
                 channelProvider.after(response);
-                if (ofNullable(response.getError()).map(Error::getErrcode).filter($ -> $ == Errno.OK).isPresent()) {
+                if (ofNullable(response.getError()).map(Error::getErrcode).filter($ -> $ != Errno.OK).isPresent()) {
                     Error error = response.getError();
                     int errCode = error.getErrcode().number();
                     errMsgs.compute(
