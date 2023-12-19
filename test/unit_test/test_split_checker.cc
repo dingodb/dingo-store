@@ -202,7 +202,7 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   range.set_start_key("aa");
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
-  auto split_key = split_checker->SplitKey(region, kAllCFs, count);
+  auto split_key = split_checker->SplitKey(region, region->Range(), kAllCFs, count);
   std::cout << "split_key: " << split_key << '\n';
 
   auto reader = SplitCheckerTest::engine->Reader();
@@ -246,7 +246,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   range.set_start_key("aa");
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
-  auto split_key = split_checker->SplitKey(region, kAllCFs, count);
+  auto split_key = split_checker->SplitKey(region, region->Range(), kAllCFs, count);
   std::cout << "split_key: " << split_key << '\n';
 
   EXPECT_EQ(false, split_key.empty());
@@ -291,7 +291,7 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   range.set_start_key("aa");
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
-  auto split_key = split_checker->SplitKey(region, kAllCFs, count);
+  auto split_key = split_checker->SplitKey(region, region->Range(), kAllCFs, count);
   std::cout << "split_key: " << split_key << '\n';
   EXPECT_EQ(true, !split_key.empty());
 
