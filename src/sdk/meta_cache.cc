@@ -16,8 +16,8 @@
 
 #include "common/logging.h"
 #include "glog/logging.h"
-#include "sdk/common.h"
-#include "sdk/param_config.h"
+#include "sdk/common/common.h"
+#include "sdk/common/param_config.h"
 
 namespace dingodb {
 namespace sdk {

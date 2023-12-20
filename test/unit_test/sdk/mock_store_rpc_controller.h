@@ -17,7 +17,7 @@
 
 #include "client_stub.h"
 #include "gmock/gmock.h"
-#include "store_rpc_controller.h"
+#include "store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

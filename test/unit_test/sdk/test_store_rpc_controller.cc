@@ -15,7 +15,7 @@
 #include <memory>
 
 #include "brpc/channel.h"
-#include "common.h"
+#include "common/common.h"
 #include "common/logging.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
@@ -25,10 +25,10 @@
 #include "mock_store_rpc_controller.h"
 #include "proto/error.pb.h"
 #include "region.h"
-#include "rpc.h"
+#include "rpc/rpc.h"
 #include "status.h"
-#include "store_rpc.h"
-#include "store_rpc_controller.h"
+#include "store/store_rpc.h"
+#include "store/store_rpc_controller.h"
 #include "test_base.h"
 #include "test_common.h"
 

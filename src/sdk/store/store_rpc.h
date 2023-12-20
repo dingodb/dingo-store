@@ -16,7 +16,7 @@
 #define DINGODB_SDK_STORE_RPC_H_
 
 #include "proto/store.pb.h"
-#include "sdk/rpc.h"
+#include "sdk/rpc/rpc.h"
 
 namespace dingodb {
 namespace sdk {

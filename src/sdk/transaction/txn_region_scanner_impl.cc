@@ -17,11 +17,11 @@
 #include <memory>
 
 #include "glog/logging.h"
-#include "sdk/common.h"
-#include "sdk/helper.h"
-#include "sdk/param_config.h"
+#include "sdk/common/common.h"
+#include "sdk/common/helper.h"
+#include "sdk/common/param_config.h"
 #include "sdk/region_scanner.h"
-#include "sdk/store_rpc.h"
+#include "sdk/store/store_rpc.h"
 #include "sdk/transaction/txn_common.h"
 
 namespace dingodb {
@@ -125,7 +125,7 @@ Status TxnRegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
       include_next_key_ = false;
       for (const auto& kv : response->kvs()) {
         DINGO_LOG(DEBUG) << "Success scan, key:" << kv.key() << ", value:" << kv.value() << ", next_key:" << next_key_
-                        << ", end_key:" << end_key_;
+                         << ", end_key:" << end_key_;
         if (kv.key() < end_key_) {
           tmp_kvs.push_back({kv.key(), kv.value()});
         } else {

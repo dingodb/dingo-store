@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/raw_kv_impl.h"
+#include "sdk/rawkv/raw_kv_impl.h"
 
 #include <cstdint>
 #include <iterator>
@@ -26,12 +26,12 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
-#include "sdk/common.h"
+#include "sdk/common/common.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
 #include "sdk/status.h"
-#include "sdk/store_rpc.h"
-#include "sdk/store_rpc_controller.h"
+#include "sdk/store/store_rpc.h"
+#include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

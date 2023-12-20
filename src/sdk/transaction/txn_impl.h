@@ -23,7 +23,7 @@
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
 #include "sdk/region.h"
-#include "sdk/store_rpc.h"
+#include "sdk/store/store_rpc.h"
 #include "sdk/transaction/txn_buffer.h"
 #include "sdk/transaction/txn_common.h"
 

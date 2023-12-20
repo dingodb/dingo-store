@@ -17,7 +17,7 @@
 
 #include "gmock/gmock.h"
 #include "google/protobuf/message.h"
-#include "rpc.h"
+#include "rpc/rpc.h"
 
 namespace dingodb {
 namespace sdk {

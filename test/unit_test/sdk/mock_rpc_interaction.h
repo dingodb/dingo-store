@@ -19,7 +19,7 @@
 
 #include "brpc/channel.h"
 #include "gmock/gmock.h"
-#include "rpc_interaction.h"
+#include "rpc/rpc_interaction.h"
 
 namespace dingodb {
 namespace sdk {

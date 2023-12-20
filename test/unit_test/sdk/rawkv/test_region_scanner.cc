@@ -17,14 +17,14 @@
 #include <string>
 
 #include "client.h"
-#include "common.h"
+#include "common/common.h"
+#include "common/param_config.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "mock_region_scanner.h"
-#include "param_config.h"
 #include "proto/error.pb.h"
-#include "region_scanner_impl.h"
-#include "store_rpc.h"
+#include "rawkv/region_scanner_impl.h"
+#include "store/store_rpc.h"
 #include "test_base.h"
 #include "test_common.h"
 
