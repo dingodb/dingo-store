@@ -18,8 +18,11 @@
 #include <memory>
 
 #include "brpc/channel.h"
+#include "common/synchronization.h"
 #include "gmock/gmock.h"
 #include "rpc/rpc_interaction.h"
+#include "status.h"
+#include "utils/call_back.h"
 
 namespace dingodb {
 namespace sdk {
@@ -29,18 +32,7 @@ class MockRpcInteraction final : public RpcInteraction {
 
   ~MockRpcInteraction() override = default;
 
-  MOCK_METHOD(Status, SendRpc, (Rpc& rpc, google::protobuf::Closure* done), (override));
-
-  MOCK_METHOD(Status, InitChannel, (const butil::EndPoint& server_addr_and_port, std::shared_ptr<brpc::Channel>& channel),
-              (override));
-
-  Status SendRpcSync(Rpc& rpc, google::protobuf::Closure* done = nullptr) { return SendRpc(rpc, done); }
-
-  Status RealSendRpc(Rpc& rpc, google::protobuf::Closure* done = nullptr) { return RpcInteraction::SendRpc(rpc, done); }
-
-  Status RealInitChannel(const butil::EndPoint& server_addr_and_port, std::shared_ptr<brpc::Channel>& channel) {
-    return RpcInteraction::InitChannel(server_addr_and_port, channel);
-  }
+  MOCK_METHOD(void, SendRpc, (Rpc& rpc, RpcCallback cb), (override));
 };
 }  // namespace sdk
 

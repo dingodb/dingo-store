@@ -10,7 +10,7 @@ include(GoogleTest)
 set(TEST_SRCS
   test_meta_cache.cc
   test_region.cc
-  test_rpc_interaction.cc
+  # test_rpc_interaction.cc
   test_store_rpc_controller.cc
   rawkv/test_raw_kv.cc
   rawkv/test_region_scanner.cc

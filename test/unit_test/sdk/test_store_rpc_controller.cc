@@ -48,12 +48,12 @@ TEST_F(StoreRpcControllerTest, CallSuccess) {
 
   StoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(get_rpc);
     get_rpc->MutableResponse()->set_value("pong");
-    return Status::OK();
+
+    cb();
   });
 
   Status call = controller.Call();
@@ -81,7 +81,11 @@ TEST_F(StoreRpcControllerTest, RegionIsStale) {
 }
 
 TEST_F(StoreRpcControllerTest, AllReplicaFail) {
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly(testing::Return(Status::Incomplete("init fail")));
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+    rpc.SetStatus(Status::NetworkError("connect fail"));
+    cb();
+  });
+
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -94,28 +98,6 @@ TEST_F(StoreRpcControllerTest, AllReplicaFail) {
 
   Status call = controller.Call();
   // expect all replica failed
-  // TODO:: maybe add status sub code
-  EXPECT_TRUE(call.IsAborted());
-}
-
-TEST_F(StoreRpcControllerTest, RpcFailed) {
-  KvGetRpc rpc;
-  std::string key = "d";
-  rpc.MutableRequest()->set_key(key);
-  std::shared_ptr<Region> region;
-  Status got = meta_cache->LookupRegionByKey(key, region);
-  EXPECT_TRUE(got.IsOK());
-  EXPECT_FALSE(region->IsStale());
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).Times(testing::AnyNumber());
-  EXPECT_CALL(*store_rpc_interaction, InitChannel).Times(testing::AnyNumber());
-
-  MockStoreRpcController controller(*stub, rpc, region);
-
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(true));
-
-  Status call = controller.Call();
-  // expect retry rpc times exceed
   // TODO:: maybe add status sub code
   EXPECT_TRUE(call.IsAborted());
 }
@@ -139,15 +121,14 @@ TEST_F(StoreRpcControllerTest, RaftNotLeaderWithOutHint) {
     }
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
     response->mutable_error()->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
-    return Status::OK();
+
+    cb();
   });
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
 
   Status call = controller.Call();
   // expect retry rpc times exceed
@@ -186,25 +167,23 @@ TEST_F(StoreRpcControllerTest, RaftNotLeaderWithHint) {
   }
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
         CHECK_NOTNULL(kv_get_rpc);
         auto* response = kv_get_rpc->MutableResponse();
         response->mutable_error()->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
         auto* location = response->mutable_error()->mutable_leader_location();
         *location = Helper::EndPointToLocation(follower.end_point);
-        return Status::OK();
+
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+        rpc.Reset();
         auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
         CHECK_NOTNULL(kv_get_rpc);
         kv_get_rpc->MutableResponse()->set_value("pong");
-        return Status::OK();
+        cb();
       });
-
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
 
   Status call = controller.Call();
   EXPECT_TRUE(call.IsOK());
@@ -235,15 +214,13 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithOutStoreRegionInfo) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
     response->mutable_error()->set_errcode(pb::error::EREGION_VERSION);
-    return Status::OK();
+
+    cb();
   });
 
   Status call = controller.Call();
@@ -263,12 +240,9 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithStoreRegionInfo) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
-
   std::shared_ptr<Region> new_region = RegionC2E(2);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
@@ -276,7 +250,8 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithStoreRegionInfo) {
     auto* region_info = response->mutable_error()->mutable_store_region_info();
 
     Region2StoreRegionInfo(new_region, region_info);
-    return Status::OK();
+
+    cb();
   });
 
   Status call = controller.Call();
@@ -302,15 +277,12 @@ TEST_F(StoreRpcControllerTest, RegionNotFound) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
     response->mutable_error()->set_errcode(pb::error::Errno::EREGION_NOT_FOUND);
-    return Status::OK();
+    cb();
   });
 
   Status call = controller.Call();
@@ -330,15 +302,12 @@ TEST_F(StoreRpcControllerTest, KeyOutOfRange) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
     response->mutable_error()->set_errcode(pb::error::Errno::EKEY_OUT_OF_RANGE);
-    return Status::OK();
+    cb();
   });
 
   Status call = controller.Call();
@@ -362,15 +331,12 @@ TEST_F(StoreRpcControllerTest, RequestFull) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_put_rpc);
     auto* response = kv_put_rpc->MutableResponse();
     response->mutable_error()->set_errcode(pb::error::EREQUEST_FULL);
-    return Status::OK();
+    cb();
   });
 
   Status call = controller.Call();
@@ -391,21 +357,20 @@ TEST_F(StoreRpcControllerTest, RequestFullThenSuccess) {
   StoreRpcController controller(*stub, rpc, region);
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvGetRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         auto* response = kv_rpc->MutableResponse();
         response->mutable_error()->set_errcode(pb::error::EREQUEST_FULL);
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+        rpc.Reset();
         auto* kv_rpc = dynamic_cast<KvGetRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
         kv_rpc->MutableResponse()->set_value("pong");
-        return Status::OK();
+        cb();
       });
 
   Status call = controller.Call();
@@ -429,14 +394,12 @@ TEST_F(StoreRpcControllerTest, OtherErrorCode) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(controller, IsRpcFailed).WillRepeatedly(testing::Return(false));
-
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_put_rpc);
     auto* response = kv_put_rpc->MutableResponse();
     response->mutable_error()->set_errcode(pb::error::EINTERNAL);
+    cb();
     return Status::OK();
   });
 

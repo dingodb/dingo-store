@@ -60,8 +60,7 @@ TEST_F(TxnLockResolverTest, TxnNotFound) {
         return Status::OK();
       });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -82,7 +81,7 @@ TEST_F(TxnLockResolverTest, TxnNotFound) {
     no_txn->set_start_ts(request->lock_ts());
     no_txn->set_primary_key(request->primary_key());
 
-    return Status::OK();
+    cb();
   });
 
   Status s = lock_resolver->ResolveLock(fake_lock, Tso2Timestamp(init_tso));
@@ -110,8 +109,7 @@ TEST_F(TxnLockResolverTest, Locked) {
         return Status::OK();
       });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -128,7 +126,7 @@ TEST_F(TxnLockResolverTest, Locked) {
 
     txn_rpc->MutableResponse()->set_lock_ttl(10);
 
-    return Status::OK();
+    cb();
   });
 
   Status s = lock_resolver->ResolveLock(fake_lock, Tso2Timestamp(init_tso));
@@ -158,8 +156,7 @@ TEST_F(TxnLockResolverTest, Committed) {
       });
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -177,11 +174,10 @@ TEST_F(TxnLockResolverTest, Committed) {
 
         txn_rpc->MutableResponse()->set_commit_ts(request->current_ts());
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve primary key
-        (void)done;
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -199,11 +195,11 @@ TEST_F(TxnLockResolverTest, Committed) {
         const auto& key = request->keys(0);
         EXPECT_EQ(key, fake_lock.primary_lock());
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve conlict key
-        (void)done;
+
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -221,7 +217,7 @@ TEST_F(TxnLockResolverTest, Committed) {
         const auto& key = request->keys(0);
         EXPECT_EQ(key, fake_lock.key());
 
-        return Status::OK();
+        cb();
       });
 
   Status s = lock_resolver->ResolveLock(fake_lock, Tso2Timestamp(init_tso));
@@ -251,8 +247,7 @@ TEST_F(TxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
       });
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -270,11 +265,11 @@ TEST_F(TxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
 
         txn_rpc->MutableResponse()->set_commit_ts(request->current_ts());
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve primary key
-        (void)done;
+
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -296,7 +291,7 @@ TEST_F(TxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
         auto* error = response->mutable_error();
         error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-        return Status::OK();
+        cb();
       });
 
   Status s = lock_resolver->ResolveLock(fake_lock, Tso2Timestamp(init_tso));
@@ -326,8 +321,7 @@ TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
       });
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -345,11 +339,11 @@ TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
 
         txn_rpc->MutableResponse()->set_commit_ts(request->current_ts());
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve primary key
-        (void)done;
+
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -367,11 +361,11 @@ TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
         const auto& key = request->keys(0);
         EXPECT_EQ(key, fake_lock.primary_lock());
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve primary key
-        (void)done;
+
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -393,7 +387,7 @@ TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
         auto* error = response->mutable_error();
         error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-        return Status::OK();
+        cb();
       });
 
   Status s = lock_resolver->ResolveLock(fake_lock, Tso2Timestamp(init_tso));
@@ -423,8 +417,7 @@ TEST_F(TxnLockResolverTest, Rollbacked) {
       });
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -443,11 +436,11 @@ TEST_F(TxnLockResolverTest, Rollbacked) {
         txn_rpc->MutableResponse()->set_lock_ttl(0);
         txn_rpc->MutableResponse()->set_commit_ts(0);
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve primary key
-        (void)done;
+
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -465,11 +458,11 @@ TEST_F(TxnLockResolverTest, Rollbacked) {
         const auto& key = request->keys(0);
         EXPECT_EQ(key, fake_lock.primary_lock());
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         //  resolve conlict key
-        (void)done;
+
         auto* txn_rpc = dynamic_cast<TxnResolveLockRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
 
@@ -487,7 +480,7 @@ TEST_F(TxnLockResolverTest, Rollbacked) {
         const auto& key = request->keys(0);
         EXPECT_EQ(key, fake_lock.key());
 
-        return Status::OK();
+        cb();
       });
 
   Status s = lock_resolver->ResolveLock(fake_lock, Tso2Timestamp(init_tso));

@@ -59,8 +59,7 @@ TEST_F(RawKVTest, Get) {
   CHECK(meta_cache->LookupRegionByKey(key, region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
 
@@ -71,7 +70,7 @@ TEST_F(RawKVTest, Get) {
     EXPECT_EQ(0, EpochCompare(context.region_epoch(), region->Epoch()));
 
     kv_get_rpc->MutableResponse()->set_value("pong");
-    return Status::OK();
+    cb();
   });
 
   Status got = raw_kv->Get(key, value);
@@ -87,8 +86,7 @@ TEST_F(RawKVTest, BatchGetSuccess) {
 
   std::vector<KVPair> kvs;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* batch_get_rpc = dynamic_cast<KvBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(batch_get_rpc);
     CHECK(batch_get_rpc->Request()->has_context());
@@ -108,7 +106,8 @@ TEST_F(RawKVTest, BatchGetSuccess) {
       kv->set_key("f");
       kv->set_value("f");
     }
-    return Status::OK();
+
+    cb();
   });
 
   Status got = raw_kv->BatchGet(keys, kvs);
@@ -128,8 +127,7 @@ TEST_F(RawKVTest, BatchGetPartialFail) {
 
   std::vector<KVPair> kvs;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* batch_get_rpc = dynamic_cast<KvBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(batch_get_rpc);
     CHECK(batch_get_rpc->Request()->has_context());
@@ -151,7 +149,7 @@ TEST_F(RawKVTest, BatchGetPartialFail) {
       kv->set_key("f");
       kv->set_value("f");
     }
-    return Status::OK();
+    cb();
   });
 
   Status got = raw_kv->BatchGet(keys, kvs);
@@ -171,8 +169,7 @@ TEST_F(RawKVTest, BatchGetAllFail) {
 
   std::vector<KVPair> kvs;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* batch_get_rpc = dynamic_cast<KvBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(batch_get_rpc);
     CHECK(batch_get_rpc->Request()->has_context());
@@ -198,7 +195,7 @@ TEST_F(RawKVTest, BatchGetAllFail) {
       auto* error = batch_get_rpc->MutableResponse()->mutable_error();
       error->set_errcode(pb::error::EINTERNAL);
     }
-    return Status::OK();
+    cb();
   });
 
   Status got = raw_kv->BatchGet(keys, kvs);
@@ -218,8 +215,7 @@ TEST_F(RawKVTest, Put) {
   CHECK(meta_cache->LookupRegionByKey(key, region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_put_rpc);
 
@@ -232,7 +228,7 @@ TEST_F(RawKVTest, Put) {
     auto kv = kv_put_rpc->MutableRequest()->kv();
     EXPECT_EQ(kv.key(), key);
     EXPECT_EQ(kv.value(), value);
-    return Status::OK();
+    cb();
   });
 
   Status put = raw_kv->Put(key, value);
@@ -245,8 +241,7 @@ TEST_F(RawKVTest, BatchPutSuccess) {
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_batch_put_rpc = dynamic_cast<KvBatchPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_batch_put_rpc);
 
@@ -260,7 +255,7 @@ TEST_F(RawKVTest, BatchPutSuccess) {
       EXPECT_EQ(kv.key(), kv.value());
     }
 
-    return Status::OK();
+    cb();
   });
   Status put = raw_kv->BatchPut(kvs);
   EXPECT_TRUE(put.IsOK());
@@ -272,8 +267,7 @@ TEST_F(RawKVTest, BatchPutPartialFail) {
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_batch_put_rpc = dynamic_cast<KvBatchPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_batch_put_rpc);
 
@@ -291,7 +285,7 @@ TEST_F(RawKVTest, BatchPutPartialFail) {
       }
     }
 
-    return Status::OK();
+    cb();
   });
 
   Status put = raw_kv->BatchPut(kvs);
@@ -302,8 +296,7 @@ TEST_F(RawKVTest, PutIfAbsent) {
   std::string key = "d";
   std::string value = "d";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvPutIfAbsentRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -316,7 +309,8 @@ TEST_F(RawKVTest, PutIfAbsent) {
     EXPECT_EQ(kv.value(), value);
 
     kv_rpc->MutableResponse()->set_key_state(true);
-    return Status::OK();
+
+    cb();
   });
 
   bool state;
@@ -331,8 +325,7 @@ TEST_F(RawKVTest, BatchPutIfAbsentSuccess) {
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchPutIfAbsentRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -347,7 +340,7 @@ TEST_F(RawKVTest, BatchPutIfAbsentSuccess) {
       kv_rpc->MutableResponse()->add_key_states(true);
     }
 
-    return Status::OK();
+    cb();
   });
 
   std::vector<KeyOpState> states;
@@ -364,8 +357,7 @@ TEST_F(RawKVTest, BatchPutIfAbsentPartialFail) {
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchPutIfAbsentRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -386,7 +378,7 @@ TEST_F(RawKVTest, BatchPutIfAbsentPartialFail) {
       }
     }
 
-    return Status::OK();
+    cb();
   });
 
   std::vector<KeyOpState> states;
@@ -403,8 +395,7 @@ TEST_F(RawKVTest, BatchPutIfAbsentPartialFail) {
 TEST_F(RawKVTest, Delete) {
   std::string key = "d";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -414,7 +405,8 @@ TEST_F(RawKVTest, Delete) {
 
     EXPECT_EQ(1, kv_rpc->MutableRequest()->keys_size());
     EXPECT_EQ(key, kv_rpc->MutableRequest()->keys(0));
-    return Status::OK();
+
+    cb();
   });
 
   EXPECT_TRUE(raw_kv->Delete(key).IsOK());
@@ -426,8 +418,7 @@ TEST_F(RawKVTest, BatchDeleteSuccess) {
   to_delete.push_back("d");
   to_delete.push_back("f");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -439,7 +430,7 @@ TEST_F(RawKVTest, BatchDeleteSuccess) {
       EXPECT_TRUE(key == "b" || key == "d" || key == "f");
     }
 
-    return Status::OK();
+    cb();
   });
 
   EXPECT_TRUE(raw_kv->BatchDelete(to_delete).IsOK());
@@ -451,8 +442,7 @@ TEST_F(RawKVTest, BatchDeletePartialFail) {
   to_delete.push_back("d");
   to_delete.push_back("f");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -468,7 +458,7 @@ TEST_F(RawKVTest, BatchDeletePartialFail) {
       }
     }
 
-    return Status::OK();
+    cb();
   });
 
   EXPECT_FALSE(raw_kv->BatchDelete(to_delete).IsOK());
@@ -491,8 +481,7 @@ TEST_F(RawKVTest, DeleteRangeInOneRegion) {
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -510,7 +499,7 @@ TEST_F(RawKVTest, DeleteRangeInOneRegion) {
 
     kv_rpc->MutableResponse()->set_delete_count(count);
 
-    return Status::OK();
+    cb();
   });
 
   int64_t delete_count;
@@ -537,8 +526,7 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -562,7 +550,7 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
 
     kv_rpc->MutableResponse()->set_delete_count(count);
 
-    return Status::OK();
+    cb();
   });
 
   int64_t delete_count;
@@ -590,8 +578,7 @@ TEST_F(RawKVTest, DeleteRangeInThressRegion) {
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -617,7 +604,7 @@ TEST_F(RawKVTest, DeleteRangeInThressRegion) {
 
     kv_rpc->MutableResponse()->set_delete_count(count);
 
-    return Status::OK();
+    cb();
   });
 
   int64_t delete_count;
@@ -645,8 +632,7 @@ TEST_F(RawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -672,7 +658,7 @@ TEST_F(RawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
 
     kv_rpc->MutableResponse()->set_delete_count(count);
 
-    return Status::OK();
+    cb();
   });
 
   int64_t delete_count;
@@ -725,8 +711,7 @@ TEST_F(RawKVTest, DeleteRangeNonContinuous) {
             return Status::OK();
           });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -754,7 +739,7 @@ TEST_F(RawKVTest, DeleteRangeNonContinuous) {
 
     kv_rpc->MutableResponse()->set_delete_count(count);
 
-    return Status::OK();
+    cb();
   });
 
   int64_t delete_count;
@@ -772,8 +757,7 @@ TEST_F(RawKVTest, CompareAndSet) {
   CHECK(meta_cache->LookupRegionByKey(key, region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvCompareAndSetRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -792,7 +776,8 @@ TEST_F(RawKVTest, CompareAndSet) {
     kv_rpc->MutableResponse()->set_key_state(true);
 
     EXPECT_EQ(expteced, expect_value);
-    return Status::OK();
+
+    cb();
   });
 
   bool state = false;
@@ -827,8 +812,7 @@ TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
   expect_values.push_back("x");
   expect_values.push_back("w");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchCompareAndSetRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -860,7 +844,7 @@ TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
       kv_rpc->MutableResponse()->add_key_states(true);
     }
 
-    return Status::OK();
+    cb();
   });
 
   std::vector<KeyOpState> key_state;
@@ -885,8 +869,7 @@ TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
   expect_values.push_back("x");
   expect_values.push_back("w");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchCompareAndSetRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -927,7 +910,7 @@ TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
       error->set_errcode(pb::error::EINTERNAL);
     }
 
-    return Status::OK();
+    cb();
   });
 
   std::vector<KeyOpState> key_state;

@@ -26,12 +26,9 @@ class MockStoreRpcController final : public StoreRpcController {
  public:
   MockStoreRpcController(const ClientStub& stub, Rpc& rpc, std::shared_ptr<Region> region)
       : StoreRpcController(stub, rpc, region) {
-    ON_CALL(*this, IsRpcFailed).WillByDefault(testing::Return(false));
   }
 
   ~MockStoreRpcController() override = default;
-
-  MOCK_METHOD(bool, IsRpcFailed, (const brpc::Controller* cntl), (override));
 };
 
 }  // namespace sdk
