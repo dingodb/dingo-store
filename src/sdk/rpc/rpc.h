@@ -16,17 +16,22 @@
 #define DINGODB_SDK_RPC_H_
 
 #include <cstdint>
-#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 
+#include "brpc/callback.h"
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "butil/fast_rand.h"
+#include "butil/type_traits.h"
+#include "common/logging.h"
 #include "google/protobuf/message.h"
+#include "sdk/common/param_config.h"
 #include "sdk/status.h"
+#include "sdk/utils/call_back.h"
 
 namespace dingodb {
 namespace sdk {
@@ -45,6 +50,10 @@ class Rpc {
 
   const brpc::Controller* Controller() const { return &controller; }
 
+  Status GetStatus() { return status; }
+
+  void SetStatus(const Status& s) { status = s; }
+
   virtual google::protobuf::Message* RawMutableRequest() = 0;
 
   virtual const google::protobuf::Message* RawRequest() const = 0;
@@ -59,12 +68,15 @@ class Rpc {
 
   virtual std::string Method() const = 0;
 
-  virtual void Call(brpc::Channel* channel, google::protobuf::Closure* done = nullptr) = 0;
+  virtual void Reset() = 0;
+
+  virtual void Call(brpc::Channel* channel, RpcCallback cb) = 0;
 
  protected:
   std::string cmd;
   brpc::Controller controller;
   butil::EndPoint end_point;
+  Status status;
 };
 
 template <class RequestType, class ResponseType, class ServiceType, class StubType>
@@ -100,9 +112,35 @@ class ClientRpc : public Rpc {
 
   std::string ServiceFullName() override { return ServiceType::descriptor()->full_name(); }
 
-  void Call(brpc::Channel* channel, google::protobuf::Closure* done = nullptr) override {
+  void OnClientRpcDone(RpcCallback cb) {
+    if (controller.Failed()) {
+      DINGO_LOG(WARNING) << "Fail send rpc, log_id:" << controller.log_id() << " method:" << Method()
+                         << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str()
+                         << " error_code:" << controller.ErrorCode() << " error_text:" << controller.ErrorText();
+
+      Status err = Status::NetworkError(controller.ErrorCode(), controller.ErrorText());
+      SetStatus(err);
+    } else {
+      DINGO_LOG(DEBUG) << "Success send rpc, log_id:" << controller.log_id() << " method:" << Method()
+                       << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str()
+                       << ", request:" << request->DebugString() << ", response:" << response->DebugString();
+    }
+
+    cb();
+  }
+
+  void Reset() override {
+    response->Clear();
+    controller.Reset();
+    controller.set_log_id(butil::fast_rand());
+    controller.set_timeout_ms(kRpcTimeOutMs);
+    controller.set_max_retry(kRpcCallMaxRetry);
+    status = Status::OK();
+  }
+
+  void Call(brpc::Channel* channel, RpcCallback cb) override {
     StubType stub(channel);
-    Send(stub, done);
+    Send(stub, brpc::NewCallback(this, &ClientRpc::OnClientRpcDone, cb));
   }
 
   virtual void Send(StubType& stub, google::protobuf::Closure* done) = 0;

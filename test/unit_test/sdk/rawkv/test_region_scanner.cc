@@ -53,8 +53,7 @@ TEST_F(RegionScannerImplTest, OpenCloseSuccess) {
   std::string scan_id = "101";
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
@@ -83,10 +82,9 @@ TEST_F(RegionScannerImplTest, OpenCloseSuccess) {
 
         kv_rpc->MutableResponse()->set_scan_id(scan_id);
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanReleaseRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
@@ -100,7 +98,7 @@ TEST_F(RegionScannerImplTest, OpenCloseSuccess) {
 
         EXPECT_EQ(scan_id, kv_rpc->Request()->scan_id());
 
-        return Status::OK();
+        cb();
       });
 
   RegionScannerImpl scanner(*stub, region);
@@ -119,15 +117,14 @@ TEST_F(RegionScannerImplTest, OpenFail) {
 
   std::string scan_id = "101";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
     auto* error = kv_rpc->MutableResponse()->mutable_error();
     error->set_errcode(pb::error::EINTERNAL);
 
-    return Status::OK();
+    cb();
   });
 
   RegionScannerImpl scanner(*stub, region);
@@ -148,16 +145,14 @@ TEST_F(RegionScannerImplTest, OpenSuccessCloseFail) {
   std::string scan_id = "101";
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         kv_rpc->MutableResponse()->set_scan_id(scan_id);
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanReleaseRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
@@ -166,7 +161,7 @@ TEST_F(RegionScannerImplTest, OpenSuccessCloseFail) {
         auto* error = kv_rpc->MutableResponse()->mutable_error();
         error->set_errcode(pb::error::EINTERNAL);
 
-        return Status::OK();
+        cb();
       });
 
   RegionScannerImpl scanner(*stub, region);
@@ -209,16 +204,14 @@ TEST_F(RegionScannerImplTest, NextBatchFail) {
   std::string scan_id = "101";
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         kv_rpc->MutableResponse()->set_scan_id(scan_id);
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanContinueRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
@@ -228,16 +221,15 @@ TEST_F(RegionScannerImplTest, NextBatchFail) {
         auto* error = kv_rpc->MutableResponse()->mutable_error();
         error->set_errcode(pb::error::EINTERNAL);
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanReleaseRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         EXPECT_EQ(scan_id, kv_rpc->Request()->scan_id());
 
-        return Status::OK();
+        cb();
       });
 
   RegionScannerImpl scanner(*stub, region);
@@ -263,32 +255,29 @@ TEST_F(RegionScannerImplTest, NextBatchNoData) {
   std::string scan_id = "101";
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         kv_rpc->MutableResponse()->set_scan_id(scan_id);
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanContinueRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         EXPECT_EQ(kv_rpc->Request()->scan_id(), scan_id);
         EXPECT_EQ(kv_rpc->Request()->max_fetch_cnt(), kScanBatchSize);
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanReleaseRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         EXPECT_EQ(scan_id, kv_rpc->Request()->scan_id());
 
-        return Status::OK();
+        cb();
       });
 
   RegionScannerImpl scanner(*stub, region);
@@ -322,16 +311,14 @@ TEST_F(RegionScannerImplTest, NextBatchWithData) {
   int iter_before = 0;
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
 
         kv_rpc->MutableResponse()->set_scan_id(scan_id);
-        return Status::OK();
+        cb();
       })
-      .WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanContinueRpc*>(&rpc);
         if (kv_rpc == nullptr) {
           // KvScanReleaseRpc
@@ -340,7 +327,7 @@ TEST_F(RegionScannerImplTest, NextBatchWithData) {
 
           EXPECT_EQ(scan_id, kv_rpc->Request()->scan_id());
 
-          return Status::OK();
+          cb();
         } else {
           // KvScanContinueRpc
           CHECK_NOTNULL(kv_rpc);
@@ -358,7 +345,7 @@ TEST_F(RegionScannerImplTest, NextBatchWithData) {
             iter++;
           }
 
-          return Status::OK();
+          cb();
         }
       });
 

@@ -91,8 +91,7 @@ TEST_F(TxnImplTest, Get) {
 
   auto txn = NewTransactionImpl(options);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnGetRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -107,7 +106,7 @@ TEST_F(TxnImplTest, Get) {
     EXPECT_EQ(request->start_ts(), txn->TEST_GetStartTs());
 
     txn_rpc->MutableResponse()->set_value("pong");
-    return Status::OK();
+    cb();
   });
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -120,8 +119,7 @@ TEST_F(TxnImplTest, Get) {
 TEST_F(TxnImplTest, SingleOP) {
   auto txn = NewTransactionImpl(options);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnGetRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -129,7 +127,7 @@ TEST_F(TxnImplTest, SingleOP) {
     EXPECT_TRUE(request->has_context());
 
     EXPECT_EQ(request->start_ts(), txn->TEST_GetStartTs());
-    return Status::OK();
+    cb();
   });
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -189,8 +187,7 @@ TEST_F(TxnImplTest, BatchGet) {
 
   auto txn = NewTransactionImpl(options);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -213,7 +210,8 @@ TEST_F(TxnImplTest, BatchGet) {
       kv->set_key("f");
       kv->set_value("f");
     }
-    return Status::OK();
+
+    cb();
   });
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -334,8 +332,7 @@ TEST_F(TxnImplTest, CommitWithData) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr == txn_rpc) {
       // commit
@@ -350,7 +347,7 @@ TEST_F(TxnImplTest, CommitWithData) {
         EXPECT_TRUE(key == "a" || key == "b" || key == "d");
       }
 
-      return Status::OK();
+      cb();
     } else {
       // precommit
       CHECK_NOTNULL(txn_rpc);
@@ -373,7 +370,7 @@ TEST_F(TxnImplTest, CommitWithData) {
           CHECK(false) << "unknow test mutation:" << mutation.DebugString();
         }
       }
-      return Status::OK();
+      cb();
     }
   });
 
@@ -405,8 +402,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflict) {
   mock_lock.set_key(txn->TEST_GetPrimaryKey());
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
         CHECK_NOTNULL(txn_rpc);
@@ -425,10 +421,9 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflict) {
         auto* lock_info = txn_result->mutable_locked();
         *lock_info = mock_lock;
 
-        return Status::OK();
+        cb();
       })
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
         CHECK_NOTNULL(txn_rpc);
@@ -442,12 +437,12 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflict) {
 
         const auto& mutation = request->mutations(0);
         EXPECT_EQ(mutation.key(), txn->TEST_GetPrimaryKey());
-        return Status::OK();
+        cb();
       })
-      .WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
+      .WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
         (void)rpc;
-        (void)done;
-        return Status::OK();
+
+        cb();
       });
 
   EXPECT_CALL(*txn_lock_resolver, ResolveLock)
@@ -484,8 +479,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflictExceed) {
   auto mock_lock = PrepareLockInfo();
   mock_lock.set_key(txn->TEST_GetPrimaryKey());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     // precommit
     CHECK_NOTNULL(txn_rpc);
@@ -504,7 +498,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflictExceed) {
     auto* lock_info = txn_result->mutable_locked();
     *lock_info = mock_lock;
 
-    return Status::OK();
+    cb();
   });
 
   EXPECT_CALL(*txn_lock_resolver, ResolveLock)
@@ -539,8 +533,7 @@ TEST_F(TxnImplTest, PrimaryKeyWriteLockConfict) {
   conflict.set_start_ts(txn->TEST_GetStartTs() + kStep);
   conflict.set_key(txn->TEST_GetPrimaryKey());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     // precommit
     CHECK_NOTNULL(txn_rpc);
@@ -559,7 +552,7 @@ TEST_F(TxnImplTest, PrimaryKeyWriteLockConfict) {
     auto* write_confilict = txn_result->mutable_write_conflict();
     *write_confilict = conflict;
 
-    return Status::OK();
+    cb();
   });
 
   EXPECT_CALL(*txn_lock_resolver, ResolveLock).Times(0);
@@ -585,8 +578,7 @@ TEST_F(TxnImplTest, PreWriteSecondLockConflict) {
   }
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
         CHECK_NOTNULL(txn_rpc);
@@ -601,10 +593,9 @@ TEST_F(TxnImplTest, PreWriteSecondLockConflict) {
         const auto& mutation = request->mutations(0);
         EXPECT_EQ(mutation.key(), txn->TEST_GetPrimaryKey());
 
-        return Status::OK();
+        cb();
       })
-      .WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
         CHECK_NOTNULL(txn_rpc);
@@ -623,7 +614,7 @@ TEST_F(TxnImplTest, PreWriteSecondLockConflict) {
           *lock_info = mock_lock;
         }
 
-        return Status::OK();
+        cb();
       });
 
   EXPECT_CALL(*txn_lock_resolver, ResolveLock).Times(testing::AnyNumber());
@@ -649,8 +640,7 @@ TEST_F(TxnImplTest, PreWriteSecondWriteConflict) {
   }
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc)
-      .WillOnce([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
         CHECK_NOTNULL(txn_rpc);
@@ -665,10 +655,9 @@ TEST_F(TxnImplTest, PreWriteSecondWriteConflict) {
         const auto& mutation = request->mutations(0);
         EXPECT_EQ(mutation.key(), txn->TEST_GetPrimaryKey());
 
-        return Status::OK();
+        cb();
       })
-      .WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-        (void)done;
+      .WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
         CHECK_NOTNULL(txn_rpc);
@@ -692,7 +681,7 @@ TEST_F(TxnImplTest, PreWriteSecondWriteConflict) {
           *write_confilict = conflict;
         }
 
-        return Status::OK();
+        cb();
       });
 
   EXPECT_CALL(*txn_lock_resolver, ResolveLock).Times(0);
@@ -717,12 +706,11 @@ TEST_F(TxnImplTest, CommitPrimaryKeyMeetRollback) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
-      return Status::OK();
+      cb();
     } else {
       // only commit primarykey rpc
       TxnCommitRpc* txn_rpc = dynamic_cast<TxnCommitRpc*>(&rpc);
@@ -747,7 +735,7 @@ TEST_F(TxnImplTest, CommitPrimaryKeyMeetRollback) {
       write_conflict->set_conflict_ts(txn->TEST_GetStartTs());
       write_conflict->set_key(key);
 
-      return Status::OK();
+      cb();
     }
   });
 
@@ -777,12 +765,11 @@ TEST_F(TxnImplTest, CommitSencondError) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
-      return Status::OK();
+      cb();
     } else {
       TxnCommitRpc* txn_rpc = dynamic_cast<TxnCommitRpc*>(&rpc);
       CHECK_NOTNULL(txn_rpc);
@@ -795,11 +782,11 @@ TEST_F(TxnImplTest, CommitSencondError) {
       response->set_commit_ts(txn->TEST_GetCommitTs());
       if (request->keys_size() == 1 && request->keys(0) == txn->TEST_GetPrimaryKey()) {
         // commit primary key
-        return Status::OK();
+        cb();
       } else {
         auto* with_err = response->mutable_error();
         with_err->set_errcode(pb::error::EREGION_NOT_FOUND);
-        return Status::OK();
+        cb();
       }
     }
   });
@@ -830,8 +817,7 @@ TEST_F(TxnImplTest, PreCommitFailThenRollback) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -855,7 +841,7 @@ TEST_F(TxnImplTest, PreCommitFailThenRollback) {
         *write_confilict = conflict;
       }
 
-      return Status::OK();
+      cb();
     } else {
       // rollback
       TxnBatchRollbackRpc* txn_rpc = dynamic_cast<TxnBatchRollbackRpc*>(&rpc);
@@ -866,7 +852,7 @@ TEST_F(TxnImplTest, PreCommitFailThenRollback) {
       for (const auto& key : request->keys()) {
         EXPECT_TRUE(key == "a" || key == "b" || key == "d");
       }
-      return Status::OK();
+      cb();
     }
   });
 
@@ -896,8 +882,7 @@ TEST_F(TxnImplTest, RollbackPrimaryKeyFail) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -921,7 +906,7 @@ TEST_F(TxnImplTest, RollbackPrimaryKeyFail) {
         *write_confilict = conflict;
       }
 
-      return Status::OK();
+      cb();
     } else {
       // rollback
       TxnBatchRollbackRpc* txn_rpc = dynamic_cast<TxnBatchRollbackRpc*>(&rpc);
@@ -939,7 +924,7 @@ TEST_F(TxnImplTest, RollbackPrimaryKeyFail) {
       auto* txn_result = txn_rpc->MutableResponse()->mutable_txn_result();
       auto* lock_info = txn_result->mutable_locked();
       *lock_info = mock_lock;
-      return Status::OK();
+      cb();
     }
   });
 
@@ -969,8 +954,7 @@ TEST_F(TxnImplTest, RollbackSecondKeysFail) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, google::protobuf::Closure* done) {
-    (void)done;
+  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -994,7 +978,7 @@ TEST_F(TxnImplTest, RollbackSecondKeysFail) {
         *write_confilict = conflict;
       }
 
-      return Status::OK();
+      cb();
     } else {
       // rollback
       TxnBatchRollbackRpc* txn_rpc = dynamic_cast<TxnBatchRollbackRpc*>(&rpc);
@@ -1004,7 +988,7 @@ TEST_F(TxnImplTest, RollbackSecondKeysFail) {
 
       for (const auto& key : request->keys()) {
         if (key == txn->TEST_GetPrimaryKey()) {
-          return Status::OK();
+          cb();
         } else {
           auto mock_lock = PrepareLockInfo();
           mock_lock.set_key(key);
@@ -1015,7 +999,7 @@ TEST_F(TxnImplTest, RollbackSecondKeysFail) {
         }
       }
 
-      return Status::OK();
+      cb();
     }
   });
 

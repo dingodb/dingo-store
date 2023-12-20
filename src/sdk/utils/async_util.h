@@ -12,41 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_RPC_INTERACTION_H_
-#define DINGODB_SDK_RPC_INTERACTION_H_
+#ifndef DINGODB_SDK_ASYNC_UTIL_H_
+#define DINGODB_SDK_ASYNC_UTIL_H_
 
-#include <cstdint>
-#include <map>
-#include <memory>
+#include <atomic>
+#include <condition_variable>
+#include <functional>
 #include <mutex>
 
-#include "brpc/channel.h"
-#include "butil/endpoint.h"
-#include "rpc.h"
 #include "sdk/status.h"
 #include "sdk/utils/call_back.h"
 
 namespace dingodb {
 namespace sdk {
 
-class RpcInteraction {
+class Synchronizer {
  public:
-  RpcInteraction(const RpcInteraction &) = delete;
-  const RpcInteraction &operator=(const RpcInteraction &) = delete;
+  Synchronizer() : fire_(false) {}
 
-  RpcInteraction(brpc::ChannelOptions options) : options_(std::move(options)) {}
+  void Wait() {
+    std::unique_lock<std::mutex> lk(lock_);
+    while (!fire_) {
+      cv_.wait(lk);
+    }
+  }
 
-  virtual ~RpcInteraction() = default;
+  RpcCallback AsRpcCallBack() {
+    return [&]() { Fire(); };
+  }
 
-  virtual void SendRpc(Rpc &rpc, RpcCallback cb);
+  StatusCallback AsStatusCallBack(Status& in_staus) {
+    return [&](const Status& s) {
+      in_staus = s;
+      Fire();
+    };
+  }
+
+  void Fire() {
+    std::unique_lock<std::mutex> lk(lock_);
+    fire_ = true;
+    cv_.notify_one();
+  }
 
  private:
-  brpc::ChannelOptions options_;
-
   std::mutex lock_;
-  std::map<butil::EndPoint, std::shared_ptr<brpc::Channel>> channel_map_;
+  std::condition_variable cv_;
+  bool fire_;
 };
 
 }  // namespace sdk
+
 }  // namespace dingodb
-#endif  // DINGODB_SDK_RPC_INTERACTION_H_
+#endif  // DINGODB_SDK_ASYNC_UTIL_H_

@@ -26,6 +26,7 @@
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
+#include "rpc/rpc.h"
 #include "tso_control.h"
 
 namespace dingodb {

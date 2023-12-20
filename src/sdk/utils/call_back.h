@@ -12,26 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_HELPER_H_
-#define DINGODB_SDK_HELPER_H_
+#ifndef DINGODB_SDK_CALL_BACK_H_
+#define DINGODB_SDK_CALL_BACK_H_
 
-#include "common/logging.h"
-#include "glog/logging.h"
-#include "sdk/client_stub.h"
-#include "sdk/store/store_rpc_controller.h"
+#include <functional>
+
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
+using RpcCallback = std::function<void()>;
 
-// TODO: log in rpc when we support async
-template <class StoreClientRpc>
-static Status LogAndSendRpc(const ClientStub& stub, StoreClientRpc& rpc, std::shared_ptr<Region> region) {
-  StoreRpcController controller(stub, rpc, region);
-  Status s = controller.Call();
-  return s;
-}
-
+using StatusCallback = std::function<void(const Status &)>;
 }  // namespace sdk
-
 }  // namespace dingodb
-#endif  // DINGODB_SDK_HELPER_H_
+#endif  // DINGODB_SDK_CALL_BACK_H_

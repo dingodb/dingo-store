@@ -18,6 +18,7 @@
 #include "gmock/gmock.h"
 #include "google/protobuf/message.h"
 #include "rpc/rpc.h"
+#include "utils/call_back.h"
 
 namespace dingodb {
 namespace sdk {
@@ -43,7 +44,9 @@ class MockRpc final : public Rpc {
 
   MOCK_METHOD(std::string, Method, (), (const, override));
 
-  MOCK_METHOD(void, Call, (brpc::Channel * channel, google::protobuf::Closure* done), (override));
+  MOCK_METHOD(void, Call, (brpc::Channel * channel, RpcCallback cb), (override));
+
+  MOCK_METHOD(void, Reset, (), (override));
 
  private:
   google::protobuf::Message* request_;
@@ -52,4 +55,4 @@ class MockRpc final : public Rpc {
 }  // namespace sdk
 }  // namespace dingodb
 
-#endif // DINGODB_SDK_TEST_MOCK_RPC_H_
+#endif  // DINGODB_SDK_TEST_MOCK_RPC_H_

@@ -15,11 +15,14 @@
 #ifndef DINGODB_SDK_STORE_RPC_CONTROLLER_H_
 #define DINGODB_SDK_STORE_RPC_CONTROLLER_H_
 
+#include <future>
 #include <memory>
 
 #include "butil/endpoint.h"
 #include "proto/error.pb.h"
 #include "sdk/client_stub.h"
+#include "sdk/status.h"
+#include "sdk/utils/call_back.h"
 
 namespace dingodb {
 namespace sdk {
@@ -31,21 +34,29 @@ class StoreRpcController {
 
   virtual ~StoreRpcController();
 
-  // NOTE: only support sync
-  // TODO: support async
-  Status Call(google::protobuf::Closure* done = nullptr);
+  Status Call();
+
+  void AsyncCall(StatusCallback cb);
 
   void ResetRegion(std::shared_ptr<Region> region);
 
- protected:
-  virtual bool IsRpcFailed(const brpc::Controller* cntl);
-
  private:
-  void DoCall(google::protobuf::Closure* done);
+  void DoAsyncCall();
+
+  // send rpc flow
+  bool PreCheck();
+  bool PrepareRpc();
+  void SendStoreRpc();
+  void SendStoreRpcCallBack();
+  void RetrySendRpcOrFireCallback();
+  void FireCallback() const;
+
+  // backoff
+  void MaybeDelay();
+  bool NeedDelay() const;
+  int64_t DelayTimeMs() const;
 
   bool PickNextLeader(butil::EndPoint& leader);
-
-  Status PrepareRpc();
 
   bool Failed(const butil::EndPoint& addr);
 
@@ -55,24 +66,18 @@ class StoreRpcController {
 
   bool NeedRetry() const;
 
-  bool NeedDelay() const;
-
   bool NeedPickLeader() const;
-
-  int64_t DelayTimeMs() const;
 
   static const pb::error::Error& GetResponseError(Rpc& rpc);
 
   const ClientStub& stub_;
   Rpc& rpc_;
   std::shared_ptr<Region> region_;
-
   int rpc_retry_times_;
-
   std::set<butil::EndPoint> failed_addrs_;
   int next_replica_index_;
-
   Status status_;
+  StatusCallback call_back_;
 };
 
 }  // namespace sdk
