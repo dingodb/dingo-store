@@ -225,6 +225,7 @@ void PeriodRenwLease(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void GetWatchKeyAndRevision(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
                             const std::string& lock_prefix, const std::string& lock_key, std::string& watch_key,
                             int64_t& watch_revision) {
+  DINGO_LOG(INFO) << "lock_prefix=" << lock_prefix << ", lock_key=" << lock_key;
   // check if lock success
   std::vector<dingodb::pb::version::Kv> kvs;
   auto ret = CoorKvRange(coordinator_interaction, lock_prefix, lock_prefix + "\xFF", 0, kvs);
@@ -259,6 +260,8 @@ void GetWatchKeyAndRevision(std::shared_ptr<dingodb::CoordinatorInteraction> coo
       key_with_create_revisions.begin(), key_with_create_revisions.end(),
       [](const KeyWithCreateRevision& a, const KeyWithCreateRevision& b) { return a.mod_revision < b.mod_revision; });
 
+  DINGO_LOG(INFO) << "key_with_create_revisions.size()=" << key_with_create_revisions.size();
+
   int self_index = 0;
   int watch_index = 0;
   for (int i = 0; i < key_with_create_revisions.size(); i++) {
@@ -266,6 +269,7 @@ void GetWatchKeyAndRevision(std::shared_ptr<dingodb::CoordinatorInteraction> coo
                     << ", mod_revision=" << key_with_create_revisions[i].mod_revision;
     if (key_with_create_revisions[i].key == lock_key) {
       self_index = i;
+      DINGO_LOG(INFO) << "self_index=" << self_index;
     }
   }
   if (self_index > 0) {
