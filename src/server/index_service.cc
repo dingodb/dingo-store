@@ -1222,8 +1222,8 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::common::KeyValue> kvs;
-  bool has_more;
-  std::string end_key;
+  bool has_more = false;
+  std::string end_key{};
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
