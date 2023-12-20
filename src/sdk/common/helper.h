@@ -18,7 +18,7 @@
 #include "common/logging.h"
 #include "glog/logging.h"
 #include "sdk/client_stub.h"
-#include "sdk/store_rpc_controller.h"
+#include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

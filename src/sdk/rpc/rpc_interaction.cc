@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/rpc_interaction.h"
+#include "sdk/rpc/rpc_interaction.h"
 
 #include <cstddef>
 #include <memory>

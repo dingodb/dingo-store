@@ -20,11 +20,11 @@
 #include "glog/logging.h"
 #include "proto/store.pb.h"
 #include "sdk/client_stub.h"
-#include "sdk/common.h"
+#include "sdk/common/common.h"
 #include "sdk/region.h"
 #include "sdk/status.h"
-#include "sdk/store_rpc.h"
-#include "sdk/store_rpc_controller.h"
+#include "sdk/store/store_rpc.h"
+#include "sdk/store/store_rpc_controller.h"
 #include "sdk/transaction/txn_common.h"
 
 namespace dingodb {

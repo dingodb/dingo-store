@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "sdk/store_rpc_controller.h"
+#include "sdk/store/store_rpc_controller.h"
 
 #include <cstddef>
 #include <string>
@@ -27,9 +27,9 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "sdk/client_stub.h"
-#include "sdk/common.h"
+#include "sdk/common/common.h"
+#include "sdk/common/param_config.h"
 #include "sdk/meta_cache.h"
-#include "sdk/param_config.h"
 #include "sdk/status.h"
 
 namespace dingodb {

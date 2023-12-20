@@ -8,15 +8,15 @@ include_directories(${GTEST_INCLUDE_DIR}/include)
 include(GoogleTest)
 
 set(TEST_SRCS
-  transaction/test_txn_buffer.cc
-  transaction/test_txn_impl.cc
-  transaction/test_txn_lock_resolver.cc
   test_meta_cache.cc
-  test_raw_kv.cc
-  test_region_scanner.cc
   test_region.cc
   test_rpc_interaction.cc
   test_store_rpc_controller.cc
+  rawkv/test_raw_kv.cc
+  rawkv/test_region_scanner.cc
+  transaction/test_txn_buffer.cc
+  transaction/test_txn_impl.cc
+  transaction/test_txn_lock_resolver.cc
 )
 
 # file(GLOB TEST_SRCS "test_*.cc")

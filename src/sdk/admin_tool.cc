@@ -17,7 +17,7 @@
 #include "common/logging.h"
 #include "glog/logging.h"
 #include "proto/coordinator.pb.h"
-#include "sdk/common.h"
+#include "sdk/common/common.h"
 #include "sdk/status.h"
 
 namespace dingodb {

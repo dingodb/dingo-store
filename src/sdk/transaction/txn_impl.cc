@@ -27,12 +27,12 @@
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 #include "sdk/client.h"
-#include "sdk/common.h"
-#include "sdk/helper.h"
-#include "sdk/param_config.h"
+#include "sdk/common/common.h"
+#include "sdk/common/helper.h"
+#include "sdk/common/param_config.h"
 #include "sdk/status.h"
-#include "sdk/store_rpc.h"
-#include "sdk/store_rpc_controller.h"
+#include "sdk/store/store_rpc.h"
+#include "sdk/store/store_rpc_controller.h"
 #include "sdk/transaction/txn_buffer.h"
 
 namespace dingodb {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/store_rpc.h"
+#include "sdk/store/store_rpc.h"
 
 #include "fmt/core.h"
 

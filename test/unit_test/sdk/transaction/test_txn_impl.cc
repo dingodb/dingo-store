@@ -16,14 +16,14 @@
 #include <memory>
 
 #include "client.h"
-#include "common.h"
+#include "common/common.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 #include "status.h"
-#include "store_rpc.h"
+#include "store/store_rpc.h"
 #include "test_base.h"
 #include "test_common.h"
 #include "transaction/txn_impl.h"

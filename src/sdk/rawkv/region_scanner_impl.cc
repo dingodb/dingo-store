@@ -11,13 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "sdk/region_scanner_impl.h"
+#include "sdk/rawkv/region_scanner_impl.h"
 
 #include <memory>
 
-#include "sdk/common.h"
-#include "sdk/param_config.h"
-#include "sdk/store_rpc_controller.h"
+#include "sdk/common/common.h"
+#include "sdk/common/param_config.h"
+#include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

@@ -23,7 +23,7 @@
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
 #include "sdk/region_scanner.h"
-#include "sdk/store_rpc.h"
+#include "sdk/store/store_rpc.h"
 
 namespace dingodb {
 namespace sdk {

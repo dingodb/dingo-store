@@ -23,7 +23,7 @@
 #include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
-#include "sdk/rpc_interaction.h"
+#include "sdk/rpc/rpc_interaction.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 
 namespace dingodb {
