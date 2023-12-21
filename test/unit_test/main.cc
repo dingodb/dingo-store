@@ -22,10 +22,11 @@ int main(int argc, char* argv[]) {
   if (testing::FLAGS_gtest_filter == "*") {
     std::string default_run_case;
     default_run_case += "ConfigTest.*";
-    default_run_case += ":WriteDataBuilderTest.*";
     default_run_case += ":HelperTest.*";
+    default_run_case += ":DingoLatchTest.*";
     default_run_case += ":DingoLoggerTest.*";
     default_run_case += ":StorePbTest.*";
+    default_run_case += ":WriteDataBuilderTest.*";
     default_run_case += ":FailPointManagerTest.*";
     default_run_case += ":FailPointTest.*";
     default_run_case += ":CoprocessorTest.*";
@@ -34,7 +35,6 @@ int main(int argc, char* argv[]) {
     default_run_case += ":DingoSafeMapTest.*";
     default_run_case += ":SegmentLogStorageTest.*";
     default_run_case += ":DingoSerialListTypeTest.*";
-    default_run_case += ":DingoSerialTest.*";
     default_run_case += ":DingoSerialTest.*";
     default_run_case += ":ServiceHelperTest.*";
     default_run_case += ":SplitCheckerTest.*";
