@@ -2,6 +2,7 @@ package io.dingodb.sdk.common;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 
 import java.util.function.Function;
 
@@ -21,8 +22,9 @@ public class AutoIncrement {
 
     private final Function<DingoCommonId, Increment> fetcher;
 
+    @Getter
     private long limit = 0;
-    private long inc = 0;
+    private volatile long inc = 0;
 
     public AutoIncrement(DingoCommonId tableId, int increment, int offset, Function<DingoCommonId, Increment> fetcher) {
         this.tableId = tableId;
@@ -42,6 +44,12 @@ public class AutoIncrement {
         }
         inc += increment;
         return current;
+    }
+
+    public synchronized void inc(long targetInc) {
+        if (targetInc > inc) {
+            inc = targetInc;
+        }
     }
 
     private long fetch() {
