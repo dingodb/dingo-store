@@ -22,6 +22,9 @@
 #include <optional>
 #include <vector>
 
+#include "bthread/mutex.h"
+#include "bthread/types.h"
+
 namespace dingodb {
 
 class Latch {
@@ -59,14 +62,19 @@ class Lock {
 };
 
 struct Slot {
-  std::mutex mutex;
+  Slot() { CHECK_EQ(0, bthread_mutex_init(&mutex, nullptr)); }
+  ~Slot() { CHECK_EQ(0, bthread_mutex_destroy(&mutex)); }
+  bthread_mutex_t mutex;
   Latch latch;
 };
 
 class Latches {
  public:
   explicit Latches(size_t size);
+  explicit Latches();
   ~Latches();
+
+  void SetSlotNum(size_t size);
 
   bool Acquire(Lock* lock, uint64_t who) const;
 

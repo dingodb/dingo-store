@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "butil/containers/flat_map.h"
+#include "butil/scoped_lock.h"
 #include "butil/string_printf.h"
 #include "butil/synchronization/lock.h"
 #include "common/helper.h"
@@ -38,128 +39,160 @@ class DingoLatchTest : public testing::Test {
   void TearDown() override {}
 };
 
-// TEST(DingoLatchTest, wakeup) {
-//   dingodb::Latches latches(1024);
+TEST(DingoLatchTest, next_power_of_two) {
+  auto tmp = dingodb::Latches::NextPowerOfTwo(256);
+  EXPECT_EQ(tmp, 256);
 
-//   std::vector<std::string> keys_a{"k1", "k3", "k5"};
-//   std::vector<std::string> keys_b{"k4", "k5", "k6"};
-//   int64_t cid_a = 1;
-//   int64_t cid_b = 2;
+  tmp = dingodb::Latches::NextPowerOfTwo(257);
+  EXPECT_EQ(tmp, 512);
 
-//   dingodb::Lock lock_a(keys_a);
-//   dingodb::Lock lock_b(keys_b);
+  tmp = dingodb::Latches::NextPowerOfTwo(15);
+  EXPECT_EQ(tmp, 16);
 
-//   // a acquire lock success
-//   auto acquired_a = latches.Acquire(&lock_a, cid_a);
-//   EXPECT_EQ(acquired_a, true);
+  tmp = dingodb::Latches::NextPowerOfTwo(512);
+  EXPECT_EQ(tmp, 512);
 
-//   // b acquire lock failed
-//   auto acquired_b = latches.Acquire(&lock_b, cid_b);
-//   EXPECT_EQ(acquired_b, false);
+  tmp = dingodb::Latches::NextPowerOfTwo(513);
+  EXPECT_EQ(tmp, 1024);
 
-//   // a release lock, and get wakeup list
-//   auto wakeup = latches.Release(&lock_a, cid_a, std::nullopt);
-//   EXPECT_EQ(wakeup[0], cid_b);
+  tmp = dingodb::Latches::NextPowerOfTwo(1024);
+  EXPECT_EQ(tmp, 1024);
 
-//   // b acquire lock success
-//   acquired_b = latches.Acquire(&lock_b, cid_b);
-//   EXPECT_EQ(acquired_b, true);
-// }
+  tmp = dingodb::Latches::NextPowerOfTwo(1025);
+  EXPECT_EQ(tmp, 2048);
 
-// TEST(DingoLatchTest, wakeup_by_multi_cmds) {
-//   dingodb::Latches latches(256);
+  tmp = dingodb::Latches::NextPowerOfTwo(2048);
+  EXPECT_EQ(tmp, 2048);
 
-//   std::vector<std::string> keys_a{"k1", "k2", "k3"};
-//   std::vector<std::string> keys_b{"k4", "k5", "k6"};
-//   std::vector<std::string> keys_c{"k3", "k4"};
-//   dingodb::Lock lock_a(keys_a);
-//   dingodb::Lock lock_b(keys_b);
-//   dingodb::Lock lock_c(keys_c);
-//   uint64_t cid_a = 1;
-//   uint64_t cid_b = 2;
-//   uint64_t cid_c = 3;
+  tmp = dingodb::Latches::NextPowerOfTwo(2049);
+  EXPECT_EQ(tmp, 4096);
 
-//   // a acquire lock success
-//   auto acquired_a = latches.Acquire(&lock_a, cid_a);
-//   EXPECT_EQ(acquired_a, true);
+  tmp = dingodb::Latches::NextPowerOfTwo(4096);
+  EXPECT_EQ(tmp, 4096);
+}
 
-//   // b acquire lock success
-//   auto acquired_b = latches.Acquire(&lock_b, cid_b);
-//   EXPECT_EQ(acquired_b, true);
+TEST(DingoLatchTest, wakeup) {
+  dingodb::Latches latches(1024);
 
-//   // c acquire lock failed, cause a occupied slot 3
-//   auto acquired_c = latches.Acquire(&lock_c, cid_c);
-//   EXPECT_EQ(acquired_c, false);
+  std::vector<std::string> keys_a{"k1", "k3", "k5"};
+  std::vector<std::string> keys_b{"k4", "k5", "k6"};
+  int64_t cid_a = 1;
+  int64_t cid_b = 2;
 
-//   // a release lock, and get wakeup list
-//   auto wakeup = latches.Release(&lock_a, cid_a, std::nullopt);
-//   EXPECT_EQ(wakeup[0], cid_c);
+  dingodb::Lock lock_a(keys_a);
+  dingodb::Lock lock_b(keys_b);
 
-//   // c acquire lock failed again, cause b occupied slot 4
-//   acquired_c = latches.Acquire(&lock_c, cid_c);
-//   EXPECT_EQ(acquired_c, false);
+  // a acquire lock success
+  auto acquired_a = latches.Acquire(&lock_a, cid_a);
+  EXPECT_EQ(acquired_a, true);
 
-//   // b release lock, and get wakeup list
-//   wakeup = latches.Release(&lock_b, cid_b, std::nullopt);
-//   EXPECT_EQ(wakeup[0], cid_c);
+  // b acquire lock failed
+  auto acquired_b = latches.Acquire(&lock_b, cid_b);
+  EXPECT_EQ(acquired_b, false);
 
-//   // finally c acquire lock success
-//   acquired_c = latches.Acquire(&lock_c, cid_c);
-//   EXPECT_EQ(acquired_c, true);
-// }
+  // a release lock, and get wakeup list
+  auto wakeup = latches.Release(&lock_a, cid_a, std::nullopt);
+  EXPECT_EQ(wakeup[0], cid_b);
 
-// TEST(DingoLatchTest, wakeup_by_small_latch_slot) {
-//   dingodb::Latches latches(5);
+  // b acquire lock success
+  acquired_b = latches.Acquire(&lock_b, cid_b);
+  EXPECT_EQ(acquired_b, true);
+}
 
-//   std::vector<std::string> keys_a{"k1", "k2", "k3"};
-//   std::vector<std::string> keys_b{"k6", "k7", "k8"};
-//   std::vector<std::string> keys_c{"k3", "k4"};
-//   std::vector<std::string> keys_d{"k7", "k10"};
-//   dingodb::Lock lock_a(keys_a);
-//   dingodb::Lock lock_b(keys_b);
-//   dingodb::Lock lock_c(keys_c);
-//   dingodb::Lock lock_d(keys_d);
-//   u_int64_t cid_a = 1;
-//   u_int64_t cid_b = 2;
-//   u_int64_t cid_c = 3;
-//   u_int64_t cid_d = 4;
+TEST(DingoLatchTest, wakeup_by_multi_cmds) {
+  dingodb::Latches latches(256);
 
-//   auto acquired_a = latches.Acquire(&lock_a, cid_a);
-//   EXPECT_EQ(acquired_a, true);
+  std::vector<std::string> keys_a{"k1", "k2", "k3"};
+  std::vector<std::string> keys_b{"k4", "k5", "k6"};
+  std::vector<std::string> keys_c{"k3", "k4"};
+  dingodb::Lock lock_a(keys_a);
+  dingodb::Lock lock_b(keys_b);
+  dingodb::Lock lock_c(keys_c);
+  uint64_t cid_a = 1;
+  uint64_t cid_b = 2;
+  uint64_t cid_c = 3;
 
-//   // c acquire lock failed, cause a occupied slot 3
-//   auto acquired_c = latches.Acquire(&lock_c, cid_c);
-//   EXPECT_EQ(acquired_c, false);
+  // a acquire lock success
+  auto acquired_a = latches.Acquire(&lock_a, cid_a);
+  EXPECT_EQ(acquired_a, true);
 
-//   // b acquire lock success
-//   auto acquired_b = latches.Acquire(&lock_b, cid_b);
-//   EXPECT_EQ(acquired_b, true);
+  // b acquire lock success
+  auto acquired_b = latches.Acquire(&lock_b, cid_b);
+  EXPECT_EQ(acquired_b, true);
 
-//   // d acquire lock failed, cause a occupied slot 7
-//   auto acquired_d = latches.Acquire(&lock_d, cid_d);
-//   EXPECT_EQ(acquired_d, false);
+  // c acquire lock failed, cause a occupied slot 3
+  auto acquired_c = latches.Acquire(&lock_c, cid_c);
+  EXPECT_EQ(acquired_c, false);
 
-//   // a release lock, and get wakeup list
-//   auto wakeup = latches.Release(&lock_a, cid_a, std::nullopt);
-//   EXPECT_EQ(wakeup[0], cid_c);
+  // a release lock, and get wakeup list
+  auto wakeup = latches.Release(&lock_a, cid_a, std::nullopt);
+  EXPECT_EQ(wakeup[0], cid_c);
 
-//   // c acquire lock success
-//   acquired_c = latches.Acquire(&lock_c, cid_c);
-//   EXPECT_EQ(acquired_c, true);
+  // c acquire lock failed again, cause b occupied slot 4
+  acquired_c = latches.Acquire(&lock_c, cid_c);
+  EXPECT_EQ(acquired_c, false);
 
-//   // b release lock, and get wakeup list
-//   wakeup = latches.Release(&lock_b, cid_b, std::nullopt);
-//   EXPECT_EQ(wakeup[0], cid_d);
+  // b release lock, and get wakeup list
+  wakeup = latches.Release(&lock_b, cid_b, std::nullopt);
+  EXPECT_EQ(wakeup[0], cid_c);
 
-//   // finally d acquire lock success
-//   acquired_d = latches.Acquire(&lock_d, cid_d);
-//   EXPECT_EQ(acquired_d, true);
-// }
+  // finally c acquire lock success
+  acquired_c = latches.Acquire(&lock_c, cid_c);
+  EXPECT_EQ(acquired_c, true);
+}
+
+TEST(DingoLatchTest, wakeup_by_small_latch_slot) {
+  dingodb::Latches latches(5);
+
+  std::vector<std::string> keys_a{"k1", "k2", "k3"};
+  std::vector<std::string> keys_b{"k6", "k7", "k8"};
+  std::vector<std::string> keys_c{"k3", "k4"};
+  std::vector<std::string> keys_d{"k7", "k10"};
+  dingodb::Lock lock_a(keys_a);
+  dingodb::Lock lock_b(keys_b);
+  dingodb::Lock lock_c(keys_c);
+  dingodb::Lock lock_d(keys_d);
+  u_int64_t cid_a = 1;
+  u_int64_t cid_b = 2;
+  u_int64_t cid_c = 3;
+  u_int64_t cid_d = 4;
+
+  auto acquired_a = latches.Acquire(&lock_a, cid_a);
+  EXPECT_EQ(acquired_a, true);
+
+  // c acquire lock failed, cause a occupied slot 3
+  auto acquired_c = latches.Acquire(&lock_c, cid_c);
+  EXPECT_EQ(acquired_c, false);
+
+  // b acquire lock success
+  auto acquired_b = latches.Acquire(&lock_b, cid_b);
+  EXPECT_EQ(acquired_b, true);
+
+  // d acquire lock failed, cause a occupied slot 7
+  auto acquired_d = latches.Acquire(&lock_d, cid_d);
+  EXPECT_EQ(acquired_d, false);
+
+  // a release lock, and get wakeup list
+  auto wakeup = latches.Release(&lock_a, cid_a, std::nullopt);
+  EXPECT_EQ(wakeup[0], cid_c);
+
+  // c acquire lock success
+  acquired_c = latches.Acquire(&lock_c, cid_c);
+  EXPECT_EQ(acquired_c, true);
+
+  // b release lock, and get wakeup list
+  wakeup = latches.Release(&lock_b, cid_b, std::nullopt);
+  EXPECT_EQ(wakeup[0], cid_d);
+
+  // finally d acquire lock success
+  acquired_d = latches.Acquire(&lock_d, cid_d);
+  EXPECT_EQ(acquired_d, true);
+}
 
 void CheckLatchHolder(dingodb::Latches* latches, const std::string& key, std::optional<uint64_t> expected_holder_cid) {
   uint64_t hash = dingodb::Lock::Hash(key);
   auto* slot = latches->GetSlot(hash);
-  std::lock_guard<std::mutex> guard(slot->mutex);
+  BAIDU_SCOPED_LOCK(slot->mutex);
   std::optional<uint64_t> actual_holder = slot->latch.GetFirstReqByHash(hash);
   assert(actual_holder == expected_holder_cid);
 }
@@ -167,7 +200,7 @@ void CheckLatchHolder(dingodb::Latches* latches, const std::string& key, std::op
 bool IsLatchesEmpty(dingodb::Latches* latches) {
   for (uint64_t i = 0; i < latches->slots_size; ++i) {
     auto* slot = latches->GetSlot(i);
-    std::lock_guard<std::mutex> guard(slot->mutex);
+    BAIDU_SCOPED_LOCK(slot->mutex);
     const auto& waiting = slot->latch.waiting;
     if (!waiting.empty()) {
       return false;
@@ -316,8 +349,8 @@ void TestPartiallyReleasingImpl(uint64_t size) {
         if (tmp_k2 > 25) {
           tmp_k2 -= 4;
         }
-        DINGO_LOG(INFO) << "k1: " << k1 << ", k2: " << k2;
-        DINGO_LOG(INFO) << "tmp_k1: " << tmp_k1 << ", tmp_k2: " << tmp_k2;
+        // DINGO_LOG(INFO) << "k1: " << k1 << ", k2: " << k2;
+        // DINGO_LOG(INFO) << "tmp_k1: " << tmp_k1 << ", tmp_k2: " << tmp_k2;
 
         std::vector<uint64_t> preempted_cids = {tmp_k1, tmp_k2};
         std::vector<uint64_t> expected_wakeup_cids;
@@ -328,14 +361,14 @@ void TestPartiallyReleasingImpl(uint64_t size) {
         }
         std::sort(wakeup.begin(), wakeup.end());
         // print all elements of wakeup and expected_wakeup_cids
-        DINGO_LOG(INFO) << "wakeup: ";
-        for (auto& i : wakeup) {
-          DINGO_LOG(INFO) << i << " ";
-        }
-        DINGO_LOG(INFO) << "expected_wakeup_cids: ";
-        for (auto& i : expected_wakeup_cids) {
-          DINGO_LOG(INFO) << i << " ";
-        }
+        // DINGO_LOG(INFO) << "wakeup: ";
+        // for (auto& i : wakeup) {
+        //   DINGO_LOG(INFO) << i << " ";
+        // }
+        // DINGO_LOG(INFO) << "expected_wakeup_cids: ";
+        // for (auto& i : expected_wakeup_cids) {
+        //   DINGO_LOG(INFO) << i << " ";
+        // }
         assert(wakeup == expected_wakeup_cids);
 
         CheckLatchHolder(&latches, keys[k1], 27);
@@ -360,6 +393,8 @@ void TestPartiallyReleasingImpl(uint64_t size) {
 
 TEST(DingoLatchTest, partially_releasing) {
   TestPartiallyReleasingImpl(256);
+  TestPartiallyReleasingImpl(128);
+  TestPartiallyReleasingImpl(64);
   TestPartiallyReleasingImpl(4);
   TestPartiallyReleasingImpl(2);
 }

@@ -17,7 +17,12 @@
 #include <cassert>
 #include <utility>
 
+#include "butil/scoped_lock.h"
+#include "gflags/gflags.h"
+
 namespace dingodb {
+
+DEFINE_uint32(latch_slot_num, 2048, "latch slot num");
 
 const size_t kWaitingListShrinkSize = 8;
 const size_t kWaitingListMaxCapacity = 16;
@@ -86,14 +91,25 @@ Latches::Latches(size_t size) {
   slots_ptr = new std::vector<Slot>(slots_size);
 }
 
+Latches::Latches() {
+  slots_size = NextPowerOfTwo(FLAGS_latch_slot_num);
+  slots_ptr = new std::vector<Slot>(slots_size);
+}
+
 Latches::~Latches() { delete slots_ptr; }
+
+// CAUTION: this function is not safe, need to call before any usage begin
+void Latches::SetSlotNum(size_t size) {
+  slots_size = NextPowerOfTwo(size);
+  slots_ptr->resize(slots_size);
+}
 
 bool Latches::Acquire(Lock* lock, uint64_t who) const {
   size_t acquired_count = 0;
   for (size_t i = lock->ownedCount; i < lock->requiredHashes.size(); ++i) {
     auto key_hash = lock->requiredHashes[i];
-    std::lock_guard<std::mutex> guard((*slots_ptr)[GetSlotIndex(key_hash)].mutex);
-    Latch& latch = (*slots_ptr)[GetSlotIndex(key_hash)].latch;
+    BAIDU_SCOPED_LOCK(GetSlot(key_hash)->mutex);
+    Latch& latch = GetSlot(key_hash)->latch;
 
     auto first_req = latch.GetFirstReqByHash(key_hash);
     if (first_req.has_value()) {
@@ -128,7 +144,7 @@ std::vector<uint64_t> Latches::Release(Lock* lock, uint64_t who,
   std::vector<uint64_t> wakeup_list;
   for (auto key_hash_iter = lock->requiredHashes.begin();
        key_hash_iter != lock->requiredHashes.begin() + lock->ownedCount; ++key_hash_iter) {
-    std::lock_guard<std::mutex> guard((*slots_ptr)[GetSlotIndex(*key_hash_iter)].mutex);
+    BAIDU_SCOPED_LOCK(GetSlot(*key_hash_iter)->mutex);
     auto* slot = this->GetSlot(*key_hash_iter);
     auto* latch = &slot->latch;
     auto value = latch->PopFront(*key_hash_iter);
@@ -178,10 +194,8 @@ size_t Latches::NextPowerOfTwo(size_t n) {
   return n + 1;
 }
 
-size_t Latches::GetSlotIndex(uint64_t hash) const { return hash & (this->slots_size - 1); }
-
 Slot* Latches::GetSlot(uint64_t hash) const {
-  auto index = hash & (this->slots_size - 1);
+  auto index = hash & (slots_size - 1);
   return &(*slots_ptr)[index];
 }
 
