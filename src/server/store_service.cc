@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "butil/time.h"
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
@@ -43,6 +44,8 @@ DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
 DECLARE_int64(max_scan_lock_limit);
 DECLARE_int64(max_prewrite_count);
+
+static bvar::LatencyRecorder g_store_latches_recorder("dingodb", "latches_us_store");
 
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
@@ -265,6 +268,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
   Lock lock(keys_for_lock);
@@ -278,6 +282,8 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -367,6 +373,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
@@ -382,6 +389,8 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -470,6 +479,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
   Lock lock(keys_for_lock);
@@ -483,6 +493,8 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -579,6 +591,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
@@ -594,6 +607,8 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -689,6 +704,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
@@ -704,6 +720,8 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -870,6 +888,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
   Lock lock(keys_for_lock);
@@ -883,6 +902,8 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -976,6 +997,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
@@ -991,6 +1013,8 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -1550,6 +1574,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
@@ -1565,6 +1590,8 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -1676,6 +1703,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
@@ -1800,6 +1828,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
@@ -1933,6 +1962,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
@@ -2050,6 +2080,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_key());
   Lock lock(keys_for_lock);
@@ -2063,6 +2094,8 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -2357,6 +2390,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
@@ -2372,6 +2406,8 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -2578,6 +2614,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_lock());
   Lock lock(keys_for_lock);
@@ -2591,6 +2628,8 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
       sync_cond.IncreaseWait();
     }
   }
+
+  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
