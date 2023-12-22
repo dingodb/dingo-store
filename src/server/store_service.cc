@@ -264,6 +264,24 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  keys_for_lock.push_back(request->kv().key());
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -290,7 +308,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoKvPut(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -348,6 +366,26 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& kv : request->kvs()) {
+    keys_for_lock.push_back(kv.key());
+  }
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -377,7 +415,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvBatchPut(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -431,6 +469,24 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  keys_for_lock.push_back(request->kv().key());
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -463,7 +519,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvPutIfAbsent(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -522,6 +578,26 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& kv : request->kvs()) {
+    keys_for_lock.push_back(kv.key());
+  }
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -558,7 +634,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
       [=]() { DoKvBatchPutIfAbsent(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -612,6 +688,26 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& key : request->keys()) {
+    keys_for_lock.push_back(key);
+  }
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -641,7 +737,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvBatchDelete(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -723,7 +819,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoKvDeleteRange(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -773,6 +869,24 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  keys_for_lock.push_back(request->kv().key());
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -802,7 +916,7 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
       [=]() { DoKvCompareAndSet(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
@@ -861,6 +975,26 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& kv : request->kvs()) {
+    keys_for_lock.push_back(kv.key());
+  }
+  Lock lock(keys_for_lock);
+  BthreadCond sync_cond;
+  uint64_t cid = (uint64_t)(&sync_cond);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(&lock, cid);
+    if (!latch_got) {
+      sync_cond.IncreaseWait();
+    }
+  }
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -899,7 +1033,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
       [=]() { DoKvBatchCompareAndSet(storage, controller, request, response, svr_done, true); });
-  bool ret = write_worker_set_->ExecuteHashByRegionId(request->context().region_id(), task);
+  bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
