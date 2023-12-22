@@ -116,15 +116,15 @@ public class AutoIncrementService {
         rwLock.writeLock().lock();
         incrementId = incrementId + 1;
         try {
-            AutoIncrement autoIncrement = innerCache.get(tableId);
-            if (autoIncrement != null
-                    && (incrementId < autoIncrement.getLimit() && incrementId >= autoIncrement.current())) {
+            AutoIncrement autoIncrement = innerCache.computeIfAbsent(tableId,
+                    id -> new AutoIncrement(id, increment, offset, this::fetcher));
+            if (incrementId < autoIncrement.getLimit() && incrementId >= autoIncrement.current()) {
                 autoIncrement.inc(incrementId);
             } else {
                 // update server startid
-                updateIncrement(tableId, incrementId);
-                if (autoIncrement != null) {
-                    autoIncrement.inc(incrementId);
+                autoIncrement.inc(incrementId);
+                if (autoIncrement.getLimit() > 0 && incrementId > autoIncrement.getLimit()) {
+                    updateIncrement(tableId, incrementId);
                 }
             }
         } finally {

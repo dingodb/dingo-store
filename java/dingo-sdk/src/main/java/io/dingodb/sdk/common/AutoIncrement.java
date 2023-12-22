@@ -57,10 +57,14 @@ public class AutoIncrement {
         if ((increment.inc + this.increment) >= increment.limit) {
             throw new RuntimeException("Fetch zero increment, table id: {}" + tableId);
         }
+        long incTmp;
         if (increment.inc % this.offset != 0) {
-            this.inc = increment.inc + this.offset - increment.inc % this.offset;
+            incTmp = increment.inc + this.offset - increment.inc % this.offset;
         } else {
-            this.inc = increment.inc;
+            incTmp = increment.inc;
+        }
+        if (incTmp > this.inc) {
+            this.inc = incTmp;
         }
         this.limit = increment.limit;
         return inc;
