@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -30,6 +31,7 @@
 #include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "common/constant.h"
+#include "common/latch.h"
 #include "common/safe_map.h"
 #include "engine/engine.h"
 #include "engine/gc_safe_point.h"
@@ -131,6 +133,11 @@ class Region {
   void SetLastChangeJobId(int64_t job_id);
   int64_t LastChangeJobId();
 
+  bool LatchesAcquire(Lock* lock, uint64_t who);
+
+  void LatchesRelease(Lock* lock, uint64_t who,
+                      std::optional<std::pair<uint64_t, Lock*>> keep_latches_for_next_cmd = std::nullopt);
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
@@ -139,6 +146,9 @@ class Region {
   pb::raft::SplitStrategy split_strategy_{};
 
   VectorIndexWrapperPtr vector_index_wapper_{nullptr};
+
+  // latches is for multi request concurrency control
+  Latches latches_;
 };
 
 using RegionPtr = std::shared_ptr<Region>;
