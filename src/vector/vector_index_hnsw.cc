@@ -33,11 +33,14 @@
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/logging.h"
+#include "common/threadpool.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "server/server.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_utils.h"
 
@@ -46,55 +49,11 @@ namespace dingodb {
 DEFINE_int64(max_hnsw_memory_size_of_region, 1024L * 1024L * 1024L, "max memory size of region in HSNW");
 DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 
-DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
-DEFINE_int32(max_hnsw_parallel_thread_num_per_request, 32, "max hnsw parallel thread num to acquire in a request");
 DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
 DEFINE_uint32(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
+DEFINE_uint32(hnsw_vector_batch_size_per_task, 64, "hnsw vector batch size per task");
 
 DECLARE_int64(vector_max_batch_count);
-
-HnswThreadConig& HnswThreadConig::GetInstance() {
-  static HnswThreadConig instance;
-  return instance;
-}
-
-HnswThreadConig::HnswThreadConig() : running_thread_num_metrics_("dingo_hnsw_thread_running_count") {
-  bthread_mutex_init(&mutex_, nullptr);
-  if (FLAGS_max_hnsw_parallel_thread_num > 0) {
-    max_thread_num_ = FLAGS_max_hnsw_parallel_thread_num;
-  } else {
-    max_thread_num_ = std::thread::hardware_concurrency();
-  }
-
-  DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw] max hnsw parallel thread num is set to {}", max_thread_num_);
-}
-
-uint32_t HnswThreadConig::AcquireThreads(uint32_t num) {
-  CHECK(num > 0);
-  BAIDU_SCOPED_LOCK(mutex_);
-  if (running_thread_num_ >= max_thread_num_) {
-    return 0;
-  } else {
-    uint32_t acquire_num = std::min(num, max_thread_num_ - running_thread_num_);
-    running_thread_num_ += acquire_num;
-    running_thread_num_metrics_ << acquire_num;
-    return acquire_num;
-  }
-}
-
-void HnswThreadConig::ReleaseThreads(uint32_t num) {
-  CHECK(num > 0);
-  BAIDU_SCOPED_LOCK(mutex_);
-  running_thread_num_ -= num;
-  running_thread_num_metrics_ << -num;
-  if (BAIDU_UNLIKELY(running_thread_num_ < 0)) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.hnsw] running_thread_num_ is illegal, running_thread_num_={} max_thread_num_={} num={}",
-        running_thread_num_, max_thread_num_, num);
-    running_thread_num_ = 0;
-    running_thread_num_metrics_.reset();
-  }
-}
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
@@ -118,69 +77,43 @@ class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
 };
 
-/*
- * replacement for the openmp '#pragma omp parallel for' directive
- * only handles a subset of functionality (no reductions etc)
- * Process ids from start (inclusive) to end (EXCLUSIVE)
- *
- * The method is borrowed from nmslib
- */
 template <class Function>
-inline void ParallelFor(size_t start, size_t end, size_t num_threads, Function fn) {
-  if (num_threads <= 0) {
-    num_threads = std::thread::hardware_concurrency();
+inline void ParallelFor(size_t start, size_t end, Function fn) {
+  struct Parameter {
+    size_t start_pos;
+    size_t end_pos;
+  };
+
+  LOG(INFO) << "ParallelFor begin...";
+  int64_t start_time = Helper::TimestampMs();
+  std::vector<ThreadPool::TaskPtr> tasks;
+  for (size_t i = start; i < end; i += FLAGS_hnsw_vector_batch_size_per_task) {
+    Parameter* param = new Parameter();
+    param->start_pos = i;
+    param->end_pos = std::min(i + FLAGS_hnsw_vector_batch_size_per_task, end);
+
+    auto task = Server::GetInstance().GetVectorIndexThreadPool()->ExecuteTask(
+        [&](void* arg) {
+          Parameter* param = static_cast<Parameter*>(arg);
+          for (int j = param->start_pos; j < param->end_pos; ++j) {
+            fn(j);
+          }
+        },
+        param);
+
+    if (task != nullptr) {
+      tasks.push_back(task);
+    } else {
+      delete param;
+    }
   }
 
-  if (num_threads == 1) {
-    for (size_t id = start; id < end; id++) {
-      fn(id, 0);
-    }
-  } else {
-    std::vector<std::thread> threads;
-    // std::vector<Bthread> threads;
-    std::atomic<size_t> current(start);
-
-    // keep track of exceptions in threads
-    // https://stackoverflow.com/a/32428427/1713196
-    std::exception_ptr last_exception = nullptr;
-    std::mutex last_except_mutex;
-
-    for (size_t thread_id = 0; thread_id < num_threads; ++thread_id) {
-      threads.push_back(std::thread([&, thread_id] {
-        pthread_setname_np(pthread_self(), "vector_index");
-
-        while (true) {
-          size_t id = current.fetch_add(1);
-
-          if (id >= end) {
-            break;
-          }
-
-          try {
-            fn(id, thread_id);
-          } catch (...) {
-            std::unique_lock<std::mutex> last_excep_lock(last_except_mutex);
-            last_exception = std::current_exception();
-            /*
-             * This will work even when current is the largest value that
-             * size_t can fit, because fetch_add returns the previous value
-             * before the increment (what will result in overflow
-             * and produce 0 instead of current + 1).
-             */
-            current = end;
-            break;
-          }
-        }
-      }));
-    }
-    for (auto& thread : threads) {
-      thread.join();
-      // thread.Join();
-    }
-    if (last_exception) {
-      std::rethrow_exception(last_exception);
-    }
+  for (auto& task : tasks) {
+    task->Join();
+    delete static_cast<Parameter*>(task->arg);
   }
+
+  LOG(INFO) << "ParallelFor elapsed time: " << Helper::TimestampMs() - start_time;
 }
 
 VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
@@ -266,41 +199,19 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
       hnsw_index_->resizeIndex(new_max_elements);
     }
 
-    int32_t acquire_num = vector_with_ids.size() > FLAGS_max_hnsw_parallel_thread_num_per_request
-                              ? FLAGS_max_hnsw_parallel_thread_num_per_request
-                              : vector_with_ids.size();
-
-    size_t available_threads = HnswThreadConig::GetInstance().AcquireThreads(acquire_num);
-    DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
-
-    if (available_threads > 0) {
-      DINGO_LOG(DEBUG) << fmt::format(
-          "[vector_index.hnsw][id({})] upsert, count({}) acquire_num({}) available_threads({})", id,
-          vector_with_ids.size(), acquire_num, available_threads);
-    }
-
-    size_t real_threads = available_threads > 0 ? available_threads : 1;
-
-    if (BAIDU_UNLIKELY(hnsw_index_->M_ < real_threads &&
-                       hnsw_index_->cur_element_count.load(std::memory_order_relaxed) <
-                           real_threads * hnsw_index_->M_)) {
-      real_threads = 1;
-    }
-
     if (!normalize_) {
-      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
+      ParallelFor(0, vector_with_ids.size(), [&](size_t row) {
         this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(),
                                     vector_with_ids[row].id(), false);
       });
     } else {
-      std::vector<float> norm_array(real_threads * dimension_);
-      ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
+      ParallelFor(0, vector_with_ids.size(), [&](size_t row) {
         // normalize vector
-        size_t start_idx = thread_id * dimension_;
+        std::vector<float> norm_array(dimension_);
         VectorIndexUtils::NormalizeVectorForHnsw((float*)vector_with_ids[row].vector().float_values().data(),
-                                                 dimension_, (norm_array.data() + start_idx));
+                                                 dimension_, norm_array.data());
 
-        this->hnsw_index_->addPoint((void*)(norm_array.data() + start_idx), vector_with_ids[row].id(), false);
+        this->hnsw_index_->addPoint((void*)norm_array.data(), vector_with_ids[row].id(), false);
       });
     }
     return butil::Status();
@@ -321,27 +232,11 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids) {
 
   butil::Status ret;
 
-  int32_t acquire_num = delete_ids.size() > FLAGS_max_hnsw_parallel_thread_num_per_request
-                            ? FLAGS_max_hnsw_parallel_thread_num_per_request
-                            : delete_ids.size();
-
-  size_t available_threads = HnswThreadConig::GetInstance().AcquireThreads(acquire_num);
-  DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
-
-  if (available_threads > 0) {
-    DINGO_LOG(DEBUG) << fmt::format(
-        "[vector_index.hnsw][id({})] delete, count({}) acquire_num({}) available_threads({})", Id(), delete_ids.size(),
-        acquire_num, available_threads);
-  }
-
-  size_t real_threads = available_threads > 0 ? available_threads : 1;
-
   BAIDU_SCOPED_LOCK(mutex_);
 
   // Add data to index
   try {
-    ParallelFor(0, delete_ids.size(), real_threads,
-                [&](size_t row, size_t /*thread_id*/) { hnsw_index_->markDelete(delete_ids[row]); });
+    ParallelFor(0, delete_ids.size(), [&](size_t row) { hnsw_index_->markDelete(delete_ids[row]); });
   } catch (std::runtime_error& e) {
     std::string s = fmt::format("delete vector failed, error: {}", e.what());
     DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
@@ -503,21 +398,6 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
 
-  int32_t acquire_num = vector_with_ids.size() > FLAGS_max_hnsw_parallel_thread_num_per_request
-                            ? FLAGS_max_hnsw_parallel_thread_num_per_request
-                            : vector_with_ids.size();
-
-  size_t available_threads = HnswThreadConig::GetInstance().AcquireThreads(acquire_num);
-  DEFER(if (available_threads > 0) { HnswThreadConig::GetInstance().ReleaseThreads(available_threads); });
-
-  if (available_threads > 0) {
-    DINGO_LOG(DEBUG) << fmt::format(
-        "[vector_index.hnsw][id({})] search, count({}) acquire_num({}) available_threads({})", Id(),
-        vector_with_ids.size(), acquire_num, available_threads);
-  }
-
-  size_t real_threads = available_threads > 0 ? available_threads : 1;
-
   BAIDU_SCOPED_LOCK(mutex_);
 
   if (search_parameter.hnsw().efsearch() > 0) {
@@ -527,7 +407,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   if (!normalize_) {
-    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t /*thread_id*/) {
+    ParallelFor(0, vector_with_ids.size(), [&](size_t row) {
       std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
       try {
@@ -545,16 +425,15 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       }
     });
   } else {  // normalize_
-    std::vector<float> norm_array(real_threads * dimension_);
-    ParallelFor(0, vector_with_ids.size(), real_threads, [&](size_t row, size_t thread_id) {
-      size_t start_idx = thread_id * dimension_;
+    ParallelFor(0, vector_with_ids.size(), [&](size_t row) {
+      std::vector<float> norm_array(dimension_);
       VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,  // NOLINT
-                                               (norm_array.data() + start_idx));
+                                               norm_array.data());
 
       std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
       try {
-        result = hnsw_index_->searchKnn(norm_array.data() + start_idx, topk, hnsw_filter.get());
+        result = hnsw_index_->searchKnn(norm_array.data(), topk, hnsw_filter.get());
       } catch (std::runtime_error& e) {
         std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
         LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);

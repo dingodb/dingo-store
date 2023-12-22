@@ -23,6 +23,7 @@
 #include "brpc/channel.h"
 #include "common/meta_control.h"
 #include "common/safe_map.h"
+#include "common/threadpool.h"
 #include "config/config_manager.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
@@ -188,6 +189,8 @@ class Server {
   std::vector<std::vector<std::string>> GetIndexServiceWriteWorkerSetTrace();
   std::vector<std::vector<std::string>> GetVectorIndexBackgroundWorkerSetTrace();
 
+  ThreadPoolPtr GetVectorIndexThreadPool();
+
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
 
@@ -285,6 +288,9 @@ class Server {
   WorkerSetPtr store_service_write_worker_set_;
   WorkerSetPtr index_service_read_worker_set_;
   WorkerSetPtr index_service_write_worker_set_;
+
+  // vector index thread pool
+  ThreadPoolPtr vector_index_thread_pool_;
 };
 
 // Shortcut
