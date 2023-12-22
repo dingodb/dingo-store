@@ -50,6 +50,8 @@ DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
 DEFINE_bool(enable_async_vector_count, true, "enable async vector count");
 DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation");
 
+static bvar::LatencyRecorder g_index_latches_recorder("dingodb", "latches_us_index");
+
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
@@ -1481,6 +1483,7 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   // check latches
+  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(std::to_string(mutation.vector().id()));
@@ -1496,6 +1499,8 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
       sync_cond.IncreaseWait();
     }
   }
+
+  g_index_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
