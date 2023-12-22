@@ -26,9 +26,11 @@
 
 #include "bthread/mutex.h"
 #include "bthread/types.h"
+#include "butil/scoped_lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
+#include "common/synchronization.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -285,6 +287,23 @@ void Region::SetLastChangeJobId(int64_t job_id) {
 int64_t Region::LastChangeJobId() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.last_change_job_id();
+}
+
+bool Region::LatchesAcquire(Lock* lock, uint64_t who) {
+  CHECK(lock != nullptr);
+  CHECK(who != 0);
+
+  return this->latches_.Acquire(lock, who);
+}
+
+void Region::LatchesRelease(Lock* lock, uint64_t who,
+                            std::optional<std::pair<uint64_t, Lock*>> keep_latches_for_next_cmd) {
+  auto wakeup = this->latches_.Release(lock, who, keep_latches_for_next_cmd);
+  for (const auto& cid : wakeup) {
+    CHECK(cid != 0);
+    BthreadCond* cond = (BthreadCond*)cid;
+    cond->DecreaseSignal();
+  }
 }
 
 RaftMeta::RaftMeta(int64_t region_id) {
