@@ -526,7 +526,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
       switch (request.cmd_type()) {
         case pb::raft::VECTOR_ADD: {
           if (!ids.empty()) {
-            vector_index->Delete(ids);
+            vector_index->Delete(ids, false);
             ids.clear();
           }
 
@@ -537,14 +537,14 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
           }
 
           if (vectors.size() >= Constant::kBuildVectorIndexBatchSize) {
-            vector_index->Upsert(vectors);
+            vector_index->Upsert(vectors, false);
             vectors.clear();
           }
           break;
         }
         case pb::raft::VECTOR_DELETE: {
           if (!vectors.empty()) {
-            vector_index->Upsert(vectors);
+            vector_index->Upsert(vectors, false);
             vectors.clear();
           }
 
@@ -554,7 +554,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
             }
           }
           if (ids.size() >= Constant::kBuildVectorIndexBatchSize) {
-            vector_index->Delete(ids);
+            vector_index->Delete(ids, false);
             ids.clear();
           }
           break;
@@ -567,9 +567,9 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     last_log_id = log_entry->index;
   }
   if (!vectors.empty()) {
-    vector_index->Upsert(vectors);
+    vector_index->Upsert(vectors, false);
   } else if (!ids.empty()) {
-    vector_index->Delete(ids);
+    vector_index->Delete(ids, false);
   }
 
   if (last_log_id > vector_index->ApplyLogId()) {
@@ -692,7 +692,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     if ((count + 1) % Constant::kBuildVectorIndexBatchSize == 0) {
       int64_t upsert_start_time = Helper::TimestampMs();
 
-      vector_index->Add(vectors);
+      vector_index->Add(vectors, false);
 
       int32_t this_upsert_time = Helper::TimestampMs() - upsert_start_time;
       upsert_use_time += this_upsert_time;
@@ -711,7 +711,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   if (!vectors.empty()) {
     int64_t upsert_start_time = Helper::TimestampMs();
-    vector_index->Add(vectors);
+    vector_index->Add(vectors, false);
     upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
   }
 

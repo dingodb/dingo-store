@@ -50,10 +50,14 @@ class VectorIndexHnsw : public VectorIndex {
   VectorIndexHnsw(VectorIndexHnsw&& rhs) = delete;
   VectorIndexHnsw& operator=(VectorIndexHnsw&& rhs) = delete;
 
-  butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
   butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
+  butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority) override;
+
+  butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) override;
+  butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority) override;
 
   butil::Status Delete(const std::vector<int64_t>& delete_ids) override;
+  butil::Status Delete(const std::vector<int64_t>& delete_ids, bool is_priority) override;
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;

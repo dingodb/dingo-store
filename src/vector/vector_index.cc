@@ -74,6 +74,16 @@ void VectorIndex::SetEpochAndRange(const pb::common::RegionEpoch& epoch, const p
   this->range = range;
 }
 
+butil::Status VectorIndex::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool) {
+  return Add(vector_with_ids);
+}
+
+butil::Status VectorIndex::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool) {
+  return Upsert(vector_with_ids);
+}
+
+butil::Status VectorIndex::Delete(const std::vector<int64_t>& delete_ids, bool) { return Delete(delete_ids); }
+
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "this vector index do not implement save");
