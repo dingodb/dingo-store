@@ -45,7 +45,8 @@ DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
 DECLARE_int64(max_scan_lock_limit);
 DECLARE_int64(max_prewrite_count);
 
-static bvar::LatencyRecorder g_store_latches_recorder("dingodb", "latches_us_store");
+bvar::LatencyRecorder g_raw_latches_recorder("dingodb", "latches_us_raw");
+bvar::LatencyRecorder g_txn_latches_recorder("dingodb", "latches_us_txn");
 
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
@@ -283,7 +284,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -390,7 +391,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -494,7 +495,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -608,7 +609,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -721,7 +722,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -903,7 +904,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -1014,7 +1015,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -1591,7 +1592,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -1720,6 +1721,11 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
     }
   }
 
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -1844,6 +1850,11 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
       sync_cond.IncreaseWait();
     }
   }
+
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1979,6 +1990,11 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
     }
   }
 
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
+
+  // release latches after done
+  DEFER(region->LatchesRelease(&lock, cid));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetRequestId(request->request_info().request_id());
@@ -2095,7 +2111,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -2407,7 +2423,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
@@ -2629,7 +2645,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
     }
   }
 
-  g_store_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
 
   // release latches after done
   DEFER(region->LatchesRelease(&lock, cid));
