@@ -28,6 +28,7 @@
 
 #include "bthread/mutex.h"
 #include "butil/status.h"
+#include "common/synchronization.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -39,28 +40,21 @@ DEFINE_int64(bruteforce_need_save_count, 10000, "bruteforce need save count");
 VectorIndexBruteforce::VectorIndexBruteforce(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range) {
-  bthread_mutex_init(&mutex_, nullptr);
-
   metric_type_ = vector_index_parameter.bruteforce_parameter().metric_type();
   dimension_ = vector_index_parameter.bruteforce_parameter().dimension();
 }
 
-VectorIndexBruteforce::~VectorIndexBruteforce() { bthread_mutex_destroy(&mutex_); }
+VectorIndexBruteforce::~VectorIndexBruteforce() = default;
 
 butil::Status VectorIndexBruteforce::Upsert(const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/) {
-  BAIDU_SCOPED_LOCK(mutex_);
   return butil::Status::OK();
 }
 
 butil::Status VectorIndexBruteforce::Add(const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/) {
-  BAIDU_SCOPED_LOCK(mutex_);
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexBruteforce::Delete(const std::vector<int64_t>& /*delete_ids*/) {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return butil::Status::OK();
-}
+butil::Status VectorIndexBruteforce::Delete(const std::vector<int64_t>& /*delete_ids*/) { return butil::Status::OK(); }
 
 butil::Status VectorIndexBruteforce::Search(std::vector<pb::common::VectorWithId> /*vector_with_ids*/,
                                             uint32_t /*topk*/, std::vector<std::shared_ptr<FilterFunctor>> /*filters*/,
@@ -78,9 +72,9 @@ butil::Status VectorIndexBruteforce::RangeSearch(std::vector<pb::common::VectorW
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "not support");
 }
 
-void VectorIndexBruteforce::LockWrite() { bthread_mutex_lock(&mutex_); }
+void VectorIndexBruteforce::LockWrite() {}
 
-void VectorIndexBruteforce::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+void VectorIndexBruteforce::UnlockWrite() {}
 
 bool VectorIndexBruteforce::SupportSave() { return true; }
 

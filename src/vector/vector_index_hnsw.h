@@ -28,6 +28,7 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "hnswlib/hnswlib.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -106,7 +107,8 @@ class VectorIndexHnsw : public VectorIndex {
   // Dimension of the elements
   uint32_t dimension_;
 
-  bthread_mutex_t mutex_;
+  // bthread_mutex_t mutex_;
+  RWLock rw_lock_;
 
   uint32_t max_element_limit_;
 

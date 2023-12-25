@@ -35,6 +35,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "common/threadpool.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -120,8 +121,6 @@ inline void ParallelFor(size_t start, size_t end, bool is_priority, Function fn)
 VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
-  bthread_mutex_init(&mutex_, nullptr);
-
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
     assert(hnsw_parameter.dimension() > 0);
@@ -164,8 +163,6 @@ VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParame
 VectorIndexHnsw::~VectorIndexHnsw() {
   delete hnsw_index_;
   delete hnsw_space_;
-
-  bthread_mutex_destroy(&mutex_);
 }
 
 butil::Status VectorIndexHnsw::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
@@ -194,7 +191,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
 
   // Add data to index
   try {
@@ -243,7 +240,7 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids, bo
 
   butil::Status ret;
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
 
   // Add data to index
   try {
@@ -270,7 +267,7 @@ butil::Status VectorIndexHnsw::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Load(const std::string& path) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
 
   // FIXME: need to prevent SEGV when delete old_hnsw_index
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -409,7 +406,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (search_parameter.hnsw().efsearch() > 0) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw][id({})] set ef_search({}).", Id(),
@@ -479,12 +476,12 @@ butil::Status VectorIndexHnsw::RangeSearch(std::vector<pb::common::VectorWithId>
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "RangeSearch not support in Hnsw!!!");
 }
 
-void VectorIndexHnsw::LockWrite() { bthread_mutex_lock(&mutex_); }
+void VectorIndexHnsw::LockWrite() { rw_lock_.LockWrite(); }
 
-void VectorIndexHnsw::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+void VectorIndexHnsw::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
 butil::Status VectorIndexHnsw::ResizeMaxElements(int64_t new_max_elements) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
 
   try {
     if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -503,7 +500,7 @@ butil::Status VectorIndexHnsw::ResizeMaxElements(int64_t new_max_elements) {
 }
 
 butil::Status VectorIndexHnsw::GetMaxElements(int64_t& max_elements) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     max_elements = hnsw_index_->getMaxElements();
@@ -565,7 +562,7 @@ bool VectorIndexHnsw::NeedToRebuild() {
 }
 
 bool VectorIndexHnsw::NeedToSave(int64_t last_save_log_behind) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   int64_t element_count = 0, deleted_count = 0;
 

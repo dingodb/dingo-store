@@ -30,6 +30,7 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "faiss/Index.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/AuxIndexStructures.h"
@@ -48,8 +49,6 @@ DEFINE_int64(flat_need_save_count, 10000, "flat need save count");
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range) {
-  bthread_mutex_init(&mutex_, nullptr);
-
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
   dimension_ = vector_index_parameter.flat_parameter().dimension();
 
@@ -71,10 +70,7 @@ VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParame
   index_id_map2_ = std::make_unique<faiss::IndexIDMap2>(raw_index_.get());
 }
 
-VectorIndexFlat::~VectorIndexFlat() {
-  index_id_map2_->reset();
-  bthread_mutex_destroy(&mutex_);
-}
+VectorIndexFlat::~VectorIndexFlat() { index_id_map2_->reset(); }
 
 // const float kFloatAccuracy = 0.00001;
 
@@ -119,7 +115,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
   // c++ 20 fix this bug.
   const std::unique_ptr<float[]>& vectors2 = vectors;
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
   std::thread([&]() {
     if (is_upsert) {
       faiss::IDSelectorArray sel(vector_with_ids.size(), ids2.get());
@@ -154,7 +150,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
 
   size_t remove_count = 0;
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockWriteGuard guard(&rw_lock_);
     std::thread([&]() { remove_count = index_id_map2_->remove_ids(sel); }).join();
   }
 
@@ -198,7 +194,7 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   faiss::SearchParameters flat_search_parameters;
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockReadGuard guard(&rw_lock_);
     // use std::thread to call faiss functions
     std::thread t([&]() {
       if (!filters.empty()) {
@@ -257,7 +253,7 @@ butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId>
   }
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockReadGuard guard(&rw_lock_);
     // use std::thread to call faiss functions
     std::promise<butil::Status> promise_status;
     std::future<butil::Status> future_status = promise_status.get_future();
@@ -295,9 +291,9 @@ butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId>
   return butil::Status::OK();
 }
 
-void VectorIndexFlat::LockWrite() { bthread_mutex_lock(&mutex_); }
+void VectorIndexFlat::LockWrite() { rw_lock_.LockWrite(); }
 
-void VectorIndexFlat::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+void VectorIndexFlat::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
 bool VectorIndexFlat::SupportSave() { return true; }
 
@@ -467,7 +463,7 @@ int32_t VectorIndexFlat::GetDimension() { return this->dimension_; }
 pb::common::MetricType VectorIndexFlat::GetMetricType() { return this->metric_type_; }
 
 butil::Status VectorIndexFlat::GetCount(int64_t& count) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   count = index_id_map2_->id_map.size();
   return butil::Status::OK();
 }
@@ -478,7 +474,7 @@ butil::Status VectorIndexFlat::GetDeletedCount(int64_t& deleted_count) {
 }
 
 butil::Status VectorIndexFlat::GetMemorySize(int64_t& memory_size) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   auto count = index_id_map2_->ntotal;
   if (count == 0) {
     memory_size = 0;
@@ -509,7 +505,7 @@ void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::compon
 }
 
 bool VectorIndexFlat::NeedToSave(int64_t last_save_log_behind) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   int64_t element_count = 0;
 
