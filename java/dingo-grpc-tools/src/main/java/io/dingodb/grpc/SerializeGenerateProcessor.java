@@ -11,6 +11,7 @@ import java.util.Set;
 
 import static com.google.common.base.CaseFormat.LOWER_CAMEL;
 import static com.google.common.base.CaseFormat.LOWER_UNDERSCORE;
+import static io.dingodb.grpc.Constant.HAS_VALUE;
 import static io.dingodb.grpc.Constant.INPUT;
 import static io.dingodb.grpc.Constant.NUMBER;
 import static io.dingodb.grpc.Constant.OUT;
@@ -47,14 +48,14 @@ public class SerializeGenerateProcessor {
     public static CodeBlock readStatement(String fieldName, TypeName fieldType, int number, Set<ClassName> enums) {
         if (canDirect(fieldType)) {
             return CodeBlock.of(
-                "case $L: $L = $T.$L($L); break",
-                number, fieldName, READER, directRead(fieldType), INPUT
+                "case $L: $L = $T.$L($L); $L = true; break",
+                number, fieldName, READER, directRead(fieldType), INPUT, HAS_VALUE
             );
         }
         if (enums.contains(fieldType)) {
             return CodeBlock.of(
-                "case $L: $L = $T.forNumber($T.readInt($L)); break",
-                number, fieldName, fieldType, READER, INPUT
+                "case $L: $L = $T.forNumber($T.readInt($L));$L = true; break",
+                number, fieldName, fieldType, READER, INPUT, HAS_VALUE
             );
         }
         if (fieldType instanceof ParameterizedTypeName) {
@@ -62,23 +63,23 @@ public class SerializeGenerateProcessor {
             if (((ParameterizedTypeName) fieldType).rawType.equals(ClassName.get(List.class))) {
                 if (canPack(firstGenericType)) {
                     return CodeBlock.of(
-                        "case $L: $L = $T.readPack($L, $T::$L); break",
-                        number, fieldName, READER, INPUT, READER, directRead(firstGenericType)
+                        "case $L: $L = $T.readPack($L, $T::$L); $L = true; break",
+                        number, fieldName, READER, INPUT, READER, directRead(firstGenericType), HAS_VALUE
                     );
                 } else if (canDirect(firstGenericType)) {
                     return CodeBlock.of(
-                            "case $L: $L = $T.readList($L, $L, $T::$L); break",
-                            number, fieldName, READER, fieldName, INPUT, READER, directRead(firstGenericType)
+                            "case $L: $L = $T.readList($L, $L, $T::$L); $L = true; break",
+                            number, fieldName, READER, fieldName, INPUT, READER, directRead(firstGenericType), HAS_VALUE
                         );
                 } else if (enums.contains(firstGenericType)) {
                     return CodeBlock.of(
-                        "case $L: $L = $T.readList($L, $L, in -> $T.forNumber($T.readInt($L))); break",
-                        number, fieldName, READER, fieldName, INPUT, firstGenericType, READER, INPUT
+                        "case $L: $L = $T.readList($L, $L, in -> $T.forNumber($T.readInt($L))); $L = true; break",
+                        number, fieldName, READER, fieldName, INPUT, firstGenericType, READER, INPUT, HAS_VALUE
                     );
                 } else {
                     return CodeBlock.of(
-                        "case $L: $L = $T.readList($L, $L, in -> $T.readMessage(new $T(), in)); break",
-                        number, fieldName, READER, fieldName, INPUT, READER, firstGenericType
+                        "case $L: $L = $T.readList($L, $L, in -> $T.readMessage(new $T(), in)); $L = true; break",
+                        number, fieldName, READER, fieldName, INPUT, READER, firstGenericType, HAS_VALUE
                     );
                 }
             } else {
@@ -86,28 +87,29 @@ public class SerializeGenerateProcessor {
                     String keyReader = directRead(firstGenericType);
                     String valueReader = directRead(((ParameterizedTypeName) fieldType).typeArguments.get(1));
                     return CodeBlock.of(
-                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, $T::$L); break",
-                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueReader
+                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, $T::$L); $L = true; break",
+                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueReader, HAS_VALUE
                     );
                 } else if (enums.contains(firstGenericType)) {
                     String keyReader = directRead(firstGenericType);
                     TypeName valueType = ((ParameterizedTypeName) fieldType).typeArguments.get(1);
                     return CodeBlock.of(
-                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, in -> in -> $T.forNumber($T.readInt(in))); break",
-                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueType
+                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, in -> in -> $T.forNumber($T.readInt(in))); $L = true; break",
+                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueType, HAS_VALUE
                     );
                 } else {
                     String keyReader = directRead(firstGenericType);
                     TypeName valueType = ((ParameterizedTypeName) fieldType).typeArguments.get(1);
                     return CodeBlock.of(
-                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, in -> $T.readMessage(new $T(), in)); break",
-                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueType
+                        "case $L: $L = $T.readMap($L, $L, $L, $T::$L, in -> $T.readMessage(new $T(), in)); $L = true; break",
+                        number, fieldName, READER, NUMBER, fieldName, INPUT, READER, keyReader, READER, valueType, HAS_VALUE
                     );
                 }
             }
         } else {
             return CodeBlock.of(
-                "case $L: $L = $T.readMessage(new $T(), $L); break", number, fieldName, READER, fieldType, INPUT
+                "case $L: $L = $T.readMessage(new $T(), $L); $L = $L ? $L : $L != null; break",
+                number, fieldName, READER, fieldType, INPUT, HAS_VALUE, HAS_VALUE, HAS_VALUE, fieldName
             );
         }
     }

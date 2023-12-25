@@ -17,11 +17,13 @@
 package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.service.caller.RpcCaller;
 import io.dingodb.sdk.service.entity.common.KeyValue;
 import io.dingodb.sdk.service.entity.version.DeleteRangeRequest;
 import io.dingodb.sdk.service.entity.version.EventType;
 import io.dingodb.sdk.service.entity.version.Kv;
 import io.dingodb.sdk.service.entity.version.LeaseGrantRequest;
+import io.dingodb.sdk.service.entity.version.LeaseGrantResponse;
 import io.dingodb.sdk.service.entity.version.LeaseRenewRequest;
 import io.dingodb.sdk.service.entity.version.PutRequest;
 import io.dingodb.sdk.service.entity.version.PutResponse;
@@ -29,6 +31,8 @@ import io.dingodb.sdk.service.entity.version.RangeRequest;
 import io.dingodb.sdk.service.entity.version.RangeResponse;
 import io.dingodb.sdk.service.entity.version.WatchRequest;
 import io.dingodb.sdk.service.entity.version.WatchRequest.RequestUnionNest.OneTimeRequest;
+import io.grpc.CallOptions;
+import io.grpc.MethodDescriptor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -50,6 +54,22 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
 public class LockService {
+
+    static {
+        RpcCaller.addHandler(new RpcHandler<LeaseGrantRequest, LeaseGrantResponse>() {
+            @Override
+            public MethodDescriptor<LeaseGrantRequest, LeaseGrantResponse> matchMethod() {
+                return VersionService.leaseGrant;
+            }
+
+            @Override
+            public void enter(LeaseGrantRequest request, CallOptions options, String remote, long trace) {
+                if (request.getID() == -1) {
+                    request.setID(Math.abs((((long) System.identityHashCode(request)) << 32) + System.nanoTime()));
+                }
+            }
+        });
+    }
 
     private final ScheduledExecutorService executors = Executors.newScheduledThreadPool(1);
     private ScheduledFuture<?> renewFuture;
@@ -95,14 +115,7 @@ public class LockService {
     private void grantLease() {
         do {
             try {
-                lease = kvService.leaseGrant(() -> {
-                    long id = lease;
-                    if (id == -1) {
-                        id = System.identityHashCode(LockService.class);
-                        id = Math.abs(((id << 32)) + System.nanoTime());
-                    }
-                    return LeaseGrantRequest.builder().iD(id).tTL(leaseTtl).build();
-                }).getID();
+                lease = kvService.leaseGrant(LeaseGrantRequest.builder().iD(lease).tTL(leaseTtl).build()).getID();
             } catch (Exception e) {
                 if (lease == -1) {
                     log.error("Grant lease failed, will retry...", e);

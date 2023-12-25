@@ -17,6 +17,7 @@
 package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.utils.Optional;
+import io.dingodb.sdk.common.utils.StackTraces;
 import io.dingodb.sdk.service.entity.common.Location;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
@@ -47,7 +48,11 @@ public final class ChannelManager {
         return Optional.ofNullable(location)
             .filter(__ -> __.getHost() != null)
             .filter(__ -> !__.getHost().isEmpty())
-            .ifAbsent(() -> log.warn("Cannot connect empty host."))
+            .ifAbsent(() -> {
+                if (log.isDebugEnabled()) {
+                    log.warn("Cannot connect empty host, call stack {}.", StackTraces.stack(1));
+                }
+            })
             .map(__ -> channels.computeIfAbsent(
                 Location.builder().host(location.getHost()).port(location.getPort()).build(),
                 k -> newChannel(k.getHost(), k.getPort())
@@ -58,8 +63,11 @@ public final class ChannelManager {
         return Optional.ofNullable(location)
             .filter(__ -> __.getHost() != null)
             .filter(__ -> !__.getHost().isEmpty())
-            .ifAbsent(() -> log.warn("Cannot connect empty host."))
-            .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.getHost(), k.getPort())))
+            .ifAbsent(() -> {
+                if (log.isDebugEnabled()) {
+                    log.warn("Cannot connect empty host, call stack {}.", StackTraces.stack(1));
+                }
+            })            .map(__ -> channels.computeIfAbsent(location, k -> newChannel(k.getHost(), k.getPort())))
             .orNull();
     }
 

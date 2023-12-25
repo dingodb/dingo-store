@@ -16,13 +16,15 @@
 
 package io.dingodb.sdk.common.codec;
 
-import io.dingodb.sdk.common.serial.schema.*;
+import io.dingodb.sdk.common.serial.BufImpl;
+import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.common.utils.TypeSchemaMapper;
 import io.dingodb.sdk.service.entity.meta.ColumnDefinition;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -127,6 +129,23 @@ public final class CodecUtils {
             }
         }
         return -1;
+    }
+
+    public static byte[] sliceIdKey(byte[] key) {
+        return Arrays.copyOf(key, 9);
+    }
+
+    public static long readId(byte[] key) {
+        BufImpl buf = new BufImpl(key);
+        buf.skip(1);
+        return buf.readLong();
+    }
+
+    public static byte[] encodeId(byte namespace, long id) {
+        BufImpl buf = new BufImpl(9);
+        buf.write(namespace);
+        buf.writeLong(id);
+        return buf.getBytes();
     }
 
 }

@@ -56,7 +56,6 @@ import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 
 import static io.dingodb.grpc.Constant.CALLER;
-import static io.dingodb.grpc.Constant.COMMON_ID;
 import static io.dingodb.grpc.Constant.MARSHALLER;
 import static io.dingodb.grpc.Constant.MSG_PKG;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
@@ -127,9 +126,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                 ));
                 typeBuilder
                     .addMethod(makeRequestMethod(methodName, reqTypeName, resTypeName))
-                    .addMethod(makeProviderMethod(methodName, reqTypeName, resTypeName))
-                    .addMethod(makeRequestWithIdMethod(methodName, reqTypeName, resTypeName))
-                    .addMethod(makeProviderWithIdMethod(methodName, reqTypeName, resTypeName));
+                    .addMethod(makeRequestWithIdMethod(methodName, reqTypeName, resTypeName));
                 messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.REQUEST);
                 messageGenerateProcessor.messages.get(resTypeName).addSuperinterface(Constant.RESPONSE);
                 if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("store")) {

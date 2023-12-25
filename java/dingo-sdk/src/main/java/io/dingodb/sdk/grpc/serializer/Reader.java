@@ -66,13 +66,13 @@ public class Reader {
         final int length = input.readRawVarint32();
         input.checkRecursionLimit();
         int oldLimit = input.pushLimit(length);
-        message.read(input);
+        boolean hasValue = message.read(input);
         input.checkLastTagWas(0);
         if (input.getBytesUntilLimit() != 0) {
             throw new RuntimeException("The message " + message.getClass() + " not read finish.");
         }
         input.popLimit(oldLimit);
-        return message;
+        return hasValue ? message : null;
     }
 
     @SneakyThrows

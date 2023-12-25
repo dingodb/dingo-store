@@ -3,21 +3,26 @@ package io.dingodb.sdk.service;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
+import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.caller.ServiceCaller;
 import io.dingodb.sdk.service.entity.common.Location;
+import io.dingodb.sdk.service.entity.common.Range;
 import io.dingodb.sdk.service.entity.coordinator.GetCoordinatorMapResponse;
-import io.dingodb.sdk.service.entity.coordinator.GetRangeRegionMapRequest;
-import io.dingodb.sdk.service.entity.coordinator.RangeRegion;
+import io.dingodb.sdk.service.entity.coordinator.ScanRegionInfo;
+import io.dingodb.sdk.service.entity.coordinator.ScanRegionsRequest;
+import io.dingodb.sdk.service.entity.coordinator.ScanRegionsResponse;
 import io.dingodb.sdk.service.entity.meta.DingoCommonId;
 import lombok.SneakyThrows;
 
 import java.util.Arrays;
-import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -140,7 +145,8 @@ public class Services {
                 }
             });
 
-    private static final NavigableMap<byte[], RangeRegion> rangeRegions = new TreeMap<>(ByteArrayUtils::compare);
+    private static final NavigableMap<byte[], NavigableMap<byte[], ScanRegionInfo>> rangeRegions =
+        new ConcurrentSkipListMap<>(ByteArrayUtils::compare);
 
     public static CoordinatorChannelProvider coordinatorServiceChannelProvider(Set<Location> locations) {
         return new CoordinatorChannelProvider(locations, GetCoordinatorMapResponse::getLeaderLocation);
@@ -202,23 +208,60 @@ public class Services {
     }
 
     @SneakyThrows
-    public static synchronized RegionChannelProvider regionChannelProvider(
+    public static RegionChannelProvider regionChannelProvider(
         Set<Location> locations, byte[] key
     ) {
-        CoordinatorService coordinatorService = coordinatorService(locations);
-        RangeRegion region = rangeRegions.floorEntry(key).getValue();
-        if (region != null && compare(key, region.getStartKey()) >= 0 && compare(key, region.getEndKey()) < 0) {
-            return regionCache.get(locations).get(region.getRegionId());
+        NavigableMap<byte[], ScanRegionInfo> regions = Optional.ofNullable(rangeRegions.floorEntry(key))
+            .map(Map.Entry::getValue)
+            .ifAbsentSet(() -> {
+                long id = CodecUtils.readId(key);
+                byte[] begin = CodecUtils.encodeId(key[0], id);
+                return rangeRegions.computeIfAbsent(
+                    begin, k -> new TreeMap<>(ByteArrayUtils::compare)
+                );
+            })
+            .get();
+        synchronized (regions) {
+            ScanRegionInfo region = Optional.mapOrNull(regions.floorEntry(key), Map.Entry::getValue);
+            if (region != null) {
+                Range range = Optional.mapOrNull(region, ScanRegionInfo::getRange);
+                if (range != null && compare(key, range.getStartKey()) >= 0 && compare(key, range.getEndKey()) < 0) {
+                    RegionChannelProvider regionProvider = regionCache.get(locations).get(region.getRegionId());
+                    if (regionProvider.isIn(key)) {
+                        return regionProvider;
+                    }
+                }
+            }
+            return regionChannelProviderNewly(locations, key);
         }
-        List<RangeRegion> regions = coordinatorService
-            .getRangeRegionMap(GetRangeRegionMapRequest::new).getRangeRegions();
-        rangeRegions.clear();
-        regions.forEach($ -> rangeRegions.put($.getStartKey(), $));
-        region = rangeRegions.floorEntry(key).getValue();
-        if (region != null && compare(key, region.getStartKey()) >= 0 && compare(key, region.getEndKey()) < 0) {
-            return regionCache.get(locations).get(region.getRegionId());
+    }
+
+    @SneakyThrows
+    public static RegionChannelProvider regionChannelProviderNewly(
+        Set<Location> locations, byte[] key
+    ) {
+        long id = CodecUtils.readId(key);
+        byte[] begin = CodecUtils.encodeId(key[0], id);
+        byte[] end = CodecUtils.encodeId(key[0], id + 1);
+        NavigableMap<byte[], ScanRegionInfo> regions = rangeRegions.computeIfAbsent(
+            begin, k -> new TreeMap<>(ByteArrayUtils::compare)
+        );
+        synchronized (regions) {
+            regions.clear();
+            Optional.ofNullable(coordinatorService(locations).scanRegions(
+                ScanRegionsRequest.builder().key(begin).rangeEnd(end).build()
+            )).map(ScanRegionsResponse::getRegions)
+                .ifPresent($ -> $.forEach(region -> regions.put(region.getRange().getStartKey(), region)));
+            ScanRegionInfo region = Optional.mapOrNull(regions.floorEntry(key), Map.Entry::getValue);
+            Range range = Optional.mapOrNull(region, ScanRegionInfo::getRange);
+            if (range != null && compare(key, range.getStartKey()) >= 0 && compare(key, range.getEndKey()) < 0) {
+                RegionChannelProvider regionProvider = regionCache.get(locations).get(region.getRegionId());
+                if (regionProvider.isIn(key)) {
+                    return regionProvider;
+                }
+            }
+            throw new RuntimeException("Cannot found region for " + Arrays.toString(key));
         }
-        throw new RuntimeException("Cannot found " + Arrays.toString(key) + " region");
     }
 
     @SneakyThrows
