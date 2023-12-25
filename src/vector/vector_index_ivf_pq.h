@@ -29,6 +29,7 @@
 #include "bthread/mutex.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "faiss/Index.h"
 #include "faiss/IndexFlat.h"
 #include "faiss/IndexIDMap.h"
@@ -114,7 +115,7 @@ class VectorIndexIvfPq : public VectorIndex {
   // only support L2 and IP
   pb::common::MetricType metric_type_;
 
-  bthread_mutex_t mutex_;
+  RWLock rw_lock_;
 
   size_t nlist_;
 

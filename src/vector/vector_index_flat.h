@@ -27,6 +27,7 @@
 #include "bthread/mutex.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "faiss/Index.h"
 #include "faiss/IndexFlat.h"
 #include "faiss/IndexIDMap.h"
@@ -138,7 +139,7 @@ class VectorIndexFlat : public VectorIndex {
 
   std::unique_ptr<faiss::IndexIDMap2> index_id_map2_;
 
-  bthread_mutex_t mutex_;
+  RWLock rw_lock_;
 
   // normalize vector
   bool normalize_;

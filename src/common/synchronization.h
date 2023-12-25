@@ -19,107 +19,25 @@
 
 #include "bthread/bthread.h"
 #include "bthread/butex.h"
+#include "bthread/types.h"
+#include "butil/scoped_lock.h"
 #include "common/logging.h"
 
 namespace dingodb {
 
 class BthreadCond {
  public:
-  BthreadCond(int count = 0) {
-    bthread_cond_init(&cond_, nullptr);
-    bthread_mutex_init(&mutex_, nullptr);
-    count_ = count;
-  }
-  ~BthreadCond() {
-    bthread_mutex_destroy(&mutex_);
-    bthread_cond_destroy(&cond_);
-  }
+  BthreadCond(int count = 0);
+  ~BthreadCond();
+  int Count() const;
 
-  int Count() const { return count_; }
-
-  void Increase() {
-    bthread_mutex_lock(&mutex_);
-    ++count_;
-    bthread_mutex_unlock(&mutex_);
-  }
-
-  void DecreaseSignal() {
-    bthread_mutex_lock(&mutex_);
-    --count_;
-    bthread_cond_signal(&cond_);
-    bthread_mutex_unlock(&mutex_);
-  }
-
-  void DecreaseBroadcast() {
-    bthread_mutex_lock(&mutex_);
-    --count_;
-    bthread_cond_broadcast(&cond_);
-    bthread_mutex_unlock(&mutex_);
-  }
-
-  int Wait(int cond = 0) {
-    int ret = 0;
-    bthread_mutex_lock(&mutex_);
-    while (count_ > cond) {
-      ret = bthread_cond_wait(&cond_, &mutex_);
-      if (ret != 0) {
-        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
-        break;
-      }
-    }
-
-    bthread_mutex_unlock(&mutex_);
-    return ret;
-  }
-
-  int IncreaseWait(int cond = 0) {
-    int ret = 0;
-    bthread_mutex_lock(&mutex_);
-    while (count_ + 1 > cond) {
-      ret = bthread_cond_wait(&cond_, &mutex_);
-      if (ret != 0) {
-        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
-        break;
-      }
-    }
-
-    ++count_;
-    bthread_mutex_unlock(&mutex_);
-    return ret;
-  }
-
-  int TimedWait(int64_t timeout_us, int cond = 0) {
-    int ret = 0;
-    timespec tm = butil::microseconds_from_now(timeout_us);
-    bthread_mutex_lock(&mutex_);
-    while (count_ > cond) {
-      ret = bthread_cond_timedwait(&cond_, &mutex_, &tm);
-      if (ret != 0) {
-        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
-        break;
-      }
-    }
-
-    bthread_mutex_unlock(&mutex_);
-    return ret;
-  }
-
-  int IncreaseTimedWait(int64_t timeout_us, int cond = 0) {
-    int ret = 0;
-    timespec tm = butil::microseconds_from_now(timeout_us);
-    bthread_mutex_lock(&mutex_);
-    while (count_ + 1 > cond) {
-      ret = bthread_cond_timedwait(&cond_, &mutex_, &tm);
-      if (ret != 0) {
-        DINGO_LOG(WARNING) << "wait timeout, ret: " << ret;
-        break;
-      }
-    }
-
-    ++count_;
-    bthread_mutex_unlock(&mutex_);
-    return ret;
-  }
+  void Increase();
+  void DecreaseSignal();
+  void DecreaseBroadcast();
+  int Wait(int cond = 0);
+  int IncreaseWait(int cond = 0);
+  int TimedWait(int64_t timeout_us, int cond = 0);
+  int IncreaseTimedWait(int64_t timeout_us, int cond = 0);
 
  private:
   int count_;
@@ -133,53 +51,17 @@ using BthreadCondPtr = std::shared_ptr<BthreadCond>;
 class Bthread {
  public:
   Bthread() = default;
-  explicit Bthread(const bthread_attr_t* attr) : attr_(attr) {}
-  explicit Bthread(const std::function<void()>& call) {
-    attr_ = &BTHREAD_ATTR_NORMAL;
-    Run(call);
-  }
-  explicit Bthread(const bthread_attr_t* attr, const std::function<void()>& call) {
-    attr_ = attr;
-    Run(call);
-  }
+  explicit Bthread(const bthread_attr_t* attr);
+  explicit Bthread(const std::function<void()>& call);
+  explicit Bthread(const bthread_attr_t* attr, const std::function<void()>& call);
 
-  void Run(const std::function<void()>& call) {
-    std::function<void()>* func_call = new std::function<void()>;
-    *func_call = call;
-    int ret = bthread_start_background(
-        &tid_, attr_,
-        [](void* p) -> void* {
-          auto* call = static_cast<std::function<void()>*>(p);
-          (*call)();
-          delete call;
-          return nullptr;
-        },
-        func_call);
-    if (ret != 0) {
-      DINGO_LOG(FATAL) << "bthread_start_background fail.";
-    }
-  }
+  void Run(const std::function<void()>& call);
 
-  void RunUrgent(const std::function<void()>& call) {
-    std::function<void()>* func_call = new std::function<void()>;
-    *func_call = call;
-    int ret = bthread_start_urgent(
-        &tid_, attr_,
-        [](void* p) -> void* {
-          auto* call = static_cast<std::function<void()>*>(p);
-          (*call)();
-          delete call;
-          return nullptr;
-        },
-        func_call);
-    if (ret != 0) {
-      DINGO_LOG(FATAL) << "bthread_start_urgent fail";
-    }
-  }
+  void RunUrgent(const std::function<void()>& call);
 
-  void Join() const { bthread_join(tid_, nullptr); }
+  void Join() const;
 
-  bthread_t Id() const { return tid_; }
+  bthread_t Id() const;
 
  private:
   bthread_t tid_;
@@ -189,17 +71,13 @@ class Bthread {
 // RAII
 class ScopeGuard {
  public:
-  explicit ScopeGuard(std::function<void()> exit_func) : exit_func_(exit_func) {}
-  ~ScopeGuard() {
-    if (!is_release_) {
-      exit_func_();
-    }
-  }
+  explicit ScopeGuard(std::function<void()> exit_func);
+  ~ScopeGuard();
 
   ScopeGuard(const ScopeGuard&) = delete;
   ScopeGuard& operator=(const ScopeGuard&) = delete;
 
-  void Release() { is_release_ = true; }
+  void Release();
 
  private:
   std::function<void()> exit_func_;
@@ -210,6 +88,61 @@ class ScopeGuard {
 #define SCOPEGUARD_LINENAME(name, line) SCOPEGUARD_LINENAME_CAT(name, line)
 #define ON_SCOPE_EXIT(callback) ScopeGuard SCOPEGUARD_LINENAME(scope_guard, __LINE__)(callback)
 #define DEFER(expr) ON_SCOPE_EXIT([&]() { expr; })
+
+class RWLock {
+ private:
+  bthread_mutex_t mutex_;       // mutex to protect the following fields
+  bthread_cond_t cond_;         // condition variable
+  int active_readers_ = 0;      // number of active readers
+  int waiting_writers_ = 0;     // number of waiting writers
+  bool active_writer_ = false;  // is there an active writer
+
+  bool CanRead() const;
+
+  bool CanWrite() const;
+
+ public:
+  RWLock();
+  ~RWLock();
+
+  void LockRead();
+
+  void UnlockRead();
+
+  void LockWrite();
+
+  void UnlockWrite();
+};
+
+class RWLockReadGuard {
+ public:
+  explicit RWLockReadGuard(RWLock* rw_lock);
+  ~RWLockReadGuard();
+
+  RWLockReadGuard(const RWLockReadGuard&) = delete;
+  RWLockReadGuard& operator=(const RWLockReadGuard&) = delete;
+
+  void Release();
+
+ private:
+  RWLock* rw_lock_;
+  bool is_release_ = false;
+};
+
+class RWLockWriteGuard {
+ public:
+  explicit RWLockWriteGuard(RWLock* rw_lock);
+  ~RWLockWriteGuard();
+
+  RWLockWriteGuard(const RWLockWriteGuard&) = delete;
+  RWLockWriteGuard& operator=(const RWLockWriteGuard&) = delete;
+
+  void Release();
+
+ private:
+  RWLock* rw_lock_;
+  bool is_release_ = false;
+};
 
 };  // namespace dingodb
 

@@ -50,8 +50,6 @@ DEFINE_int64(ivf_flat_need_save_count, 10000, "ivf flat need save count");
 VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                        const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range) {
-  bthread_mutex_init(&mutex_, nullptr);
-
   metric_type_ = vector_index_parameter.ivf_flat_parameter().metric_type();
   dimension_ = vector_index_parameter.ivf_flat_parameter().dimension();
 
@@ -72,7 +70,7 @@ VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndex
   // Delay object creation.
 }
 
-VectorIndexIvfFlat::~VectorIndexIvfFlat() { bthread_mutex_destroy(&mutex_); }
+VectorIndexIvfFlat::~VectorIndexIvfFlat() = default;
 
 butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                               bool is_upsert) {
@@ -100,7 +98,7 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
   // c++ 20 fix this bug.
   const std::unique_ptr<float[]>& vectors2 = vectors;
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("ivf flat not train. train first.");
     DINGO_LOG(WARNING) << s;
@@ -162,7 +160,7 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
 
   size_t remove_count = 0;
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockWriteGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
@@ -217,7 +215,7 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
   const std::unique_ptr<float[]>& vectors2 = vectors;
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockReadGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
@@ -298,7 +296,7 @@ butil::Status VectorIndexIvfFlat::RangeSearch(std::vector<pb::common::VectorWith
   }
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockReadGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
@@ -362,9 +360,9 @@ butil::Status VectorIndexIvfFlat::RangeSearch(std::vector<pb::common::VectorWith
   return butil::Status::OK();
 }
 
-void VectorIndexIvfFlat::LockWrite() { bthread_mutex_lock(&mutex_); }
+void VectorIndexIvfFlat::LockWrite() { rw_lock_.LockWrite(); }
 
-void VectorIndexIvfFlat::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+void VectorIndexIvfFlat::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
 bool VectorIndexIvfFlat::SupportSave() { return true; }
 
@@ -541,7 +539,7 @@ int32_t VectorIndexIvfFlat::GetDimension() { return this->dimension_; }
 pb::common::MetricType VectorIndexIvfFlat::GetMetricType() { return this->metric_type_; }
 
 butil::Status VectorIndexIvfFlat::GetCount(int64_t& count) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   if (DoIsTrained()) {
     count = index_->ntotal;
   } else {
@@ -556,7 +554,7 @@ butil::Status VectorIndexIvfFlat::GetDeletedCount(int64_t& deleted_count) {
 }
 
 butil::Status VectorIndexIvfFlat::GetMemorySize(int64_t& memory_size) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     memory_size = 0;
@@ -605,7 +603,7 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
     DINGO_LOG(WARNING) << s;
   }
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(DoIsTrained())) {
     std::string s = fmt::format("already trained . ignore");
     DINGO_LOG(WARNING) << s;
@@ -704,7 +702,7 @@ butil::Status VectorIndexIvfFlat::Train([[maybe_unused]] const std::vector<pb::c
 }
 
 bool VectorIndexIvfFlat::NeedToRebuild() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("not trained");
@@ -733,12 +731,12 @@ bool VectorIndexIvfFlat::NeedToRebuild() {
 }
 
 bool VectorIndexIvfFlat::IsTrained() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   return DoIsTrained();
 }
 
 bool VectorIndexIvfFlat::NeedToSave(int64_t last_save_log_behind) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("not trained. train first");
     DINGO_LOG(WARNING) << s;

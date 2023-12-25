@@ -27,6 +27,7 @@
 #include "bthread/mutex.h"
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -94,8 +95,6 @@ class VectorIndexBruteforce : public VectorIndex {
 
   // only support L2 and IP
   pb::common::MetricType metric_type_;
-
-  bthread_mutex_t mutex_;
 };
 
 }  // namespace dingodb

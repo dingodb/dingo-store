@@ -25,7 +25,6 @@
 #include <utility>
 #include <vector>
 
-#include "bthread/mutex.h"
 #include "bthread/types.h"
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
@@ -47,8 +46,6 @@ namespace dingodb {
 VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                    const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range), index_type_in_ivf_pq_(IndexTypeInIvfPq::kUnknow) {
-  bthread_mutex_init(&mutex_, nullptr);
-
   metric_type_ = vector_index_parameter.ivf_pq_parameter().metric_type();
   dimension_ = vector_index_parameter.ivf_pq_parameter().dimension();
 
@@ -75,7 +72,7 @@ VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexPara
   // Delay object creation.
 }
 
-VectorIndexIvfPq::~VectorIndexIvfPq() { bthread_mutex_destroy(&mutex_); }
+VectorIndexIvfPq::~VectorIndexIvfPq() = default;
 
 butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                    bool is_upsert) {
@@ -85,7 +82,7 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
 
   butil::Status status;
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockWriteGuard guard(&rw_lock_);
     status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
                                     &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
   }
@@ -108,7 +105,7 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
 
   // add again
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockWriteGuard guard(&rw_lock_);
     status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
                                     &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
   }
@@ -129,7 +126,7 @@ butil::Status VectorIndexIvfPq::Add(const std::vector<pb::common::VectorWithId>&
 }
 
 butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
   if (delete_ids.empty()) {
     return butil::Status::OK();
   }
@@ -148,7 +145,7 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
                                        std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
                                        const pb::common::VectorSearchParameter& parameter,
                                        std::vector<pb::index::VectorWithDistanceResult>& results) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
                                                 vector_with_ids, topk, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
@@ -169,7 +166,7 @@ butil::Status VectorIndexIvfPq::RangeSearch(std::vector<pb::common::VectorWithId
                                             std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                                             bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                             std::vector<pb::index::VectorWithDistanceResult>& results) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   butil::Status status =
       InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch, false,
                              vector_with_ids, radius, filters, reconstruct, parameter, results);
@@ -186,9 +183,9 @@ butil::Status VectorIndexIvfPq::RangeSearch(std::vector<pb::common::VectorWithId
   return butil::Status::OK();
 }
 
-void VectorIndexIvfPq::LockWrite() { bthread_mutex_lock(&mutex_); }
+void VectorIndexIvfPq::LockWrite() { rw_lock_.LockWrite(); }
 
-void VectorIndexIvfPq::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+void VectorIndexIvfPq::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
 bool VectorIndexIvfPq::SupportSave() { return true; }
 
@@ -267,7 +264,7 @@ int32_t VectorIndexIvfPq::GetDimension() { return this->dimension_; }
 pb::common::MetricType VectorIndexIvfPq::GetMetricType() { return this->metric_type_; }
 
 butil::Status VectorIndexIvfPq::GetCount(int64_t& count) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   if (DoIsTrained()) {
     switch (index_type_in_ivf_pq_) {
       case IndexTypeInIvfPq::kFlat: {
@@ -294,7 +291,7 @@ butil::Status VectorIndexIvfPq::GetDeletedCount(int64_t& deleted_count) {
 }
 
 butil::Status VectorIndexIvfPq::GetMemorySize(int64_t& memory_size) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     memory_size = 0;
@@ -346,7 +343,7 @@ butil::Status VectorIndexIvfPq::Train(const std::vector<float>& train_datas) {
 
   faiss::idx_t train_subvector_size = pq.cp.max_points_per_centroid * (1 << nbits_per_idx_);
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(DoIsTrained())) {
     std::string s = fmt::format("already trained . ignore");
     DINGO_LOG(WARNING) << s;
@@ -447,7 +444,7 @@ butil::Status VectorIndexIvfPq::Train([[maybe_unused]] const std::vector<pb::com
 }
 
 bool VectorIndexIvfPq::NeedToRebuild() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("not trained");
@@ -483,12 +480,12 @@ bool VectorIndexIvfPq::NeedToRebuild() {
 }
 
 bool VectorIndexIvfPq::IsTrained() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   return DoIsTrained();
 }
 
 bool VectorIndexIvfPq::NeedToSave(int64_t last_save_log_behind) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("ivf pq not train. train first.");
     DINGO_LOG(ERROR) << s;
@@ -515,7 +512,7 @@ bool VectorIndexIvfPq::NeedToSave(int64_t last_save_log_behind) {
 }
 
 pb::common::VectorIndexType VectorIndexIvfPq::VectorIndexSubType() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("ivf pq not train. train first.");
     DINGO_LOG(ERROR) << s;
