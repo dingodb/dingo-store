@@ -66,7 +66,7 @@ public class TableRegionsFailOver {
                 TableRegionsFailOver.this.refresh(regionId, location, trace);
             }
             RangeDistribution distribution = regionChannels.get(regionId);
-            if (distribution == null) {
+            if (distribution == null || distribution.getLeader() == null) {
                 TableRegionsFailOver.this.refresh(regionId, location, trace);
                 if ((distribution = regionChannels.get(regionId)) == null) {
                     return;
@@ -105,7 +105,7 @@ public class TableRegionsFailOver {
             return;
         }
         try {
-            if (!regionChannels.containsKey(regionId) || regionChannels.get(regionId).getLeader().equals(location)) {
+            if (!regionChannels.containsKey(regionId) || regionChannels.get(regionId).getLeader() == null || regionChannels.get(regionId).getLeader().equals(location)) {
                 regionChannels = rangesGetter.apply(trace).stream().collect(Collectors.toMap(
                     RangeDistribution::getId, $ -> $
                 ));

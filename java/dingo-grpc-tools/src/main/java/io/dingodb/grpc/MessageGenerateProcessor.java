@@ -394,8 +394,9 @@ public class MessageGenerateProcessor {
             }
 
             if (canDirect(realTypeName)) {
-                nestClassBuilder.addMethod(overrideBuilder("read", VOID, INPUT_ARG)
+                nestClassBuilder.addMethod(overrideBuilder("read", TypeName.BOOLEAN, INPUT_ARG)
                         .addStatement("$L = $T.$L($L)", VALUE, READER, directRead(realTypeName), INPUT)
+                        .addStatement("return true")
                         .build()
                     ).addMethod(overrideBuilder("write", VOID, OUT_ARG)
                         .addStatement("$T.$L($L, $L)", WRITER, WRITE, VALUE, OUT)
@@ -444,10 +445,11 @@ public class MessageGenerateProcessor {
 
         MethodSpec.Builder writeBuilder = overrideBuilder(WRITE, VOID, OUT_ARG);
         MethodSpec.Builder sizeOfBuilder = overrideBuilder(SIZE_OF, TypeName.get(int.class));
-        MethodSpec.Builder readBuilder = overrideBuilder("read", VOID, INPUT_ARG);
+        MethodSpec.Builder readBuilder = overrideBuilder("read", TypeName.BOOLEAN, INPUT_ARG);
         if (!all.isEmpty()) {
             sizeOfBuilder.addStatement("int size = 0");
             readBuilder.addStatement(CodeBlock.of("int number = 0"))
+                .addStatement(CodeBlock.of("boolean hasValue = false"))
                 .beginControlFlow("while((number = $T.$L($L)) != 0)", READER, "readNumber", INPUT)
                 .beginControlFlow("switch(number)");
 
@@ -464,8 +466,10 @@ public class MessageGenerateProcessor {
 
             readBuilder.addStatement("default: $T.$L($L)", READER, "skip", INPUT).endControlFlow().endControlFlow();
             sizeOfBuilder.addStatement("return size");
+            readBuilder.addStatement(CodeBlock.of("return hasValue"));
         } else {
             sizeOfBuilder.addStatement("return 0");
+            readBuilder.addStatement(CodeBlock.of("return false"));
         }
         builder.addMethod(writeBuilder.build()).addMethod(readBuilder.build()).addMethod(sizeOfBuilder.build());
     }

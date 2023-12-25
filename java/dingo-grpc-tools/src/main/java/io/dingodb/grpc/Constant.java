@@ -40,6 +40,7 @@ public class Constant {
 
     public static final String SERIALIZE_PACKAGE = "io.dingodb.sdk.grpc.serializer";
 
+    public static final String HAS_VALUE = "hasValue";
     public static final String WRITE = "write";
     public static final String SIZE_OF = "sizeOf";
 

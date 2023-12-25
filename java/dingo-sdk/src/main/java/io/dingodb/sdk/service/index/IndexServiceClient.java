@@ -135,7 +135,7 @@ public class IndexServiceClient {
                 .setVectorCoprocessor(Optional.mapOrGet(
                         parameter.getCoprocessor(),
                         __ -> mapping(parameter.getCoprocessor(), regionId.parentId()),
-                        () -> Common.VectorCoprocessor.newBuilder().build()))
+                        () -> Common.CoprocessorV2.newBuilder().build()))
                 .addAllVectorIds(Parameters.cleanNull(parameter.getVectorIds(), Collections.emptyList()));
         if (parameter.getVectorFilter() != null) {
             builder.setVectorFilter(Common.VectorFilter.valueOf(parameter.getVectorFilter().name()));

@@ -715,68 +715,68 @@ public class EntityConversion {
                 VectorIndexParameter.MetricType.valueOf(distance.getMetricType().name()));
     }
 
-    public static Common.VectorCoprocessor mapping(Coprocessor coprocessor, long partId) {
-        Common.VectorCoprocessor.VectorSchemaWrapper schemaWrapper = Common.VectorCoprocessor.VectorSchemaWrapper.newBuilder()
+    public static Common.CoprocessorV2 mapping(Coprocessor coprocessor, long partId) {
+        Common.CoprocessorV2.SchemaWrapper schemaWrapper = Common.CoprocessorV2.SchemaWrapper.newBuilder()
                 .addAllSchema(mapping(coprocessor.getOriginalSchema()))
                 .setCommonId(partId)
                 .build();
-        return Common.VectorCoprocessor.newBuilder()
+        return Common.CoprocessorV2.newBuilder()
                 .setSchemaVersion(coprocessor.getSchemaVersion())
                 .setOriginalSchema(schemaWrapper)
                 .addAllSelectionColumns(Parameters.cleanNull(coprocessor.getSelection(), Collections.emptyList()))
-                .setExpression(ByteString.copyFrom(Parameters.cleanNull(coprocessor.getExpression(), ByteArrayUtils.EMPTY_BYTES)))
+                .setRelExpr(ByteString.copyFrom(Parameters.cleanNull(coprocessor.getExpression(), ByteArrayUtils.EMPTY_BYTES)))
                 .build();
     }
 
-    public static List<Common.VectorSchema> mapping(Coprocessor.SchemaWrapper schemaWrapper) {
+    public static List<Common.Schema> mapping(Coprocessor.SchemaWrapper schemaWrapper) {
         if (schemaWrapper == null) {
             return Collections.emptyList();
         }
         return CodecUtils.createSchemaForColumns(schemaWrapper.getSchemas()).stream()
                 .map(schema -> {
-                    Common.VectorSchema.Type vs;
+                    Common.Schema.Type vs;
                     switch (schema.getType()) {
                         case BOOLEAN:
-                            vs = Common.VectorSchema.Type.BOOL;
+                            vs = Common.Schema.Type.BOOL;
                             break;
                         case INTEGER:
-                            vs = Common.VectorSchema.Type.INTEGER;
+                            vs = Common.Schema.Type.INTEGER;
                             break;
                         case FLOAT:
-                            vs = Common.VectorSchema.Type.FLOAT;
+                            vs = Common.Schema.Type.FLOAT;
                             break;
                         case LONG:
-                            vs = Common.VectorSchema.Type.LONG;
+                            vs = Common.Schema.Type.LONG;
                             break;
                         case DOUBLE:
-                            vs = Common.VectorSchema.Type.DOUBLE;
+                            vs = Common.Schema.Type.DOUBLE;
                             break;
                         case BYTES:
                         case STRING:
-                            vs = Common.VectorSchema.Type.STRING;
+                            vs = Common.Schema.Type.STRING;
                             break;
                         case BOOLEANLIST:
-                            vs = Common.VectorSchema.Type.BOOLLIST;
+                            vs = Common.Schema.Type.BOOLLIST;
                             break;
                         case INTEGERLIST:
-                            vs = Common.VectorSchema.Type.INTEGERLIST;
+                            vs = Common.Schema.Type.INTEGERLIST;
                             break;
                         case FLOATLIST:
-                            vs = Common.VectorSchema.Type.FLOATLIST;
+                            vs = Common.Schema.Type.FLOATLIST;
                             break;
                         case LONGLIST:
-                            vs = Common.VectorSchema.Type.LONGLIST;
+                            vs = Common.Schema.Type.LONGLIST;
                             break;
                         case DOUBLELIST:
-                            vs = Common.VectorSchema.Type.DOUBLELIST;
+                            vs = Common.Schema.Type.DOUBLELIST;
                             break;
                         case STRINGLIST:
-                            vs = Common.VectorSchema.Type.STRINGLIST;
+                            vs = Common.Schema.Type.STRINGLIST;
                             break;
                         default:
                             throw new IllegalStateException("Unexpected value: " + schema.getType());
                     }
-                    return Common.VectorSchema.newBuilder()
+                    return Common.Schema.newBuilder()
                             .setType(vs)
                             .setIsKey(schema.isKey())
                             .setIsNullable(schema.isAllowNull())
@@ -815,8 +815,8 @@ public class EntityConversion {
                 .build();
     }
 
-    public static Store.Schema mapping(DingoSchema schema) {
-        return Store.Schema.newBuilder()
+    public static Common.Schema mapping(DingoSchema schema) {
+        return Common.Schema.newBuilder()
                 .setType(mapping(schema.getType()))
                 .setIsKey(schema.isKey())
                 .setIsNullable(schema.isAllowNull())
@@ -824,33 +824,33 @@ public class EntityConversion {
                 .build();
     }
 
-    public static Store.Schema.Type mapping(Type type) {
+    public static Common.Schema.Type mapping(Type type) {
         switch (type) {
             case BOOLEAN:
-                return Store.Schema.Type.BOOL;
+                return Common.Schema.Type.BOOL;
             case INTEGER:
-                return Store.Schema.Type.INTEGER;
+                return Common.Schema.Type.INTEGER;
             case FLOAT:
-                return Store.Schema.Type.FLOAT;
+                return Common.Schema.Type.FLOAT;
             case LONG:
-                return Store.Schema.Type.LONG;
+                return Common.Schema.Type.LONG;
             case DOUBLE:
-                return Store.Schema.Type.DOUBLE;
+                return Common.Schema.Type.DOUBLE;
             case BYTES:
             case STRING:
-                return Store.Schema.Type.STRING;
+                return Common.Schema.Type.STRING;
             case BOOLEANLIST:
-                return Store.Schema.Type.BOOLLIST;
+                return Common.Schema.Type.BOOLLIST;
             case INTEGERLIST:
-                return Store.Schema.Type.INTEGERLIST;
+                return Common.Schema.Type.INTEGERLIST;
             case FLOATLIST:
-                return Store.Schema.Type.FLOATLIST;
+                return Common.Schema.Type.FLOATLIST;
             case LONGLIST:
-                return Store.Schema.Type.LONGLIST;
+                return Common.Schema.Type.LONGLIST;
             case DOUBLELIST:
-                return Store.Schema.Type.DOUBLELIST;
+                return Common.Schema.Type.DOUBLELIST;
             case STRINGLIST:
-                return Store.Schema.Type.STRINGLIST;
+                return Common.Schema.Type.STRINGLIST;
             default:
                 throw new IllegalStateException("Unexpected value: " + type);
         }

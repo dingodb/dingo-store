@@ -1,20 +1,33 @@
 package io.dingodb.sdk.service;
 
+import io.dingodb.sdk.common.codec.CodecUtils;
+import io.dingodb.sdk.common.utils.ByteArrayUtils;
+import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.service.entity.Message;
 import io.dingodb.sdk.service.entity.common.Location;
+import io.dingodb.sdk.service.entity.common.Range;
+import io.dingodb.sdk.service.entity.common.Region;
+import io.dingodb.sdk.service.entity.common.RegionDefinition;
 import io.dingodb.sdk.service.entity.common.RegionEpoch;
 import io.dingodb.sdk.service.entity.coordinator.QueryRegionRequest;
-import io.dingodb.sdk.service.entity.coordinator.ScanRegionInfo;
+import io.dingodb.sdk.service.entity.coordinator.QueryRegionResponse;
 import io.dingodb.sdk.service.entity.coordinator.ScanRegionsRequest;
-import io.dingodb.sdk.service.entity.meta.DingoCommonId;
+import io.dingodb.sdk.service.entity.coordinator.ScanRegionsResponse;
 import io.dingodb.sdk.service.entity.store.Context;
 import io.grpc.Channel;
 import lombok.Getter;
+
+import static io.dingodb.sdk.common.utils.ByteArrayUtils.compare;
 
 public class RegionChannelProvider implements ChannelProvider {
 
     @Getter
     private final long regionId;
+    @Getter
+    private Range range;
+    @Getter
+    private byte[] idKey;
+    private byte[] nextIdKey;
     private final CoordinatorService coordinatorService;
     private Location location;
     private Channel channel;
@@ -50,18 +63,45 @@ public class RegionChannelProvider implements ChannelProvider {
         }
     }
 
-    private void refresh() {
-        byte[] startKey = coordinatorService.queryRegion(
-            QueryRegionRequest.builder().regionId(regionId).build()
-        ).getRegion().getDefinition().getRange().getStartKey();
-        ScanRegionInfo regionInfo = coordinatorService.scanRegions(
-            ScanRegionsRequest.builder().key(startKey).build()
-        ).getRegions().get(0);
-        if (regionInfo != null && regionInfo.getLeader() != null) {
-            location = regionInfo.getLeader();
-            channel = ChannelManager.getChannel(location);
-            regionEpoch = regionInfo.getRegionEpoch();
+    public boolean isIn(byte[] key) {
+        if (range == null) {
+            throw new RuntimeException("Not refresh!");
         }
+        // range.start <= key < range.end
+        return compare(range.getStartKey(), key) <= 0 && compare(key, range.getEndKey()) < 0;
+    }
+
+    private void refresh() {
+        if (idKey == null) {
+            refreshIdKey();
+        }
+        Optional.ofNullable(coordinatorService.scanRegions(
+            ScanRegionsRequest.builder().key(idKey).rangeEnd(nextIdKey).build()
+        )).map(ScanRegionsResponse::getRegions)
+            .map($ -> $.stream().filter(region -> region.getRegionId() == regionId).findAny().orElse(null))
+            .filter($ -> $.getLeader() != null)
+            .ifPresent($ -> {
+                location = $.getLeader();
+                channel = ChannelManager.getChannel(location);
+                regionEpoch = $.getRegionEpoch();
+            });
+    }
+
+    private synchronized void refreshIdKey() {
+        if (idKey != null) {
+            return;
+        }
+        Optional.ofNullable(coordinatorService.queryRegion(QueryRegionRequest.builder().regionId(regionId).build()))
+            .map(QueryRegionResponse::getRegion)
+            .map(Region::getDefinition)
+            .map(RegionDefinition::getRange)
+            .ifPresent(range -> this.range = range)
+            .map(Range::getStartKey)
+            .ifPresent($ -> {
+                long id = CodecUtils.readId($);
+                this.idKey = CodecUtils.encodeId($[0], id);
+                this.nextIdKey = CodecUtils.encodeId($[0], id + 1);
+            });
     }
 
 }
