@@ -712,7 +712,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   auto *schema1 = original_schema->add_schema();
   {
-    schema1->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1->set_is_key(true);
     schema1->set_is_nullable(true);
     schema1->set_index(0);
@@ -720,7 +720,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   auto *schema2 = original_schema->add_schema();
   {
-    schema2->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2->set_is_key(false);
     schema2->set_is_nullable(true);
     schema2->set_index(1);
@@ -728,7 +728,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   auto *schema3 = original_schema->add_schema();
   {
-    schema3->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3->set_is_key(false);
     schema3->set_is_nullable(true);
     schema3->set_index(2);
@@ -736,7 +736,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   auto *schema4 = original_schema->add_schema();
   {
-    schema4->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4->set_is_key(false);
     schema4->set_is_nullable(true);
     schema4->set_index(3);
@@ -744,7 +744,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   auto *schema5 = original_schema->add_schema();
   {
-    schema5->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5->set_is_key(true);
     schema5->set_is_nullable(true);
     schema5->set_index(4);
@@ -752,7 +752,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   auto *schema6 = original_schema->add_schema();
   {
-    schema6->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6->set_is_key(true);
     schema6->set_is_nullable(true);
     schema6->set_index(5);
@@ -778,7 +778,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema1 = result_schema->add_schema();
     {
-      schema1->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema1->set_is_key(true);
       schema1->set_is_nullable(true);
       schema1->set_index(0);
@@ -786,7 +786,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema2 = result_schema->add_schema();
     {
-      schema2->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema2->set_is_key(false);
       schema2->set_is_nullable(true);
       schema2->set_index(1);
@@ -794,7 +794,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema3 = result_schema->add_schema();
     {
-      schema3->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema3->set_is_key(false);
       schema3->set_is_nullable(true);
       schema3->set_index(2);
@@ -802,7 +802,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema4 = result_schema->add_schema();
     {
-      schema4->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4->set_is_key(false);
       schema4->set_is_nullable(true);
       schema4->set_index(3);
@@ -810,7 +810,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema5 = result_schema->add_schema();
     {
-      schema5->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5->set_is_key(true);
       schema5->set_is_nullable(true);
       schema5->set_index(4);
@@ -818,7 +818,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     auto *schema6 = result_schema->add_schema();
     {
-      schema6->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema6->set_is_key(true);
       schema6->set_is_nullable(true);
       schema6->set_index(5);
@@ -826,7 +826,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     // auto *schema7 = result_schema->add_schema();
     // {
-    //   schema7->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    //   schema7->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     //   schema7->set_is_key(true);
     //   schema7->set_is_nullable(true);
     //   schema7->set_index(6);
@@ -834,7 +834,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     // auto *schema8 = result_schema->add_schema();
     // {
-    //   schema8->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    //   schema8->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     //   schema8->set_is_key(false);
     //   schema8->set_is_nullable(true);
     //   schema8->set_index(7);
@@ -842,7 +842,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     // auto *schema9 = result_schema->add_schema();
     // {
-    //   schema9->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    //   schema9->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     //   schema9->set_is_key(false);
     //   schema9->set_is_nullable(true);
     //   schema9->set_index(8);
@@ -850,7 +850,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     // auto *schema10 = result_schema->add_schema();
     // {
-    //   schema10->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    //   schema10->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     //   schema10->set_is_key(false);
     //   schema10->set_is_nullable(true);
     //   schema10->set_index(9);
@@ -858,7 +858,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     // auto *schema11 = result_schema->add_schema();
     // {
-    //   schema11->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    //   schema11->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     //   schema11->set_is_key(true);
     //   schema11->set_is_nullable(true);
     //   schema11->set_index(10);
@@ -866,7 +866,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
     // auto *schema12 = result_schema->add_schema();
     // {
-    //   schema12->set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    //   schema12->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     //   schema12->set_is_key(true);
     //   schema12->set_is_nullable(true);
     //   schema12->set_index(11);

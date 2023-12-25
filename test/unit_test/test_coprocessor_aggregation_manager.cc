@@ -50,10 +50,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -123,10 +123,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -196,10 +196,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -269,10 +269,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -342,10 +342,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -418,10 +418,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -432,10 +432,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     result_serial_schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
-    google::protobuf::RepeatedPtrField<pb::store::Schema> result_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> result_pb_schemas;
     for (size_t i = 0; i < 1; i++) {
-      pb::store::Schema schema;
-      schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema;
+      schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema.set_is_key(true);
       schema.set_is_nullable(true);
       schema.set_index(4);
@@ -507,10 +507,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -521,10 +521,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     result_serial_schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
-    google::protobuf::RepeatedPtrField<pb::store::Schema> result_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> result_pb_schemas;
     for (size_t i = 0; i < 1; i++) {
-      pb::store::Schema schema;
-      schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema;
+      schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema.set_is_key(true);
       schema.set_is_nullable(true);
       schema.set_index(4);
@@ -593,10 +593,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -666,10 +666,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -739,10 +739,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -812,10 +812,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -885,10 +885,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -958,10 +958,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1034,10 +1034,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1107,10 +1107,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1180,10 +1180,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1253,10 +1253,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1326,10 +1326,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1399,10 +1399,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
@@ -1475,45 +1475,45 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
 
-    pb::store::Schema schema2;
-    schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema2;
+    schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2.set_is_key(true);
     schema2.set_is_nullable(true);
     schema2.set_index(1);
     pb_schemas.Add(std::move(schema2));
 
-    pb::store::Schema schema3;
-    schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema3;
+    schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3.set_is_key(true);
     schema3.set_is_nullable(true);
     schema3.set_index(2);
     pb_schemas.Add(std::move(schema3));
 
-    pb::store::Schema schema4;
-    schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema4;
+    schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4.set_is_key(true);
     schema4.set_is_nullable(true);
     schema4.set_index(3);
     pb_schemas.Add(std::move(schema4));
 
-    pb::store::Schema schema5;
-    schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema5;
+    schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5.set_is_key(true);
     schema5.set_is_nullable(true);
     schema5.set_index(4);
     pb_schemas.Add(std::move(schema5));
 
-    pb::store::Schema schema6;
-    schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema6;
+    schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6.set_is_key(true);
     schema6.set_is_nullable(true);
     schema6.set_index(5);
@@ -1546,45 +1546,45 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
 
-    pb::store::Schema schema2;
-    schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema2;
+    schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2.set_is_key(true);
     schema2.set_is_nullable(true);
     schema2.set_index(1);
     pb_schemas.Add(std::move(schema2));
 
-    pb::store::Schema schema3;
-    schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema3;
+    schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3.set_is_key(true);
     schema3.set_is_nullable(true);
     schema3.set_index(2);
     pb_schemas.Add(std::move(schema3));
 
-    pb::store::Schema schema4;
-    schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema4;
+    schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4.set_is_key(true);
     schema4.set_is_nullable(true);
     schema4.set_index(3);
     pb_schemas.Add(std::move(schema4));
 
-    pb::store::Schema schema5;
-    schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema5;
+    schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5.set_is_key(true);
     schema5.set_is_nullable(true);
     schema5.set_index(4);
     pb_schemas.Add(std::move(schema5));
 
-    pb::store::Schema schema6;
-    schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema6;
+    schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6.set_is_key(true);
     schema6.set_is_nullable(true);
     schema6.set_index(5);
@@ -1597,10 +1597,10 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     result_serial_schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
-    google::protobuf::RepeatedPtrField<pb::store::Schema> result_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> result_pb_schemas;
     for (size_t i = 0; i < 6; i++) {
-      pb::store::Schema schema;
-      schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema;
+      schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema.set_is_key(true);
       schema.set_is_nullable(true);
       schema.set_index(4);
@@ -1628,45 +1628,45 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
 
-    pb::store::Schema schema2;
-    schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema2;
+    schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2.set_is_key(true);
     schema2.set_is_nullable(true);
     schema2.set_index(1);
     pb_schemas.Add(std::move(schema2));
 
-    pb::store::Schema schema3;
-    schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema3;
+    schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3.set_is_key(true);
     schema3.set_is_nullable(true);
     schema3.set_index(2);
     pb_schemas.Add(std::move(schema3));
 
-    pb::store::Schema schema4;
-    schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema4;
+    schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4.set_is_key(true);
     schema4.set_is_nullable(true);
     schema4.set_index(3);
     pb_schemas.Add(std::move(schema4));
 
-    pb::store::Schema schema5;
-    schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema5;
+    schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5.set_is_key(true);
     schema5.set_is_nullable(true);
     schema5.set_index(4);
     pb_schemas.Add(std::move(schema5));
 
-    pb::store::Schema schema6;
-    schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema6;
+    schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6.set_is_key(true);
     schema6.set_is_nullable(true);
     schema6.set_index(5);
@@ -1679,10 +1679,10 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     result_serial_schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
-    google::protobuf::RepeatedPtrField<pb::store::Schema> result_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> result_pb_schemas;
     for (size_t i = 0; i < 6; i++) {
-      pb::store::Schema schema;
-      schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema;
+      schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema.set_is_key(true);
       schema.set_is_nullable(true);
       schema.set_index(4);
@@ -1710,45 +1710,45 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
 
-    pb::store::Schema schema2;
-    schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema2;
+    schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2.set_is_key(true);
     schema2.set_is_nullable(true);
     schema2.set_index(1);
     pb_schemas.Add(std::move(schema2));
 
-    pb::store::Schema schema3;
-    schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema3;
+    schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3.set_is_key(true);
     schema3.set_is_nullable(true);
     schema3.set_index(2);
     pb_schemas.Add(std::move(schema3));
 
-    pb::store::Schema schema4;
-    schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema4;
+    schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4.set_is_key(true);
     schema4.set_is_nullable(true);
     schema4.set_index(3);
     pb_schemas.Add(std::move(schema4));
 
-    pb::store::Schema schema5;
-    schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema5;
+    schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5.set_is_key(true);
     schema5.set_is_nullable(true);
     schema5.set_index(4);
     pb_schemas.Add(std::move(schema5));
 
-    pb::store::Schema schema6;
-    schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema6;
+    schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6.set_is_key(true);
     schema6.set_is_nullable(true);
     schema6.set_index(5);
@@ -1761,10 +1761,10 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     result_serial_schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
-    google::protobuf::RepeatedPtrField<pb::store::Schema> result_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> result_pb_schemas;
     for (size_t i = 0; i < 6; i++) {
-      pb::store::Schema schema;
-      schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema;
+      schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema.set_is_key(true);
       schema.set_is_nullable(true);
       schema.set_index(4);
@@ -1792,45 +1792,45 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
 
-    pb::store::Schema schema2;
-    schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema2;
+    schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2.set_is_key(true);
     schema2.set_is_nullable(true);
     schema2.set_index(1);
     pb_schemas.Add(std::move(schema2));
 
-    pb::store::Schema schema3;
-    schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema3;
+    schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3.set_is_key(true);
     schema3.set_is_nullable(true);
     schema3.set_index(2);
     pb_schemas.Add(std::move(schema3));
 
-    pb::store::Schema schema4;
-    schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema4;
+    schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4.set_is_key(true);
     schema4.set_is_nullable(true);
     schema4.set_index(3);
     pb_schemas.Add(std::move(schema4));
 
-    pb::store::Schema schema5;
-    schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema5;
+    schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5.set_is_key(true);
     schema5.set_is_nullable(true);
     schema5.set_index(4);
     pb_schemas.Add(std::move(schema5));
 
-    pb::store::Schema schema6;
-    schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema6;
+    schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6.set_is_key(true);
     schema6.set_is_nullable(true);
     schema6.set_index(5);
@@ -1863,45 +1863,45 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
 
-    pb::store::Schema schema1;
-    schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+    pb::common::Schema schema1;
+    schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
     schema1.set_is_key(true);
     schema1.set_is_nullable(true);
     schema1.set_index(0);
     pb_schemas.Add(std::move(schema1));
 
-    pb::store::Schema schema2;
-    schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+    pb::common::Schema schema2;
+    schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
     schema2.set_is_key(true);
     schema2.set_is_nullable(true);
     schema2.set_index(1);
     pb_schemas.Add(std::move(schema2));
 
-    pb::store::Schema schema3;
-    schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+    pb::common::Schema schema3;
+    schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
     schema3.set_is_key(true);
     schema3.set_is_nullable(true);
     schema3.set_index(2);
     pb_schemas.Add(std::move(schema3));
 
-    pb::store::Schema schema4;
-    schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+    pb::common::Schema schema4;
+    schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
     schema4.set_is_key(true);
     schema4.set_is_nullable(true);
     schema4.set_index(3);
     pb_schemas.Add(std::move(schema4));
 
-    pb::store::Schema schema5;
-    schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+    pb::common::Schema schema5;
+    schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
     schema5.set_is_key(true);
     schema5.set_is_nullable(true);
     schema5.set_index(4);
     pb_schemas.Add(std::move(schema5));
 
-    pb::store::Schema schema6;
-    schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+    pb::common::Schema schema6;
+    schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
     schema6.set_is_key(true);
     schema6.set_is_nullable(true);
     schema6.set_index(5);
@@ -1935,48 +1935,48 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
     ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator> aggregation_operators;
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas;
 
-    google::protobuf::RepeatedPtrField<pb::store::Schema> group_by_pb_schemas;
-    google::protobuf::RepeatedPtrField<pb::store::Schema> result_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> group_by_pb_schemas;
+    google::protobuf::RepeatedPtrField<pb::common::Schema> result_pb_schemas;
 
     // result_pb_schemas has 6 [bool, int, float. long, double. string]
     {
-      pb::store::Schema schema1;
-      schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema1;
+      schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema1.set_is_key(true);
       schema1.set_is_nullable(true);
       schema1.set_index(0);
       result_pb_schemas.Add(std::move(schema1));
 
-      pb::store::Schema schema2;
-      schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema2;
+      schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema2.set_is_key(true);
       schema2.set_is_nullable(true);
       schema2.set_index(1);
       result_pb_schemas.Add(std::move(schema2));
 
-      pb::store::Schema schema3;
-      schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema3;
+      schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema3.set_is_key(true);
       schema3.set_is_nullable(true);
       schema3.set_index(2);
       result_pb_schemas.Add(std::move(schema3));
 
-      pb::store::Schema schema4;
-      schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema4;
+      schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4.set_is_key(true);
       schema4.set_is_nullable(true);
       schema4.set_index(3);
       result_pb_schemas.Add(std::move(schema4));
 
-      pb::store::Schema schema5;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema5;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(4);
       result_pb_schemas.Add(std::move(schema5));
 
-      pb::store::Schema schema6;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema6;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(5);
@@ -1985,36 +1985,36 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
 
     // SUM
     {
-      pb::store::Schema schema1;
-      schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema1;
+      schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema1.set_is_key(true);
       schema1.set_is_nullable(true);
       schema1.set_index(0);
       group_by_pb_schemas.Add(std::move(schema1));
 
-      pb::store::Schema schema2;
-      schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema2;
+      schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema2.set_is_key(true);
       schema2.set_is_nullable(true);
       schema2.set_index(1);
       group_by_pb_schemas.Add(std::move(schema2));
 
-      pb::store::Schema schema3;
-      schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema3;
+      schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema3.set_is_key(true);
       schema3.set_is_nullable(true);
       schema3.set_index(2);
       group_by_pb_schemas.Add(std::move(schema3));
 
-      pb::store::Schema schema4;
-      schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema4;
+      schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4.set_is_key(true);
       schema4.set_is_nullable(true);
       schema4.set_index(3);
       group_by_pb_schemas.Add(std::move(schema4));
 
-      pb::store::Schema schema5;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema5;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(4);
@@ -2027,36 +2027,36 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
         aggregation_operators.Add(std::move(aggregation_operator));
       }
 
-      pb::store::Schema schema11;
-      schema11.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema11;
+      schema11.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema11.set_is_key(true);
       schema11.set_is_nullable(true);
       schema11.set_index(0);
       result_pb_schemas.Add(std::move(schema11));
 
-      pb::store::Schema schema22;
-      schema22.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema22;
+      schema22.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema22.set_is_key(true);
       schema22.set_is_nullable(true);
       schema22.set_index(1);
       result_pb_schemas.Add(std::move(schema22));
 
-      pb::store::Schema schema33;
-      schema33.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema33;
+      schema33.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema33.set_is_key(true);
       schema33.set_is_nullable(true);
       schema33.set_index(2);
       result_pb_schemas.Add(std::move(schema33));
 
-      pb::store::Schema schema44;
-      schema44.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema44;
+      schema44.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema44.set_is_key(true);
       schema44.set_is_nullable(true);
       schema44.set_index(3);
       result_pb_schemas.Add(std::move(schema44));
 
-      pb::store::Schema schema55;
-      schema55.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema55;
+      schema55.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema55.set_is_key(true);
       schema55.set_is_nullable(true);
       schema55.set_index(4);
@@ -2065,43 +2065,43 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
 
     // COUNT
     {
-      pb::store::Schema schema1;
-      schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema1;
+      schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema1.set_is_key(true);
       schema1.set_is_nullable(true);
       schema1.set_index(0);
       group_by_pb_schemas.Add(std::move(schema1));
 
-      pb::store::Schema schema2;
-      schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema2;
+      schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema2.set_is_key(true);
       schema2.set_is_nullable(true);
       schema2.set_index(1);
       group_by_pb_schemas.Add(std::move(schema2));
 
-      pb::store::Schema schema3;
-      schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema3;
+      schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema3.set_is_key(true);
       schema3.set_is_nullable(true);
       schema3.set_index(2);
       group_by_pb_schemas.Add(std::move(schema3));
 
-      pb::store::Schema schema4;
-      schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema4;
+      schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4.set_is_key(true);
       schema4.set_is_nullable(true);
       schema4.set_index(3);
       group_by_pb_schemas.Add(std::move(schema4));
 
-      pb::store::Schema schema5;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema5;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(4);
       group_by_pb_schemas.Add(std::move(schema5));
 
-      pb::store::Schema schema6;
-      schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema6;
+      schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema6.set_is_key(true);
       schema6.set_is_nullable(true);
       schema6.set_index(5);
@@ -2115,8 +2115,8 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
       }
 
       for (size_t i = 0; i < 6; i++) {
-        pb::store::Schema schema;
-        schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+        pb::common::Schema schema;
+        schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
         schema.set_is_key(true);
         schema.set_is_nullable(true);
         schema.set_index(4);
@@ -2126,43 +2126,43 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
 
     // COUNTWITHNULL
     {
-      pb::store::Schema schema1;
-      schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema1;
+      schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema1.set_is_key(true);
       schema1.set_is_nullable(true);
       schema1.set_index(0);
       group_by_pb_schemas.Add(std::move(schema1));
 
-      pb::store::Schema schema2;
-      schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema2;
+      schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema2.set_is_key(true);
       schema2.set_is_nullable(true);
       schema2.set_index(1);
       group_by_pb_schemas.Add(std::move(schema2));
 
-      pb::store::Schema schema3;
-      schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema3;
+      schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema3.set_is_key(true);
       schema3.set_is_nullable(true);
       schema3.set_index(2);
       group_by_pb_schemas.Add(std::move(schema3));
 
-      pb::store::Schema schema4;
-      schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema4;
+      schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4.set_is_key(true);
       schema4.set_is_nullable(true);
       schema4.set_index(3);
       group_by_pb_schemas.Add(std::move(schema4));
 
-      pb::store::Schema schema5;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema5;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(4);
       group_by_pb_schemas.Add(std::move(schema5));
 
-      pb::store::Schema schema6;
-      schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema6;
+      schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema6.set_is_key(true);
       schema6.set_is_nullable(true);
       schema6.set_index(5);
@@ -2176,8 +2176,8 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
       }
 
       for (size_t i = 0; i < 6; i++) {
-        pb::store::Schema schema;
-        schema.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+        pb::common::Schema schema;
+        schema.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
         schema.set_is_key(true);
         schema.set_is_nullable(true);
         schema.set_index(4);
@@ -2187,43 +2187,43 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
 
     // MAX
     {
-      pb::store::Schema schema1;
-      schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema1;
+      schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema1.set_is_key(true);
       schema1.set_is_nullable(true);
       schema1.set_index(0);
       group_by_pb_schemas.Add(std::move(schema1));
 
-      pb::store::Schema schema2;
-      schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema2;
+      schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema2.set_is_key(true);
       schema2.set_is_nullable(true);
       schema2.set_index(1);
       group_by_pb_schemas.Add(std::move(schema2));
 
-      pb::store::Schema schema3;
-      schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema3;
+      schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema3.set_is_key(true);
       schema3.set_is_nullable(true);
       schema3.set_index(2);
       group_by_pb_schemas.Add(std::move(schema3));
 
-      pb::store::Schema schema4;
-      schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema4;
+      schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4.set_is_key(true);
       schema4.set_is_nullable(true);
       schema4.set_index(3);
       group_by_pb_schemas.Add(std::move(schema4));
 
-      pb::store::Schema schema5;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema5;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(4);
       group_by_pb_schemas.Add(std::move(schema5));
 
-      pb::store::Schema schema6;
-      schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema6;
+      schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema6.set_is_key(true);
       schema6.set_is_nullable(true);
       schema6.set_index(5);
@@ -2236,43 +2236,43 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
         aggregation_operators.Add(std::move(aggregation_operator));
       }
 
-      pb::store::Schema schema11;
-      schema11.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema11;
+      schema11.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema11.set_is_key(true);
       schema11.set_is_nullable(true);
       schema11.set_index(0);
       result_pb_schemas.Add(std::move(schema11));
 
-      pb::store::Schema schema22;
-      schema22.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema22;
+      schema22.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema22.set_is_key(true);
       schema22.set_is_nullable(true);
       schema22.set_index(1);
       result_pb_schemas.Add(std::move(schema22));
 
-      pb::store::Schema schema33;
-      schema33.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema33;
+      schema33.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema33.set_is_key(true);
       schema33.set_is_nullable(true);
       schema33.set_index(2);
       result_pb_schemas.Add(std::move(schema33));
 
-      pb::store::Schema schema44;
-      schema44.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema44;
+      schema44.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema44.set_is_key(true);
       schema44.set_is_nullable(true);
       schema44.set_index(3);
       result_pb_schemas.Add(std::move(schema44));
 
-      pb::store::Schema schema55;
-      schema55.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema55;
+      schema55.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema55.set_is_key(true);
       schema55.set_is_nullable(true);
       schema55.set_index(4);
       result_pb_schemas.Add(std::move(schema55));
 
-      pb::store::Schema schema66;
-      schema66.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema66;
+      schema66.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema66.set_is_key(true);
       schema66.set_is_nullable(true);
       schema66.set_index(5);
@@ -2281,43 +2281,43 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
 
     // MIN
     {
-      pb::store::Schema schema1;
-      schema1.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema1;
+      schema1.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema1.set_is_key(true);
       schema1.set_is_nullable(true);
       schema1.set_index(0);
       group_by_pb_schemas.Add(std::move(schema1));
 
-      pb::store::Schema schema2;
-      schema2.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema2;
+      schema2.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema2.set_is_key(true);
       schema2.set_is_nullable(true);
       schema2.set_index(1);
       group_by_pb_schemas.Add(std::move(schema2));
 
-      pb::store::Schema schema3;
-      schema3.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema3;
+      schema3.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema3.set_is_key(true);
       schema3.set_is_nullable(true);
       schema3.set_index(2);
       group_by_pb_schemas.Add(std::move(schema3));
 
-      pb::store::Schema schema4;
-      schema4.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema4;
+      schema4.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema4.set_is_key(true);
       schema4.set_is_nullable(true);
       schema4.set_index(3);
       group_by_pb_schemas.Add(std::move(schema4));
 
-      pb::store::Schema schema5;
-      schema5.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema5;
+      schema5.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema5.set_is_key(true);
       schema5.set_is_nullable(true);
       schema5.set_index(4);
       group_by_pb_schemas.Add(std::move(schema5));
 
-      pb::store::Schema schema6;
-      schema6.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema6;
+      schema6.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema6.set_is_key(true);
       schema6.set_is_nullable(true);
       schema6.set_index(5);
@@ -2330,43 +2330,43 @@ TEST_F(CoprocessorAggregationManagerTest, Open) {
         aggregation_operators.Add(std::move(aggregation_operator));
       }
 
-      pb::store::Schema schema11;
-      schema11.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_BOOL);
+      pb::common::Schema schema11;
+      schema11.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
       schema11.set_is_key(true);
       schema11.set_is_nullable(true);
       schema11.set_index(0);
       result_pb_schemas.Add(std::move(schema11));
 
-      pb::store::Schema schema22;
-      schema22.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_INTEGER);
+      pb::common::Schema schema22;
+      schema22.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
       schema22.set_is_key(true);
       schema22.set_is_nullable(true);
       schema22.set_index(1);
       result_pb_schemas.Add(std::move(schema22));
 
-      pb::store::Schema schema33;
-      schema33.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_FLOAT);
+      pb::common::Schema schema33;
+      schema33.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
       schema33.set_is_key(true);
       schema33.set_is_nullable(true);
       schema33.set_index(2);
       result_pb_schemas.Add(std::move(schema33));
 
-      pb::store::Schema schema44;
-      schema44.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_LONG);
+      pb::common::Schema schema44;
+      schema44.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
       schema44.set_is_key(true);
       schema44.set_is_nullable(true);
       schema44.set_index(3);
       result_pb_schemas.Add(std::move(schema44));
 
-      pb::store::Schema schema55;
-      schema55.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_DOUBLE);
+      pb::common::Schema schema55;
+      schema55.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
       schema55.set_is_key(true);
       schema55.set_is_nullable(true);
       schema55.set_index(4);
       result_pb_schemas.Add(std::move(schema55));
 
-      pb::store::Schema schema66;
-      schema66.set_type(::dingodb::pb::store::Schema_Type::Schema_Type_STRING);
+      pb::common::Schema schema66;
+      schema66.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
       schema66.set_is_key(true);
       schema66.set_is_nullable(true);
       schema66.set_index(5);

@@ -543,7 +543,7 @@ message SearchDiskAnnParam {
   // TODO : Not implement
 }
 
-message VectorSchema {
+message Schema {
   enum Type {
     BOOL = 0;
     INTEGER = 1;
@@ -572,26 +572,28 @@ message VectorSchema {
   int32 index = 4;
 }
 
-message VectorCoprocessor {
-  // the version of the serialized data
+message CoprocessorV2 {
+  // The version of the serialized data.
   int32 schema_version = 1;
 
-  message VectorSchemaWrapper {
-    repeated VectorSchema schema = 1;
+  message SchemaWrapper {
+    repeated Schema schema = 1;
     int64 common_id = 2;
   }
 
-  // original schema
-  VectorSchemaWrapper original_schema = 2;
+  // Original schema.
+  SchemaWrapper original_schema = 2;
 
-  // Column selection in the table list selection
+  // Result schema
+  SchemaWrapper result_schema = 3;
+
+  // Column selection in the table list selection.
   // For example, [0, 2, 4, 7] selects the index subscript of the column.
-  // If the length of the array is 0, it means all
-  repeated int32 selection_columns = 3;
+  // If the length of the array is 0, it means not need to decode.
+  repeated int32 selection_columns = 4;
 
-  // The operator pushes down the expression binary filter to use empty to indicate that there is no expression and no
-  // filtering
-  bytes expression = 4;
+  // Encoded binary of the relational expression pushed down.
+  bytes rel_expr = 5;
 }
 
 message VectorSearchParameter {
@@ -625,7 +627,7 @@ message VectorSearchParameter {
 
   //  if vector_filter == TABLE_FILTER and  vector_query_type = QUERY_PRE enable vector_coprocessor
   //  coprocessor request
-  VectorCoprocessor vector_coprocessor = 23;
+  CoprocessorV2 vector_coprocessor = 23;
 
   // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
   repeated int64 vector_ids = 24;

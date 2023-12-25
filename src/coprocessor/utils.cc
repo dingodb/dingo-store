@@ -69,7 +69,7 @@ void SerialBaseSchemaUpdateKeyWrapper(bool is_key, const UPDATE& update, SERIAL_
   update(type_serial_schema, is_key);
 }
 
-butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas) {
+butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas) {
   // if (pb_schemas.empty()) {
   //   std::string error_message = fmt::format("pb_schema empty. not support");
   //   DINGO_LOG(ERROR) << error_message;
@@ -80,12 +80,12 @@ butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::
   for (const auto& schema : pb_schemas) {
     const auto& type = schema.type();
     // check null type ?
-    if (type != pb::store::Schema::Type::Schema_Type_BOOL && type != pb::store::Schema::Type::Schema_Type_INTEGER &&
-        type != pb::store::Schema::Type::Schema_Type_FLOAT && type != pb::store::Schema::Type::Schema_Type_LONG &&
-        type != pb::store::Schema::Type::Schema_Type_DOUBLE && type != pb::store::Schema::Type::Schema_Type_STRING &&
-        type != pb::store::Schema::Type::Schema_Type_BOOLLIST && type != pb::store::Schema::Type::Schema_Type_INTEGERLIST &&
-        type != pb::store::Schema::Type::Schema_Type_FLOATLIST && type != pb::store::Schema::Type::Schema_Type_LONGLIST &&
-        type != pb::store::Schema::Type::Schema_Type_DOUBLELIST && type != pb::store::Schema::Type::Schema_Type_STRINGLIST) {
+    if (type != pb::common::Schema::Type::Schema_Type_BOOL && type != pb::common::Schema::Type::Schema_Type_INTEGER &&
+        type != pb::common::Schema::Type::Schema_Type_FLOAT && type != pb::common::Schema::Type::Schema_Type_LONG &&
+        type != pb::common::Schema::Type::Schema_Type_DOUBLE && type != pb::common::Schema::Type::Schema_Type_STRING &&
+        type != pb::common::Schema::Type::Schema_Type_BOOLLIST && type != pb::common::Schema::Type::Schema_Type_INTEGERLIST &&
+        type != pb::common::Schema::Type::Schema_Type_FLOATLIST && type != pb::common::Schema::Type::Schema_Type_LONGLIST &&
+        type != pb::common::Schema::Type::Schema_Type_DOUBLELIST && type != pb::common::Schema::Type::Schema_Type_STRINGLIST) {
       std::string error_message = fmt::format("pb_schema invalid type : {}. not support", static_cast<int>(type));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -206,7 +206,7 @@ butil::Status Utils::CheckGroupByOperators(
   return butil::Status();
 }
 
-butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
+butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas,
                                          std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* serial_schemas) {
   (*serial_schemas)->reserve(pb_schemas.size());
 
@@ -219,68 +219,68 @@ butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrFiel
     };
 
     switch (pb_schema.type()) {
-      case pb::store::Schema::Type::Schema_Type_BOOL: {
+      case pb::common::Schema::Type::Schema_Type_BOOL: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda), bool>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_INTEGER: {
+      case pb::common::Schema::Type::Schema_Type_INTEGER: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda), int32_t>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
 
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_FLOAT: {
+      case pb::common::Schema::Type::Schema_Type_FLOAT: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda), float>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
 
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_LONG: {
+      case pb::common::Schema::Type::Schema_Type_LONG: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda), int64_t>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
 
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_DOUBLE: {
+      case pb::common::Schema::Type::Schema_Type_DOUBLE: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda), double>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
 
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_STRING: {
+      case pb::common::Schema::Type::Schema_Type_STRING: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
                                          std::shared_ptr<std::string>>(pb_schema, serial_schema_construct_lambda,
                                                                        serial_schemas);
 
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_BOOLLIST: {
+      case pb::common::Schema::Type::Schema_Type_BOOLLIST: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<bool>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_INTEGERLIST: {
+      case pb::common::Schema::Type::Schema_Type_INTEGERLIST: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<int32_t>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_FLOATLIST: {
+      case pb::common::Schema::Type::Schema_Type_FLOATLIST: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<float>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_LONGLIST: {
+      case pb::common::Schema::Type::Schema_Type_LONGLIST: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<int64_t>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_DOUBLELIST: {
+      case pb::common::Schema::Type::Schema_Type_DOUBLELIST: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<double>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
-      case pb::store::Schema::Type::Schema_Type_STRINGLIST: {
+      case pb::common::Schema::Type::Schema_Type_STRINGLIST: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<std::string>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
@@ -1010,7 +1010,7 @@ std::shared_ptr<BaseSchema> Utils::FindSerialSchemaVector(
   return {};
 }
 
-void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
+void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas,
                           const std::string& name) {
   COPROCESSOR_LOG
       << "***************************DebugPbSchema Start*****************************************************";
@@ -1027,40 +1027,40 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Sc
     ss << "Schema_Type : ";
 
     switch (type) {
-      case pb::store::Schema_Type_BOOL:
+      case pb::common::Schema_Type_BOOL:
         ss << "Schema_Type_BOOL";
         break;
-      case pb::store::Schema_Type_INTEGER:
+      case pb::common::Schema_Type_INTEGER:
         ss << "Schema_Type_INTEGER";
         break;
-      case pb::store::Schema_Type_FLOAT:
+      case pb::common::Schema_Type_FLOAT:
         ss << "Schema_Type_FLOAT";
         break;
-      case pb::store::Schema_Type_LONG:
+      case pb::common::Schema_Type_LONG:
         ss << "Schema_Type_LONG";
         break;
-      case pb::store::Schema_Type_DOUBLE:
+      case pb::common::Schema_Type_DOUBLE:
         ss << "Schema_Type_DOUBLE";
         break;
-      case pb::store::Schema_Type_STRING:
+      case pb::common::Schema_Type_STRING:
         ss << "Schema_Type_STRING";
         break;
-      case pb::store::Schema_Type_BOOLLIST:
+      case pb::common::Schema_Type_BOOLLIST:
         ss << "Schema_Type_BOOLLIST";
         break;
-      case pb::store::Schema_Type_INTEGERLIST:
+      case pb::common::Schema_Type_INTEGERLIST:
         ss << "Schema_Type_INTEGERLIST";
         break;
-      case pb::store::Schema_Type_FLOATLIST:
+      case pb::common::Schema_Type_FLOATLIST:
         ss << "Schema_Type_FLOATLIST";
         break;
-      case pb::store::Schema_Type_LONGLIST:
+      case pb::common::Schema_Type_LONGLIST:
         ss << "Schema_Type_LONGLIST";
         break;
-      case pb::store::Schema_Type_DOUBLELIST:
+      case pb::common::Schema_Type_DOUBLELIST:
         ss << "Schema_Type_DOUBLELIST";
         break;
-      case pb::store::Schema_Type_STRINGLIST:
+      case pb::common::Schema_Type_STRINGLIST:
         ss << "Schema_Type_STRINGLIST";
         break;
     }
