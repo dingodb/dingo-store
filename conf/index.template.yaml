@@ -22,7 +22,7 @@ raft:
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/raft_data
   log_path: $BASE_PATH$/data/raft_log
-  election_timeout_s: 12
+  election_timeout_s: 20
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32MB
 log:
