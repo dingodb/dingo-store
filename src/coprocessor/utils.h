@@ -37,15 +37,14 @@ class Utils {
   Utils(Utils&& rhs) = delete;
   Utils& operator=(Utils&& rhs) = delete;
 
-  static butil::Status CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas);
+  static butil::Status CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas);
   static butil::Status CheckSerialSchema(
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas);
 
   static butil::Status CreateSerialSchema(
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
-      const ::google::protobuf::RepeatedField<int32_t>& new_columns,
-    const std::vector<int>& selection_columns,
-    std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas) ;
+      const ::google::protobuf::RepeatedField<int32_t>& new_columns, const std::vector<int>& selection_columns,
+      std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas);
 
   static butil::Status CheckSelection(const ::google::protobuf::RepeatedField<int32_t>& selection_columns,
                                       size_t original_schema_size);
@@ -57,7 +56,7 @@ class Utils {
       const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators,
       size_t selection_columns_size);
 
-  static butil::Status TransToSerialSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
+  static butil::Status TransToSerialSchema(const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas,
                                            std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* serial_schemas);
 
   static std::shared_ptr<BaseSchema> CloneSerialSchema(const std::shared_ptr<BaseSchema>& serial_schema);
@@ -105,7 +104,7 @@ class Utils {
   static std::shared_ptr<BaseSchema> FindSerialSchemaVector(
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& schemas, int index);
 
-  static void DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::store::Schema>& pb_schemas,
+  static void DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas,
                             const std::string& name);
 
   static void DebugSerialSchema(const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& serial_schemas,
