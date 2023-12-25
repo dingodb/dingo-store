@@ -92,24 +92,24 @@ static const std::string kYamlConfigContent =
 
 static void DoGcCore(bool gc_stop, int64_t safe_point_ts, bool force_gc_stop);
 static void DeleteRange();
-static void PrepareDataForDoGcDataNormalNoLock();
-static void PrepareDataForDoGcDataNormalGcSafePointWarning();
-static void PrepareDataForDoGcNoDataAtBefore();
-static void PrepareDataForDoGcDataNormalGcStopAtMiddle();
-static void PrepareDataForDoGcDataNormalGcStopAtEnd();
-static void PrepareDataForDoGcNoData();
-static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys();
-static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter();
-static void PrepareDataForDoGcDataDeleteAndPutAndRollBack();
-static void PrepareDataForDoGcDataEmpty();
-static void PrepareDataForDoGcDataNormal();
-static void PrepareDataForDoGcSpanLock();
-static void PrepareData(const std::vector<std::string> &prefix_key_array, size_t start_index, size_t end_index,
-                        int count, int set_tso_position,
+static void PrepareData(const std::vector<std::string> &prefix_key_array, int start_index, int end_index, int count,
+                        int set_tso_position,
                         std::function<void(int j, int64_t physical, int64_t logical, const std::string &prefix_key,
                                            RawEngine::WriterPtr writer)>
                             func);
 
+[[deprecated]] static void PrepareDataForDoGcDataNormalNoLock();
+[[deprecated]] static void PrepareDataForDoGcDataNormalGcSafePointWarning();
+[[deprecated]] static void PrepareDataForDoGcNoDataAtBefore();
+[[deprecated]] static void PrepareDataForDoGcDataNormalGcStopAtMiddle();
+[[deprecated]] static void PrepareDataForDoGcDataNormalGcStopAtEnd();
+[[deprecated]] static void PrepareDataForDoGcNoData();
+[[deprecated]] static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys();
+[[deprecated]] static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter();
+[[deprecated]] static void PrepareDataForDoGcDataDeleteAndPutAndRollBack();
+[[deprecated]] static void PrepareDataForDoGcDataEmpty();
+[[deprecated]] static void PrepareDataForDoGcDataNormal();
+[[deprecated]] static void PrepareDataForDoGcSpanLock();
 class TxnGcTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
@@ -167,8 +167,8 @@ class TxnGcTest : public testing::Test {
   friend void PrepareDataForDoGcDataEmpty();
   friend void PrepareDataForDoGcDataNormal();
   friend void PrepareDataForDoGcSpanLock();
-  friend void PrepareData(const std::vector<std::string> &prefix_key_array, size_t start_index, size_t end_index,
-                          int count, int set_tso_position,
+  friend void PrepareData(const std::vector<std::string> &prefix_key_array, int start_index, int end_index, int count,
+                          int set_tso_position,
                           std::function<void(int j, int64_t physical, int64_t logical, const std::string &prefix_key,
                                              RawEngine::WriterPtr writer)>
                               func);
@@ -212,8 +212,8 @@ static void DeleteRange() {
   }
 }
 
-static void PrepareData(const std::vector<std::string> &prefix_key_array, size_t start_index, size_t end_index,
-                        int count, int set_tso_position,
+static void PrepareData(const std::vector<std::string> &prefix_key_array, int start_index, int end_index, int count,
+                        int set_tso_position,
                         std::function<void(int j, int64_t physical, int64_t logical, const std::string &prefix_key,
                                            RawEngine::WriterPtr writer)>
                             func) {
@@ -233,14 +233,6 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, size_t
         const auto &prefix_key = prefix_key_array[i];
         for (int j = 0; j < count; j++) {
           func(j, physical, logical, prefix_key, writer);
-          if (-1 != set_tso_position) {
-            if (j == set_tso_position) {
-              pb::meta::TsoTimestamp tso;
-              tso.set_physical(physical);
-              tso.set_logical(logical);
-              TxnGcTest::safe_point_ts = TxnGcTest::Tso2Timestamp(tso);
-            }
-          }
         }
         std::cout << '\n';
         physical++;
@@ -328,7 +320,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, size_t
   }
 }
 
-static void PrepareDataForDoGcDataNormalGcSafePointWarning() {
+[[deprecated]] static void PrepareDataForDoGcDataNormalGcSafePointWarning() {
   auto writer = TxnGcTest::engine->Writer();
   // prepare data
   {
@@ -393,7 +385,7 @@ static void PrepareDataForDoGcDataNormalGcSafePointWarning() {
   }
 }
 
-static void PrepareDataForDoGcNoDataAtBefore() {
+[[deprecated]] static void PrepareDataForDoGcNoDataAtBefore() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -491,7 +483,7 @@ static void PrepareDataForDoGcNoDataAtBefore() {
   }
 }
 
-static void PrepareDataForDoGcDataNormalGcStopAtMiddle() {
+[[deprecated]] static void PrepareDataForDoGcDataNormalGcStopAtMiddle() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -569,7 +561,7 @@ static void PrepareDataForDoGcDataNormalGcStopAtMiddle() {
   }
 }
 
-static void PrepareDataForDoGcDataNormalGcStopAtEnd() {
+[[deprecated]] static void PrepareDataForDoGcDataNormalGcStopAtEnd() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -635,7 +627,7 @@ static void PrepareDataForDoGcDataNormalGcStopAtEnd() {
   }
 }
 
-static void PrepareDataForDoGcNoData() {
+[[deprecated]] static void PrepareDataForDoGcNoData() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -661,7 +653,7 @@ static void PrepareDataForDoGcNoData() {
   }
 }
 
-static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys() {
+[[deprecated]] static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -759,7 +751,7 @@ static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBefo
   }
 }
 
-static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter() {
+[[deprecated]] static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -861,7 +853,7 @@ static void PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBefo
   }
 }
 
-static void PrepareDataForDoGcDataDeleteAndPutAndRollBack() {
+[[deprecated]] static void PrepareDataForDoGcDataDeleteAndPutAndRollBack() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -957,7 +949,7 @@ static void PrepareDataForDoGcDataDeleteAndPutAndRollBack() {
   }
 }
 
-static void PrepareDataForDoGcDataEmpty() {
+[[deprecated]] static void PrepareDataForDoGcDataEmpty() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -1010,7 +1002,7 @@ static void PrepareDataForDoGcDataEmpty() {
   }
 }
 
-static void PrepareDataForDoGcDataNormal() {
+[[deprecated]] static void PrepareDataForDoGcDataNormal() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -1076,7 +1068,7 @@ static void PrepareDataForDoGcDataNormal() {
   }
 }
 
-static void PrepareDataForDoGcSpanLock() {
+[[deprecated]] static void PrepareDataForDoGcSpanLock() {
   auto writer = TxnGcTest::engine->Writer();
 
   // prepare data
@@ -1158,7 +1150,7 @@ TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
   // PrepareDataForDoGcDataNormalNoLock();
 
   PrepareData(
-      {"aba", "abb", "abc", "abd", "abe", "abf", "abg"}, 0, -1, 32768, -1,
+      {"aba", "abb", "abc", "abd", "abe", "abf", "abg"}, 0, 1, 32768, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1207,7 +1199,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
   // PrepareDataForDoGcDataNormalGcSafePointWarning();
 
   PrepareData(
-      {"aba", "abb"}, 0, -1, 3, -1,
+      {"aba", "abb"}, 0, 1, 3, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1255,7 +1247,7 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
 
   std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
   PrepareData(
-      prefix_key_array, 0, -2, 12, (std::size(prefix_key_array) - 1) / 2,
+      prefix_key_array, 0, 2, 12, (std::size(prefix_key_array) - 1) / 2,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1330,7 +1322,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
   // PrepareDataForDoGcDataNormalGcStopAtMiddle();
   std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
   PrepareData(
-      prefix_key_array, 0, -1, 32768, -1,
+      prefix_key_array, 0, 1, 32768, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1391,7 +1383,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
   // PrepareDataForDoGcDataNormalGcStopAtEnd();
   std::vector<std::string> prefix_key_array{"aba", "abb"};
   PrepareData(
-      prefix_key_array, 0, -1, 0, -1,
+      prefix_key_array, 0, 1, 3, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1440,7 +1432,7 @@ TEST_F(TxnGcTest, DoGcNoData) {
       "aba",
   };
   PrepareData(
-      prefix_key_array, 0, -1, 0, -1,
+      prefix_key_array, 0, 1, 0, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         // lock empty
       });
@@ -1455,7 +1447,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
   // PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys();
   std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
   PrepareData(
-      prefix_key_array, 0, -1, 12, (std::size(prefix_key_array) - 1) / 2,
+      prefix_key_array, 0, 1, 12, (std::size(prefix_key_array) - 1) / 2,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1531,7 +1523,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
   // PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter();
   std::vector<std::string> prefix_key_array{"aba", "abb"};
   PrepareData(
-      prefix_key_array, 0, -1, 12, -2,
+      prefix_key_array, 0, 1, 12, -2,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1615,7 +1607,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
       "abc",
   };
   PrepareData(
-      prefix_key_array, 0, -1, 6, -1,
+      prefix_key_array, 0, 1, 6, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1690,32 +1682,33 @@ TEST_F(TxnGcTest, DoGcDataEmpty) {
       "aba",
       "abb",
   };
-  PrepareData(
-      prefix_key_array, 0, -1, 3, -2,
-      [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
-        pb::common::KeyValue kv_write;
-        pb::meta::TsoTimestamp tso;
-        tso.set_physical(physical);
-        tso.set_logical(logical);
-        int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
-        tso.set_logical(++logical);
-        int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
+  PrepareData(prefix_key_array, 0, 1, 3, -1,
+              [&]([[maybe_unused]] int j, int64_t physical, int64_t logical, const std::string &prefix_key,
+                  RawEngine::WriterPtr writer) {
+                pb::common::KeyValue kv_write;
+                pb::meta::TsoTimestamp tso;
+                tso.set_physical(physical);
+                tso.set_logical(logical);
+                int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
+                tso.set_logical(++logical);
+                int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+                std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts)
+                          << '\n';
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+                std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
-        pb::store::WriteInfo write_info;
-        write_info.set_start_ts(start_ts);
-        write_info.set_op(::dingodb::pb::store::Op::Put);
+                pb::store::WriteInfo write_info;
+                write_info.set_start_ts(start_ts);
+                write_info.set_op(::dingodb::pb::store::Op::Put);
 
-        kv_write.set_key(write_key);
-        kv_write.set_value(write_info.SerializeAsString());
+                kv_write.set_key(write_key);
+                kv_write.set_value(write_info.SerializeAsString());
 
-        writer->KvPut(Constant::kTxnWriteCF, kv_write);
+                writer->KvPut(Constant::kTxnWriteCF, kv_write);
 
-        // lock empty
-      });
+                // lock empty
+              });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
   DeleteRange();
 }
@@ -1727,7 +1720,7 @@ TEST_F(TxnGcTest, DoGcDataNormal) {
       "abb",
   };
   PrepareData(
-      prefix_key_array, 0, -1, 3, -1,
+      prefix_key_array, 0, 1, 3, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1774,7 +1767,7 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
   // PrepareDataForDoGcSpanLock();
   std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
   PrepareData(
-      prefix_key_array, 0, -1, 32768, -1,
+      prefix_key_array, 0, 1, 32768, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
