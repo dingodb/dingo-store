@@ -127,6 +127,7 @@ class Constant {
 
   // scan config
   inline static const std::string kStoreScan = "store.scan";
+  inline static const std::string kStoreScanV2 = "store.scan_v2";
   inline static const std::string kStoreScanTimeoutS = "timeout_s";
   inline static const std::string kStoreScanMaxBytesRpc = "max_bytes_rpc";
   inline static const std::string kStoreScanMaxFetchCntByServer = "max_fetch_cnt_by_server";

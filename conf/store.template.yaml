@@ -37,6 +37,11 @@ store:
     timeout_s: 1800
     max_bytes_rpc: 4194304
     max_fetch_cnt_by_server: 1000
+  scan_v2:
+    scan_interval_s: 30
+    timeout_s: 1800
+    max_bytes_rpc: 4194304
+    max_fetch_cnt_by_server: 1000
 gc:
   update_safe_point_interval_s: 60
   do_gc_interval_s: 60

@@ -83,9 +83,12 @@ butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::
     if (type != pb::common::Schema::Type::Schema_Type_BOOL && type != pb::common::Schema::Type::Schema_Type_INTEGER &&
         type != pb::common::Schema::Type::Schema_Type_FLOAT && type != pb::common::Schema::Type::Schema_Type_LONG &&
         type != pb::common::Schema::Type::Schema_Type_DOUBLE && type != pb::common::Schema::Type::Schema_Type_STRING &&
-        type != pb::common::Schema::Type::Schema_Type_BOOLLIST && type != pb::common::Schema::Type::Schema_Type_INTEGERLIST &&
-        type != pb::common::Schema::Type::Schema_Type_FLOATLIST && type != pb::common::Schema::Type::Schema_Type_LONGLIST &&
-        type != pb::common::Schema::Type::Schema_Type_DOUBLELIST && type != pb::common::Schema::Type::Schema_Type_STRINGLIST) {
+        type != pb::common::Schema::Type::Schema_Type_BOOLLIST &&
+        type != pb::common::Schema::Type::Schema_Type_INTEGERLIST &&
+        type != pb::common::Schema::Type::Schema_Type_FLOATLIST &&
+        type != pb::common::Schema::Type::Schema_Type_LONGLIST &&
+        type != pb::common::Schema::Type::Schema_Type_DOUBLELIST &&
+        type != pb::common::Schema::Type::Schema_Type_STRINGLIST) {
       std::string error_message = fmt::format("pb_schema invalid type : {}. not support", static_cast<int>(type));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -115,8 +118,9 @@ butil::Status Utils::CheckSerialSchema(
     const auto& type = schema->GetType();
     if (type != BaseSchema::Type::kBool && type != BaseSchema::Type::kInteger && type != BaseSchema::Type::kFloat &&
         type != BaseSchema::Type::kLong && type != BaseSchema::Type::kDouble && type != BaseSchema::Type::kString &&
-        type != BaseSchema::Type::kBoolList && type != BaseSchema::Type::kIntegerList && type != BaseSchema::Type::kFloatList &&
-        type != BaseSchema::Type::kLongList && type != BaseSchema::Type::kDoubleList && type != BaseSchema::Type::kStringList) {
+        type != BaseSchema::Type::kBoolList && type != BaseSchema::Type::kIntegerList &&
+        type != BaseSchema::Type::kFloatList && type != BaseSchema::Type::kLongList &&
+        type != BaseSchema::Type::kDoubleList && type != BaseSchema::Type::kStringList) {
       std::string error_message = fmt::format("serial_schemas invalid type : {}. not support", static_cast<int>(type));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -216,6 +220,7 @@ butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrFiel
       serial_schema->SetIsKey(pb_schema.is_key());
       serial_schema->SetAllowNull(pb_schema.is_nullable());
       serial_schema->SetIndex(pb_schema.index());
+      serial_schema->SetName(pb_schema.name());
     };
 
     switch (pb_schema.type()) {
@@ -256,32 +261,38 @@ butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrFiel
         break;
       }
       case pb::common::Schema::Type::Schema_Type_BOOLLIST: {
-        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<bool>>>(
-            pb_schema, serial_schema_construct_lambda, serial_schemas);
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<std::vector<bool>>>(pb_schema, serial_schema_construct_lambda,
+                                                                             serial_schemas);
         break;
       }
       case pb::common::Schema::Type::Schema_Type_INTEGERLIST: {
-        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<int32_t>>>(
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<std::vector<int32_t>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
       case pb::common::Schema::Type::Schema_Type_FLOATLIST: {
-        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<float>>>(
-            pb_schema, serial_schema_construct_lambda, serial_schemas);
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<std::vector<float>>>(pb_schema, serial_schema_construct_lambda,
+                                                                              serial_schemas);
         break;
       }
       case pb::common::Schema::Type::Schema_Type_LONGLIST: {
-        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<int64_t>>>(
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<std::vector<int64_t>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
       case pb::common::Schema::Type::Schema_Type_DOUBLELIST: {
-        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<double>>>(
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<std::vector<double>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
       case pb::common::Schema::Type::Schema_Type_STRINGLIST: {
-        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),  std::shared_ptr<std::vector<std::string>>>(
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<std::vector<std::string>>>(
             pb_schema, serial_schema_construct_lambda, serial_schemas);
         break;
       }
@@ -305,6 +316,7 @@ std::shared_ptr<BaseSchema> Utils::CloneSerialSchema(const std::shared_ptr<BaseS
       clone_serial_schema->SetIsKey(serial_schema->IsKey());
       clone_serial_schema->SetAllowNull(serial_schema->AllowNull());
       clone_serial_schema->SetIndex(serial_schema->GetIndex());
+      clone_serial_schema->SetName(serial_schema->GetName());
     };
     switch (type) {
       case BaseSchema::Type::kBool: {
@@ -345,32 +357,38 @@ std::shared_ptr<BaseSchema> Utils::CloneSerialSchema(const std::shared_ptr<BaseS
         break;
       }
       case BaseSchema::Type::kBoolList: {
-        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda), std::shared_ptr<std::vector<bool>>>(
-            serial_schema, serial_schema_clone_lambda, &clone_serial_schema);
+        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda),
+                                      std::shared_ptr<std::vector<bool>>>(serial_schema, serial_schema_clone_lambda,
+                                                                          &clone_serial_schema);
         break;
       }
       case BaseSchema::Type::kIntegerList: {
-        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda), std::shared_ptr<std::vector<int32_t>>>(
-            serial_schema, serial_schema_clone_lambda, &clone_serial_schema);
+        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda),
+                                      std::shared_ptr<std::vector<int32_t>>>(serial_schema, serial_schema_clone_lambda,
+                                                                             &clone_serial_schema);
         break;
       }
       case BaseSchema::Type::kFloatList: {
-        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda), std::shared_ptr<std::vector<float>>>(
-            serial_schema, serial_schema_clone_lambda, &clone_serial_schema);
+        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda),
+                                      std::shared_ptr<std::vector<float>>>(serial_schema, serial_schema_clone_lambda,
+                                                                           &clone_serial_schema);
         break;
       }
       case BaseSchema::Type::kLongList: {
-        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda), std::shared_ptr<std::vector<int64_t>>>(
-            serial_schema, serial_schema_clone_lambda, &clone_serial_schema);
+        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda),
+                                      std::shared_ptr<std::vector<int64_t>>>(serial_schema, serial_schema_clone_lambda,
+                                                                             &clone_serial_schema);
         break;
       }
       case BaseSchema::Type::kDoubleList: {
-        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda), std::shared_ptr<std::vector<double>>>(
-            serial_schema, serial_schema_clone_lambda, &clone_serial_schema);
+        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda),
+                                      std::shared_ptr<std::vector<double>>>(serial_schema, serial_schema_clone_lambda,
+                                                                            &clone_serial_schema);
         break;
       }
       case BaseSchema::Type::kStringList: {
-        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda), std::shared_ptr<std::vector<std::string>>>(
+        SerialBaseSchemaClonedWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_clone_lambda),
+                                      std::shared_ptr<std::vector<std::string>>>(
             serial_schema, serial_schema_clone_lambda, &clone_serial_schema);
         break;
       }
@@ -406,12 +424,9 @@ butil::Status Utils::CreateSerialSchema(
   return butil::Status();
 }
 
-
-
 butil::Status Utils::CreateSerialSchema(
     const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& old_serial_schemas,
-    const ::google::protobuf::RepeatedField<int32_t>& new_columns,
-    const std::vector<int>& selection_columns,
+    const ::google::protobuf::RepeatedField<int32_t>& new_columns, const std::vector<int>& selection_columns,
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>* new_serial_schemas) {
   if (old_serial_schemas && !old_serial_schemas->empty() && !new_columns.empty()) {
     (*new_serial_schemas)->clear();
@@ -506,37 +521,37 @@ butil::Status Utils::UpdateSerialSchemaIndex(
         case BaseSchema::Type::kBoolList: {
           SerialBaseSchemaUpdateIndexWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_index_lambda),
                                              std::shared_ptr<std::vector<bool>>>(i, serial_schema_update_index_lambda,
-                                                                           &serial_schema);
+                                                                                 &serial_schema);
           break;
         }
         case BaseSchema::Type::kIntegerList: {
           SerialBaseSchemaUpdateIndexWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_index_lambda),
-                                             std::shared_ptr<std::vector<int32_t>>>(i, serial_schema_update_index_lambda,
-                                                                           &serial_schema);
+                                             std::shared_ptr<std::vector<int32_t>>>(
+              i, serial_schema_update_index_lambda, &serial_schema);
           break;
         }
         case BaseSchema::Type::kFloatList: {
           SerialBaseSchemaUpdateIndexWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_index_lambda),
                                              std::shared_ptr<std::vector<float>>>(i, serial_schema_update_index_lambda,
-                                                                           &serial_schema);
+                                                                                  &serial_schema);
           break;
         }
         case BaseSchema::Type::kLongList: {
           SerialBaseSchemaUpdateIndexWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_index_lambda),
-                                             std::shared_ptr<std::vector<int64_t>>>(i, serial_schema_update_index_lambda,
-                                                                           &serial_schema);
+                                             std::shared_ptr<std::vector<int64_t>>>(
+              i, serial_schema_update_index_lambda, &serial_schema);
           break;
         }
         case BaseSchema::Type::kDoubleList: {
           SerialBaseSchemaUpdateIndexWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_index_lambda),
                                              std::shared_ptr<std::vector<double>>>(i, serial_schema_update_index_lambda,
-                                                                           &serial_schema);
+                                                                                   &serial_schema);
           break;
         }
         case BaseSchema::Type::kStringList: {
           SerialBaseSchemaUpdateIndexWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_index_lambda),
-                                             std::shared_ptr<std::vector<std::string>>>(i, serial_schema_update_index_lambda,
-                                                                           &serial_schema);
+                                             std::shared_ptr<std::vector<std::string>>>(
+              i, serial_schema_update_index_lambda, &serial_schema);
           break;
         }
         default: {
@@ -598,37 +613,37 @@ butil::Status Utils::UpdateSerialSchemaKey(const std::vector<bool>& keys,
         case BaseSchema::Type::kBoolList: {
           SerialBaseSchemaUpdateKeyWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_key_lambda),
                                            std::shared_ptr<std::vector<bool>>>(keys[i], serial_schema_update_key_lambda,
-                                                                         &serial_schema);
+                                                                               &serial_schema);
           break;
         }
         case BaseSchema::Type::kIntegerList: {
           SerialBaseSchemaUpdateKeyWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_key_lambda),
-                                           std::shared_ptr<std::vector<int32_t>>>(keys[i], serial_schema_update_key_lambda,
-                                                                         &serial_schema);
+                                           std::shared_ptr<std::vector<int32_t>>>(
+              keys[i], serial_schema_update_key_lambda, &serial_schema);
           break;
         }
         case BaseSchema::Type::kFloatList: {
           SerialBaseSchemaUpdateKeyWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_key_lambda),
-                                           std::shared_ptr<std::vector<float>>>(keys[i], serial_schema_update_key_lambda,
-                                                                         &serial_schema);
+                                           std::shared_ptr<std::vector<float>>>(
+              keys[i], serial_schema_update_key_lambda, &serial_schema);
           break;
         }
         case BaseSchema::Type::kLongList: {
           SerialBaseSchemaUpdateKeyWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_key_lambda),
-                                           std::shared_ptr<std::vector<int64_t>>>(keys[i], serial_schema_update_key_lambda,
-                                                                         &serial_schema);
+                                           std::shared_ptr<std::vector<int64_t>>>(
+              keys[i], serial_schema_update_key_lambda, &serial_schema);
           break;
         }
         case BaseSchema::Type::kDoubleList: {
           SerialBaseSchemaUpdateKeyWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_key_lambda),
-                                           std::shared_ptr<std::vector<double>>>(keys[i], serial_schema_update_key_lambda,
-                                                                         &serial_schema);
+                                           std::shared_ptr<std::vector<double>>>(
+              keys[i], serial_schema_update_key_lambda, &serial_schema);
           break;
         }
         case BaseSchema::Type::kStringList: {
           SerialBaseSchemaUpdateKeyWrapper<std::shared_ptr<BaseSchema>, decltype(serial_schema_update_key_lambda),
-                                           std::shared_ptr<std::vector<std::string>>>(keys[i], serial_schema_update_key_lambda,
-                                                                         &serial_schema);
+                                           std::shared_ptr<std::vector<std::string>>>(
+              keys[i], serial_schema_update_key_lambda, &serial_schema);
           break;
         }
         default: {
@@ -857,66 +872,76 @@ std::any Utils::CloneColumn(const std::any& column, BaseSchema::Type type) {
     }
     case BaseSchema::Type::kBoolList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<bool>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<bool>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(column);
         if (value.has_value()) {
           return std::optional<std::shared_ptr<std::vector<bool>>>(value.value());
         } else {
           return std::optional<std::shared_ptr<std::vector<bool>>>(std::nullopt);
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<bool>>> failed", bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<bool>>> failed",
+                                        bad.what());
         return {};
       }
     }
     case BaseSchema::Type::kIntegerList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<int32_t>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<int32_t>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(column);
         if (value.has_value()) {
           return std::optional<std::shared_ptr<std::vector<int32_t>>>(value.value());
         } else {
           return std::optional<std::shared_ptr<std::vector<int32_t>>>(std::nullopt);
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<int32_t>>> failed", bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<int32_t>>> failed",
+                                        bad.what());
         return {};
       }
     }
     case BaseSchema::Type::kFloatList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<float>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<float>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(column);
         if (value.has_value()) {
           return std::optional<std::shared_ptr<std::vector<float>>>(value.value());
         } else {
           return std::optional<std::shared_ptr<std::vector<float>>>(std::nullopt);
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<float>>> failed", bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<float>>> failed",
+                                        bad.what());
         return {};
       }
     }
     case BaseSchema::Type::kLongList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<int64_t>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<int64_t>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(column);
         if (value.has_value()) {
           return std::optional<std::shared_ptr<std::vector<int64_t>>>(value.value());
         } else {
           return std::optional<std::shared_ptr<std::vector<int64_t>>>(std::nullopt);
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<int64_t>>> failed", bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<int64_t>>> failed",
+                                        bad.what());
         return {};
       }
     }
     case BaseSchema::Type::kDoubleList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<double>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<double>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(column);
         if (value.has_value()) {
           return std::optional<std::shared_ptr<std::vector<double>>>(value.value());
         } else {
           return std::optional<std::shared_ptr<std::vector<double>>>(std::nullopt);
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<double>>> failed", bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<double>>> failed",
+                                        bad.what());
         return {};
       }
     }
@@ -930,7 +955,8 @@ std::any Utils::CloneColumn(const std::any& column, BaseSchema::Type type) {
           return std::optional<std::shared_ptr<std::vector<std::string>>>(std::nullopt);
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<std::string>>> failed", bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::vector<std::string>>> failed",
+                                        bad.what());
         return {};
       }
     }
@@ -1068,6 +1094,7 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::S
     ss << "\tis_key : " << (schema.is_key() ? "true" : "false");
     ss << "\tis_nullable : " << (schema.is_nullable() ? "true" : "false");
     ss << "\tindex : " << (schema.index());
+    ss << "\tname : " << (schema.name());
 
     COPROCESSOR_LOG << ss.str() << "\n";
     i++;
@@ -1342,20 +1369,23 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
         if (value.has_value()) {
           const auto vector1 = value.value();
           for (const auto& element : *vector1) {
-            COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<bool>>> : " << (element ? "true" : "false");
+            COPROCESSOR_LOG << name
+                            << " std::optional<std::shared_ptr<std::vector<bool>>> : " << (element ? "true" : "false");
           }
         } else {
           COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<bool>>> : null";
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<bool>>> failed", name, bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<bool>>> failed",
+                                        name, bad.what());
         return;
       }
       break;
     }
     case BaseSchema::Type::kIntegerList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<int32_t>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<int32_t>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(column);
         if (value.has_value()) {
           const auto vector1 = value.value();
           for (const auto& element : *vector1) {
@@ -1365,14 +1395,16 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
           COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<int32_t>>> : null";
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<int32_t>>> failed", name, bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<int32_t>>> failed",
+                                        name, bad.what());
         return;
       }
       break;
     }
     case BaseSchema::Type::kFloatList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<float>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<float>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(column);
         if (value.has_value()) {
           const auto vector1 = value.value();
           for (const auto& element : *vector1) {
@@ -1382,14 +1414,16 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
           COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<float>>> : null";
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<float>>> failed", name, bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<float>>> failed",
+                                        name, bad.what());
         return;
       }
       break;
     }
     case BaseSchema::Type::kLongList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<int64_t>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<int64_t>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(column);
         if (value.has_value()) {
           const auto vector1 = value.value();
           for (const auto& element : *vector1) {
@@ -1399,14 +1433,16 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
           COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<int64_t>>> : null";
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<int64_t>>> failed", name, bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<int64_t>>> failed",
+                                        name, bad.what());
         return;
       }
       break;
     }
     case BaseSchema::Type::kDoubleList: {
       try {
-        const std::optional<std::shared_ptr<std::vector<double>>>& value = std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(column);
+        const std::optional<std::shared_ptr<std::vector<double>>>& value =
+            std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(column);
         if (value.has_value()) {
           const auto vector1 = value.value();
           for (const auto& element : *vector1) {
@@ -1416,7 +1452,8 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
           COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<double>>> : null";
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<double>>> failed", name, bad.what());
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<double>>> failed",
+                                        name, bad.what());
         return;
       }
       break;
@@ -1428,14 +1465,15 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
         if (value.has_value()) {
           const auto vector1 = value.value();
           for (const auto& element : *vector1) {
-            COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<string>>> : " << Helper::StringToHex(element);
+            COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<string>>> : "
+                            << Helper::StringToHex(element);
           }
         } else {
           COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<std::vector<std::string>>> : null";
         }
       } catch (const std::bad_any_cast& bad) {
-        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::vector<std::string>>> failed", name,
-                                        bad.what());
+        DINGO_LOG(ERROR) << fmt::format(
+            "{} {}  any_cast std::optional<std::shared_ptr<std::vector<std::string>>> failed", name, bad.what());
         return;
       }
       break;
@@ -1450,6 +1488,29 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
 
 void Utils::DebugGroupByKey(const std::string& key, const std::string& name) {
   COPROCESSOR_LOG << name << " : " << Helper::StringToHex(key);
+}
+
+///////////////////////////////////////////////CoprocessorV2////////////////////////////////////////////////////////////////////
+void Utils::DebugCoprocessorV2(const pb::common::CoprocessorV2& coprocessor) {
+  // COPROCESSOR_LOG << fmt::format("pb::common::CoprocessorV2 ; {}", coprocessor.ShortDebugString());
+
+  COPROCESSOR_LOG
+      << "***************************DebugCoprocessorV2 Start*****************************************************";
+
+  COPROCESSOR_LOG << "schema_version : " << coprocessor.schema_version();
+
+  Utils::DebugPbSchema(coprocessor.original_schema().schema(), "original_schema");
+  COPROCESSOR_LOG << "original_schema : common_id : " << coprocessor.original_schema().common_id();
+
+  Utils::DebugPbSchema(coprocessor.result_schema().schema(), "result_schema");
+  COPROCESSOR_LOG << "result_schema : common_id : " << coprocessor.result_schema().common_id();
+
+  Utils::DebugInt32Index(coprocessor.selection_columns(), "selection_columns");
+
+  COPROCESSOR_LOG << "expression : " << fmt::format(Helper::StringToHex(coprocessor.rel_expr()));
+
+  COPROCESSOR_LOG
+      << "***************************DebugCoprocessorV2 End*****************************************************";
 }
 
 #undef COPROCESSOR_LOG

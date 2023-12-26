@@ -15,21 +15,19 @@
 #ifndef DINGODB_ENGINE_SCAN_H_  // NOLINT
 #define DINGODB_ENGINE_SCAN_H_
 
-#include <atomic>
 #include <chrono>  // NOLINT
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "bthread/types.h"
 #include "butil/status.h"
-#include "common/context.h"
-#include "coprocessor/coprocessor.h"
+#include "coprocessor/raw_coprocessor.h"
 #include "engine/iterator.h"
 #include "engine/raw_engine.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 
 namespace dingodb {
 
@@ -71,7 +69,7 @@ class ScanContext {
   ScanContext(ScanContext&& rhs) = delete;
   ScanContext& operator=(ScanContext&& rhs) = delete;
 
-  static void Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server);
+  void Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server);
 
   butil::Status Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine, const std::string& cf_name);
 
@@ -132,17 +130,19 @@ class ScanContext {
   bool disable_coprocessor_;
 
   // coprocessor
-  std::shared_ptr<Coprocessor> coprocessor_;
+  std::shared_ptr<RawCoprocessor> coprocessor_;
 
   // timeout millisecond to destroy
-  static int64_t timeout_ms_;
+  int64_t timeout_ms_;
 
   // Maximum number of bytes per transfer from rpc default 4M
-  static int64_t max_bytes_rpc_;
+  int64_t max_bytes_rpc_;
 
   // kv count per transfer specified by the server
-  static int64_t max_fetch_cnt_by_server_;
+  int64_t max_fetch_cnt_by_server_;
 };
+
+
 
 class ScanHandler {
  public:
@@ -157,7 +157,7 @@ class ScanHandler {
   static butil::Status ScanBegin(std::shared_ptr<ScanContext> context, int64_t region_id,
                                  const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
                                  bool disable_auto_release, bool disable_coprocessor,
-                                 const pb::store::Coprocessor& coprocessor, std::vector<pb::common::KeyValue>* kvs);
+                                 const CoprocessorPbWrapper& coprocessor, std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
                                     int64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs);

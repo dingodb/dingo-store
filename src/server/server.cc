@@ -430,6 +430,18 @@ bool Server::InitCrontabManager() {
     });
   }
 
+  // Add scan v2 crontab
+  if (GetRole() == pb::common::STORE) {
+    ScanManagerV2::GetInstance().Init(config);
+    crontab_configs_.push_back({
+        "SCAN_V2",
+        {pb::common::STORE},
+        GetInterval(config, "scan_v2.scan_interval_s", Constant::kScanIntervalS) * 1000,
+        false,
+        [](void*) { ScanManagerV2::RegularCleaningHandler(nullptr); },
+    });
+  }
+
   // Add split checker crontab
   if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
     bool enable_auto_split = config->GetBool("region.enable_auto_split");

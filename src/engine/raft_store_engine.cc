@@ -521,9 +521,10 @@ butil::Status RaftStoreEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, 
                                                   const pb::common::Range& range, int64_t limit, bool key_only,
                                                   bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
                                                   std::vector<pb::common::KeyValue>& kvs, bool& has_more,
-                                                  std::string& end_key) {
+                                                  std::string& end_key, bool disable_coprocessor,
+                                                  const pb::common::CoprocessorV2& coprocessor) {
   return TxnEngineHelper::Scan(txn_reader_raw_engine_, ctx->IsolationLevel(), start_ts, range, limit, key_only,
-                               is_reverse, txn_result_info, kvs, has_more, end_key);
+                               is_reverse, txn_result_info, kvs, has_more, end_key, disable_coprocessor, coprocessor);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, int64_t min_lock_ts,

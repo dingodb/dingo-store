@@ -1229,7 +1229,8 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
-                            request->is_reverse(), txn_result_info, kvs, has_more, end_key);
+                            request->is_reverse(), txn_result_info, kvs, has_more, end_key, !request->has_coprocessor(),
+                            request->coprocessor());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

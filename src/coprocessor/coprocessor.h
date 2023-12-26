@@ -24,27 +24,38 @@
 
 #include "butil/status.h"
 #include "coprocessor/aggregation_manager.h"
+#include "coprocessor/raw_coprocessor.h"
 #include "engine/iterator.h"
 #include "proto/store.pb.h"
 #include "scan/scan_filter.h"
 
 namespace dingodb {
 
-class Coprocessor {
+class Coprocessor : public RawCoprocessor {
  public:
   Coprocessor();
-  ~Coprocessor();
+  ~Coprocessor() override;
 
   Coprocessor(const Coprocessor& rhs) = delete;
   Coprocessor& operator=(const Coprocessor& rhs) = delete;
   Coprocessor(Coprocessor&& rhs) = delete;
   Coprocessor& operator=(Coprocessor&& rhs) = delete;
 
-  butil::Status Open(const pb::store::Coprocessor& coprocessor);
+  // coprocessor = CoprocessorPbWrapper
+  butil::Status Open(const std::any& coprocessor) override;
 
   butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                        std::vector<pb::common::KeyValue>* kvs);
-  void Close();
+                        std::vector<pb::common::KeyValue>* kvs) override;
+
+  butil::Status Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
+                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,  // NOLINT
+                        bool& has_more, std::string& end_key) override;                                     // NOLINT
+
+  butil::Status Filter(const std::string& key, const std::string& value, bool& is_reserved) override;  // NOLINT
+
+  butil::Status Filter(const pb::common::VectorScalardata& scalar_data, bool& is_reserved) override;  // NOLINT
+
+  void Close() override;
 
  private:
   butil::Status DoExecute(const pb::common::KeyValue& kv, bool* has_result_kv, pb::common::KeyValue* result_kv);

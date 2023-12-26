@@ -23,41 +23,104 @@
 
 namespace dingodb {
 
-class ScanManager {
+template <typename T>
+class RawScanManagerSingleton {
  public:
-  static ScanManager& GetInstance();
+  static T& GetInstance() noexcept(std::is_nothrow_constructible_v<T>) {
+    static T instance{};
+    return instance;
+  }
+  virtual ~RawScanManagerSingleton() = default;
+  RawScanManagerSingleton(const RawScanManagerSingleton&) = delete;
+  RawScanManagerSingleton& operator=(const RawScanManagerSingleton&) = delete;
+  RawScanManagerSingleton(RawScanManagerSingleton&& rhs) = delete;
+  RawScanManagerSingleton& operator=(RawScanManagerSingleton&& rhs) = delete;
 
-  ScanManager(const ScanManager& rhs) = delete;
-  ScanManager& operator=(const ScanManager& rhs) = delete;
-  ScanManager(ScanManager&& rhs) = delete;
-  ScanManager& operator=(ScanManager&& rhs) = delete;
+ protected:
+  RawScanManagerSingleton() noexcept = default;
+};
 
-  bool Init(std::shared_ptr<Config> config);
+class RawScanManager {
+ public:
+  RawScanManager(const RawScanManager& rhs) = delete;
+  RawScanManager& operator=(const RawScanManager& rhs) = delete;
+  RawScanManager(RawScanManager&& rhs) = delete;
+  RawScanManager& operator=(RawScanManager&& rhs) = delete;
 
-  std::shared_ptr<ScanContext> CreateScan(std::string* scan_id);
-  std::shared_ptr<ScanContext> FindScan(const std::string& scan_id);
-  void DeleteScan(const std::string& scan_id);
-  void TryDeleteScan(const std::string& scan_id);
+  virtual bool Init(std::shared_ptr<Config> config);
 
-  int64_t GetTimeoutMs() const { return timeout_ms_; }
+  virtual std::shared_ptr<ScanContext> CreateScan(std::string* scan_id);
+  virtual std::shared_ptr<ScanContext> FindScan(const std::string& scan_id);
+  virtual void DeleteScan(const std::string& scan_id);
+  virtual void TryDeleteScan(const std::string& scan_id);
 
-  int64_t GetMaxBytesRpc() const { return max_bytes_rpc_; }
-  int64_t GetMaxFetchCntByServer() const { return max_fetch_cnt_by_server_; }
-  int64_t GetScanIntervalMs() const { return scan_interval_ms_; }
+  virtual std::shared_ptr<ScanContext> CreateScan(int64_t scan_id);
+  virtual std::shared_ptr<ScanContext> FindScan(int64_t scan_id);
+  virtual void DeleteScan(int64_t scan_id);
+  virtual void TryDeleteScan(int64_t scan_id);
+
+  int64_t GetTimeoutMs() const { return timeout_ms; }
+  int64_t GetMaxBytesRpc() const { return max_bytes_rpc; }
+  int64_t GetMaxFetchCntByServer() const { return max_fetch_cnt_by_server; }
+  int64_t GetScanIntervalMs() const { return scan_interval_ms; }
+
+  RawScanManager();
+  virtual ~RawScanManager();
+
+ protected:
+  int64_t timeout_ms;
+  int64_t max_bytes_rpc;
+  int64_t max_fetch_cnt_by_server;
+  int64_t scan_interval_ms;
+  bthread_mutex_t mutex;
+};
+
+class ScanManager : public RawScanManager, public RawScanManagerSingleton<ScanManager> {
+ public:
+  // ScanManager(const ScanManager& rhs) = delete;
+  // ScanManager& operator=(const ScanManager& rhs) = delete;
+  // ScanManager(ScanManager&& rhs) = delete;
+  // ScanManager& operator=(ScanManager&& rhs) = delete;
+
+  bool Init(std::shared_ptr<Config> config) override;
+
+  std::shared_ptr<ScanContext> CreateScan(std::string* scan_id) override;
+  std::shared_ptr<ScanContext> FindScan(const std::string& scan_id) override;
+  void DeleteScan(const std::string& scan_id) override;
+  void TryDeleteScan(const std::string& scan_id) override;
 
   static void RegularCleaningHandler(void* arg);
 
- private:
   ScanManager();
-  ~ScanManager();
+  ~ScanManager() override;
 
+ private:
   std::map<std::string, std::shared_ptr<ScanContext>> alive_scans_;
   std::map<std::string, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;
-  int64_t timeout_ms_;
-  int64_t max_bytes_rpc_;
-  int64_t max_fetch_cnt_by_server_;
-  int64_t scan_interval_ms_;
-  bthread_mutex_t mutex_;
+};
+
+class ScanManagerV2 : public RawScanManager, public RawScanManagerSingleton<ScanManagerV2> {
+ public:
+  // ScanManagerV2(const ScanManagerV2& rhs) = delete;
+  // ScanManagerV2& operator=(const ScanManagerV2& rhs) = delete;
+  // ScanManagerV2(ScanManagerV2&& rhs) = delete;
+  // ScanManagerV2& operator=(ScanManagerV2&& rhs) = delete;
+
+  bool Init(std::shared_ptr<Config> config) override;
+
+  std::shared_ptr<ScanContext> CreateScan(int64_t scan_id) override;
+  std::shared_ptr<ScanContext> FindScan(int64_t scan_id) override;
+  void DeleteScan(int64_t scan_id) override;
+  void TryDeleteScan(int64_t scan_id) override;
+
+  static void RegularCleaningHandler(void* arg);
+
+  ScanManagerV2();
+  ~ScanManagerV2() override;
+
+ private:
+  std::map<int64_t, std::shared_ptr<ScanContext>> alive_scans_;
+  std::map<int64_t, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;
 };
 
 }  // namespace dingodb

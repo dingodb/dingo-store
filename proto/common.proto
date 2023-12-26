@@ -571,6 +571,9 @@ message Schema {
 
   // index position starts from 0
   int32 index = 4;
+
+  // field name only for scala , others invalid
+  string name = 5;
 }
 
 message CoprocessorV2 {
