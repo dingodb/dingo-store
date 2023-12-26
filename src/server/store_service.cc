@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -1335,6 +1336,256 @@ static butil::Status ValidateTxnGetRequest(const dingodb::pb::store::TxnGetReque
   return butil::Status();
 }
 
+static butil::Status ValidateKvScanBeginRequestV2(const dingodb::pb::store::KvScanBeginRequestV2* request,
+                                                  store::RegionPtr region, const pb::common::Range& req_range) {
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* controller,
+                     const dingodb::pb::store::KvScanBeginRequestV2* request,
+                     dingodb::pb::store::KvScanBeginResponseV2* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
+
+  auto uniform_range = Helper::TransformRangeWithOptions(request->range());
+  butil::Status status = ValidateKvScanBeginRequestV2(request, region, uniform_range);
+  if (!status.ok()) {
+    if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
+      ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+      ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    }
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(region_id);
+  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+
+  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+
+  std::vector<pb::common::KeyValue> kvs;                  // NOLINT
+  int64_t scan_id = std::numeric_limits<int64_t>::max();  // NOLINT
+
+  status = storage->KvScanBeginV2(ctx, Constant::kStoreDataCF, region_id, correction_range, request->max_fetch_cnt(),
+                                  request->key_only(), request->disable_auto_release(), !request->has_coprocessor(),
+                                  request->coprocessor(), scan_id, &kvs);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  if (!kvs.empty()) {
+    Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
+  }
+
+  response->set_scan_id(scan_id);
+}
+
+void StoreServiceImpl::KvScanBeginV2(google::protobuf::RpcController* controller,
+                                     const ::dingodb::pb::store::KvScanBeginRequestV2* request,
+                                     ::dingodb::pb::store::KvScanBeginResponseV2* response,
+                                     ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvScanBeginV2(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoKvScanBeginV2(storage, controller, request, response, svr_done); });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+static butil::Status ValidateKvScanContinueRequestV2(const dingodb::pb::store::KvScanContinueRequestV2* request,
+                                                     store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Ignore scan_id check!
+  // if (request->scan_id().empty()) {
+  //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
+  // }
+
+  if (0 == request->max_fetch_cnt()) {
+    return butil::Status(pb::error::EKEY_EMPTY, "max_fetch_cnt is 0");
+  }
+
+  return butil::Status();
+}
+
+void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* controller,
+                        const dingodb::pb::store::KvScanContinueRequestV2* request,
+                        dingodb::pb::store::KvScanContinueResponseV2* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
+
+  butil::Status status = ValidateKvScanContinueRequestV2(request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(region_id);
+  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+
+  std::vector<pb::common::KeyValue> kvs;  // NOLINT
+  status = storage->KvScanContinueV2(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
+
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    return;
+  }
+
+  if (!kvs.empty()) {
+    Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
+  }
+}
+
+void StoreServiceImpl::KvScanContinueV2(::google::protobuf::RpcController* controller,
+                                        const ::dingodb::pb::store::KvScanContinueRequestV2* request,
+                                        ::dingodb::pb::store::KvScanContinueResponseV2* response,
+                                        ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvScanContinueV2(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoKvScanContinueV2(storage, controller, request, response, svr_done); });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+static butil::Status ValidateKvScanReleaseRequestV2(const dingodb::pb::store::KvScanReleaseRequestV2* request,
+                                                    store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Ignore scan_id check!
+  // if (request->scan_id().empty()) {
+  //   return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
+  // }
+
+  return butil::Status();
+}
+
+void DoKvScanReleaseV2(StoragePtr storage, google::protobuf::RpcController* controller,
+                       const dingodb::pb::store::KvScanReleaseRequestV2* request,
+                       dingodb::pb::store::KvScanReleaseResponseV2* response, google::protobuf::Closure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+
+  int64_t region_id = request->context().region_id();
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+    return;
+  }
+
+  butil::Status status = ValidateKvScanReleaseRequestV2(request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  ctx->SetRegionId(region_id);
+  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+
+  status = storage->KvScanReleaseV2(ctx, request->scan_id());
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+  }
+}
+
+void StoreServiceImpl::KvScanReleaseV2(::google::protobuf::RpcController* controller,
+                                       const ::dingodb::pb::store::KvScanReleaseRequestV2* request,
+                                       ::dingodb::pb::store::KvScanReleaseResponseV2* response,
+                                       ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvScanReleaseV2(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  StoragePtr storage = storage_;
+  auto task =
+      std::make_shared<ServiceTask>([=]() { DoKvScanReleaseV2(storage, controller, request, response, svr_done); });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
 void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
               const dingodb::pb::store::TxnGetRequest* request, dingodb::pb::store::TxnGetResponse* response,
               google::protobuf::Closure* done) {
@@ -1460,7 +1711,8 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
-                            request->is_reverse(), txn_result_info, kvs, has_more, end_key);
+                            request->is_reverse(), txn_result_info, kvs, has_more, end_key, !request->has_coprocessor(),
+                            request->coprocessor());
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

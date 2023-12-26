@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -243,6 +244,84 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
   }
 
   status = ScanHandler::ScanRelease(scan, scan_id);
+  if (!status.ok()) {
+    manager.DeleteScan(scan_id);
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanRelease failed : {}", scan_id);
+    return status;
+  }
+
+  // if set auto release. directly delete
+  manager.TryDeleteScan(scan_id);
+
+  return status;
+}
+
+butil::Status Storage::KvScanBeginV2(std::shared_ptr<Context> ctx, const std::string& cf_name, int64_t region_id,
+                                     const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
+                                     bool disable_auto_release, bool disable_coprocessor,
+                                     const pb::common::CoprocessorV2& coprocessor, int64_t scan_id,
+                                     std::vector<pb::common::KeyValue>* kvs) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (!status.ok()) {
+    return status;
+  }
+
+  ScanManagerV2& manager = ScanManagerV2::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager.CreateScan(scan_id);
+
+  auto raw_engine = engine_->GetRawEngine(ctx->RawEngineType());
+  status = scan->Open(std::to_string(scan_id), raw_engine, cf_name);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", scan_id);
+    manager.DeleteScan(scan_id);
+    scan_id = std::numeric_limits<int64_t>::max();
+    return status;
+  }
+
+  status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release,
+                                  disable_coprocessor, coprocessor, kvs);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed: {}", scan_id);
+    manager.DeleteScan(scan_id);
+    scan_id = std::numeric_limits<int64_t>::max();
+    kvs->clear();
+    return status;
+  }
+
+  return status;
+}
+
+butil::Status Storage::KvScanContinueV2(std::shared_ptr<Context> /*ctx*/, int64_t scan_id, int64_t max_fetch_cnt,
+                                        std::vector<pb::common::KeyValue>* kvs) {
+  ScanManagerV2& manager = ScanManagerV2::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
+  butil::Status status;
+  if (!scan) {
+    DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
+    return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
+  }
+
+  status = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, kvs);
+  if (!status.ok()) {
+    manager.DeleteScan(scan_id);
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,
+                                    max_fetch_cnt);
+    return status;
+  }
+
+  return status;
+}
+
+butil::Status Storage::KvScanReleaseV2(std::shared_ptr<Context> /*ctx*/, int64_t scan_id) {
+  ScanManagerV2& manager = ScanManagerV2::GetInstance();
+  std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
+  butil::Status status;
+  if (!scan) {
+    DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
+    return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
+  }
+
+  status = ScanHandler::ScanRelease(scan, std::to_string(scan_id));
   if (!status.ok()) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanRelease failed : {}", scan_id);
@@ -525,7 +604,8 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
 
 butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range,
                                int64_t limit, bool key_only, bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
-                               std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) {
+                               std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key,
+                               bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -541,7 +621,8 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
   }
-  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key,
+                           disable_coprocessor, coprocessor);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found

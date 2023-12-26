@@ -28,6 +28,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coprocessor/coprocessor_v2.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -844,7 +845,8 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
 butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
                                     int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
                                     bool is_reverse, pb::store::TxnResultInfo &txn_result_info,
-                                    std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key) {
+                                    std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key,
+                                    bool disable_coprocessor, const pb::common::CoprocessorV2 &coprocessor) {
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts << ", limit: " << limit
                   << ", key_only: " << key_only << ", is_reverse: " << is_reverse
@@ -877,8 +879,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_key is not empty");
   }
 
-  TxnIterator txn_iter(raw_engine, range, start_ts, isolation_level);
-  auto ret = txn_iter.Init();
+  std::shared_ptr<TxnIterator> txn_iter = std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level);
+  auto ret = txn_iter->Init();
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "[txn]Scan init txn_iter failed, start_ts: " << start_ts
                      << ", range: " << range.ShortDebugString() << ", status: " << ret.error_str();
@@ -886,10 +888,31 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   }
 
   int64_t response_memory_size = 0;
-  txn_iter.Seek(range.start_key());
-  while (txn_iter.Valid(txn_result_info)) {
-    auto key = txn_iter.Key();
-    auto value = txn_iter.Value();
+  txn_iter->Seek(range.start_key());
+
+  if (!disable_coprocessor) {
+    std::shared_ptr<RawCoprocessor> txn_coprocessor = std::make_shared<CoprocessorV2>();
+    butil::Status status;
+    status = txn_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "[txn]Scan coprocessor::Open failed " << status.error_cstr();
+      return status;
+    }
+
+    status = txn_coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "[txn]Scan coprocessor::Execute failed " << status.error_cstr();
+      return status;
+    }
+
+    txn_coprocessor->Close();
+    txn_coprocessor.reset();
+    return butil::Status::OK();
+  }
+
+  while (txn_iter->Valid(txn_result_info)) {
+    auto key = txn_iter->Key();
+    auto value = txn_iter->Value();
 
     if (key_only) {
       pb::common::KeyValue kv;
@@ -906,7 +929,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
 
     end_key = key;
 
-    txn_iter.Next();
+    txn_iter->Next();
 
     if ((limit > 0 && kvs.size() >= limit) || kvs.size() >= FLAGS_max_scan_line_limit ||
         response_memory_size >= FLAGS_max_scan_memory_size) {

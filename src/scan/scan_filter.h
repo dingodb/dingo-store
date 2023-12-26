@@ -37,6 +37,9 @@ class ScanFilter {
 
   void Reset(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc);
 
+  size_t GetCurFetchCnt() const { return cur_fetch_cnt_; }
+  size_t GetCurBytesRpc() const { return cur_bytes_rpc_; }
+
  private:
   bool key_only_;
   size_t max_fetch_cnt_;

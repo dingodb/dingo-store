@@ -14,16 +14,16 @@
 
 #include "coprocessor/coprocessor.h"
 
-#include <algorithm>
+#include <any>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
-#include <optional>
 #include <utility>
 #include <vector>
 
 #include "common/logging.h"
+#include "coprocessor/raw_coprocessor.h"
 #include "coprocessor/utils.h"
 #include "fmt/core.h"
 #include "proto/error.pb.h"
@@ -39,12 +39,27 @@ namespace dingodb {
 Coprocessor::Coprocessor() : enable_expression_(true), end_of_group_by_(true) {}
 Coprocessor::~Coprocessor() { Close(); }
 
-butil::Status Coprocessor::Open(const pb::store::Coprocessor& coprocessor) {
+butil::Status Coprocessor::Open(const std::any& coprocessor) {
   butil::Status status;
 
   DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Open Enter");
 
-  coprocessor_ = coprocessor;
+  try {
+    const CoprocessorPbWrapper& coprocessor_pb_wrapper = std::any_cast<const CoprocessorPbWrapper&>(coprocessor);
+
+    const pb::store::Coprocessor* coprocessor_v1 = std::get_if<pb::store::Coprocessor>(&coprocessor_pb_wrapper);
+    if (nullptr == coprocessor_v1) {
+      std::string error_message =
+          fmt::format("EXCEPTION from coprocessor_pb_wrapper trans pb::store::Coprocessor failed");
+      DINGO_LOG(ERROR) << error_message;
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    }
+    coprocessor_ = *coprocessor_v1;
+  } catch (std::bad_any_cast& e) {
+    std::string error_message = fmt::format("EXCEPTION : {} trans pb::store::Coprocessor failed", e.what());
+    DINGO_LOG(ERROR) << error_message;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  }
 
   Utils::DebugCoprocessor(coprocessor_);
 
@@ -231,6 +246,21 @@ butil::Status Coprocessor::Execute(IteratorPtr iter, bool key_only, size_t max_f
 
   return status;
 }
+
+butil::Status Coprocessor::Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
+                                   pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                                   bool& has_more, std::string& end_key) {
+  return RawCoprocessor::Execute(iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+}
+
+butil::Status Coprocessor::Filter(const std::string& key, const std::string& value, bool& is_reserved) {
+  return RawCoprocessor::Filter(key, value, is_reserved);
+}
+
+butil::Status Coprocessor::Filter(const pb::common::VectorScalardata& scalar_data, bool& is_reserved) {
+  return RawCoprocessor::Filter(scalar_data, is_reserved);
+}
+
 butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_result_kv,
                                      pb::common::KeyValue* result_kv) {
   butil::Status status;

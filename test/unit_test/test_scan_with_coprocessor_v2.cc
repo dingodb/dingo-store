@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,10 +30,8 @@
 #include <vector>
 
 #include "butil/status.h"
-#include "common/constant.h"
-#include "config/config_manager.h"
 #include "config/yaml_config.h"
-#include "coprocessor/coprocessor.h"
+#include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
@@ -71,7 +70,13 @@ const std::string kYamlConfigContent =
     "\n"
     "store:\n"
     "  path: " +
-    kStorePath + "\n";
+    kStorePath +
+    "\n"
+    "  scan_v2:\n"
+    "    scan_interval_s: 30\n"
+    "    timeout_s: 1800\n"
+    "    max_bytes_rpc: 4194304\n"
+    "    max_fetch_cnt_by_server: 1000\n";
 
 static std::string StrToHex(std::string str, std::string separator = "") {
   const std::string hex = "0123456789ABCDEF";
@@ -82,16 +87,16 @@ static std::string StrToHex(std::string str, std::string separator = "") {
   return ss.str();
 }
 
-class ScanWithCoprocessor : public testing::Test {
+class ScanWithCoprocessorV2 : public testing::Test {
  public:
   static std::shared_ptr<Config> GetConfig() { return config_; }
 
   static std::shared_ptr<RocksRawEngine> GetRawRocksEngine() { return engine; }
   static ScanManager &GetManager() { return ScanManager::GetInstance(); }
 
-  static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
+  static std::shared_ptr<ScanContext> GetScan(int64_t *scan_id) {
     if (!scan_) {
-      scan_ = GetManager().CreateScan(scan_id);
+      scan_ = ScanManagerV2::GetInstance().CreateScan(*scan_id);
       scan_id_ = *scan_id;
     } else {
       *scan_id = scan_id_;
@@ -100,16 +105,16 @@ class ScanWithCoprocessor : public testing::Test {
   }
 
   static void DeleteScan() {
-    if (!scan_id_.empty() || scan_) {
-      GetManager().DeleteScan(scan_id_);
+    if (scan_) {
+      ScanManagerV2::GetInstance().DeleteScan(scan_id_);
     }
     scan_.reset();
-    scan_id_ = "";
+    scan_id_ = std::numeric_limits<int64_t>::max();
   }
 
  protected:
   static void SetUpTestSuite() {
-    DingoLogger::InitLogger("./", "ScanWithCoprocessor", dingodb::pb::node::LogLevel::DEBUG);
+    DingoLogger::InitLogger("./", "ScanWithCoprocessorV2", dingodb::pb::node::LogLevel::DEBUG);
     DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
 
     // Set whether log messages go to stderr in addition to logfiles.
@@ -129,6 +134,8 @@ class ScanWithCoprocessor : public testing::Test {
     if (!engine->Init(config_, kAllCFs)) {
       std::cout << "RocksRawEngine init failed" << '\n';
     }
+
+    ScanManagerV2::GetInstance().Init(config_);
   }
 
   static void TearDownTestSuite() {
@@ -144,18 +151,18 @@ class ScanWithCoprocessor : public testing::Test {
  private:
   inline static std::shared_ptr<Config> config_;     // NOLINT
   inline static std::shared_ptr<ScanContext> scan_;  // NOLINT
-  inline static std::string scan_id_;                // NOLINT
+  inline static std::int64_t scan_id_;               // NOLINT
 
  public:
   inline static std::shared_ptr<RocksRawEngine> engine;
-  inline static std::shared_ptr<Coprocessor> coprocessor;
+  inline static std::shared_ptr<CoprocessorV2> coprocessor;
   inline static std::string max_key;
   inline static std::string min_key;
   inline static size_t max_min_size;
   inline static size_t min_min_size;
 };
 
-TEST_F(ScanWithCoprocessor, Prepare) {
+TEST_F(ScanWithCoprocessorV2, Prepare) {
   int schema_version = 1;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
   long common_id = 1;  // NOLINT
@@ -672,9 +679,9 @@ TEST_F(ScanWithCoprocessor, Prepare) {
   }
 }
 
-TEST_F(ScanWithCoprocessor, scan) {
+TEST_F(ScanWithCoprocessorV2, scan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
-  std::string scan_id;
+  int64_t scan_id = 1;
 
   butil::Status ok;
 
@@ -684,7 +691,7 @@ TEST_F(ScanWithCoprocessor, scan) {
   std::cout << "scan_id : " << scan_id << '\n';
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -711,7 +718,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   // ok has aggregation
 
-  pb::store::Coprocessor pb_coprocessor;
+  pb::common::CoprocessorV2 pb_coprocessor;
 
   pb_coprocessor.set_schema_version(1);
 
@@ -889,41 +896,41 @@ TEST_F(ScanWithCoprocessor, scan) {
   // pb_coprocessor.add_group_by_columns(4);
   // pb_coprocessor.add_group_by_columns(5);
 
-  auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-  {
-    aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
-    aggregation_operator1->set_index_of_column(1);
-  }
+  // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
+  // {
+  //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
+  //   aggregation_operator1->set_index_of_column(1);
+  // }
 
-  auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-  {
-    aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    aggregation_operator2->set_index_of_column(1);
-  }
+  // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
+  // {
+  //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+  //   aggregation_operator2->set_index_of_column(1);
+  // }
 
-  auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-  {
-    aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    aggregation_operator3->set_index_of_column(88);
-  }
+  // auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
+  // {
+  //   aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+  //   aggregation_operator3->set_index_of_column(88);
+  // }
 
-  auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-  {
-    aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-    aggregation_operator4->set_index_of_column(3);
-  }
+  // auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
+  // {
+  //   aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
+  //   aggregation_operator4->set_index_of_column(3);
+  // }
 
-  auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-  {
-    aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
-    aggregation_operator5->set_index_of_column(4);
-  }
+  // auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
+  // {
+  //   aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
+  //   aggregation_operator5->set_index_of_column(4);
+  // }
 
-  auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-  {
-    aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    aggregation_operator6->set_index_of_column(-1);
-  }
+  // auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
+  // {
+  //   aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+  //   aggregation_operator6->set_index_of_column(-1);
+  // }
 
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, false,
@@ -940,7 +947,7 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   int cnt = 0;
   while (true) {
-    ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
+    ok = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
@@ -957,13 +964,13 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   std::cout << "cnt : " << cnt << '\n';
 
-  ok = ScanHandler::ScanRelease(scan, scan_id);
+  ok = ScanHandler::ScanRelease(scan, std::to_string(scan_id));
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   this->DeleteScan();
 }
 
-TEST_F(ScanWithCoprocessor, KvDeleteRange) {
+TEST_F(ScanWithCoprocessorV2, KvDeleteRange) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
   auto writer = raw_rocks_engine->Writer();

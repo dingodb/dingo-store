@@ -103,7 +103,7 @@ class VectorReader {
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status DoVectorSearchForTableCoprocessor(
-      VectorIndexWrapperPtr vector_index, int64_t partition_id,
+      VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 

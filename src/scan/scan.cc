@@ -17,10 +17,8 @@
 #include <fmt/core.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "bthread/mutex.h"
@@ -29,24 +27,18 @@
 #include "common/constant.h"  // IWYU pragma: keep
 #include "common/helper.h"    // IWYU pragma: keep
 #include "common/logging.h"
+#include "coprocessor/coprocessor.h"
+#include "coprocessor/coprocessor_v2.h"
 #include "coprocessor/utils.h"
 #include "engine/write_data.h"  // IWYU pragma: keep
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "scan/scan_filter.h"
 #if defined(ENABLE_SCAN_OPTIMIZATION)
 #include "bthread/bthread.h"
 #endif
 
 namespace dingodb {
-
-// timeout millisecond to destroy
-int64_t ScanContext::timeout_ms_ = 0;
-
-// Maximum number of bytes per transfer from rpc default 4M
-int64_t ScanContext::max_bytes_rpc_ = 0;
-
-// kv count per transfer specified by the server
-int64_t ScanContext::max_fetch_cnt_by_server_ = 0;
 
 ScanContext::ScanContext()
     : region_id_(0),
@@ -61,9 +53,11 @@ ScanContext::ScanContext()
       ,
       seek_state_(SeekState::kUninit)
 #endif
-
       ,
-      disable_coprocessor_(true) {
+      disable_coprocessor_(true),
+      timeout_ms_(0),
+      max_bytes_rpc_(0),
+      max_fetch_cnt_by_server_(0) {
   bthread_mutex_init(&mutex_, nullptr);
 }
 ScanContext::~ScanContext() { Close(); }
@@ -350,8 +344,7 @@ const char* ScanContext::GetSeekState(SeekState state) {
 butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64_t region_id,
                                      const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
                                      bool disable_auto_release, bool disable_coprocessor,
-                                     const pb::store::Coprocessor& coprocessor,
-                                     std::vector<pb::common::KeyValue>* kvs) {
+                                     const CoprocessorPbWrapper& coprocessor, std::vector<pb::common::KeyValue>* kvs) {
   if (BAIDU_UNLIKELY(range.start_key().empty() || range.end_key().empty())) {
     DINGO_LOG(ERROR) << fmt::format("start_key or end_key empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range wrong");
@@ -381,17 +374,29 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
 
   // opt if coprocessor all empty. set disable_coprocessor = true
   if (!disable_coprocessor) {
-    if (Utils::CoprocessorParamEmpty(coprocessor)) {
-      context->disable_coprocessor_ = true;
-    } else {
-      context->disable_coprocessor_ = disable_coprocessor;
-      if (!context->disable_coprocessor_) {
-        context->coprocessor_ = std::make_shared<Coprocessor>();
-        butil::Status status = context->coprocessor_->Open(coprocessor);
-        if (!status.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("Coprocessor::Open failed");
-          return status;
+    const pb::store::Coprocessor* coprocessor_v1 = std::get_if<pb::store::Coprocessor>(&coprocessor);
+    if (nullptr != coprocessor_v1) {  // pb::store::CoprocessorV1
+      if (Utils::CoprocessorParamEmpty(*coprocessor_v1)) {
+        context->disable_coprocessor_ = true;
+      } else {
+        context->disable_coprocessor_ = disable_coprocessor;
+        if (!context->disable_coprocessor_) {
+          context->coprocessor_ = std::make_shared<Coprocessor>();
         }
+      }
+    } else {  // pb::common::CoprocessorV2
+      const pb::common::CoprocessorV2* coprocessor_v2 = std::get_if<pb::common::CoprocessorV2>(&coprocessor);
+      if (nullptr != coprocessor_v2) {
+        context->disable_coprocessor_ = disable_coprocessor;
+        context->coprocessor_ = std::make_shared<CoprocessorV2>();
+      }
+    }
+
+    if (!context->disable_coprocessor_ && context->coprocessor_) {
+      butil::Status status = context->coprocessor_->Open(coprocessor);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("Coprocessor::Open failed");
+        return status;
       }
     }
   }

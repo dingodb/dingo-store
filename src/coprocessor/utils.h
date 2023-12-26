@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
@@ -122,6 +123,9 @@ class Utils {
   static void DebugColumn(const std::any& column, BaseSchema::Type type, const std::string& name);
 
   static void DebugGroupByKey(const std::string& key, const std::string& name);
+
+  ///////////////////////////////////////////////CoprocessorV2////////////////////////////////////////////////////////////////////
+  static void DebugCoprocessorV2(const pb::common::CoprocessorV2& coprocessor);
 };
 
 }  // namespace dingodb

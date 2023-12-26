@@ -30,7 +30,7 @@ class StoreServiceImpl : public pb::store::StoreService {
   void Hello(google::protobuf::RpcController* controller, const pb::store::HelloRequest* request,
              pb::store::HelloResponse* response, google::protobuf::Closure* done) override;
 
-  // rawkv read
+  // raw kv read
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,
              pb::store::KvGetResponse* response, google::protobuf::Closure* done) override;
 
@@ -48,6 +48,20 @@ class StoreServiceImpl : public pb::store::StoreService {
   void KvScanRelease(google::protobuf::RpcController* controller,
                      const ::dingodb::pb::store::KvScanReleaseRequest* request,
                      ::dingodb::pb::store::KvScanReleaseResponse* response, ::google::protobuf::Closure* done) override;
+
+  void KvScanBeginV2(google::protobuf::RpcController* controller,
+                     const ::dingodb::pb::store::KvScanBeginRequestV2* request,
+                     ::dingodb::pb::store::KvScanBeginResponseV2* response, ::google::protobuf::Closure* done) override;
+
+  void KvScanContinueV2(::google::protobuf::RpcController* controller,
+                        const ::dingodb::pb::store::KvScanContinueRequestV2* request,
+                        ::dingodb::pb::store::KvScanContinueResponseV2* response,
+                        ::google::protobuf::Closure* done) override;
+
+  void KvScanReleaseV2(::google::protobuf::RpcController* controller,
+                       const ::dingodb::pb::store::KvScanReleaseRequestV2* request,
+                       ::dingodb::pb::store::KvScanReleaseResponseV2* response,
+                       ::google::protobuf::Closure* done) override;
 
   // rawkv write
   void KvPut(google::protobuf::RpcController* controller, const pb::store::KvPutRequest* request,

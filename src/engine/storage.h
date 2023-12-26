@@ -57,6 +57,17 @@ class Storage {
 
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
 
+  butil::Status KvScanBeginV2(std::shared_ptr<Context> ctx, const std::string& cf_name, int64_t region_id,
+                              const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,
+                              bool disable_auto_release, bool disable_coprocessor,
+                              const pb::common::CoprocessorV2& coprocessor, int64_t scan_id,
+                              std::vector<pb::common::KeyValue>* kvs);
+
+  static butil::Status KvScanContinueV2(std::shared_ptr<Context> ctx, int64_t scan_id, int64_t max_fetch_cnt,
+                                        std::vector<pb::common::KeyValue>* kvs);
+
+  static butil::Status KvScanReleaseV2(std::shared_ptr<Context> ctx, int64_t scan_id);
+
   // kv write
   butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs);
 
@@ -76,7 +87,8 @@ class Storage {
                             pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs);
   butil::Status TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range, int64_t limit,
                         bool key_only, bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
-                        std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key);
+                        std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key,
+                        bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor);
   butil::Status TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const std::string& start_key, int64_t limit,
                             const std::string& end_key, pb::store::TxnResultInfo& txn_result_info,
                             std::vector<pb::store::LockInfo>& lock_infos);

@@ -22,11 +22,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <optional>
 #include <random>
 #include <string>
@@ -36,15 +33,13 @@
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
-#include "coprocessor/coprocessor.h"
+#include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
 #include "serial/record_encoder.h"
-#include "serial/schema/base_schema.h"
 #include "serial/schema/boolean_schema.h"
-#include "serial/schema/double_schema.h"
 #include "serial/schema/float_schema.h"
 #include "serial/schema/integer_schema.h"
 #include "serial/schema/long_schema.h"
@@ -104,9 +99,17 @@ static std::string GenRandomString(int len) {
   return result;
 }
 
-class CoprocessorTest : public testing::Test {
+class CoprocessorTestV2 : public testing::Test {
  protected:
   static void SetUpTestSuite() {
+    DingoLogger::InitLogger("./", "CoprocessorTestV2", dingodb::pb::node::LogLevel::DEBUG);
+    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
+
+    // Set whether log messages go to stderr in addition to logfiles.
+    FLAGS_alsologtostderr = true;
+
+    // If set this flag to true, the log will show in the terminal
+    FLAGS_logtostderr = true;
     dingodb::Helper::CreateDirectories(kStorePath);
     std::srand(std::time(nullptr));
 
@@ -121,7 +124,7 @@ class CoprocessorTest : public testing::Test {
       std::cout << "RocksRawEngine init failed" << '\n';
     }
 
-    coprocessor = std::make_shared<Coprocessor>();
+    coprocessor = std::make_shared<CoprocessorV2>();
   }
 
   static void TearDownTestSuite() {
@@ -135,7 +138,7 @@ class CoprocessorTest : public testing::Test {
   void TearDown() override {}
 
   static std::shared_ptr<RocksRawEngine> engine;
-  static std::shared_ptr<Coprocessor> coprocessor;
+  static std::shared_ptr<CoprocessorV2> coprocessor;
 
   static std::string max_key;
   static std::string min_key;
@@ -144,22 +147,22 @@ class CoprocessorTest : public testing::Test {
   static size_t min_min_size;
 };
 
-std::shared_ptr<RocksRawEngine> CoprocessorTest::engine = nullptr;
+std::shared_ptr<RocksRawEngine> CoprocessorTestV2::engine = nullptr;
 
-std::shared_ptr<Coprocessor> CoprocessorTest::coprocessor = nullptr;
+std::shared_ptr<CoprocessorV2> CoprocessorTestV2::coprocessor = nullptr;
 
-std::string CoprocessorTest::max_key;
-std::string CoprocessorTest::min_key;
+std::string CoprocessorTestV2::max_key;
+std::string CoprocessorTestV2::min_key;
 
-size_t CoprocessorTest::max_min_size = 0;
-size_t CoprocessorTest::min_min_size = 0;
+size_t CoprocessorTestV2::max_min_size = 0;
+size_t CoprocessorTestV2::min_min_size = 0;
 
-TEST_F(CoprocessorTest, Open) {
+TEST_F(CoprocessorTestV2, Open) {
   butil::Status ok;
 
   // original_schema  empty
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -169,7 +172,7 @@ TEST_F(CoprocessorTest, Open) {
 
   // selection empty failed
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -230,7 +233,7 @@ TEST_F(CoprocessorTest, Open) {
 
   // result empty failed
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -305,7 +308,7 @@ TEST_F(CoprocessorTest, Open) {
 
   // ok but not exist aggregation
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -481,7 +484,7 @@ TEST_F(CoprocessorTest, Open) {
 
   // ok has aggregation
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -652,58 +655,58 @@ TEST_F(CoprocessorTest, Open) {
     }
 
     // aggression
-    pb_coprocessor.add_group_by_columns(0);
-    pb_coprocessor.add_group_by_columns(1);
-    pb_coprocessor.add_group_by_columns(2);
-    pb_coprocessor.add_group_by_columns(3);
-    pb_coprocessor.add_group_by_columns(4);
-    pb_coprocessor.add_group_by_columns(5);
+    // pb_coprocessor.add_group_by_columns(0);
+    // pb_coprocessor.add_group_by_columns(1);
+    // pb_coprocessor.add_group_by_columns(2);
+    // pb_coprocessor.add_group_by_columns(3);
+    // pb_coprocessor.add_group_by_columns(4);
+    // pb_coprocessor.add_group_by_columns(5);
 
-    auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
-      aggregation_operator1->set_index_of_column(0);
-    }
+    // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
+    //   aggregation_operator1->set_index_of_column(0);
+    // }
 
-    auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-      aggregation_operator2->set_index_of_column(1);
-    }
+    // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+    //   aggregation_operator2->set_index_of_column(1);
+    // }
 
-    auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-      aggregation_operator3->set_index_of_column(88);
-    }
+    // auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+    //   aggregation_operator3->set_index_of_column(88);
+    // }
 
-    auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-      aggregation_operator4->set_index_of_column(3);
-    }
+    // auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
+    //   aggregation_operator4->set_index_of_column(3);
+    // }
 
-    auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
-      aggregation_operator5->set_index_of_column(4);
-    }
+    // auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
+    //   aggregation_operator5->set_index_of_column(4);
+    // }
 
-    auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-      aggregation_operator6->set_index_of_column(-1);
-    }
+    // auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+    //   aggregation_operator6->set_index_of_column(-1);
+    // }
 
     coprocessor.reset();
-    coprocessor = std::make_shared<Coprocessor>();
+    coprocessor = std::make_shared<CoprocessorV2>();
 
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 }
 
-TEST_F(CoprocessorTest, Prepare) {
+TEST_F(CoprocessorTestV2, Prepare) {
   int schema_version = 1;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
   long common_id = 1;  // NOLINT
@@ -1220,7 +1223,7 @@ TEST_F(CoprocessorTest, Prepare) {
   }
 }
 
-TEST_F(CoprocessorTest, Execute) {
+TEST_F(CoprocessorTestV2, Execute) {
   butil::Status ok;
   // std::string my_min_key;
   // char my_max_key_char[] = {static_cast<char>(0xEF), static_cast<char>(0xEF), static_cast<char>(0xEF)};
@@ -1260,12 +1263,12 @@ TEST_F(CoprocessorTest, Execute) {
 }
 
 // without Aggregation only selection
-TEST_F(CoprocessorTest, OpenSelection) {
+TEST_F(CoprocessorTestV2, OpenSelection) {
   butil::Status ok;
 
   // ok no aggregation
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -1441,7 +1444,7 @@ TEST_F(CoprocessorTest, OpenSelection) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteSelection) {
+TEST_F(CoprocessorTestV2, ExecuteSelection) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -1479,12 +1482,12 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
 }
 
 // without Aggregation Key
-TEST_F(CoprocessorTest, OpenNoAggregationKey) {
+TEST_F(CoprocessorTestV2, OpenNoAggregationKey) {
   butil::Status ok;
 
   // ok has aggregation bu no  aggregation key
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -1607,48 +1610,48 @@ TEST_F(CoprocessorTest, OpenNoAggregationKey) {
     }
 
     // aggression
-    auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
-      aggregation_operator1->set_index_of_column(0);
-    }
+    // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
+    //   aggregation_operator1->set_index_of_column(0);
+    // }
 
-    auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-      aggregation_operator2->set_index_of_column(1);
-    }
+    // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+    //   aggregation_operator2->set_index_of_column(1);
+    // }
 
-    auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-      aggregation_operator3->set_index_of_column(88);
-    }
+    // auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+    //   aggregation_operator3->set_index_of_column(88);
+    // }
 
-    auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-      aggregation_operator4->set_index_of_column(3);
-    }
+    // auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
+    //   aggregation_operator4->set_index_of_column(3);
+    // }
 
-    auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
-      aggregation_operator5->set_index_of_column(4);
-    }
+    // auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
+    //   aggregation_operator5->set_index_of_column(4);
+    // }
 
-    auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-      aggregation_operator6->set_index_of_column(-1);
-    }
+    // auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+    //   aggregation_operator6->set_index_of_column(-1);
+    // }
     coprocessor->Close();
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
+TEST_F(CoprocessorTestV2, ExecuteNoAggregationKey) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -1686,11 +1689,11 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
 }
 
 // without Aggregation Value
-TEST_F(CoprocessorTest, OpenNoAggregationValue) {
+TEST_F(CoprocessorTestV2, OpenNoAggregationValue) {
   butil::Status ok;
 
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -1813,12 +1816,12 @@ TEST_F(CoprocessorTest, OpenNoAggregationValue) {
     }
 
     // aggression
-    pb_coprocessor.add_group_by_columns(0);
-    pb_coprocessor.add_group_by_columns(1);
-    pb_coprocessor.add_group_by_columns(2);
-    pb_coprocessor.add_group_by_columns(3);
-    pb_coprocessor.add_group_by_columns(4);
-    pb_coprocessor.add_group_by_columns(5);
+    // pb_coprocessor.add_group_by_columns(0);
+    // pb_coprocessor.add_group_by_columns(1);
+    // pb_coprocessor.add_group_by_columns(2);
+    // pb_coprocessor.add_group_by_columns(3);
+    // pb_coprocessor.add_group_by_columns(4);
+    // pb_coprocessor.add_group_by_columns(5);
 
     coprocessor->Close();
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
@@ -1826,7 +1829,7 @@ TEST_F(CoprocessorTest, OpenNoAggregationValue) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
+TEST_F(CoprocessorTestV2, ExecuteNoAggregationValue) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -1864,12 +1867,12 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
 }
 
 // without Aggregation only selection one
-TEST_F(CoprocessorTest, OpenSelectionOne) {
+TEST_F(CoprocessorTestV2, OpenSelectionOne) {
   butil::Status ok;
 
   // ok no aggregation
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -1988,7 +1991,7 @@ TEST_F(CoprocessorTest, OpenSelectionOne) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteSelectionOne) {
+TEST_F(CoprocessorTestV2, ExecuteSelectionOne) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -2026,12 +2029,12 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
 }
 
 // without Aggregation Key
-TEST_F(CoprocessorTest, OpenNoAggregationKeyOne) {
+TEST_F(CoprocessorTestV2, OpenNoAggregationKeyOne) {
   butil::Status ok;
 
   // ok has aggregation bu no  aggregation key
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -2111,17 +2114,17 @@ TEST_F(CoprocessorTest, OpenNoAggregationKeyOne) {
       }
     }
 
-    auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-      aggregation_operator1->set_index_of_column(1);
-    }
+    // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+    //   aggregation_operator1->set_index_of_column(1);
+    // }
 
-    auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    {
-      aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-      aggregation_operator2->set_index_of_column(88);
-    }
+    // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
+    // {
+    //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+    //   aggregation_operator2->set_index_of_column(88);
+    // }
 
     coprocessor->Close();
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
@@ -2129,7 +2132,7 @@ TEST_F(CoprocessorTest, OpenNoAggregationKeyOne) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
+TEST_F(CoprocessorTestV2, ExecuteNoAggregationKeyOne) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -2167,11 +2170,11 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
 }
 
 // without Aggregation Value one
-TEST_F(CoprocessorTest, OpenNoAggregationValueOne) {
+TEST_F(CoprocessorTestV2, OpenNoAggregationValueOne) {
   butil::Status ok;
 
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -2252,8 +2255,8 @@ TEST_F(CoprocessorTest, OpenNoAggregationValueOne) {
     }
 
     // aggression
-    pb_coprocessor.add_group_by_columns(0);
-    pb_coprocessor.add_group_by_columns(1);
+    // pb_coprocessor.add_group_by_columns(0);
+    // pb_coprocessor.add_group_by_columns(1);
 
     coprocessor->Close();
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
@@ -2261,7 +2264,7 @@ TEST_F(CoprocessorTest, OpenNoAggregationValueOne) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
+TEST_F(CoprocessorTestV2, ExecuteNoAggregationValueOne) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -2299,11 +2302,11 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
 }
 
 // without Aggregation Value one test empty
-TEST_F(CoprocessorTest, OpenNoAggregationValueEmpty) {
+TEST_F(CoprocessorTestV2, OpenNoAggregationValueEmpty) {
   butil::Status ok;
 
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -2384,8 +2387,8 @@ TEST_F(CoprocessorTest, OpenNoAggregationValueEmpty) {
     }
 
     // aggression
-    pb_coprocessor.add_group_by_columns(0);
-    pb_coprocessor.add_group_by_columns(1);
+    // pb_coprocessor.add_group_by_columns(0);
+    // pb_coprocessor.add_group_by_columns(1);
 
     coprocessor->Close();
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
@@ -2393,7 +2396,7 @@ TEST_F(CoprocessorTest, OpenNoAggregationValueEmpty) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
+TEST_F(CoprocessorTestV2, ExecuteNoAggregationValueOneEmpty) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -2431,12 +2434,12 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
 }
 
 // without Aggregation only selection bad
-TEST_F(CoprocessorTest, OpenBadSelection) {
+TEST_F(CoprocessorTestV2, OpenBadSelection) {
   butil::Status ok;
 
   // ok no aggregation
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -2550,7 +2553,7 @@ TEST_F(CoprocessorTest, OpenBadSelection) {
   }
 }
 
-TEST_F(CoprocessorTest, ExecuteBadSelection) {
+TEST_F(CoprocessorTestV2, ExecuteBadSelection) {
   butil::Status ok;
 
   std::string my_min_key(min_key.c_str(), 8);
@@ -2583,7 +2586,7 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
   std::cout << "key_values selection cnt : " << cnt << '\n';
 }
 
-TEST_F(CoprocessorTest, KvDeleteRange) {
+TEST_F(CoprocessorTestV2, KvDeleteRange) {
   const std::string &cf_name = kDefaultCf;
   auto writer = engine->Writer();
 
@@ -2624,7 +2627,7 @@ TEST_F(CoprocessorTest, KvDeleteRange) {
   }
 }
 
-TEST_F(CoprocessorTest, PrepareForDisorder) {
+TEST_F(CoprocessorTestV2, PrepareForDisorder) {
   int schema_version = 1;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
   long common_id = 1;  // NOLINT
@@ -3156,12 +3159,12 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
 }
 
 // only has expr disorder ok
-TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
+TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderExpr) {
   butil::Status ok;
 
   // open ok no aggregation and group by key
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -3308,12 +3311,12 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
 }
 
 // group by key disorder ok
-TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
+TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderGroupByKey) {
   butil::Status ok;
 
   // open ok no aggregation and group by key
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -3368,11 +3371,11 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
       schema6->set_index(3);
     }
 
-    {
-      // group by key 0 = string 1 = double
-      pb_coprocessor.add_group_by_columns(0);
-      pb_coprocessor.add_group_by_columns(1);
-    }
+    // {
+    //   // group by key 0 = string 1 = double
+    //   pb_coprocessor.add_group_by_columns(0);
+    //   pb_coprocessor.add_group_by_columns(1);
+    // }
 
     {
       auto *result_schema = pb_coprocessor.mutable_result_schema();
@@ -3434,12 +3437,12 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
 }
 
 // only has aggregation. no group by key ok.
-TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
+TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderAggregation) {
   butil::Status ok;
 
   // open ok no aggregation and group by key
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -3495,49 +3498,49 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
     }
 
     // aggregation
-    {
-      auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-      {
-        // string
-        aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-        aggregation_operator1->set_index_of_column(0);
-      }
+    // {
+    //   auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     // string
+    //     aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+    //     aggregation_operator1->set_index_of_column(0);
+    //   }
 
-      auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-      {
-        // double
-        aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::SUM);
-        aggregation_operator2->set_index_of_column(1);
-      }
+    //   auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     // double
+    //     aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::SUM);
+    //     aggregation_operator2->set_index_of_column(1);
+    //   }
 
-      auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-      {
-        // long
-        aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-        aggregation_operator3->set_index_of_column(2);
-      }
+    //   auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     // long
+    //     aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+    //     aggregation_operator3->set_index_of_column(2);
+    //   }
 
-      auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-      {
-        // float
-        aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-        aggregation_operator4->set_index_of_column(3);
-      }
+    //   auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     // float
+    //     aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
+    //     aggregation_operator4->set_index_of_column(3);
+    //   }
 
-      auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-      {
-        // int32
-        aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::SUM0);
-        aggregation_operator5->set_index_of_column(4);
-      }
+    //   auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     // int32
+    //     aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::SUM0);
+    //     aggregation_operator5->set_index_of_column(4);
+    //   }
 
-      auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-      {
-        // bool
-        aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::MIN);
-        aggregation_operator6->set_index_of_column(5);
-      }
-    }
+    //   auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     // bool
+    //     aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::MIN);
+    //     aggregation_operator6->set_index_of_column(5);
+    //   }
+    // }
 
     // result
     {
@@ -3632,12 +3635,12 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
 }
 
 // only has aggregation and  group by key ok.
-TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
+TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderAggregationAndGroupByKey) {
   butil::Status ok;
 
   // open ok no aggregation and group by key
   {
-    pb::store::Coprocessor pb_coprocessor;
+    pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
@@ -3693,49 +3696,49 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
     }
 
     // group by key 0 = string 1 = double
-    {
-      pb_coprocessor.add_group_by_columns(0);
-      pb_coprocessor.add_group_by_columns(1);
-    }
+    // {
+    //   pb_coprocessor.add_group_by_columns(0);
+    //   pb_coprocessor.add_group_by_columns(1);
+    // }
 
     // aggregation
-    {
-      auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-      {
-        aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-        aggregation_operator1->set_index_of_column(0);
-      }
+    // {
+    //   auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNT);
+    //     aggregation_operator1->set_index_of_column(0);
+    //   }
 
-      auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-      {
-        aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::SUM);
-        aggregation_operator2->set_index_of_column(1);
-      }
+    //   auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::SUM);
+    //     aggregation_operator2->set_index_of_column(1);
+    //   }
 
-      auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-      {
-        aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-        aggregation_operator3->set_index_of_column(2);
-      }
+    //   auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
+    //     aggregation_operator3->set_index_of_column(2);
+    //   }
 
-      auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-      {
-        aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-        aggregation_operator4->set_index_of_column(3);
-      }
+    //   auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
+    //     aggregation_operator4->set_index_of_column(3);
+    //   }
 
-      auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-      {
-        aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::SUM0);
-        aggregation_operator5->set_index_of_column(4);
-      }
+    //   auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::SUM0);
+    //     aggregation_operator5->set_index_of_column(4);
+    //   }
 
-      auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-      {
-        aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::MIN);
-        aggregation_operator6->set_index_of_column(5);
-      }
-    }
+    //   auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
+    //   {
+    //     aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::MIN);
+    //     aggregation_operator6->set_index_of_column(5);
+    //   }
+    // }
 
     {
       auto *result_schema = pb_coprocessor.mutable_result_schema();
@@ -3846,7 +3849,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
   }
 }
 
-TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
+TEST_F(CoprocessorTestV2, KvDeleteRangeForDisorder) {
   const std::string &cf_name = kDefaultCf;
   auto writer = engine->Writer();
 

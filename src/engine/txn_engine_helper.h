@@ -102,7 +102,8 @@ class TxnEngineHelper {
   static butil::Status Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                             const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
                             pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
-                            bool &has_more, std::string &end_key);
+                            bool &has_more, std::string &end_key, bool disable_coprocessor,
+                            const pb::common::CoprocessorV2 &coprocessor);
 
   static butil::Status GetWriteInfo(RawEnginePtr raw_engine, int64_t min_commit_ts, int64_t max_commit_ts,
                                     int64_t start_ts, const std::string &key, bool include_rollback,
