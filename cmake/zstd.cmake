@@ -30,6 +30,10 @@ ExternalProject_Add(
     extern_zstd
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+    
     SOURCE_DIR ${ZSTD_BUILD_DIR}
     PREFIX ${ZSTD_BUILD_DIR}
 

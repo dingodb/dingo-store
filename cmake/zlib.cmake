@@ -26,6 +26,10 @@ ExternalProject_Add(
     extern_zlib
     ${EXTERNAL_PROJECT_LOG_ARGS}
     
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+    
     SOURCE_DIR ${ZLIB_SOURCES_DIR}
     BINARY_DIR ${ZLIB_BINARY_DIR}
     PREFIX ${ZLIB_BINARY_DIR}

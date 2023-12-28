@@ -23,14 +23,22 @@ SET(ROCKSDB_LIBRARIES "${ROCKSDB_INSTALL_DIR}/lib/librocksdb.a" CACHE FILEPATH "
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/lz4|${THIRD_PARTY_PATH}/install/zstd|${THIRD_PARTY_PATH}/install/gflags")
 
+# To avoid rocksdb PROTABLE options on old arch machine when build using docker
+set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
+message(STATUS "Rocksdb protable option(ROCKSDB_PROTABLE_OPTION): ${ROCKSDB_PROTABLE_OPTION}")
 
 ExternalProject_Add(
     extern_rocksdb
     ${EXTERNAL_PROJECT_LOG_ARGS}
     
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+
     SOURCE_DIR ${ROCKSDB_SOURCES_DIR}
     BINARY_DIR ${ROCKSDB_BINARY_DIR}
     PREFIX ${ROCKSDB_BINARY_DIR}
+    
     UPDATE_COMMAND ""
     CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}

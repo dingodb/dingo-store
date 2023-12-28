@@ -32,12 +32,19 @@ ExternalProject_Add(
     extern_bdb
     ${EXTERNAL_PROJECT_LOG_ARGS}
     
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+    
     SOURCE_DIR ${BDB_SOURCES_DIR}
     BINARY_DIR ${BDB_BINARY_DIR}
     PREFIX ${BDB_BINARY_DIR}
     CONFIGURE_COMMAND ${BDB_SOURCES_DIR}/dist/configure --prefix ${BDB_INSTALL_DIR} --enable-cxx --enable-shared=no ${BDB_DEBUG_FLAG}
     BUILD_COMMAND $(MAKE) libdb_cxx.a
-    INSTALL_COMMAND mkdir -p ${BDB_INSTALL_DIR}/lib/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/libdb_cxx.a ${BDB_INSTALL_DIR}/lib/ COMMAND mkdir ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db.h ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db_cxx.h ${BDB_INSTALL_DIR}/include/
+    INSTALL_COMMAND mkdir -p ${BDB_INSTALL_DIR}/lib ${BDB_INSTALL_DIR}/include
+        COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/libdb_cxx.a ${BDB_INSTALL_DIR}/lib/
+        COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db.h ${BDB_INSTALL_DIR}/include/
+        COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db_cxx.h ${BDB_INSTALL_DIR}/include/
 )
 
 ADD_LIBRARY(bdb STATIC IMPORTED GLOBAL)
