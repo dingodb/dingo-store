@@ -77,10 +77,6 @@ if(BUILD_GOOGLE_SANITIZE)
     message(STATUS "enable google sanitize")
 endif()
 
-# To avoid rocksdb PROTABLE options on old arch machine when build using docker
-set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
-message(STATUS "ROCKSDB_PROTABLE_OPTION value is ${ROCKSDB_PROTABLE_OPTION}")
-
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
 if(COMPILER_SUPPORTS_CXX17)
@@ -131,7 +127,7 @@ else()
     set(OPENMP_LIBRARY ${OpenMP_gomp_LIBRARY})
 endif()
 
-message(STATUS "OpenMP_LIBRARY=${OPENMP_LIBRARY}")
+message(STATUS "OpenMP library: ${OPENMP_LIBRARY}")
 
 include(lz4)
 include(zstd)
@@ -154,7 +150,12 @@ include(bdb)
 include(brpc)
 include(braft)
 
-message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
+message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
+message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")
+message(STATUS "protobuf include: ${PROTOBUF_INCLUDE_DIR}")
+message(STATUS "protobuf lib: ${PROTOBUF_LIBRARIES}")
+message(STATUS "protobuf lite lib: ${PROTOBUF_LITE_LIBRARY}")
+
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
 if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/proto" AND IS_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/proto")
         SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
@@ -170,6 +171,8 @@ set(PROTO_HDRS "")
 
 foreach(msg ${MSG_PROTOS})
         get_filename_component(FIL_WE ${msg} NAME_WE)
+
+        message(STATUS "proto file: ${msg}")
 
         list(APPEND PROTO_SRCS "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.cc")
         list(APPEND PROTO_HDRS "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h")
@@ -189,7 +192,6 @@ endforeach()
 set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
 
 add_library(PROTO_OBJS OBJECT ${PROTO_SRCS})
-message(STATUS "Debug Message protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto srcs : ${PROTO_SRCS}")
 
 add_custom_target(build_proto ALL
                 DEPENDS ${PROTO_SRCS} ${PROTO_HDRS}

@@ -32,8 +32,13 @@ ExternalProject_Add(
     extern_libunwind
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+
     SOURCE_DIR ${LIBUNWIND_BUILD_DIR}
     PREFIX ${LIBUNWIND_BUILD_DIR}
+    
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND autoreconf -i COMMAND ./configure --prefix ${LIBUNWIND_INSTALL_DIR} --disable-minidebuginfo --disable-shared --enable-static --disable-msabi-support
     BUILD_COMMAND $(MAKE)

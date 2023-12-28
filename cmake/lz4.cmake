@@ -30,6 +30,10 @@ ExternalProject_Add(
     extern_lz4
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
+    LOG_INSTALL ON
+    
     SOURCE_DIR ${LZ4_BUILD_DIR}
     PREFIX ${LZ4_BUILD_DIR}
 
