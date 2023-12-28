@@ -223,6 +223,10 @@ enum Errno {
   EBDB_COMMIT = 120003;
   EBDB_UNKNOW = 120004;
   EBDB_UNSUPPORTED = 120005;
+
+  // txn
+  ETXN_RESULT_INFO_NOT_NULL = 130000;
+  ETXN_SCAN_FINISH = 130001;
 }
 
 message StoreRegionInfo {
