@@ -903,8 +903,12 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
       DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "lock_reader->KvScan failed");
     }
+    std::string user_key;
+    int64_t ts = 0;
+    Helper::DecodeTxnKey(kv.key(), user_key, ts);
+
     pb::store::TxnLockKey txn_lock_key;
-    txn_lock_key.set_key(kv.key());
+    txn_lock_key.set_key(user_key);
     txn_lock_keys.push_back(txn_lock_key);
 
     pb::store::TxnLockValue txn_lock_value;

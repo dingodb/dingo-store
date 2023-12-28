@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "butil/compiler_specific.h"
@@ -69,7 +70,7 @@ butil::Status TxnIterator::Init() {
 
   write_iter_ = reader_->NewIterator(Constant::kTxnWriteCF, snapshot_, write_iter_options);
   if (write_iter_ == nullptr) {
-    DINGO_LOG(ERROR) << "[txn]Scan NewIterator write failed, start_ts: " << start_ts_;
+    DINGO_LOG(ERROR) << "[txn]Scan NewIterator write failed, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status(pb::error::Errno::EINTERNAL, "new iterator failed");
   }
 
@@ -80,7 +81,7 @@ butil::Status TxnIterator::Init() {
 
   lock_iter_ = reader_->NewIterator(Constant::kTxnLockCF, snapshot_, lock_iter_options);
   if (lock_iter_ == nullptr) {
-    DINGO_LOG(ERROR) << "[txn]Scan NewIterator lock failed, start_ts: " << start_ts_;
+    DINGO_LOG(ERROR) << "[txn]Scan NewIterator lock failed, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status(pb::error::Errno::EINTERNAL, "new iterator failed");
   }
 
@@ -90,7 +91,7 @@ butil::Status TxnIterator::Init() {
 
   if ((!write_iter_->Valid()) && (!lock_iter_->Valid())) {
     DINGO_LOG(ERROR) << "[txn]write_iter is not valid and lock_iter is not valid, start_ts: " << start_ts_
-                     << ", write_iter->Valid(): " << write_iter_->Valid()
+                     << ", seek_ts: " << seek_ts_ << ", write_iter->Valid(): " << write_iter_->Valid()
                      << ", lock_iter->Valid(): " << lock_iter_->Valid();
   }
 
@@ -114,7 +115,8 @@ butil::Status TxnIterator::Seek(const std::string &key) {
     if (!value_.empty()) {
       return butil::Status::OK();
     } else {
-      DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", key_: " << key_;
+      DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+                      << ", key_: " << key_;
       continue;
     }
   }
@@ -134,36 +136,37 @@ butil::Status TxnIterator::InnerSeek(const std::string &key) {
     auto ret = Helper::DecodeTxnKey(lock_iter_->Key(), last_lock_key_, lock_ts);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, lock_iter->key: " << Helper::StringToHex(lock_iter_->Key())
-                       << ", start_ts: " << start_ts_;
+                       << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     }
   } else {
-    DINGO_LOG(INFO) << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_
+    DINGO_LOG(INFO) << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
                     << ", last_lock_key: " << Helper::StringToHex(last_lock_key_);
   }
 
-  write_iter_->Seek(Helper::EncodeTxnKey(key, start_ts_));
+  write_iter_->Seek(Helper::EncodeTxnKey(key, seek_ts_));
   int64_t write_ts = 0;
   if (write_iter_->Valid()) {
     auto ret = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, write_ts);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: " << Helper::StringToHex(write_iter_->Key())
-                       << ", start_ts: " << start_ts_;
+                       << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     }
   } else {
-    DINGO_LOG(INFO) << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_
+    DINGO_LOG(INFO) << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
                     << ", last_write_key: " << Helper::StringToHex(last_write_key_);
   }
 
   if (last_lock_key_.empty() && last_write_key_.empty()) {
     DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
-                    << ", key: " << Helper::StringToHex(key);
+                    << ", seek_ts: " << seek_ts_ << ", key: " << Helper::StringToHex(key);
     return butil::Status::OK();
   }
 
   auto ret = GetCurrentValue();
   if (ret.ok()) {
-    DINGO_LOG(INFO) << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_) << ", value_: " << value_
-                    << ", start_ts: " << start_ts_;
+    DINGO_LOG(INFO) << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_)
+                    << ", value_: " << Helper::StringToHex(value_) << ", start_ts: " << start_ts_
+                    << ", seek_ts: " << seek_ts_;
     return butil::Status::OK();
   } else {
     DINGO_LOG(ERROR) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
@@ -177,14 +180,15 @@ butil::Status TxnIterator::Next() {
   while (ret.ok()) {
     ret = InnerNext();
     if (!ret.ok()) {
-      DINGO_LOG(INFO) << "[txn]InnerNext failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return ret;
     }
 
     if (!value_.empty()) {
       return butil::Status::OK();
     } else {
-      DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", key_: " << key_;
+      DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+                      << ", key_: " << Helper::StringToHex(key_);
       continue;
     }
   }
@@ -193,14 +197,20 @@ butil::Status TxnIterator::Next() {
 }
 
 butil::Status TxnIterator::InnerNext() {
-  if (key_.empty() || txn_result_info_.ByteSizeLong() > 0) {
-    DINGO_LOG(ERROR) << "[txn]Scan Next key_ is empty, start_ts: " << start_ts_;
-    return butil::Status(pb::error::Errno::EINTERNAL, "key_ is empty");
+  if (key_.empty()) {
+    DINGO_LOG(ERROR) << "[txn]Scan Next key_ is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
+    return butil::Status(pb::error::Errno::ETXN_SCAN_FINISH, "key_ is empty");
+  }
+
+  if (txn_result_info_.ByteSizeLong() > 0) {
+    DINGO_LOG(ERROR) << "[txn]Scan Next txn_result_info_ is not empty, start_ts: " << start_ts_
+                     << ", seek_ts: " << seek_ts_;
+    return butil::Status(pb::error::Errno::ETXN_RESULT_INFO_NOT_NULL, "key_ is empty");
   }
 
   value_.clear();
 
-  if (key_ >= last_lock_key_) {
+  if (lock_iter_->Valid() && key_ >= last_lock_key_) {
     while (lock_iter_->Valid()) {
       lock_iter_->Next();
       int64_t lock_ts = 0;
@@ -208,53 +218,53 @@ butil::Status TxnIterator::InnerNext() {
         auto ret = Helper::DecodeTxnKey(lock_iter_->Key(), last_lock_key_, lock_ts);
         if (!ret.ok()) {
           DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, lock_iter->key: "
-                           << Helper::StringToHex(lock_iter_->Key()) << ", start_ts: " << start_ts_;
+                           << Helper::StringToHex(lock_iter_->Key()) << ", start_ts: " << start_ts_
+                           << ", seek_ts: " << seek_ts_;
         }
         if (last_lock_key_ > key_) {
           DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ > key_, find next key, start_ts: " << start_ts_
-                          << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
+                          << ", seek_ts: " << seek_ts_ << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
                           << ", key_: " << Helper::StringToHex(key_);
           break;
         }
       } else {
-        DINGO_LOG(INFO) << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_
-                        << ", last_lock_key: " << Helper::StringToHex(last_lock_key_);
+        DINGO_LOG(INFO) << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+                        << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
+                        << ", will set last_lock_key to empty";
+        last_lock_key_ = std::string();
       }
     }
   }
 
-  if (key_ >= last_write_key_) {
-    while (write_iter_->Valid()) {
-      write_iter_->Next();
-      int64_t write_ts = 0;
-      if (write_iter_->Valid()) {
-        auto ret = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, write_ts);
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
-                           << Helper::StringToHex(write_iter_->Key()) << ", start_ts: " << start_ts_;
-        }
-        if (last_write_key_ > key_) {
-          DINGO_LOG(INFO) << "[txn]Scan last_write_key_ > key_, find next key, start_ts: " << start_ts_
-                          << ", last_write_key: " << Helper::StringToHex(last_write_key_)
-                          << ", key_: " << Helper::StringToHex(key_);
-          break;
-        }
-      } else {
-        DINGO_LOG(INFO) << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_
-                        << ", last_write_key: " << Helper::StringToHex(last_write_key_);
-      }
-    }
+  if (key_ >= last_write_key_ && write_iter_->Valid()) {
+    DINGO_LOG(FATAL) << "[txn]Scan write_iter is valid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+                     << ", last_write_key: " << Helper::StringToHex(last_write_key_);
   }
+  // // CAUTION: we do writer_iter_->Next() in GetCurrentValue(), so we don't need to do writer_iter_->Next() here
+  // int64_t write_ts = 0;
+  // if (write_iter_->Valid()) {
+  //   auto ret = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, write_ts);
+  //   if (!ret.ok()) {
+  //     DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
+  //                      << Helper::StringToHex(write_iter_->Key()) << ", start_ts: " << start_ts_
+  //                      << ", seek_ts: " << seek_ts_;
+  //   }
+  //   CHECK(last_write_key_ > key_);
+  // } else {
+  //   DINGO_LOG(INFO) << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+  //                   << ", last_write_key: " << Helper::StringToHex(last_write_key_);
+  // }
 
   if (last_lock_key_.empty() && last_write_key_.empty()) {
     DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
-                    << ", key_: " << Helper::StringToHex(key_);
+                    << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
     return butil::Status::OK();
   }
 
   if (last_lock_key_ <= key_ && last_write_key_ <= key_) {
     DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ <= key_ && last_write_key_ <= key_, no key found, start_ts: "
-                    << start_ts_ << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
+                    << start_ts_ << ", seek_ts: " << seek_ts_
+                    << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
                     << ", last_write_key: " << Helper::StringToHex(last_write_key_)
                     << ", key_: " << Helper::StringToHex(key_);
     key_.clear();
@@ -263,8 +273,9 @@ butil::Status TxnIterator::InnerNext() {
 
   auto ret = GetCurrentValue();
   if (ret.ok()) {
-    DINGO_LOG(INFO) << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_) << ", value_: " << value_
-                    << ", start_ts: " << start_ts_;
+    DINGO_LOG(INFO) << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_)
+                    << ", value_: " << Helper::StringToHex(value_) << ", start_ts: " << start_ts_
+                    << ", seek_ts: " << seek_ts_;
     return butil::Status::OK();
   } else {
     DINGO_LOG(ERROR) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
@@ -272,8 +283,151 @@ butil::Status TxnIterator::InnerNext() {
   }
 }
 
+butil::Status TxnIterator::GotoNextUserKeyInWriteIter(std::shared_ptr<Iterator> write_iter, std::string prev_user_key,
+                                                      std::string &last_write_key) {
+  while (write_iter->Valid()) {
+    write_iter->Next();
+    if (write_iter->Valid()) {
+      int64_t commit_ts;
+      auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), last_write_key, commit_ts);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
+                         << Helper::StringToHex(write_iter->Key());
+      }
+
+      if (last_write_key > prev_user_key) {
+        break;
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+std::string TxnIterator::GetUserKey(std::shared_ptr<Iterator> write_iter) {
+  std::string user_key;
+  if (write_iter->Valid()) {
+    int64_t commit_ts;
+    auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), user_key, commit_ts);
+    if (!ret1.ok()) {
+      DINGO_LOG(FATAL) << "[txn]GetUserKey failed, write_iter->key: " << Helper::StringToHex(write_iter->Key());
+    }
+  }
+
+  return std::move(user_key);
+}
+
+butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> write_iter, RawEngine::ReaderPtr reader,
+                                                   pb::store::IsolationLevel isolation_level, int64_t seek_ts,
+                                                   int64_t start_ts, const std::string &user_key,
+                                                   std::string &last_write_key, bool &is_value_found,
+                                                   std::string &user_value) {
+  is_value_found = false;
+  while (write_iter->Valid()) {
+    int64_t commit_ts;
+    auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), last_write_key, commit_ts);
+    if (!ret1.ok()) {
+      DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: " << Helper::StringToHex(write_iter->Key())
+                       << ", start_ts: " << start_ts << ", seek_ts: " << seek_ts;
+    }
+
+    if (last_write_key > user_key) {
+      DINGO_LOG(INFO) << "[txn]Scan last_write_key > user_key, means no value, start_ts: " << start_ts
+                      << ", seek_ts: " << seek_ts << ", last_write_key: " << Helper::StringToHex(last_write_key)
+                      << ", user_key: " << Helper::StringToHex(user_key);
+      return butil::Status::OK();
+    }
+
+    // check isolation_level
+    if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
+      if (commit_ts > start_ts) {
+        DINGO_LOG(INFO)
+            << "[txn]Scan commit_ts > start_ts, means this value is not accepted, will go to next, start_ts: "
+            << start_ts << ", commit_ts: " << commit_ts << ", user_key: " << Helper::StringToHex(user_key);
+        write_iter->Next();
+        continue;
+      }
+    } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
+      DINGO_LOG(INFO) << "[txn]Scan RC, commit_ts: " << commit_ts << ", start_ts: " << start_ts
+                      << ", seek_ts: " << seek_ts << ", user_key: " << Helper::StringToHex(user_key);
+    } else {
+      DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
+    }
+
+    pb::store::WriteInfo write_info;
+    auto ret2 = write_info.ParseFromArray(write_iter->Value().data(), write_iter->Value().size());
+    if (!ret2) {
+      DINGO_LOG(FATAL) << "[txn]Scan parse write info failed, write_key: " << Helper::StringToHex(write_iter->Key())
+                       << ", write_value(hex): " << Helper::StringToHex(write_iter->Value());
+    }
+
+    if (write_info.op() == pb::store::Op::Delete) {
+      // if op is delete, value is null
+      user_value = std::string();
+
+      // before return, go to next user_key
+      GotoNextUserKeyInWriteIter(write_iter, last_write_key, last_write_key);
+      is_value_found = true;
+      return butil::Status::OK();
+    } else if (write_info.op() == pb::store::Op::Rollback) {
+      // if op is rollback, go to next write
+      write_iter->Next();
+    } else if (write_info.op() == pb::store::Op::Put) {
+      // use write_ts to get data from data_cf
+      if (!write_info.short_value().empty()) {
+        user_value = write_info.short_value();
+
+        // before return, go to next user_key
+        GotoNextUserKeyInWriteIter(write_iter, last_write_key, last_write_key);
+        is_value_found = true;
+        return butil::Status::OK();
+      } else {
+        auto ret3 =
+            reader->KvGet(Constant::kTxnDataCF, Helper::EncodeTxnKey(user_key, write_info.start_ts()), user_value);
+        if (!ret3.ok() && ret3.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(FATAL) << "[txn]Scan read data failed, key: " << Helper::StringToHex(user_key)
+                           << ", status: " << ret3.error_str();
+          return butil::Status(pb::error::Errno::EINTERNAL, "read data failed");
+        } else if (ret3.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+          DINGO_LOG(ERROR) << "[txn]Scan read data failed, data is illegally not found, key: " << user_key
+                           << ", status: " << ret3.error_str()
+                           << ", raw_key: " << Helper::EncodeTxnKey(user_key, write_info.start_ts());
+          return butil::Status(pb::error::Errno::EINTERNAL, "data is illegally not found");
+        } else {
+          // before return, go to next user_key
+          GotoNextUserKeyInWriteIter(write_iter, last_write_key, last_write_key);
+          is_value_found = true;
+          return ret3;
+        }
+      }
+    } else {
+      DINGO_LOG(INFO) << "[txn]Scan write_iter meet illegal op, start_ts: " << start_ts << ", seek_ts: " << seek_ts
+                      << ", last_write_key: " << Helper::StringToHex(last_write_key)
+                      << ", tmp_key: " << Helper::StringToHex(user_key) << ", write_info.op: " << write_info.op();
+      write_iter->Next();
+    }
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status TxnIterator::GetCurrentValue() {
-  if (last_lock_key_ <= last_write_key_ && !last_lock_key_.empty()) {
+  bool check_lock_cf_first = false;
+
+  CHECK(!(last_write_key_.empty() && last_lock_key_.empty()));
+
+  if (last_write_key_.empty()) {
+    check_lock_cf_first = true;
+  } else if (!last_lock_key_.empty()) {
+    if (last_lock_key_ <= last_write_key_) {
+      check_lock_cf_first = true;
+    } else if (!write_iter_->Valid()) {
+      check_lock_cf_first = true;
+    }
+  }
+
+  if (check_lock_cf_first) {
     key_ = last_lock_key_;
 
     // get lock info
@@ -288,9 +442,9 @@ butil::Status TxnIterator::GetCurrentValue() {
     auto is_lock_conflict =
         TxnEngineHelper::CheckLockConflict(lock_info, isolation_level_, start_ts_, txn_result_info_);
     if (is_lock_conflict) {
-      DINGO_LOG(WARNING) << "[txn]BatchGet CheckLockConflict return conflict, key: "
-                         << Helper::StringToHex(lock_info.key()) << ", isolation_level: " << isolation_level_
-                         << ", start_ts: " << start_ts_ << ", lock_info: " << lock_info.ShortDebugString();
+      DINGO_LOG(WARNING) << "[txn]Scan CheckLockConflict return conflict, key: " << Helper::StringToHex(lock_info.key())
+                         << ", isolation_level: " << isolation_level_ << ", start_ts: " << start_ts_
+                         << ", seek_ts: " << seek_ts_ << ", lock_info: " << lock_info.ShortDebugString();
       key_.clear();
       value_.clear();
       return butil::Status(pb::error::Errno::EBRAFT_EINVAL, "lock conflict");
@@ -298,162 +452,37 @@ butil::Status TxnIterator::GetCurrentValue() {
 
     // if lock_key == write_key, then we can get data from write_cf
     if (last_lock_key_ == last_write_key_) {
-      while (write_iter_->Valid()) {
-        int64_t commit_ts;
-        auto ret1 = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, commit_ts);
-        if (!ret1.ok()) {
-          DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
-                           << Helper::StringToHex(write_iter_->Key()) << ", start_ts: " << start_ts_;
-        }
+      bool is_value_found = false;
+      GetUserValueInWriteIter(write_iter_, reader_, isolation_level_, seek_ts_, start_ts_, key_, last_write_key_,
+                              is_value_found, value_);
 
-        if (last_write_key_ > key_) {
-          DINGO_LOG(INFO) << "[txn]Scan last_write_key_ > key_, means no value, start_ts: " << start_ts_
-                          << ", last_write_key: " << Helper::StringToHex(last_write_key_)
-                          << ", key_: " << Helper::StringToHex(key_);
-          return butil::Status::OK();
-        }
-
-        // check isolation_level
-        if (isolation_level_ == pb::store::IsolationLevel::SnapshotIsolation) {
-          if (commit_ts > start_ts_) {
-            DINGO_LOG(INFO)
-                << "[txn]Scan commit_ts > start_ts, means this value is not accepted, will go to next, start_ts: "
-                << start_ts_ << ", commit_ts: " << commit_ts << ", key_: " << Helper::StringToHex(key_);
-            write_iter_->Next();
-            continue;
-          }
-        } else if (isolation_level_ == pb::store::IsolationLevel::ReadCommitted) {
-          DINGO_LOG(INFO) << "[txn]Scan RC, commit_ts: " << commit_ts << ", start_ts: " << start_ts_
-                          << ", key_: " << Helper::StringToHex(key_);
-        } else {
-          DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level_;
-          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
-        }
-
-        pb::store::WriteInfo write_info;
-        auto ret2 = write_info.ParseFromArray(write_iter_->Value().data(), write_iter_->Value().size());
-        if (!ret2) {
-          DINGO_LOG(FATAL) << "[txn]Scan parse write info failed, write_key: "
-                           << Helper::StringToHex(write_iter_->Key())
-                           << ", write_value(hex): " << Helper::StringToHex(write_iter_->Value());
-        }
-
-        if (write_info.op() == pb::store::Op::Delete) {
-          // if op is delete, value is null
-          value_ = std::string();
-          return butil::Status::OK();
-        } else if (write_info.op() == pb::store::Op::Rollback) {
-          // if op is rollback, go to next write
-          write_iter_->Next();
-        } else if (write_info.op() == pb::store::Op::Put) {
-          // use write_ts to get data from data_cf
-          if (!write_info.short_value().empty()) {
-            value_ = write_info.short_value();
-          } else {
-            auto ret3 = reader_->KvGet(Constant::kTxnDataCF, Helper::EncodeTxnKey(key_, write_info.start_ts()), value_);
-            if (!ret3.ok() && ret3.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
-              DINGO_LOG(FATAL) << "[txn]Scan read data failed, key: " << Helper::StringToHex(key_)
-                               << ", status: " << ret3.error_str();
-            } else if (ret3.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
-              DINGO_LOG(ERROR) << "[txn]Scan read data failed, data is illegally not found, key: " << key_
-                               << ", status: " << ret3.error_str()
-                               << ", raw_key: " << Helper::EncodeTxnKey(key_, write_info.start_ts());
-              return butil::Status(pb::error::Errno::EINTERNAL, "data is illegally not found");
-            }
-          }
-
-          return butil::Status::OK();
-        } else {
-          DINGO_LOG(INFO) << "[txn]Scan write_iter meet illegal op, start_ts: " << start_ts_
-                          << ", last_write_key: " << Helper::StringToHex(last_write_key_)
-                          << ", tmp_key: " << Helper::StringToHex(key_) << ", write_info.op: " << write_info.op();
-          write_iter_->Next();
-        }
+      if (is_value_found) {
+        return butil::Status::OK();
+      } else {
+        // no valid value is found, so the txn iterator will be invalid
+        // clear the key_ to make the txn iterator invalid
+        key_.clear();
+        return butil::Status::OK();
       }
-
-      return butil::Status::OK();
     } else {
       // lock_key < write_key, there is no data
       return butil::Status::OK();
     }
-  } else if (last_write_key_ > last_lock_key_) {
+  } else {
     key_ = last_write_key_;
 
-    while (write_iter_->Valid()) {
-      int64_t commit_ts;
-      auto ret1 = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, commit_ts);
-      if (!ret1.ok()) {
-        DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
-                         << Helper::StringToHex(write_iter_->Key()) << ", start_ts: " << start_ts_;
-      }
+    bool is_value_found = false;
+    GetUserValueInWriteIter(write_iter_, reader_, isolation_level_, seek_ts_, start_ts_, key_, last_write_key_,
+                            is_value_found, value_);
 
-      if (last_write_key_ > key_) {
-        DINGO_LOG(ERROR) << "[txn]Scan write_iter last_write_key_ > key_, start_ts: " << start_ts_
-                         << ", last_write_key: " << Helper::StringToHex(last_write_key_)
-                         << ", key_: " << Helper::StringToHex(key_);
-        return butil::Status::OK();
-      }
-
-      // check isolation_level
-      if (isolation_level_ == pb::store::IsolationLevel::SnapshotIsolation) {
-        if (commit_ts > start_ts_) {
-          DINGO_LOG(INFO)
-              << "[txn]Scan commit_ts > start_ts, means this value is not accepted, will go to next, start_ts: "
-              << start_ts_ << ", commit_ts: " << commit_ts << ", key_: " << Helper::StringToHex(key_);
-          write_iter_->Next();
-          continue;
-        }
-      } else if (isolation_level_ == pb::store::IsolationLevel::ReadCommitted) {
-        DINGO_LOG(INFO) << "[txn]Scan RC, commit_ts: " << commit_ts << ", start_ts: " << start_ts_
-                        << ", key_: " << Helper::StringToHex(key_);
-      } else {
-        DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level_;
-        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
-      }
-
-      pb::store::WriteInfo write_info;
-      auto ret2 = write_info.ParseFromArray(write_iter_->Value().data(), write_iter_->Value().size());
-      if (!ret2) {
-        DINGO_LOG(FATAL) << "[txn]Scan parse write info failed, write_key: " << Helper::StringToHex(write_iter_->Key())
-                         << ", write_value(hex): " << Helper::StringToHex(write_iter_->Value());
-      }
-
-      if (write_info.op() == pb::store::Op::Delete) {
-        // if op is delete, value is null
-        value_ = std::string();
-        return butil::Status::OK();
-      } else if (write_info.op() == pb::store::Op::Rollback) {
-        // if op is rollback, go to next write
-        write_iter_->Next();
-      } else if (write_info.op() == pb::store::Op::Put) {
-        // use write_ts to get data from data_cf
-        if (!write_info.short_value().empty()) {
-          value_ = write_info.short_value();
-        } else {
-          auto ret3 = reader_->KvGet(Constant::kTxnDataCF, Helper::EncodeTxnKey(last_write_key_, write_info.start_ts()),
-                                     value_);
-          if (!ret3.ok() && ret3.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
-            DINGO_LOG(FATAL) << "[txn]Scan read data failed, key: " << Helper::StringToHex(last_write_key_)
-                             << ", status: " << ret3.error_str();
-          } else if (ret3.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
-            DINGO_LOG(ERROR) << "[txn]Scan read data failed, data is illegally not found, key: " << last_write_key_
-                             << ", status: " << ret3.error_str()
-                             << ", raw_key: " << Helper::EncodeTxnKey(last_write_key_, write_info.start_ts());
-            return butil::Status(pb::error::Errno::EINTERNAL, "data is illegally not found");
-          }
-        }
-
-        break;
-      } else {
-        DINGO_LOG(INFO) << "[txn]Scan write_iter meet illegal op, start_ts: " << start_ts_
-                        << ", last_write_key: " << Helper::StringToHex(last_write_key_)
-                        << ", tmp_key: " << Helper::StringToHex(last_write_key_)
-                        << ", write_info.op: " << write_info.op();
-        write_iter_->Next();
-      }
+    if (is_value_found) {
+      return butil::Status::OK();
+    } else {
+      // no valid value is found, so the txn iterator will be invalid
+      // clear the key_ to make the txn iterator invalid
+      key_.clear();
+      return butil::Status::OK();
     }
-
-    return butil::Status::OK();
   }
 
   return butil::Status::OK();
@@ -478,6 +507,9 @@ std::string TxnIterator::Value() { return value_; }
 
 bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
                                         int64_t start_ts, pb::store::TxnResultInfo &txn_result_info) {
+  DINGO_LOG(DEBUG) << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
+                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts;
+
   if (lock_info.lock_ts() > 0) {
     if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
       // for pessimistic, check for_update_ts

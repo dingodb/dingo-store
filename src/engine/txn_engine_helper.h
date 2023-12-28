@@ -34,11 +34,11 @@ class TxnIterator {
  public:
   TxnIterator(RawEnginePtr raw_engine, const pb::common::Range &range, int64_t start_ts,
               pb::store::IsolationLevel isolation_level)
-      : raw_engine_(raw_engine), range_(range), isolation_level_(isolation_level) {
+      : raw_engine_(raw_engine), range_(range), isolation_level_(isolation_level), start_ts_(start_ts) {
     if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
-      start_ts_ = Constant::kMaxVer;
+      seek_ts_ = Constant::kMaxVer;
     } else {
-      start_ts_ = start_ts;
+      seek_ts_ = start_ts;
     }
   }
 
@@ -55,12 +55,22 @@ class TxnIterator {
   std::string GetLastLockKey() { return last_lock_key_; }
   std::string GetLastWriteKey() { return last_write_key_; }
 
+  static butil::Status GetUserValueInWriteIter(std::shared_ptr<Iterator> write_iter, RawEngine::ReaderPtr reader,
+                                               pb::store::IsolationLevel isolation_level, int64_t seek_ts,
+                                               int64_t start_ts, const std::string &user_key,
+                                               std::string &last_write_key, bool &is_value_found,
+                                               std::string &user_value);
+  static std::string GetUserKey(std::shared_ptr<Iterator> write_iter);
+  static butil::Status GotoNextUserKeyInWriteIter(std::shared_ptr<Iterator> write_iter, std::string prev_user_key,
+                                                  std::string &last_write_key);
+
  private:
   butil::Status GetCurrentValue();
 
   RawEnginePtr raw_engine_;
   pb::common::Range range_;
   int64_t start_ts_;
+  int64_t seek_ts_;
   pb::store::IsolationLevel isolation_level_;
 
   SnapshotPtr snapshot_;
