@@ -43,7 +43,6 @@
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
 #include "fmt/core.h"
-#include "google/protobuf/message_lite.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "rocksdb/advanced_options.h"
@@ -53,8 +52,6 @@
 #include "rocksdb/iterator.h"
 #include "rocksdb/table.h"
 #include "rocksdb/write_batch.h"
-#include "server/server.h"
-#include "store/heartbeat.h"
 
 namespace dingodb {
 
@@ -941,7 +938,7 @@ rocks::SstFileWriterPtr RocksRawEngine::NewSstFileWriter() {
   return std::make_shared<rocks::SstFileWriter>(rocksdb::Options());
 }
 
-rocks::CheckpointPtr RocksRawEngine::NewCheckpoint() { return std::make_shared<rocks::Checkpoint>(GetSelfPtr()); }
+RawEngine::CheckpointPtr RocksRawEngine::NewCheckpoint() { return std::make_shared<rocks::Checkpoint>(GetSelfPtr()); }
 
 butil::Status RocksRawEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                                    const std::vector<std::string>& cf_names,

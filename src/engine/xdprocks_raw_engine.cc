@@ -43,11 +43,8 @@
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
 #include "fmt/core.h"
-#include "google/protobuf/message_lite.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
-#include "server/server.h"
-#include "store/heartbeat.h"
 #include "xdprocks/advanced_options.h"
 #include "xdprocks/cache.h"
 #include "xdprocks/db.h"
@@ -940,7 +937,7 @@ xdp::SstFileWriterPtr XDPRocksRawEngine::NewSstFileWriter() {
   return std::make_shared<xdp::SstFileWriter>(xdprocks::Options());
 }
 
-xdp::CheckpointPtr XDPRocksRawEngine::NewCheckpoint() { return std::make_shared<xdp::Checkpoint>(GetSelfPtr()); }
+RawEngine::CheckpointPtr XDPRocksRawEngine::NewCheckpoint() { return std::make_shared<xdp::Checkpoint>(GetSelfPtr()); }
 
 butil::Status XDPRocksRawEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                                       const std::vector<std::string>& cf_names,

@@ -30,14 +30,11 @@
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "google/protobuf/message.h"
-#include "handler/raft_vote_handler.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
-#include "store/region_controller.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -77,25 +74,23 @@ std::vector<pb::store_internal::SstFileInfo> FilterSstFile(  // NOLINT
 // Do Checkpoint and hard link, generate sst snapshot file
 butil::Status RaftSnapshot::GenSnapshotFileByCheckpoint(const std::string& checkpoint_path, store::RegionPtr region,
                                                         std::vector<pb::store_internal::SstFileInfo>& sst_files) {
-  // auto raw_engine = std::dynamic_pointer_cast<RocksRawEngine>(engine_);
+  auto checkpoint = engine_->NewCheckpoint();
 
-  // std::vector<pb::store_internal::SstFileInfo> tmp_sst_files;
-  // auto checkpoint = raw_engine->NewCheckpoint();
+  std::vector<pb::store_internal::SstFileInfo> tmp_sst_files;
+  auto status =
+      checkpoint->Create(checkpoint_path, Helper::GetColumnFamilyNames(region->Range().start_key()), tmp_sst_files);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Create checkpoint failed, path: {} error: {} {}",
+                                    region->Id(), checkpoint_path, status.error_code(), status.error_str());
+    return butil::Status();
+  }
 
-  // auto status =
-  //     checkpoint->Create(checkpoint_path, Helper::GetColumnFamilyNames(region->Range().start_key()), tmp_sst_files);
-  // if (!status.ok()) {
-  //   DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Create checkpoint failed, path: {} error: {} {}",
-  //                                   region->Id(), checkpoint_path, status.error_code(), status.error_str());
-  //   return butil::Status();
-  // }
-
-  // // Get region actual range
-  // sst_files = FilterSstFile(tmp_sst_files, region->Range());
-  // for (const auto& sst_file : sst_files) {
-  //   DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file info: {}", region->Id(),
-  //                                  sst_file.ShortDebugString());
-  // }
+  // Get region actual range
+  sst_files = FilterSstFile(tmp_sst_files, region->Range());
+  for (const auto& sst_file : sst_files) {
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] sst file info: {}", region->Id(),
+                                   sst_file.ShortDebugString());
+  }
 
   return butil::Status();
 }

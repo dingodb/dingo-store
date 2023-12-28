@@ -155,17 +155,17 @@ class SstFileWriter {
 };
 using SstFileWriterPtr = std::shared_ptr<SstFileWriter>;
 
-class Checkpoint {
+class Checkpoint : public RawEngine::Checkpoint {
  public:
-  explicit Checkpoint(std::shared_ptr<RocksRawEngine> raw_engine) : raw_engine_(raw_engine) {}
-  ~Checkpoint() = default;
+  Checkpoint(std::shared_ptr<RocksRawEngine> raw_engine) : raw_engine_(raw_engine) {}
+  ~Checkpoint() override = default;
 
   Checkpoint(Checkpoint&& rhs) = delete;
   Checkpoint& operator=(Checkpoint&& rhs) = delete;
 
-  butil::Status Create(const std::string& dirpath);
+  butil::Status Create(const std::string& dirpath) override;
   butil::Status Create(const std::string& dirpath, const std::vector<std::string>& cf_names,
-                       std::vector<pb::store_internal::SstFileInfo>& sst_files);
+                       std::vector<pb::store_internal::SstFileInfo>& sst_files) override;
 
  private:
   std::shared_ptr<RocksRawEngine> GetRawEngine();
@@ -274,7 +274,7 @@ class RocksRawEngine : public RawEngine {
   RawEngine::WriterPtr Writer() override;
 
   static rocks::SstFileWriterPtr NewSstFileWriter();
-  rocks::CheckpointPtr NewCheckpoint();
+  RawEngine::CheckpointPtr NewCheckpoint() override;
 
   butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                      const std::vector<std::string>& cf_names,

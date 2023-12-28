@@ -274,7 +274,7 @@ class XDPRocksRawEngine : public RawEngine {
   RawEngine::WriterPtr Writer() override;
 
   static xdp::SstFileWriterPtr NewSstFileWriter();
-  xdp::CheckpointPtr NewCheckpoint();
+  RawEngine::CheckpointPtr NewCheckpoint() override;
 
   butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                      const std::vector<std::string>& cf_names,
