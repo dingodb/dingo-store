@@ -123,9 +123,9 @@ class TxnGcTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<RawRocksEngine>();
+    engine = std::make_shared<RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << '\n';
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
 
     ConfigManager::GetInstance().Register("store", config);
@@ -146,7 +146,7 @@ class TxnGcTest : public testing::Test {
 
   void TearDown() override {}
 
-  static inline std::shared_ptr<RawRocksEngine> engine = nullptr;
+  static inline std::shared_ptr<RocksRawEngine> engine = nullptr;
   static inline std::shared_ptr<Config> config = nullptr;
   static inline int64_t safe_point_ts = 0;
   static inline std::string prefix_start_key;

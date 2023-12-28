@@ -74,7 +74,7 @@ class RawRocksEngineBugTest : public testing::Test {
 };
 
 TEST_F(RawRocksEngineBugTest, test) {
-  auto engine = std::make_shared<dingodb::RawRocksEngine>();
+  auto engine = std::make_shared<dingodb::RocksRawEngine>();
 
   auto config = std::make_shared<dingodb::YamlConfig>();
   EXPECT_EQ(0, config->Load(kYamlConfigContent));

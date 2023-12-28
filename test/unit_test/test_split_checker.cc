@@ -115,9 +115,9 @@ class SplitCheckerTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<RawRocksEngine>();
+    engine = std::make_shared<RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << '\n';
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
   }
 
@@ -131,10 +131,10 @@ class SplitCheckerTest : public testing::Test {
 
   void TearDown() override {}
 
-  static std::shared_ptr<RawRocksEngine> engine;
+  static std::shared_ptr<RocksRawEngine> engine;
 };
 
-std::shared_ptr<RawRocksEngine> SplitCheckerTest::engine = nullptr;
+std::shared_ptr<RocksRawEngine> SplitCheckerTest::engine = nullptr;
 
 TEST_F(SplitCheckerTest, MergedIterator) {  // NOLINT
   std::vector<std::string> raft_addrs;

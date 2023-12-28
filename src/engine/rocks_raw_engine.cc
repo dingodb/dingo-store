@@ -169,7 +169,7 @@ butil::Status SstFileWriter::SaveFile(std::shared_ptr<dingodb::Iterator> iter, c
   return butil::Status();
 }
 
-std::shared_ptr<RawRocksEngine> Checkpoint::GetRawEngine() {
+std::shared_ptr<RocksRawEngine> Checkpoint::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
     DINGO_LOG(FATAL) << "[rocksdb] get raw engine failed.";
@@ -297,7 +297,7 @@ butil::Status Checkpoint::Create(const std::string& dirpath, const std::vector<s
   return butil::Status();
 }
 
-std::shared_ptr<RawRocksEngine> Reader::GetRawEngine() {
+std::shared_ptr<RocksRawEngine> Reader::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
     DINGO_LOG(FATAL) << "[rocksdb] get raw engine failed.";
@@ -445,7 +445,7 @@ dingodb::IteratorPtr Reader::NewIterator(const std::string& cf_name, dingodb::Sn
   return NewIterator(GetColumnFamily(cf_name), snapshot, options);
 }
 
-std::shared_ptr<RawRocksEngine> Writer::GetRawEngine() {
+std::shared_ptr<RocksRawEngine> Writer::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
     DINGO_LOG(FATAL) << "[rocksdb] get raw engine failed.";
@@ -654,9 +654,9 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
 
 }  // namespace rocks
 
-RawRocksEngine::RawRocksEngine() : db_(nullptr), column_families_({}) {}
+RocksRawEngine::RocksRawEngine() : db_(nullptr), column_families_({}) {}
 
-RawRocksEngine::~RawRocksEngine() = default;
+RocksRawEngine::~RocksRawEngine() = default;
 
 static rocks::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
   rocks::ColumnFamily::ColumnFamilyConfig default_config;
@@ -857,7 +857,7 @@ static rocksdb::DB* InitDB(const std::string& db_path, rocks::ColumnFamilyMap& c
 }
 
 // load rocksdb config from config file
-bool RawRocksEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) {
+bool RocksRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) {
   DINGO_LOG(INFO) << "Init rocksdb raw engine...";
   if (BAIDU_UNLIKELY(!config)) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] config empty not support!");
@@ -893,21 +893,21 @@ bool RawRocksEngine::Init(std::shared_ptr<Config> config, const std::vector<std:
   return true;
 }
 
-std::shared_ptr<RawRocksEngine> RawRocksEngine::GetSelfPtr() {
-  return std::dynamic_pointer_cast<RawRocksEngine>(shared_from_this());
+std::shared_ptr<RocksRawEngine> RocksRawEngine::GetSelfPtr() {
+  return std::dynamic_pointer_cast<RocksRawEngine>(shared_from_this());
 }
 
-std::string RawRocksEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_ROCKSDB); }
+std::string RocksRawEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_ROCKSDB); }
 
-pb::common::RawEngine RawRocksEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_ROCKSDB; }
+pb::common::RawEngine RocksRawEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_ROCKSDB; }
 
-std::string RawRocksEngine::DbPath() { return db_path_; }
+std::string RocksRawEngine::DbPath() { return db_path_; }
 
-std::shared_ptr<rocksdb::DB> RawRocksEngine::GetDB() { return db_; }
+std::shared_ptr<rocksdb::DB> RocksRawEngine::GetDB() { return db_; }
 
-rocks::ColumnFamilyPtr RawRocksEngine::GetDefaultColumnFamily() { return GetColumnFamily(Constant::kStoreDataCF); }
+rocks::ColumnFamilyPtr RocksRawEngine::GetDefaultColumnFamily() { return GetColumnFamily(Constant::kStoreDataCF); }
 
-rocks::ColumnFamilyPtr RawRocksEngine::GetColumnFamily(const std::string& cf_name) {
+rocks::ColumnFamilyPtr RocksRawEngine::GetColumnFamily(const std::string& cf_name) {
   auto it = column_families_.find(cf_name);
   if (it == column_families_.end()) {
     DINGO_LOG(FATAL) << fmt::format("[rocksdb] Not found column family {}", cf_name);
@@ -916,7 +916,7 @@ rocks::ColumnFamilyPtr RawRocksEngine::GetColumnFamily(const std::string& cf_nam
   return it->second;
 }
 
-std::vector<rocks::ColumnFamilyPtr> RawRocksEngine::GetColumnFamilies(const std::vector<std::string>& cf_names) {
+std::vector<rocks::ColumnFamilyPtr> RocksRawEngine::GetColumnFamilies(const std::vector<std::string>& cf_names) {
   std::vector<rocks::ColumnFamilyPtr> column_families;
   column_families.reserve(cf_names.size());
   for (const auto& cf_name : cf_names) {
@@ -929,21 +929,21 @@ std::vector<rocks::ColumnFamilyPtr> RawRocksEngine::GetColumnFamilies(const std:
   return column_families;
 }
 
-dingodb::SnapshotPtr RawRocksEngine::GetSnapshot() {
+dingodb::SnapshotPtr RocksRawEngine::GetSnapshot() {
   return std::make_shared<rocks::Snapshot>(db_->GetSnapshot(), db_);
 }
 
-RawEngine::ReaderPtr RawRocksEngine::Reader() { return reader_; }
+RawEngine::ReaderPtr RocksRawEngine::Reader() { return reader_; }
 
-RawEngine::WriterPtr RawRocksEngine::Writer() { return writer_; }
+RawEngine::WriterPtr RocksRawEngine::Writer() { return writer_; }
 
-rocks::SstFileWriterPtr RawRocksEngine::NewSstFileWriter() {
+rocks::SstFileWriterPtr RocksRawEngine::NewSstFileWriter() {
   return std::make_shared<rocks::SstFileWriter>(rocksdb::Options());
 }
 
-rocks::CheckpointPtr RawRocksEngine::NewCheckpoint() { return std::make_shared<rocks::Checkpoint>(GetSelfPtr()); }
+rocks::CheckpointPtr RocksRawEngine::NewCheckpoint() { return std::make_shared<rocks::Checkpoint>(GetSelfPtr()); }
 
-butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
+butil::Status RocksRawEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                                    const std::vector<std::string>& cf_names,
                                                    std::vector<std::string>& merge_sst_paths) {
   rocksdb::Options options;
@@ -1057,7 +1057,7 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
   return butil::Status::OK();
 }
 
-butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
+butil::Status RocksRawEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
   rocksdb::IngestExternalFileOptions options;
   options.write_global_seqno = false;
   auto status = db_->IngestExternalFile(GetColumnFamily(cf_name)->GetHandle(), files, options);
@@ -1069,14 +1069,14 @@ butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, con
   return butil::Status();
 }
 
-void RawRocksEngine::Flush(const std::string& cf_name) {
+void RocksRawEngine::Flush(const std::string& cf_name) {
   if (db_) {
     rocksdb::FlushOptions flush_options;
     db_->Flush(flush_options, GetColumnFamily(cf_name)->GetHandle());
   }
 }
 
-butil::Status RawRocksEngine::Compact(const std::string& cf_name) {
+butil::Status RocksRawEngine::Compact(const std::string& cf_name) {
   DINGO_LOG(INFO) << fmt::format("[rocksdb] compact column family {}", cf_name);
   if (db_ != nullptr) {
     rocksdb::CompactRangeOptions options;
@@ -1092,9 +1092,9 @@ butil::Status RawRocksEngine::Compact(const std::string& cf_name) {
   return butil::Status();
 }
 
-void RawRocksEngine::Destroy() { rocksdb::DestroyDB(db_path_, rocksdb::Options()); }
+void RocksRawEngine::Destroy() { rocksdb::DestroyDB(db_path_, rocksdb::Options()); }
 
-void RawRocksEngine::Close() {
+void RocksRawEngine::Close() {
   if (db_) {
     CancelAllBackgroundWork(db_.get(), true);
 
@@ -1117,7 +1117,7 @@ void RawRocksEngine::Close() {
   DINGO_LOG(INFO) << fmt::format("[rocksdb] close db.");
 }
 
-std::vector<int64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_name,
+std::vector<int64_t> RocksRawEngine::GetApproximateSizes(const std::string& cf_name,
                                                          std::vector<pb::common::Range>& ranges) {
   rocksdb::SizeApproximationOptions options;
 

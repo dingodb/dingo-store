@@ -68,7 +68,7 @@ const std::string kYamlConfigContent =
 class ScanTest : public testing::Test {
  public:
   static std::shared_ptr<Config> GetConfig() { return config_; }
-  static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return engine_; }
+  static std::shared_ptr<RocksRawEngine> GetRawRocksEngine() { return engine_; }
   static ScanManager &GetManager() { return ScanManager::GetInstance(); }
 
   static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
@@ -99,9 +99,9 @@ class ScanTest : public testing::Test {
       return;
     }
 
-    engine_ = std::make_shared<RawRocksEngine>();
+    engine_ = std::make_shared<RocksRawEngine>();
     if (!engine_->Init(config_, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << '\n';
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
   }
 
@@ -116,7 +116,7 @@ class ScanTest : public testing::Test {
 
  private:
   inline static std::shared_ptr<Config> config_;          // NOLINT
-  inline static std::shared_ptr<RawRocksEngine> engine_;  // NOLINT
+  inline static std::shared_ptr<RocksRawEngine> engine_;  // NOLINT
   inline static std::shared_ptr<ScanContext> scan_;       // NOLINT
   inline static std::string scan_id_;                     // NOLINT
 };

@@ -100,9 +100,9 @@ class RawRocksEngineTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<RawRocksEngine>();
+    engine = std::make_shared<RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << '\n';
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
   }
 
@@ -116,11 +116,11 @@ class RawRocksEngineTest : public testing::Test {
 
   void TearDown() override {}
 
-  static std::shared_ptr<RawRocksEngine> engine;
+  static std::shared_ptr<RocksRawEngine> engine;
   static std::shared_ptr<Config> config;
 };
 
-std::shared_ptr<RawRocksEngine> RawRocksEngineTest::engine = nullptr;
+std::shared_ptr<RocksRawEngine> RawRocksEngineTest::engine = nullptr;
 std::shared_ptr<Config> RawRocksEngineTest::config = nullptr;
 
 template <typename T>
