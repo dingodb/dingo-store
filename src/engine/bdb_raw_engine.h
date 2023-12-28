@@ -19,7 +19,6 @@
 #include "db_cxx.h"
 #include "engine/iterator.h"
 #include "engine/raw_engine.h"
-#include "serial/buf.h"
 
 namespace dingodb {
 
@@ -205,6 +204,7 @@ class BdbRawEngine : public RawEngine {
 
   RawEngine::ReaderPtr Reader() override { return reader_; }
   RawEngine::WriterPtr Writer() override { return writer_; }
+  RawEngine::CheckpointPtr NewCheckpoint() override;
 
   butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                      const std::vector<std::string>& cf_names,

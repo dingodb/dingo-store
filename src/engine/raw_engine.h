@@ -95,6 +95,21 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
 
   using WriterPtr = std::shared_ptr<Writer>;
 
+  class Checkpoint {
+   public:
+    Checkpoint() = default;
+    virtual ~Checkpoint() = default;
+
+    virtual butil::Status Create(const std::string& /*dirpath*/) {
+      return butil::Status(pb::error::ENOT_SUPPORT, "Not support checkpoint.");
+    }
+    virtual butil::Status Create(const std::string& /*dirpath*/, const std::vector<std::string>& /*cf_names*/,
+                                 std::vector<pb::store_internal::SstFileInfo>& /*sst_files*/) {
+      return butil::Status(pb::error::ENOT_SUPPORT, "Not support checkpoint.");
+    }
+  };
+  using CheckpointPtr = std::shared_ptr<Checkpoint>;
+
   virtual bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) = 0;
   virtual void Close() = 0;
   virtual void Destroy() = 0;
@@ -108,9 +123,11 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
   virtual ReaderPtr Reader() = 0;
   virtual WriterPtr Writer() = 0;
 
+  virtual CheckpointPtr NewCheckpoint() = 0;
+
   virtual butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
-                                            const std::vector<std::string>& cf_names,
-                                            std::vector<std::string>& merge_sst_paths) = 0;
+                                             const std::vector<std::string>& cf_names,
+                                             std::vector<std::string>& merge_sst_paths) = 0;
   virtual butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) = 0;
 
   virtual std::vector<int64_t> GetApproximateSizes(const std::string& cf_name,

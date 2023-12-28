@@ -1446,6 +1446,11 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
   return nullptr;
 }
 
+RawEngine::CheckpointPtr BdbRawEngine::NewCheckpoint() {
+  DINGO_LOG(FATAL) << "BdbRawEngine not support checkpoint.";
+  return nullptr;
+}
+
 butil::Status BdbRawEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,  // NOLINT
                                                  const std::vector<std::string>& cf_names,                 // NOLINT
                                                  std::vector<std::string>& merge_sst_paths) {              // NOLINT

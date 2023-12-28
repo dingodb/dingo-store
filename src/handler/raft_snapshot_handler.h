@@ -17,7 +17,6 @@
 
 #include <cstdint>
 
-#include "braft/snapshot.h"
 #include "butil/status.h"
 #include "engine/raw_engine.h"
 #include "handler/handler.h"
