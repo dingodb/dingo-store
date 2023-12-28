@@ -116,9 +116,9 @@ class CoprocessorTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<RawRocksEngine>();
+    engine = std::make_shared<RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << '\n';
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
 
     coprocessor = std::make_shared<Coprocessor>();
@@ -134,7 +134,7 @@ class CoprocessorTest : public testing::Test {
 
   void TearDown() override {}
 
-  static std::shared_ptr<RawRocksEngine> engine;
+  static std::shared_ptr<RocksRawEngine> engine;
   static std::shared_ptr<Coprocessor> coprocessor;
 
   static std::string max_key;
@@ -144,7 +144,7 @@ class CoprocessorTest : public testing::Test {
   static size_t min_min_size;
 };
 
-std::shared_ptr<RawRocksEngine> CoprocessorTest::engine = nullptr;
+std::shared_ptr<RocksRawEngine> CoprocessorTest::engine = nullptr;
 
 std::shared_ptr<Coprocessor> CoprocessorTest::coprocessor = nullptr;
 

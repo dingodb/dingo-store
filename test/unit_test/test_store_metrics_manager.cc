@@ -80,9 +80,9 @@ class StoreRegionMetricsTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<dingodb::RawRocksEngine>();
+    engine = std::make_shared<dingodb::RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << std::endl;
+      std::cout << "RocksRawEngine init failed" << std::endl;
     }
   }
 
@@ -94,10 +94,10 @@ class StoreRegionMetricsTest : public testing::Test {
   void SetUp() override {}
   void TearDown() override {}
 
-  static std::shared_ptr<dingodb::RawRocksEngine> engine;
+  static std::shared_ptr<dingodb::RocksRawEngine> engine;
 };
 
-std::shared_ptr<dingodb::RawRocksEngine> StoreRegionMetricsTest::engine = nullptr;
+std::shared_ptr<dingodb::RocksRawEngine> StoreRegionMetricsTest::engine = nullptr;
 
 static dingodb::store::RegionPtr BuildRegion(int64_t region_id, const std::string& raft_group_name,
                                              std::vector<std::string>& raft_addrs) {

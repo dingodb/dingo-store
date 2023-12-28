@@ -96,9 +96,9 @@ class RaftSnapshotTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<dingodb::RawRocksEngine>();
+    engine = std::make_shared<dingodb::RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << std::endl;
+      std::cout << "RocksRawEngine init failed" << std::endl;
     }
 
     std::filesystem::create_directories(kRaftSnapshotPath);
@@ -115,10 +115,10 @@ class RaftSnapshotTest : public testing::Test {
 
   void TearDown() override {}
 
-  static std::shared_ptr<dingodb::RawRocksEngine> engine;
+  static std::shared_ptr<dingodb::RocksRawEngine> engine;
 };
 
-std::shared_ptr<dingodb::RawRocksEngine> RaftSnapshotTest::engine = nullptr;
+std::shared_ptr<dingodb::RocksRawEngine> RaftSnapshotTest::engine = nullptr;
 
 TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   int64_t start_time = dingodb::Helper::TimestampMs();

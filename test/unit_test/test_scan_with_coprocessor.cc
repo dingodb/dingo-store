@@ -86,7 +86,7 @@ class ScanWithCoprocessor : public testing::Test {
  public:
   static std::shared_ptr<Config> GetConfig() { return config_; }
 
-  static std::shared_ptr<RawRocksEngine> GetRawRocksEngine() { return engine; }
+  static std::shared_ptr<RocksRawEngine> GetRawRocksEngine() { return engine; }
   static ScanManager &GetManager() { return ScanManager::GetInstance(); }
 
   static std::shared_ptr<ScanContext> GetScan(std::string *scan_id) {
@@ -117,9 +117,9 @@ class ScanWithCoprocessor : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<RawRocksEngine>();
+    engine = std::make_shared<RocksRawEngine>();
     if (!engine->Init(config_, kAllCFs)) {
-      std::cout << "RawRocksEngine init failed" << '\n';
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
   }
 
@@ -139,7 +139,7 @@ class ScanWithCoprocessor : public testing::Test {
   inline static std::string scan_id_;                // NOLINT
 
  public:
-  inline static std::shared_ptr<RawRocksEngine> engine;
+  inline static std::shared_ptr<RocksRawEngine> engine;
   inline static std::shared_ptr<Coprocessor> coprocessor;
   inline static std::string max_key;
   inline static std::string min_key;

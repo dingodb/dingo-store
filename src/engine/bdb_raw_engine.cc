@@ -648,7 +648,7 @@ butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* t
   return butil::Status();
 }
 
-std::shared_ptr<RawBdbEngine> Reader::GetRawEngine() {
+std::shared_ptr<BdbRawEngine> Reader::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
     DINGO_LOG(FATAL) << "[bdb] get raw engine failed.";
@@ -1270,7 +1270,7 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
   return butil::Status();
 }
 
-std::shared_ptr<RawBdbEngine> Writer::GetRawEngine() {
+std::shared_ptr<BdbRawEngine> Writer::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
     DINGO_LOG(FATAL) << "[bdb] get raw engine failed.";
@@ -1284,7 +1284,7 @@ std::shared_ptr<Db> Writer::GetDb() { return GetRawEngine()->GetDb(); }
 }  // namespace bdb
 
 // Open a BDB database
-int32_t RawBdbEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint32_t extra_flags) {
+int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint32_t extra_flags) {
   int ret;
   uint32_t open_flags;
 
@@ -1321,7 +1321,7 @@ int32_t RawBdbEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
 }
 
 // override functions
-bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {
+bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {
   DINGO_LOG(INFO) << "Init bdb raw engine...";
   if (BAIDU_UNLIKELY(!config)) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] config empty not support!");
@@ -1396,7 +1396,7 @@ bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   return true;
 }
 
-void RawBdbEngine::Close() {
+void BdbRawEngine::Close() {
   try {
     DbEnv* envp = db_->get_env();
 
@@ -1419,11 +1419,11 @@ void RawBdbEngine::Close() {
   DINGO_LOG(INFO) << "[bdb] I'm all done.";
 }
 
-std::string RawBdbEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_BDB); }
+std::string BdbRawEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_BDB); }
 
-pb::common::RawEngine RawBdbEngine::GetRawEngineType() { return pb::common::RAW_ENG_BDB; }
+pb::common::RawEngine BdbRawEngine::GetRawEngineType() { return pb::common::RAW_ENG_BDB; }
 
-dingodb::SnapshotPtr RawBdbEngine::GetSnapshot() {
+dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
   try {
     DbEnv* envp = db_->get_env();
     DbTxn* txn = nullptr;
@@ -1446,12 +1446,12 @@ dingodb::SnapshotPtr RawBdbEngine::GetSnapshot() {
   return nullptr;
 }
 
-butil::Status RawBdbEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,  // NOLINT
+butil::Status BdbRawEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,  // NOLINT
                                                  const std::vector<std::string>& cf_names,                 // NOLINT
                                                  std::vector<std::string>& merge_sst_paths) {              // NOLINT
   return butil::Status();
 }
-butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
+butil::Status BdbRawEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
   rocksdb::Options options;
   options.env = rocksdb::Env::Default();
   if (options.env == nullptr) {
@@ -1509,7 +1509,7 @@ butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const
   return butil::Status();
 }
 
-void RawBdbEngine::Flush(const std::string& /*cf_name*/) {
+void BdbRawEngine::Flush(const std::string& /*cf_name*/) {
   try {
     int ret = db_->sync(0);
     if (ret == 0) {
@@ -1522,7 +1522,7 @@ void RawBdbEngine::Flush(const std::string& /*cf_name*/) {
   }
 }
 
-butil::Status RawBdbEngine::Compact(const std::string& cf_name) {
+butil::Status BdbRawEngine::Compact(const std::string& cf_name) {
   std::string encoded_cf_name = bdb::BdbHelper::EncodeCfName(cf_name);
   std::string encoded_cf_name_upper_bound = bdb::BdbHelper::GetEncodedCfNameUpperBound(cf_name);
 
@@ -1553,7 +1553,7 @@ butil::Status RawBdbEngine::Compact(const std::string& cf_name) {
   return butil::Status(pb::error::EINTERNAL, "Internal compact error.");
 }
 
-std::vector<int64_t> RawBdbEngine::GetApproximateSizes(const std::string& cf_name,
+std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_name,
                                                        std::vector<pb::common::Range>& ranges) {
   std::vector<int64_t> result_counts;
 

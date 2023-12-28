@@ -40,7 +40,7 @@
 
 namespace dingodb {
 
-class RawRocksEngine;
+class RocksRawEngine;
 
 namespace rocks {
 
@@ -157,7 +157,7 @@ using SstFileWriterPtr = std::shared_ptr<SstFileWriter>;
 
 class Checkpoint {
  public:
-  explicit Checkpoint(std::shared_ptr<RawRocksEngine> raw_engine) : raw_engine_(raw_engine) {}
+  explicit Checkpoint(std::shared_ptr<RocksRawEngine> raw_engine) : raw_engine_(raw_engine) {}
   ~Checkpoint() = default;
 
   Checkpoint(Checkpoint&& rhs) = delete;
@@ -168,17 +168,17 @@ class Checkpoint {
                        std::vector<pb::store_internal::SstFileInfo>& sst_files);
 
  private:
-  std::shared_ptr<RawRocksEngine> GetRawEngine();
+  std::shared_ptr<RocksRawEngine> GetRawEngine();
   std::shared_ptr<rocksdb::DB> GetDB();
   std::vector<rocks::ColumnFamilyPtr> GetColumnFamilies(const std::vector<std::string>& cf_names);
 
-  std::weak_ptr<RawRocksEngine> raw_engine_;
+  std::weak_ptr<RocksRawEngine> raw_engine_;
 };
 using CheckpointPtr = std::shared_ptr<Checkpoint>;
 
 class Reader : public RawEngine::Reader {
  public:
-  Reader(std::shared_ptr<RawRocksEngine> raw_engine) : raw_engine_(raw_engine){};
+  Reader(std::shared_ptr<RocksRawEngine> raw_engine) : raw_engine_(raw_engine){};
   ~Reader() override = default;
 
   butil::Status KvGet(const std::string& cf_name, const std::string& key, std::string& value) override;
@@ -201,7 +201,7 @@ class Reader : public RawEngine::Reader {
                                    IteratorOptions options) override;
 
  private:
-  std::shared_ptr<RawRocksEngine> GetRawEngine();
+  std::shared_ptr<RocksRawEngine> GetRawEngine();
   dingodb::SnapshotPtr GetSnapshot();
   std::shared_ptr<rocksdb::DB> GetDB();
   ColumnFamilyPtr GetColumnFamily(const std::string& cf_name);
@@ -217,12 +217,12 @@ class Reader : public RawEngine::Reader {
   dingodb::IteratorPtr NewIterator(ColumnFamilyPtr column_family, dingodb::SnapshotPtr snapshot,
                                    IteratorOptions options);
 
-  std::weak_ptr<RawRocksEngine> raw_engine_;
+  std::weak_ptr<RocksRawEngine> raw_engine_;
 };
 
 class Writer : public RawEngine::Writer {
  public:
-  Writer(std::shared_ptr<RawRocksEngine> raw_engine) : raw_engine_(raw_engine) {}
+  Writer(std::shared_ptr<RocksRawEngine> raw_engine) : raw_engine_(raw_engine) {}
   ~Writer() override = default;
 
   butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) override;
@@ -238,27 +238,27 @@ class Writer : public RawEngine::Writer {
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
 
  private:
-  std::shared_ptr<RawRocksEngine> GetRawEngine();
+  std::shared_ptr<RocksRawEngine> GetRawEngine();
   std::shared_ptr<rocksdb::DB> GetDB();
   ColumnFamilyPtr GetColumnFamily(const std::string& cf_name);
   ColumnFamilyPtr GetDefaultColumnFamily();
 
-  std::weak_ptr<RawRocksEngine> raw_engine_;
+  std::weak_ptr<RocksRawEngine> raw_engine_;
 };
 
 }  // namespace rocks
 
-class RawRocksEngine : public RawEngine {
+class RocksRawEngine : public RawEngine {
  public:
-  RawRocksEngine();
-  ~RawRocksEngine() override;
+  RocksRawEngine();
+  ~RocksRawEngine() override;
 
-  RawRocksEngine(const RawRocksEngine& rhs) = delete;
-  RawRocksEngine& operator=(const RawRocksEngine& rhs) = delete;
-  RawRocksEngine(RawRocksEngine&& rhs) = delete;
-  RawRocksEngine& operator=(RawRocksEngine&& rhs) = delete;
+  RocksRawEngine(const RocksRawEngine& rhs) = delete;
+  RocksRawEngine& operator=(const RocksRawEngine& rhs) = delete;
+  RocksRawEngine(RocksRawEngine&& rhs) = delete;
+  RocksRawEngine& operator=(RocksRawEngine&& rhs) = delete;
 
-  std::shared_ptr<RawRocksEngine> GetSelfPtr();
+  std::shared_ptr<RocksRawEngine> GetSelfPtr();
 
   std::string GetName() override;
   pb::common::RawEngine GetRawEngineType() override;

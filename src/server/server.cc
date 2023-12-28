@@ -201,9 +201,9 @@ bool Server::InitEngine() {
   }
 #else
   // init rocksdb
-  auto raw_rocks_engine = std::make_shared<RawRocksEngine>();
+  auto raw_rocks_engine = std::make_shared<RocksRawEngine>();
   if (!raw_rocks_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
-    DINGO_LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
+    DINGO_LOG(ERROR) << "Init RocksRawEngine Failed with Config[" << config->ToString();
     return false;
   }
 #endif
@@ -212,9 +212,9 @@ bool Server::InitEngine() {
   meta_writer_ = std::make_shared<MetaWriter>(raw_rocks_engine);
 
   // init bdb
-  auto raw_bdb_engine = std::make_shared<RawBdbEngine>();
+  auto raw_bdb_engine = std::make_shared<BdbRawEngine>();
   if (!raw_bdb_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
-    DINGO_LOG(ERROR) << "Init RawBdbEngine Failed with Config[" << config->ToString();
+    DINGO_LOG(ERROR) << "Init BdbRawEngine Failed with Config[" << config->ToString();
     return false;
   }
 

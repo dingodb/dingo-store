@@ -23,7 +23,7 @@
 
 namespace dingodb {
 
-class RawBdbEngine;
+class BdbRawEngine;
 
 namespace bdb {
 
@@ -116,7 +116,7 @@ class Snapshot : public dingodb::Snapshot {
 
 class Reader : public RawEngine::Reader {
  public:
-  Reader(std::shared_ptr<RawBdbEngine> raw_engine) : raw_engine_(raw_engine) {}
+  Reader(std::shared_ptr<BdbRawEngine> raw_engine) : raw_engine_(raw_engine) {}
   ~Reader() override = default;
 
   butil::Status KvGet(const std::string& cf_name, const std::string& key, std::string& value) override;
@@ -141,17 +141,17 @@ class Reader : public RawEngine::Reader {
                                       const std::string& end_key, int32_t isolation_flag, int64_t& count);
 
  private:
-  std::shared_ptr<RawBdbEngine> GetRawEngine();
+  std::shared_ptr<BdbRawEngine> GetRawEngine();
   std::shared_ptr<Db> GetDb();
   dingodb::SnapshotPtr GetSnapshot();
   butil::Status RetrieveByCursor(const std::string& cf_name, DbTxn* txn, const std::string& key, std::string& value);
 
-  std::weak_ptr<RawBdbEngine> raw_engine_;
+  std::weak_ptr<BdbRawEngine> raw_engine_;
 };
 
 class Writer : public RawEngine::Writer {
  public:
-  Writer(std::shared_ptr<RawBdbEngine> raw_engine) : raw_engine_(raw_engine) {}
+  Writer(std::shared_ptr<BdbRawEngine> raw_engine) : raw_engine_(raw_engine) {}
   ~Writer() override = default;
 
   butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) override;
@@ -169,29 +169,29 @@ class Writer : public RawEngine::Writer {
  private:
   butil::Status DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn);
 
-  std::shared_ptr<RawBdbEngine> GetRawEngine();
+  std::shared_ptr<BdbRawEngine> GetRawEngine();
   std::shared_ptr<Db> GetDb();
 
-  std::weak_ptr<RawBdbEngine> raw_engine_;
+  std::weak_ptr<BdbRawEngine> raw_engine_;
   std::shared_ptr<Db> db_;
 };
 
 }  // namespace bdb
 
-class RawBdbEngine : public RawEngine {
+class BdbRawEngine : public RawEngine {
  public:
-  RawBdbEngine() = default;
-  ~RawBdbEngine() override = default;
+  BdbRawEngine() = default;
+  ~BdbRawEngine() override = default;
 
-  RawBdbEngine(const RawBdbEngine& rhs) = delete;
-  RawBdbEngine& operator=(const RawBdbEngine& rhs) = delete;
-  RawBdbEngine(RawBdbEngine&& rhs) = delete;
-  RawBdbEngine& operator=(RawBdbEngine&& rhs) = delete;
+  BdbRawEngine(const BdbRawEngine& rhs) = delete;
+  BdbRawEngine& operator=(const BdbRawEngine& rhs) = delete;
+  BdbRawEngine(BdbRawEngine&& rhs) = delete;
+  BdbRawEngine& operator=(BdbRawEngine&& rhs) = delete;
 
   // Open a DB database
   static int32_t OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, u_int32_t extra_flags);
   std::shared_ptr<Db> GetDb() { return db_; }
-  std::shared_ptr<RawBdbEngine> GetSelfPtr() { return std::dynamic_pointer_cast<RawBdbEngine>(shared_from_this()); }
+  std::shared_ptr<BdbRawEngine> GetSelfPtr() { return std::dynamic_pointer_cast<BdbRawEngine>(shared_from_this()); }
 
   // override functions
   bool Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) override;

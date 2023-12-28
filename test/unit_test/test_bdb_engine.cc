@@ -94,9 +94,9 @@ class RawBdbEngineTest : public testing::Test {
       return;
     }
 
-    engine = std::make_shared<RawBdbEngine>();
+    engine = std::make_shared<BdbRawEngine>();
     if (!engine->Init(config, {})) {
-      std::cout << "RawBdbEngine init failed" << '\n';
+      std::cout << "BdbRawEngine init failed" << '\n';
     }
   }
 
@@ -110,11 +110,11 @@ class RawBdbEngineTest : public testing::Test {
 
   void TearDown() override {}
 
-  static std::shared_ptr<RawBdbEngine> engine;
+  static std::shared_ptr<BdbRawEngine> engine;
   static std::shared_ptr<Config> config;
 };
 
-std::shared_ptr<RawBdbEngine> RawBdbEngineTest::engine = nullptr;
+std::shared_ptr<BdbRawEngine> RawBdbEngineTest::engine = nullptr;
 std::shared_ptr<Config> RawBdbEngineTest::config = nullptr;
 
 TEST_F(RawBdbEngineTest, GetName) {
