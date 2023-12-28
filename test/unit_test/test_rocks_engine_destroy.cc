@@ -34,8 +34,8 @@
 #include "config/config_manager.h"
 #include "config/yaml_config.h"
 #include "engine/engine.h"
-#include "engine/raw_rocks_engine.h"
 #include "engine/rocks_engine.h"
+#include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 

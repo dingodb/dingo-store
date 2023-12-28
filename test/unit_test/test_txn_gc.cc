@@ -38,7 +38,7 @@
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "engine/raw_engine.h"
-#include "engine/raw_rocks_engine.h"
+#include "engine/rocks_raw_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"

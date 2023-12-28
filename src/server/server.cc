@@ -34,11 +34,15 @@
 #include "config/config.h"
 #include "config/config_manager.h"
 #include "coordinator/coordinator_control.h"
+#include "engine/bdb_raw_engine.h"
 #include "engine/engine.h"
 #include "engine/mem_engine.h"
 #include "engine/raft_store_engine.h"
-#include "engine/raw_bdb_engine.h"
-#include "engine/raw_rocks_engine.h"
+#ifndef ENABLE_XDPROCKS
+#include "engine/rocks_raw_engine.h"
+#else
+#include "engine/xdprocks_raw_engine.h"
+#endif
 #include "engine/rocks_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
@@ -188,12 +192,21 @@ bool Server::InitDirectory() {
 bool Server::InitEngine() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
+#ifdef ENABLE_XDPROCKS
+  // init xdprocks
+  auto raw_rocks_engine = std::make_shared<XDPRocksRawEngine>();
+  if (!raw_rocks_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+    DINGO_LOG(ERROR) << "Init XDPRocksRawEngine Failed with Config[" << config->ToString();
+    return false;
+  }
+#else
   // init rocksdb
   auto raw_rocks_engine = std::make_shared<RawRocksEngine>();
   if (!raw_rocks_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init RawRocksEngine Failed with Config[" << config->ToString();
     return false;
   }
+#endif
 
   meta_reader_ = std::make_shared<MetaReader>(raw_rocks_engine);
   meta_writer_ = std::make_shared<MetaWriter>(raw_rocks_engine);

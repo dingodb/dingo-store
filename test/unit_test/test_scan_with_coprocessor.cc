@@ -32,7 +32,7 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "config/config_manager.h"
-#include "engine/raw_rocks_engine.h"
+#include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"

@@ -13,27 +13,37 @@
 # limitations under the License.
 
 INCLUDE(ExternalProject)
+message(STATUS "Include lz4...")
 
-SET(LZ4_SOURCES_DIR ${THIRD_PARTY_PATH}/lz4)
+SET(LZ4_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/lz4)
+SET(LZ4_BUILD_DIR ${THIRD_PARTY_PATH}/build/lz4)
 SET(LZ4_INSTALL_DIR ${THIRD_PARTY_PATH}/install/lz4)
 SET(LZ4_INCLUDE_DIR "${LZ4_INSTALL_DIR}/include" CACHE PATH "lz4 include directory." FORCE)
 SET(LZ4_LIBRARIES "${LZ4_INSTALL_DIR}/lib/liblz4.a" CACHE FILEPATH "lz4 library." FORCE)
 
-FILE(WRITE ${LZ4_SOURCES_DIR}/src/copy_repo.sh
-        "mkdir -p ${LZ4_SOURCES_DIR}/src/extern_lz4/ && cp -rf ${CMAKE_SOURCE_DIR}/contrib/lz4/* ${LZ4_SOURCES_DIR}/src/extern_lz4/")
+FILE(WRITE ${LZ4_SOURCES_DIR}/copy_repo.sh
+    "mkdir -p ${LZ4_BUILD_DIR} && cp -rf ${LZ4_SOURCES_DIR}/* ${LZ4_BUILD_DIR}/")
 
-execute_process(COMMAND sh ${LZ4_SOURCES_DIR}/src/copy_repo.sh)
+execute_process(COMMAND sh ${LZ4_SOURCES_DIR}/copy_repo.sh)
 
 ExternalProject_Add(
-        extern_lz4
-        ${EXTERNAL_PROJECT_LOG_ARGS}
-        PREFIX ${LZ4_SOURCES_DIR}
-        UPDATE_COMMAND ""
-        SOURCE_DIR ${LZ4_SOURCES_DIR}/src/extern_lz4/
-        CONFIGURE_COMMAND ""
-        BUILD_IN_SOURCE 1
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND mkdir -p ${LZ4_INSTALL_DIR}/lib/ COMMAND cp ${LZ4_SOURCES_DIR}/src/extern_lz4/lib/liblz4.a ${LZ4_INSTALL_DIR}/lib/ COMMAND cp -r ${LZ4_SOURCES_DIR}/src/extern_lz4/lib/lz4.h ${LZ4_INSTALL_DIR}/ COMMAND cp -r ${LZ4_SOURCES_DIR}/src/extern_lz4/lib/lz4hc.h ${LZ4_INSTALL_DIR}
+    extern_lz4
+    ${EXTERNAL_PROJECT_LOG_ARGS}
+
+    SOURCE_DIR ${LZ4_BUILD_DIR}
+    PREFIX ${LZ4_BUILD_DIR}
+
+    UPDATE_COMMAND ""
+    CONFIGURE_COMMAND ""
+    BUILD_IN_SOURCE 1
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND mkdir -p ${LZ4_INSTALL_DIR}/lib ${LZ4_INCLUDE_DIR}
+        COMMAND cp ${LZ4_BUILD_DIR}/lib/liblz4.a ${LZ4_INSTALL_DIR}/lib 
+        COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4.h ${LZ4_INCLUDE_DIR}
+        COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4hc.h ${LZ4_INCLUDE_DIR}
+        COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4file.h ${LZ4_INCLUDE_DIR}
+        COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4frame.h ${LZ4_INCLUDE_DIR}
+        COMMAND cp -r ${LZ4_BUILD_DIR}/lib/xxhash.h ${LZ4_INCLUDE_DIR}
 )
 
 ADD_LIBRARY(lz4 STATIC IMPORTED GLOBAL)

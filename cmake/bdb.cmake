@@ -13,6 +13,7 @@
 # limitations under the License.
 
 INCLUDE(ExternalProject)
+message(STATUS "Include bdb...")
 
 SET(BDB_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/bdb)
 SET(BDB_BINARY_DIR ${THIRD_PARTY_PATH}/build/bdb)
@@ -28,14 +29,15 @@ endif()
 
 
 ExternalProject_Add(
-extern_bdb
-        ${EXTERNAL_PROJECT_LOG_ARGS}
-        SOURCE_DIR ${BDB_SOURCES_DIR}
-        BINARY_DIR ${BDB_BINARY_DIR}
-        PREFIX ${BDB_INSTALL_DIR}
-        CONFIGURE_COMMAND ${BDB_SOURCES_DIR}/dist/configure --prefix ${BDB_INSTALL_DIR} --enable-cxx --enable-shared=no ${BDB_DEBUG_FLAG}
-        BUILD_COMMAND $(MAKE) libdb_cxx.a
-        INSTALL_COMMAND mkdir -p ${BDB_INSTALL_DIR}/lib/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/libdb_cxx.a ${BDB_INSTALL_DIR}/lib/ COMMAND mkdir ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db.h ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db_cxx.h ${BDB_INSTALL_DIR}/include/
+    extern_bdb
+    ${EXTERNAL_PROJECT_LOG_ARGS}
+    
+    SOURCE_DIR ${BDB_SOURCES_DIR}
+    BINARY_DIR ${BDB_BINARY_DIR}
+    PREFIX ${BDB_BINARY_DIR}
+    CONFIGURE_COMMAND ${BDB_SOURCES_DIR}/dist/configure --prefix ${BDB_INSTALL_DIR} --enable-cxx --enable-shared=no ${BDB_DEBUG_FLAG}
+    BUILD_COMMAND $(MAKE) libdb_cxx.a
+    INSTALL_COMMAND mkdir -p ${BDB_INSTALL_DIR}/lib/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/libdb_cxx.a ${BDB_INSTALL_DIR}/lib/ COMMAND mkdir ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db.h ${BDB_INSTALL_DIR}/include/ COMMAND cp ${THIRD_PARTY_PATH}/build/bdb/db_cxx.h ${BDB_INSTALL_DIR}/include/
 )
 
 ADD_LIBRARY(bdb STATIC IMPORTED GLOBAL)
