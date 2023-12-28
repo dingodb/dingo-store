@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_ROCKS_KV_ENGINE_H_  // NOLINT
-#define DINGODB_ENGINE_ROCKS_KV_ENGINE_H_
+#ifndef DINGODB_ENGINE_ROCKS_RAW_ENGINE_H_  // NOLINT
+#define DINGODB_ENGINE_ROCKS_RAW_ENGINE_H_
 
 #include <cstdint>
 #include <map>
@@ -276,9 +276,9 @@ class RawRocksEngine : public RawEngine {
   static rocks::SstFileWriterPtr NewSstFileWriter();
   rocks::CheckpointPtr NewCheckpoint();
 
-  static butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
-                                            const std::vector<std::string>& cf_names,
-                                            std::vector<std::string>& merge_sst_paths);
+  butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
+                                     const std::vector<std::string>& cf_names,
+                                     std::vector<std::string>& merge_sst_paths) override;
 
   butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) override;
 
@@ -308,4 +308,4 @@ class RawRocksEngine : public RawEngine {
 
 }  // namespace dingodb
 
-#endif  // DINGODB_ENGINE_ROCKS_KV_ENGINE_H_  // NOLINT
+#endif  // DINGODB_ENGINE_ROCKS_RAW_ENGINE_H_  // NOLINT

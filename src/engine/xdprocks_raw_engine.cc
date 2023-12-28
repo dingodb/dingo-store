@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "engine/raw_rocks_engine.h"
+#include "engine/xdprocks_raw_engine.h"
 
 #include <elf.h>
 
@@ -46,22 +46,22 @@
 #include "google/protobuf/message_lite.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
-#include "rocksdb/advanced_options.h"
-#include "rocksdb/cache.h"
-#include "rocksdb/db.h"
-#include "rocksdb/filter_policy.h"
-#include "rocksdb/iterator.h"
-#include "rocksdb/table.h"
-#include "rocksdb/write_batch.h"
 #include "server/server.h"
 #include "store/heartbeat.h"
+#include "xdprocks/advanced_options.h"
+#include "xdprocks/cache.h"
+#include "xdprocks/db.h"
+#include "xdprocks/filter_policy.h"
+#include "xdprocks/iterator.h"
+#include "xdprocks/table.h"
+#include "xdprocks/write_batch.h"
 
 namespace dingodb {
 
-namespace rocks {
+namespace xdp {
 
 ColumnFamily::ColumnFamily(const std::string& cf_name, const ColumnFamilyConfig& config,
-                           rocksdb::ColumnFamilyHandle* handle)
+                           xdprocks::ColumnFamilyHandle* handle)
     : name_(cf_name), config_(config), handle_(handle) {}
 
 ColumnFamily::ColumnFamily(const std::string& cf_name, const ColumnFamilyConfig& config)
@@ -88,10 +88,10 @@ std::string ColumnFamily::GetConfItem(const std::string& name) {
 
 void ColumnFamily::Dump() {
   for (const auto& [name, value] : config_) {
-    DINGO_LOG(INFO) << fmt::format("[rocksdb.dump][column_family({})] {} : {}", Name(), name, value);
+    DINGO_LOG(INFO) << fmt::format("[xdprocks.dump][column_family({})] {} : {}", Name(), name, value);
   }
 
-  DINGO_LOG(INFO) << fmt::format("[rocksdb.dump][column_family({})] end.....................", Name());
+  DINGO_LOG(INFO) << fmt::format("[xdprocks.dump][column_family({})] end.....................", Name());
 }
 
 bool Iterator::Valid() const {
@@ -100,13 +100,13 @@ bool Iterator::Valid() const {
   }
 
   if (!options_.upper_bound.empty()) {
-    auto upper_bound = rocksdb::Slice(options_.upper_bound);
+    auto upper_bound = xdprocks::Slice(options_.upper_bound);
     if (upper_bound.compare(iter_->key()) <= 0) {
       return false;
     }
   }
   if (!options_.lower_bound.empty()) {
-    auto lower_bound = rocksdb::Slice(options_.lower_bound);
+    auto lower_bound = xdprocks::Slice(options_.lower_bound);
     if (lower_bound.compare(iter_->key()) > 0) {
       return false;
     }
@@ -159,7 +159,7 @@ butil::Status SstFileWriter::SaveFile(std::shared_ptr<dingodb::Iterator> iter, c
 
   status = sst_writer_->Finish();
   if (!status.ok()) {
-    return butil::Status((status.code() == rocksdb::Status::Code::kInvalidArgument &&
+    return butil::Status((status.code() == xdprocks::Status::Code::kInvalidArgument &&
                           status.ToString().find("no entries") != std::string::npos)
                              ? pb::error::ENO_ENTRIES
                              : static_cast<int>(status.code()),
@@ -169,24 +169,24 @@ butil::Status SstFileWriter::SaveFile(std::shared_ptr<dingodb::Iterator> iter, c
   return butil::Status();
 }
 
-std::shared_ptr<RawRocksEngine> Checkpoint::GetRawEngine() {
+std::shared_ptr<XDPRocksRawEngine> Checkpoint::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
-    DINGO_LOG(FATAL) << "[rocksdb] get raw engine failed.";
+    DINGO_LOG(FATAL) << "[xdprocks] get raw engine failed.";
   }
 
   return raw_engine;
 }
 
-std::shared_ptr<rocksdb::DB> Checkpoint::GetDB() { return GetRawEngine()->GetDB(); }
-std::vector<rocks::ColumnFamilyPtr> Checkpoint::GetColumnFamilies(const std::vector<std::string>& cf_names) {
+std::shared_ptr<xdprocks::DB> Checkpoint::GetDB() { return GetRawEngine()->GetDB(); }
+std::vector<xdp::ColumnFamilyPtr> Checkpoint::GetColumnFamilies(const std::vector<std::string>& cf_names) {
   return GetRawEngine()->GetColumnFamilies(cf_names);
 }
 
 butil::Status Checkpoint::Create(const std::string& dirpath) {
-  // std::unique_ptr<rocksdb::Checkpoint> checkpoint = std::make_unique<rocksdb::Checkpoint>();
-  rocksdb::Checkpoint* checkpoint = nullptr;
-  auto status = rocksdb::Checkpoint::Create(GetDB().get(), &checkpoint);
+  // std::unique_ptr<xdprocks::Checkpoint> checkpoint = std::make_unique<xdprocks::Checkpoint>();
+  xdprocks::Checkpoint* checkpoint = nullptr;
+  auto status = xdprocks::Checkpoint::Create(GetDB().get(), &checkpoint);
   if (!status.ok()) {
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
@@ -204,46 +204,46 @@ butil::Status Checkpoint::Create(const std::string& dirpath) {
 
 butil::Status Checkpoint::Create(const std::string& dirpath, const std::vector<std::string>& cf_names,
                                  std::vector<pb::store_internal::SstFileInfo>& sst_files) {
-  rocksdb::Checkpoint* checkpoint = nullptr;
-  auto status = rocksdb::Checkpoint::Create(GetDB().get(), &checkpoint);
+  xdprocks::Checkpoint* checkpoint = nullptr;
+  auto status = xdprocks::Checkpoint::Create(GetDB().get(), &checkpoint);
   if (!status.ok()) {
     delete checkpoint;
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] create checkpoint failed, error: {}.", status.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] create checkpoint failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
   status = GetDB()->DisableFileDeletions();
   if (!status.ok()) {
     delete checkpoint;
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] disable file deletion failed, error: {}.", status.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] disable file deletion failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
   status = checkpoint->CreateCheckpoint(dirpath);
   if (!status.ok()) {
     GetDB()->EnableFileDeletions(false);
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] export column family checkpoint failed, error: {}.", status.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] export column family checkpoint failed, error: {}.", status.ToString());
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
   }
 
-  std::vector<rocksdb::ColumnFamilyMetaData> meta_datas;
+  std::vector<xdprocks::ColumnFamilyMetaData> meta_datas;
 
   auto column_families = GetColumnFamilies(cf_names);
   for (const auto& column_family : column_families) {
-    rocksdb::ColumnFamilyMetaData meta_data;
+    xdprocks::ColumnFamilyMetaData meta_data;
     GetDB()->GetColumnFamilyMetaData(column_family->GetHandle(), &meta_data);
     meta_datas.push_back(meta_data);
   }
 
   status = GetDB()->EnableFileDeletions(false);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] enable file deletion failed, error: {}.", status.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] enable file deletion failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
   if (column_families.size() != meta_datas.size()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] column_families.size() != meta_datas.size()") << column_families.size()
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] column_families.size() != meta_datas.size()") << column_families.size()
                      << " != " << meta_datas.size();
     return butil::Status(pb::error::EINTERNAL, "Internal error");
   }
@@ -256,7 +256,7 @@ butil::Status Checkpoint::Create(const std::string& dirpath, const std::vector<s
       for (const auto& file : level.files) {
         std::string filepath = dirpath + file.name;
         if (!Helper::IsExistPath(filepath)) {
-          DINGO_LOG(INFO) << fmt::format("[rocksdb] checkpoint not contain sst file: {}", filepath);
+          DINGO_LOG(INFO) << fmt::format("[xdprocks] checkpoint not contain sst file: {}", filepath);
           continue;
         }
 
@@ -297,10 +297,10 @@ butil::Status Checkpoint::Create(const std::string& dirpath, const std::vector<s
   return butil::Status();
 }
 
-std::shared_ptr<RawRocksEngine> Reader::GetRawEngine() {
+std::shared_ptr<XDPRocksRawEngine> Reader::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
-    DINGO_LOG(FATAL) << "[rocksdb] get raw engine failed.";
+    DINGO_LOG(FATAL) << "[xdprocks] get raw engine failed.";
   }
 
   return raw_engine;
@@ -308,7 +308,7 @@ std::shared_ptr<RawRocksEngine> Reader::GetRawEngine() {
 
 dingodb::SnapshotPtr Reader::GetSnapshot() { return GetRawEngine()->GetSnapshot(); }
 
-std::shared_ptr<rocksdb::DB> Reader::GetDB() { return GetRawEngine()->GetDB(); }
+std::shared_ptr<xdprocks::DB> Reader::GetDB() { return GetRawEngine()->GetDB(); }
 
 ColumnFamilyPtr Reader::GetColumnFamily(const std::string& cf_name) { return GetRawEngine()->GetColumnFamily(cf_name); }
 
@@ -327,18 +327,18 @@ butil::Status Reader::KvGet(const std::string& cf_name, std::shared_ptr<dingodb:
 butil::Status Reader::KvGet(ColumnFamilyPtr column_family, dingodb::SnapshotPtr snapshot, const std::string& key,
                             std::string& value) {
   if (BAIDU_UNLIKELY(key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  rocksdb::ReadOptions read_option;
-  read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
-  rocksdb::Status s = GetDB()->Get(read_option, column_family->GetHandle(), rocksdb::Slice(key), &value);
+  xdprocks::ReadOptions read_option;
+  read_option.snapshot = static_cast<const xdprocks::Snapshot*>(snapshot->Inner());
+  xdprocks::Status s = GetDB()->Get(read_option, column_family->GetHandle(), xdprocks::Slice(key), &value);
   if (!s.ok()) {
     if (s.IsNotFound()) {
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
     }
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] get key failed, error: {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] get key failed, error: {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal get error");
   }
 
@@ -349,21 +349,21 @@ butil::Status Reader::KvScan(ColumnFamilyPtr column_family, std::shared_ptr<ding
                              const std::string& start_key, const std::string& end_key,
                              std::vector<pb::common::KeyValue>& kvs) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty start_key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty start_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   if (BAIDU_UNLIKELY(end_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty end_key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty end_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  rocksdb::ReadOptions read_option;
+  xdprocks::ReadOptions read_option;
   read_option.auto_prefix_mode = true;
-  read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  read_option.snapshot = static_cast<const xdprocks::Snapshot*>(snapshot->Inner());
 
   std::string_view end_key_view(end_key);
-  rocksdb::Iterator* it = GetDB()->NewIterator(read_option, column_family->GetHandle());
+  xdprocks::Iterator* it = GetDB()->NewIterator(read_option, column_family->GetHandle());
   for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
     pb::common::KeyValue kv;
     kv.set_key(it->key().data(), it->key().size());
@@ -390,21 +390,21 @@ butil::Status Reader::KvScan(const std::string& cf_name, std::shared_ptr<dingodb
 butil::Status Reader::KvCount(ColumnFamilyPtr column_family, dingodb::SnapshotPtr snapshot,
                               const std::string& start_key, const std::string& end_key, int64_t& count) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty start_key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty start_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   if (BAIDU_UNLIKELY(end_key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty end_key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty end_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  rocksdb::ReadOptions read_options;
+  xdprocks::ReadOptions read_options;
   read_options.auto_prefix_mode = true;
-  read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  read_options.snapshot = static_cast<const xdprocks::Snapshot*>(snapshot->Inner());
 
   std::string_view end_key_view(end_key.data(), end_key.size());
-  rocksdb::Iterator* it = GetDB()->NewIterator(read_options, column_family->GetHandle());
+  xdprocks::Iterator* it = GetDB()->NewIterator(read_options, column_family->GetHandle());
   for (it->Seek(start_key), count = 0; it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
     ++count;
   }
@@ -426,10 +426,10 @@ butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr s
 dingodb::IteratorPtr Reader::NewIterator(ColumnFamilyPtr column_family, dingodb::SnapshotPtr snapshot,
                                          IteratorOptions options) {
   // Correct free iterate_upper_bound
-  // auto slice = std::make_unique<rocksdb::Slice>(options.upper_bound);
-  rocksdb::ReadOptions read_options;
+  // auto slice = std::make_unique<xdprocks::Slice>(options.upper_bound);
+  xdprocks::ReadOptions read_options;
   if (snapshot != nullptr) {
-    read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+    read_options.snapshot = static_cast<const xdprocks::Snapshot*>(snapshot->Inner());
   }
   read_options.auto_prefix_mode = true;
 
@@ -445,16 +445,16 @@ dingodb::IteratorPtr Reader::NewIterator(const std::string& cf_name, dingodb::Sn
   return NewIterator(GetColumnFamily(cf_name), snapshot, options);
 }
 
-std::shared_ptr<RawRocksEngine> Writer::GetRawEngine() {
+std::shared_ptr<XDPRocksRawEngine> Writer::GetRawEngine() {
   auto raw_engine = raw_engine_.lock();
   if (raw_engine == nullptr) {
-    DINGO_LOG(FATAL) << "[rocksdb] get raw engine failed.";
+    DINGO_LOG(FATAL) << "[xdprocks] get raw engine failed.";
   }
 
   return raw_engine;
 }
 
-std::shared_ptr<rocksdb::DB> Writer::GetDB() { return GetRawEngine()->GetDB(); }
+std::shared_ptr<xdprocks::DB> Writer::GetDB() { return GetRawEngine()->GetDB(); }
 
 ColumnFamilyPtr Writer::GetColumnFamily(const std::string& cf_name) { return GetRawEngine()->GetColumnFamily(cf_name); }
 
@@ -462,15 +462,15 @@ ColumnFamilyPtr Writer::GetDefaultColumnFamily() { return GetRawEngine()->GetDef
 
 butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) {
   if (BAIDU_UNLIKELY(kv.key().empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  rocksdb::WriteOptions write_options;
-  rocksdb::Status s = GetDB()->Put(write_options, GetColumnFamily(cf_name)->GetHandle(), rocksdb::Slice(kv.key()),
-                                   rocksdb::Slice(kv.value()));
+  xdprocks::WriteOptions write_options;
+  xdprocks::Status s = GetDB()->Put(write_options, GetColumnFamily(cf_name)->GetHandle(), xdprocks::Slice(kv.key()),
+                                    xdprocks::Slice(kv.value()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}.", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] put failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal put error");
   }
 
@@ -481,21 +481,21 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
                                           const std::vector<pb::common::KeyValue>& kvs_to_put,
                                           const std::vector<std::string>& keys_to_delete) {
   if (BAIDU_UNLIKELY(kvs_to_put.empty() && keys_to_delete.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty keys.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty keys.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
   auto column_family = GetColumnFamily(cf_name);
 
-  rocksdb::WriteBatch batch;
+  xdprocks::WriteBatch batch;
   for (const auto& kv : kvs_to_put) {
     if (BAIDU_UNLIKELY(kv.key().empty())) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty key.");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     } else {
-      rocksdb::Status s = batch.Put(column_family->GetHandle(), kv.key(), kv.value());
+      xdprocks::Status s = batch.Put(column_family->GetHandle(), kv.key(), kv.value());
       if (BAIDU_UNLIKELY(!s.ok())) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] batch put failed, error: {}.", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] batch put failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal put error");
       }
     }
@@ -503,20 +503,20 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 
   for (const auto& key : keys_to_delete) {
     if (BAIDU_UNLIKELY(key.empty())) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty key.");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     } else {
-      rocksdb::Status s = batch.Delete(column_family->GetHandle(), key);
+      xdprocks::Status s = batch.Delete(column_family->GetHandle(), key);
       if (BAIDU_UNLIKELY(!s.ok())) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] batch delete failed, error: {}.", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] batch delete failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete error");
       }
     }
   }
-  rocksdb::WriteOptions write_options;
-  rocksdb::Status s = GetDB()->Write(write_options, &batch);
+  xdprocks::WriteOptions write_options;
+  xdprocks::Status s = GetDB()->Write(write_options, &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] write failed, error: {}", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
@@ -526,26 +526,26 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 butil::Status Writer::KvBatchPutAndDelete(
     const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
     const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) {
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] KvBatchPutAndDelete put kv size: {} delete kv size: {}",
+  DINGO_LOG(INFO) << fmt::format("[xdprocks] KvBatchPutAndDelete put kv size: {} delete kv size: {}",
                                  kv_puts_with_cf.size(), kv_deletes_with_cf.size());
 
-  rocksdb::WriteBatch batch;
+  xdprocks::WriteBatch batch;
   for (const auto& [cf_name, kv_puts] : kv_puts_with_cf) {
     if (BAIDU_UNLIKELY(kv_puts.empty())) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] keys empty not support");
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] keys empty not support");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
     auto column_family = GetColumnFamily(cf_name);
     for (const auto& kv : kv_puts) {
       if (BAIDU_UNLIKELY(kv.key().empty())) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] key empty not support");
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] key empty not support");
         return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
       }
 
-      rocksdb::Status s = batch.Put(column_family->GetHandle(), kv.key(), kv.value());
+      xdprocks::Status s = batch.Put(column_family->GetHandle(), kv.key(), kv.value());
       if (BAIDU_UNLIKELY(!s.ok())) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] put failed, error: {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal put error");
       }
     }
@@ -553,30 +553,30 @@ butil::Status Writer::KvBatchPutAndDelete(
 
   for (const auto& [cf_name, kv_deletes] : kv_deletes_with_cf) {
     if (BAIDU_UNLIKELY(kv_deletes.empty())) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] keys empty not support");
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] keys empty not support");
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
     auto column_family = GetColumnFamily(cf_name);
     for (const auto& key : kv_deletes) {
       if (BAIDU_UNLIKELY(key.empty())) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] key empty not support");
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] key empty not support");
         return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
       }
 
-      rocksdb::Status s = batch.Delete(column_family->GetHandle(), key);
+      xdprocks::Status s = batch.Delete(column_family->GetHandle(), key);
       if (BAIDU_UNLIKELY(!s.ok())) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] put failed, error: {}", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] put failed, error: {}", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete error");
       }
     }
   }
 
-  rocksdb::WriteOptions write_options;
-  rocksdb::Status s = GetDB()->Write(write_options, &batch);
+  xdprocks::WriteOptions write_options;
+  xdprocks::Status s = GetDB()->Write(write_options, &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}", s.ToString());
-    return butil::Status(pb::error::EINTERNAL, fmt::format("rocksdb::DB::Write failed : {}", s.ToString()));
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] write failed, error: {}", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, fmt::format("xdprocks::DB::Write failed : {}", s.ToString()));
   }
 
   return butil::Status::OK();
@@ -584,15 +584,15 @@ butil::Status Writer::KvBatchPutAndDelete(
 
 butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& key) {
   if (BAIDU_UNLIKELY(key.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] not support empty key.");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  rocksdb::WriteOptions const write_options;
-  rocksdb::Status const s =
-      GetDB()->Delete(write_options, GetColumnFamily(cf_name)->GetHandle(), rocksdb::Slice(key.data(), key.size()));
+  xdprocks::WriteOptions const write_options;
+  xdprocks::Status const s =
+      GetDB()->Delete(write_options, GetColumnFamily(cf_name)->GetHandle(), xdprocks::Slice(key.data(), key.size()));
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete failed, error: {}.", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] delete failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal delete error");
   }
 
@@ -607,16 +607,16 @@ butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
   }
 
-  rocksdb::WriteBatch batch;
-  rocksdb::Status s = batch.DeleteRange(GetColumnFamily(cf_name)->GetHandle(), range.start_key(), range.end_key());
+  xdprocks::WriteBatch batch;
+  xdprocks::Status s = batch.DeleteRange(GetColumnFamily(cf_name)->GetHandle(), range.start_key(), range.end_key());
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] delete range failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
   }
 
-  s = GetDB()->Write(rocksdb::WriteOptions(), &batch);
+  s = GetDB()->Write(xdprocks::WriteOptions(), &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] write failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
@@ -624,7 +624,7 @@ butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common
 }
 
 butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
-  rocksdb::WriteBatch batch;
+  xdprocks::WriteBatch batch;
   for (const auto& [cf_name, ranges] : range_with_cfs) {
     auto column_family = GetColumnFamily(cf_name);
     for (const auto& range : ranges) {
@@ -635,31 +635,31 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
       }
 
-      rocksdb::Status s = batch.DeleteRange(column_family->GetHandle(), range.start_key(), range.end_key());
+      xdprocks::Status s = batch.DeleteRange(column_family->GetHandle(), range.start_key(), range.end_key());
       if (!s.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] delete range failed, error: {}.", s.ToString());
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] delete range failed, error: {}.", s.ToString());
         return butil::Status(pb::error::EINTERNAL, "Internal delete range error");
       }
     }
   }
 
-  rocksdb::Status s = GetDB()->Write(rocksdb::WriteOptions(), &batch);
+  xdprocks::Status s = GetDB()->Write(xdprocks::WriteOptions(), &batch);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] write failed, error: {}.", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] write failed, error: {}.", s.ToString());
     return butil::Status(pb::error::EINTERNAL, "Internal write error");
   }
 
   return butil::Status();
 }
 
-}  // namespace rocks
+}  // namespace xdp
 
-RawRocksEngine::RawRocksEngine() : db_(nullptr), column_families_({}) {}
+XDPRocksRawEngine::XDPRocksRawEngine() : db_(nullptr), column_families_({}) {}
 
-RawRocksEngine::~RawRocksEngine() = default;
+XDPRocksRawEngine::~XDPRocksRawEngine() = default;
 
-static rocks::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
-  rocks::ColumnFamily::ColumnFamilyConfig default_config;
+static xdp::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
+  xdp::ColumnFamily::ColumnFamilyConfig default_config;
   default_config.emplace(Constant::kBlockSize, Constant::kBlockSizeDefaultValue);
   default_config.emplace(Constant::kBlockCache, Constant::kBlockCacheDefaultValue);
   default_config.emplace(Constant::kArenaBlockSize, Constant::kArenaBlockSizeDefaultValue);
@@ -672,16 +672,15 @@ static rocks::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<s
   default_config.emplace(Constant::kTargetFileSizeBase, Constant::kTargetFileSizeBaseDefaultValue);
   default_config.emplace(Constant::kMaxBytesForLevelMultiplier, Constant::kMaxBytesForLevelMultiplierDefaultValue);
 
-  rocks::ColumnFamilyMap column_families;
+  xdp::ColumnFamilyMap column_families;
   for (const auto& cf_name : column_family_names) {
-    column_families.emplace(cf_name, rocks::ColumnFamily::New(cf_name, default_config));
+    column_families.emplace(cf_name, xdp::ColumnFamily::New(cf_name, default_config));
   }
 
   return column_families;
 }
 
-static void SetColumnFamilyCustomConfig(const std::shared_ptr<Config>& config,
-                                        rocks::ColumnFamilyMap& column_families) {
+static void SetColumnFamilyCustomConfig(const std::shared_ptr<Config>& config, xdp::ColumnFamilyMap& column_families) {
   // store.base config
   const auto base_cf_config = config->GetStringMap(Constant::kBaseColumnFamily);
   auto base_column_family_names = config->GetStringList(Constant::kColumnFamilies);
@@ -711,9 +710,9 @@ static void SetColumnFamilyCustomConfig(const std::shared_ptr<Config>& config,
 }
 
 template <typename T>
-bool CastValue(std::string value, T& dst_value) {
+static bool CastValue(std::string value, T& dst_value) {
   if (value.empty()) {
-    DINGO_LOG(FATAL) << fmt::format("[rocksdb] value is empty.");
+    DINGO_LOG(FATAL) << fmt::format("[xdprocks] value is empty.");
     return false;
   }
 
@@ -735,14 +734,14 @@ bool CastValue(std::string value, T& dst_value) {
     } else if (std::is_same_v<double, std::remove_reference_t<std::remove_cv_t<T>>>) {
       dst_value = std::stod(value);
     } else {
-      DINGO_LOG(FATAL) << fmt::format("[rocksdb] not match type failed, value: {}.", value);
+      DINGO_LOG(FATAL) << fmt::format("[xdprocks] not match type failed, value: {}.", value);
       return false;
     }
   } catch (const std::invalid_argument& e) {
-    DINGO_LOG(FATAL) << fmt::format("[rocksdb] cast type failed, value: {} error: {}.", value, e.what());
+    DINGO_LOG(FATAL) << fmt::format("[xdprocks] cast type failed, value: {} error: {}.", value, e.what());
     return false;
   } catch (const std::out_of_range& e) {
-    DINGO_LOG(FATAL) << fmt::format("[rocksdb] cast type failed, value: {} error: {}.", value, e.what());
+    DINGO_LOG(FATAL) << fmt::format("[xdprocks] cast type failed, value: {} error: {}.", value, e.what());
     return false;
   }
 
@@ -756,9 +755,9 @@ bool CastValue(std::string value, std::string& dst_value) {
 }
 
 // set cf config
-static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnFamilyPtr column_family) {
-  rocksdb::ColumnFamilyOptions family_options;
-  rocksdb::BlockBasedTableOptions table_options;
+static xdprocks::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(xdp::ColumnFamilyPtr column_family) {
+  xdprocks::ColumnFamilyOptions family_options;
+  xdprocks::BlockBasedTableOptions table_options;
 
   // block_size
   CastValue(column_family->GetConfItem(Constant::kBlockSize), table_options.block_size);
@@ -768,7 +767,7 @@ static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnF
     size_t option_value = 0;
     CastValue(column_family->GetConfItem(Constant::kBlockCache), option_value);
 
-    table_options.block_cache = rocksdb::NewLRUCache(option_value);  // LRUcache
+    table_options.block_cache = xdprocks::NewLRUCache(option_value);  // LRUcache
   }
 
   // arena_block_size
@@ -796,7 +795,7 @@ static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnF
     size_t value = 0;
     CastValue(column_family->GetConfItem(Constant::kPrefixExtractor), value);
 
-    family_options.prefix_extractor.reset(rocksdb::NewCappedPrefixTransform(value));
+    family_options.prefix_extractor.reset(xdprocks::NewCappedPrefixTransform(value));
   }
 
   // max_bytes_for_level_base
@@ -806,44 +805,44 @@ static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnF
   CastValue(column_family->GetConfItem(Constant::kTargetFileSizeBase), family_options.target_file_size_base);
 
   family_options.compression_per_level = {
-      rocksdb::CompressionType::kNoCompression,  rocksdb::CompressionType::kNoCompression,
-      rocksdb::CompressionType::kLZ4Compression, rocksdb::CompressionType::kLZ4Compression,
-      rocksdb::CompressionType::kLZ4Compression, rocksdb::CompressionType::kZSTD,
-      rocksdb::CompressionType::kZSTD,
+      xdprocks::CompressionType::kNoCompression,  xdprocks::CompressionType::kNoCompression,
+      xdprocks::CompressionType::kLZ4Compression, xdprocks::CompressionType::kLZ4Compression,
+      xdprocks::CompressionType::kLZ4Compression, xdprocks::CompressionType::kZSTD,
+      xdprocks::CompressionType::kZSTD,
   };
 
-  table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10.0, false));
+  table_options.filter_policy.reset(xdprocks::NewBloomFilterPolicy(10.0, false));
   table_options.whole_key_filtering = true;
 
-  rocksdb::TableFactory* table_factory = NewBlockBasedTableFactory(table_options);
+  xdprocks::TableFactory* table_factory = NewBlockBasedTableFactory(table_options);
   family_options.table_factory.reset(table_factory);
 
   return family_options;
 }
 
-static rocksdb::DB* InitDB(const std::string& db_path, rocks::ColumnFamilyMap& column_families) {
-  // Cast ColumnFamily to rocksdb::ColumnFamilyOptions
-  std::vector<rocksdb::ColumnFamilyDescriptor> column_family_descs;
+static xdprocks::DB* InitDB(const std::string& db_path, xdp::ColumnFamilyMap& column_families) {
+  // Cast ColumnFamily to xdprocks::ColumnFamilyOptions
+  std::vector<xdprocks::ColumnFamilyDescriptor> column_family_descs;
   for (auto [cf_name, column_family] : column_families) {
     column_family->Dump();
-    rocksdb::ColumnFamilyOptions family_options = GenRcoksDBColumnFamilyOptions(column_family);
-    column_family_descs.push_back(rocksdb::ColumnFamilyDescriptor(cf_name, family_options));
+    xdprocks::ColumnFamilyOptions family_options = GenRcoksDBColumnFamilyOptions(column_family);
+    column_family_descs.push_back(xdprocks::ColumnFamilyDescriptor(cf_name, family_options));
   }
 
-  rocksdb::DBOptions db_options;
+  xdprocks::DBOptions db_options;
   db_options.create_if_missing = true;
   db_options.create_missing_column_families = true;
   db_options.max_background_jobs = ConfigHelper::GetRocksDBBackgroundThreadNum();
   db_options.max_subcompactions = db_options.max_background_jobs / 4 * 3;
   db_options.stats_dump_period_sec = ConfigHelper::GetRocksDBStatsDumpPeriodSec();
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] config max_background_jobs({}) max_subcompactions({})",
+  DINGO_LOG(INFO) << fmt::format("[xdprocks] config max_background_jobs({}) max_subcompactions({})",
                                  db_options.max_background_jobs, db_options.max_subcompactions);
 
-  rocksdb::DB* db;
-  std::vector<rocksdb::ColumnFamilyHandle*> family_handles;
-  rocksdb::Status s = rocksdb::DB::Open(db_options, db_path, column_family_descs, &family_handles, &db);
+  xdprocks::DB* db;
+  std::vector<xdprocks::ColumnFamilyHandle*> family_handles;
+  xdprocks::Status s = xdprocks::DB::Open(db_options, db_path, column_family_descs, &family_handles, &db);
   if (!s.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] open db failed, error: {}", s.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] open db failed, error: {}", s.ToString());
     return nullptr;
   }
 
@@ -856,67 +855,68 @@ static rocksdb::DB* InitDB(const std::string& db_path, rocks::ColumnFamilyMap& c
   return db;
 }
 
-// load rocksdb config from config file
-bool RawRocksEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) {
+// load xdprocks config from config file
+bool XDPRocksRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& cf_names) {
+  DINGO_LOG(INFO) << "Init xdprocks raw engine...";
   if (BAIDU_UNLIKELY(!config)) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] config empty not support!");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] config empty not support!");
     return false;
   }
 
-  std::string db_path = config->GetString(Constant::kStorePathConfigName) + "/rocksdb";
+  std::string db_path = config->GetString(Constant::kStorePathConfigName) + "/xdprocks";
   if (BAIDU_UNLIKELY(db_path.empty())) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] can not find: {}/rocksdb", Constant::kStorePathConfigName);
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] can not find: {}/xdprocks", Constant::kStorePathConfigName);
     return false;
   }
 
   db_path_ = db_path;
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] db path: {}", db_path_);
+  DINGO_LOG(INFO) << fmt::format("[xdprocks] db path: {}", db_path_);
 
   // Column family config priority custom(store.$cf_name) > custom(store.base) > default.
   auto column_families = GenColumnFamilyByDefaultConfig(cf_names);
   SetColumnFamilyCustomConfig(config, column_families);
 
-  rocksdb::DB* db = InitDB(db_path_, column_families);
+  xdprocks::DB* db = InitDB(db_path_, column_families);
   if (db == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] open failed, path: {}", db_path_);
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] open failed, path: {}", db_path_);
     return false;
   }
   column_families_ = column_families;
   db_.reset(db);
 
-  reader_ = std::make_shared<rocks::Reader>(GetSelfPtr());
-  writer_ = std::make_shared<rocks::Writer>(GetSelfPtr());
+  reader_ = std::make_shared<xdp::Reader>(GetSelfPtr());
+  writer_ = std::make_shared<xdp::Writer>(GetSelfPtr());
 
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] open success, path: {}", db_path_);
+  DINGO_LOG(INFO) << fmt::format("[xdprocks] open success, path: {}", db_path_);
 
   return true;
 }
 
-std::shared_ptr<RawRocksEngine> RawRocksEngine::GetSelfPtr() {
-  return std::dynamic_pointer_cast<RawRocksEngine>(shared_from_this());
+std::shared_ptr<XDPRocksRawEngine> XDPRocksRawEngine::GetSelfPtr() {
+  return std::dynamic_pointer_cast<XDPRocksRawEngine>(shared_from_this());
 }
 
-std::string RawRocksEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_ROCKSDB); }
+std::string XDPRocksRawEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_ROCKSDB); }
 
-pb::common::RawEngine RawRocksEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_ROCKSDB; }
+pb::common::RawEngine XDPRocksRawEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_ROCKSDB; }
 
-std::string RawRocksEngine::DbPath() { return db_path_; }
+std::string XDPRocksRawEngine::DbPath() { return db_path_; }
 
-std::shared_ptr<rocksdb::DB> RawRocksEngine::GetDB() { return db_; }
+std::shared_ptr<xdprocks::DB> XDPRocksRawEngine::GetDB() { return db_; }
 
-rocks::ColumnFamilyPtr RawRocksEngine::GetDefaultColumnFamily() { return GetColumnFamily(Constant::kStoreDataCF); }
+xdp::ColumnFamilyPtr XDPRocksRawEngine::GetDefaultColumnFamily() { return GetColumnFamily(Constant::kStoreDataCF); }
 
-rocks::ColumnFamilyPtr RawRocksEngine::GetColumnFamily(const std::string& cf_name) {
+xdp::ColumnFamilyPtr XDPRocksRawEngine::GetColumnFamily(const std::string& cf_name) {
   auto it = column_families_.find(cf_name);
   if (it == column_families_.end()) {
-    DINGO_LOG(FATAL) << fmt::format("[rocksdb] Not found column family {}", cf_name);
+    DINGO_LOG(FATAL) << fmt::format("[xdprocks] Not found column family {}", cf_name);
   }
 
   return it->second;
 }
 
-std::vector<rocks::ColumnFamilyPtr> RawRocksEngine::GetColumnFamilies(const std::vector<std::string>& cf_names) {
-  std::vector<rocks::ColumnFamilyPtr> column_families;
+std::vector<xdp::ColumnFamilyPtr> XDPRocksRawEngine::GetColumnFamilies(const std::vector<std::string>& cf_names) {
+  std::vector<xdp::ColumnFamilyPtr> column_families;
   column_families.reserve(cf_names.size());
   for (const auto& cf_name : cf_names) {
     auto column_family = GetColumnFamily(cf_name);
@@ -928,29 +928,29 @@ std::vector<rocks::ColumnFamilyPtr> RawRocksEngine::GetColumnFamilies(const std:
   return column_families;
 }
 
-dingodb::SnapshotPtr RawRocksEngine::GetSnapshot() {
-  return std::make_shared<rocks::Snapshot>(db_->GetSnapshot(), db_);
+dingodb::SnapshotPtr XDPRocksRawEngine::GetSnapshot() {
+  return std::make_shared<xdp::Snapshot>(db_->GetSnapshot(), db_);
 }
 
-RawEngine::ReaderPtr RawRocksEngine::Reader() { return reader_; }
+RawEngine::ReaderPtr XDPRocksRawEngine::Reader() { return reader_; }
 
-RawEngine::WriterPtr RawRocksEngine::Writer() { return writer_; }
+RawEngine::WriterPtr XDPRocksRawEngine::Writer() { return writer_; }
 
-rocks::SstFileWriterPtr RawRocksEngine::NewSstFileWriter() {
-  return std::make_shared<rocks::SstFileWriter>(rocksdb::Options());
+xdp::SstFileWriterPtr XDPRocksRawEngine::NewSstFileWriter() {
+  return std::make_shared<xdp::SstFileWriter>(xdprocks::Options());
 }
 
-rocks::CheckpointPtr RawRocksEngine::NewCheckpoint() { return std::make_shared<rocks::Checkpoint>(GetSelfPtr()); }
+xdp::CheckpointPtr XDPRocksRawEngine::NewCheckpoint() { return std::make_shared<xdp::Checkpoint>(GetSelfPtr()); }
 
-butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
-                                                   const std::vector<std::string>& cf_names,
-                                                   std::vector<std::string>& merge_sst_paths) {
-  rocksdb::Options options;
+butil::Status XDPRocksRawEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
+                                                      const std::vector<std::string>& cf_names,
+                                                      std::vector<std::string>& merge_sst_paths) {
+  xdprocks::Options options;
   options.create_if_missing = false;
 
   if (cf_names.size() != merge_sst_paths.size()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[rocksdb] merge checkpoint files failed, cf_names size: {}, merge_sst_paths size: {}", cf_names.size(),
+        "[xdprocks] merge checkpoint files failed, cf_names size: {}, merge_sst_paths size: {}", cf_names.size(),
         merge_sst_paths.size());
     return butil::Status(pb::error::EINTERNAL,
                          fmt::format("merge checkpoint files failed, cf_names size: {}, merge_sst_paths size: {}",
@@ -958,51 +958,51 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
   }
 
   if (cf_names.empty()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, cf_names empty");
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] merge checkpoint files failed, cf_names empty");
     return butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, cf_names empty");
   }
 
-  std::vector<rocksdb::ColumnFamilyDescriptor> column_families;
+  std::vector<xdprocks::ColumnFamilyDescriptor> column_families;
   column_families.reserve(cf_names.size());
   for (const auto& cf_name : cf_names) {
-    column_families.push_back(rocksdb::ColumnFamilyDescriptor(cf_name, rocksdb::ColumnFamilyOptions()));
+    column_families.push_back(xdprocks::ColumnFamilyDescriptor(cf_name, xdprocks::ColumnFamilyOptions()));
   }
 
-  // Due to delete other region sst file, so need repair db, or rocksdb::DB::Open will fail.
-  auto status = rocksdb::RepairDB(path, options, column_families);
+  // Due to delete other region sst file, so need repair db, or xdprocks::DB::Open will fail.
+  auto status = xdprocks::RepairDB(path, options, column_families);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[rocksdb] repair db failed, path: {} error: {}", path, status.ToString());
+    DINGO_LOG(WARNING) << fmt::format("[xdprocks] repair db failed, path: {} error: {}", path, status.ToString());
     return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb Repair db failed, {}", status.ToString()));
   }
 
-  auto default_cf_desc = rocksdb::ColumnFamilyDescriptor(Constant::kStoreDataCF, rocksdb::ColumnFamilyOptions());
+  auto default_cf_desc = xdprocks::ColumnFamilyDescriptor(Constant::kStoreDataCF, xdprocks::ColumnFamilyOptions());
 
   for (int i = 0; i < cf_names.size(); i++) {
-    std::vector<rocksdb::ColumnFamilyDescriptor> cf_descs;
+    std::vector<xdprocks::ColumnFamilyDescriptor> cf_descs;
     cf_descs.push_back(default_cf_desc);
     if (cf_names[i] != Constant::kStoreDataCF) {
-      cf_descs.push_back(rocksdb::ColumnFamilyDescriptor(cf_names[i], rocksdb::ColumnFamilyOptions()));
+      cf_descs.push_back(xdprocks::ColumnFamilyDescriptor(cf_names[i], xdprocks::ColumnFamilyOptions()));
     }
 
     // Open snapshot db.
-    rocksdb::DB* snapshot_db = nullptr;
-    std::vector<rocksdb::ColumnFamilyHandle*> handles;
-    status = rocksdb::DB::OpenForReadOnly(options, path, cf_descs, &handles, &snapshot_db);
+    xdprocks::DB* snapshot_db = nullptr;
+    std::vector<xdprocks::ColumnFamilyHandle*> handles;
+    status = xdprocks::DB::OpenForReadOnly(options, path, cf_descs, &handles, &snapshot_db);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] open checkpoint failed, path: {} error: {}", path, status.ToString());
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] open checkpoint failed, path: {} error: {}", path, status.ToString());
       // return butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb open checkpoint failed, {}",
       // status.ToString()));
       merge_sst_paths[i] = "";
       continue;
     }
 
-    DINGO_LOG(INFO) << fmt::format("[rocksdb] open checkpoint success, path: {} cf_name: {}", path, cf_names[i]);
+    DINGO_LOG(INFO) << fmt::format("[xdprocks] open checkpoint success, path: {} cf_name: {}", path, cf_names[i]);
 
     // Create iterator
     IteratorOptions iter_options;
     iter_options.upper_bound = range.end_key();
 
-    rocksdb::ReadOptions read_options;
+    xdprocks::ReadOptions read_options;
     read_options.auto_prefix_mode = true;
 
     auto& merge_sst_path = merge_sst_paths[i];
@@ -1013,23 +1013,23 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
 
     butil::Status ret_status = butil::Status::OK();
     {
-      auto iter = std::make_shared<rocks::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handle));
+      auto iter = std::make_shared<xdp::Iterator>(iter_options, snapshot_db->NewIterator(read_options, handle));
       if (iter == nullptr) {
-        DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, create iterator failed");
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] merge checkpoint files failed, create iterator failed");
         ret_status = butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, create iterator failed");
       } else {
         iter->Seek(range.start_key());
         auto ret = NewSstFileWriter()->SaveFile(iter, merge_sst_path);
         if (ret.error_code() == pb::error::Errno::ENO_ENTRIES) {
-          DINGO_LOG(WARNING) << "[rocksdb] merge checkpoint files no entries, file_name=" << merge_sst_path;
+          DINGO_LOG(WARNING) << "[xdprocks] merge checkpoint files no entries, file_name=" << merge_sst_path;
           merge_sst_paths[i] = "";
         } else if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("[rocksdb] merge checkpoint files failed, save file failed")
+          DINGO_LOG(ERROR) << fmt::format("[xdprocks] merge checkpoint files failed, save file failed")
                            << ", error: " << ret.error_str();
           ret_status = butil::Status(pb::error::EINTERNAL, "merge checkpoint files failed, save file failed");
         }
 
-        DINGO_LOG(INFO) << fmt::format("[rocksdb] merge checkpoint files success, path: {} cf_name: {}", path,
+        DINGO_LOG(INFO) << fmt::format("[xdprocks] merge checkpoint files success, path: {} cf_name: {}", path,
                                        cf_names[i]);
       }
     }
@@ -1044,7 +1044,7 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
       snapshot_db->Close();
       delete snapshot_db;
     } catch (std::exception& e) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] close snapshot db failed, path: {} error: {}", path, e.what());
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] close snapshot db failed, path: {} error: {}", path, e.what());
       ret_status = butil::Status(pb::error::EINTERNAL, fmt::format("Rocksdb close snapshot db failed, {}", e.what()));
     }
 
@@ -1056,34 +1056,34 @@ butil::Status RawRocksEngine::MergeCheckpointFiles(const std::string& path, cons
   return butil::Status::OK();
 }
 
-butil::Status RawRocksEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
-  rocksdb::IngestExternalFileOptions options;
+butil::Status XDPRocksRawEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
+  xdprocks::IngestExternalFileOptions options;
   options.write_global_seqno = false;
   auto status = db_->IngestExternalFile(GetColumnFamily(cf_name)->GetHandle(), files, options);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[rocksdb] ingest external fille failed, error: {}", status.ToString());
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] ingest external fille failed, error: {}", status.ToString());
     return butil::Status(status.code(), status.ToString());
   }
 
   return butil::Status();
 }
 
-void RawRocksEngine::Flush(const std::string& cf_name) {
+void XDPRocksRawEngine::Flush(const std::string& cf_name) {
   if (db_) {
-    rocksdb::FlushOptions flush_options;
+    xdprocks::FlushOptions flush_options;
     db_->Flush(flush_options, GetColumnFamily(cf_name)->GetHandle());
   }
 }
 
-butil::Status RawRocksEngine::Compact(const std::string& cf_name) {
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] compact column family {}", cf_name);
+butil::Status XDPRocksRawEngine::Compact(const std::string& cf_name) {
+  DINGO_LOG(INFO) << fmt::format("[xdprocks] compact column family {}", cf_name);
   if (db_ != nullptr) {
-    rocksdb::CompactRangeOptions options;
+    xdprocks::CompactRangeOptions options;
     options.exclusive_manual_compaction = true;
     options.allow_write_stall = true;
     auto status = db_->CompactRange(options, GetColumnFamily(cf_name)->GetHandle(), nullptr, nullptr);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[rocksdb] compact failed, column family {}", cf_name);
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] compact failed, column family {}", cf_name);
       return butil::Status(pb::error::EINTERNAL, "Compact column family %s failed", cf_name.c_str());
     }
   }
@@ -1091,13 +1091,13 @@ butil::Status RawRocksEngine::Compact(const std::string& cf_name) {
   return butil::Status();
 }
 
-void RawRocksEngine::Destroy() { rocksdb::DestroyDB(db_path_, rocksdb::Options()); }
+void XDPRocksRawEngine::Destroy() { xdprocks::DestroyDB(db_path_, xdprocks::Options()); }
 
-void RawRocksEngine::Close() {
+void XDPRocksRawEngine::Close() {
   if (db_) {
     CancelAllBackgroundWork(db_.get(), true);
 
-    std::vector<rocksdb::ColumnFamilyHandle*> column_family_handles;
+    std::vector<xdprocks::ColumnFamilyHandle*> column_family_handles;
     for (auto& [_, column_family] : column_families_) {
       column_family_handles.push_back(column_family->GetHandle());
     }
@@ -1113,14 +1113,14 @@ void RawRocksEngine::Close() {
     db_ = nullptr;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] close db.");
+  DINGO_LOG(INFO) << fmt::format("[xdprocks] close db.");
 }
 
-std::vector<int64_t> RawRocksEngine::GetApproximateSizes(const std::string& cf_name,
-                                                         std::vector<pb::common::Range>& ranges) {
-  rocksdb::SizeApproximationOptions options;
+std::vector<int64_t> XDPRocksRawEngine::GetApproximateSizes(const std::string& cf_name,
+                                                            std::vector<pb::common::Range>& ranges) {
+  xdprocks::SizeApproximationOptions options;
 
-  rocksdb::Range inner_ranges[ranges.size()];
+  xdprocks::Range inner_ranges[ranges.size()];
   for (int i = 0; i < ranges.size(); ++i) {
     inner_ranges[i].start = ranges[i].start_key();
     inner_ranges[i].limit = ranges[i].end_key();

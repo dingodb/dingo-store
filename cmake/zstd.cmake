@@ -13,27 +13,35 @@
 # limitations under the License.
 
 INCLUDE(ExternalProject)
+message(STATUS "Include zstd...")
 
-SET(ZSTD_SOURCES_DIR ${THIRD_PARTY_PATH}/zstd)
+SET(ZSTD_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/zstd)
+SET(ZSTD_BUILD_DIR ${THIRD_PARTY_PATH}/build/zstd)
 SET(ZSTD_INSTALL_DIR ${THIRD_PARTY_PATH}/install/zstd)
 SET(ZSTD_INCLUDE_DIR "${ZSTD_INSTALL_DIR}/include" CACHE PATH "zstd include directory." FORCE)
 SET(ZSTD_LIBRARIES "${ZSTD_INSTALL_DIR}/lib/libzstd.a" CACHE FILEPATH "zstd library." FORCE)
 
-FILE(WRITE ${ZSTD_SOURCES_DIR}/src/copy_repo.sh
-        "mkdir -p ${ZSTD_SOURCES_DIR}/src/extern_zstd/ && cp -rf ${CMAKE_SOURCE_DIR}/contrib/zstd/* ${ZSTD_SOURCES_DIR}/src/extern_zstd/")
+FILE(WRITE ${ZSTD_BUILD_DIR}/copy_repo.sh
+    "mkdir -p ${ZSTD_BUILD_DIR} && cp -rf ${ZSTD_SOURCES_DIR}/* ${ZSTD_BUILD_DIR}/")
 
-execute_process(COMMAND sh ${ZSTD_SOURCES_DIR}/src/copy_repo.sh)
+execute_process(COMMAND sh ${ZSTD_BUILD_DIR}/copy_repo.sh)
 
 ExternalProject_Add(
-        extern_zstd
-        ${EXTERNAL_PROJECT_LOG_ARGS}
-        PREFIX ${ZSTD_SOURCES_DIR}
-        UPDATE_COMMAND ""
-        SOURCE_DIR ${ZSTD_SOURCES_DIR}/src/extern_zstd/
-        CONFIGURE_COMMAND ""
-        BUILD_IN_SOURCE 1
-        BUILD_COMMAND $(MAKE)
-        INSTALL_COMMAND mkdir -p ${ZSTD_INSTALL_DIR}/lib/ COMMAND cp ${ZSTD_SOURCES_DIR}/src/extern_zstd/lib/libzstd.a ${ZSTD_INSTALL_DIR}/lib/ COMMAND cp -r ${ZSTD_SOURCES_DIR}/src/extern_zstd/lib/zstd.h ${ZSTD_INSTALL_DIR}/ COMMAND cp -r ${ZSTD_SOURCES_DIR}/src/extern_zstd/lib/zdict.h ${ZSTD_INSTALL_DIR}
+    extern_zstd
+    ${EXTERNAL_PROJECT_LOG_ARGS}
+
+    SOURCE_DIR ${ZSTD_BUILD_DIR}
+    PREFIX ${ZSTD_BUILD_DIR}
+
+    UPDATE_COMMAND  ""
+    CONFIGURE_COMMAND ""
+    BUILD_IN_SOURCE 1
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND mkdir -p ${ZSTD_INSTALL_DIR}/lib ${ZSTD_INCLUDE_DIR}
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/libzstd.a ${ZSTD_INSTALL_DIR}/lib 
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zstd.h ${ZSTD_INCLUDE_DIR} 
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zdict.h ${ZSTD_INCLUDE_DIR} 
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zstd_errors.h ${ZSTD_INCLUDE_DIR}
 )
 
 ADD_LIBRARY(zstd STATIC IMPORTED GLOBAL)

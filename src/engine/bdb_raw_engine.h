@@ -206,7 +206,11 @@ class RawBdbEngine : public RawEngine {
   RawEngine::ReaderPtr Reader() override { return reader_; }
   RawEngine::WriterPtr Writer() override { return writer_; }
 
+  butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
+                                     const std::vector<std::string>& cf_names,
+                                     std::vector<std::string>& merge_sst_paths) override;
   butil::Status IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) override;
+
   void Flush(const std::string& cf_name) override;
   butil::Status Compact(const std::string& cf_name) override;
   std::vector<int64_t> GetApproximateSizes(const std::string& cf_name, std::vector<pb::common::Range>& ranges) override;

@@ -37,7 +37,7 @@
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "coprocessor/coprocessor.h"
-#include "engine/raw_rocks_engine.h"
+#include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"

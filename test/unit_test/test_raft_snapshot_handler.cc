@@ -31,7 +31,7 @@
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
-#include "engine/raw_rocks_engine.h"
+#include "engine/rocks_raw_engine.h"
 #include "fmt/core.h"
 #include "handler/raft_snapshot_handler.h"
 #include "meta/store_meta_manager.h"

@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "engine/raw_bdb_engine.h"
+#include "engine/bdb_raw_engine.h"
 
 #include <gflags/gflags.h>
 
@@ -1322,6 +1322,7 @@ int32_t RawBdbEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
 
 // override functions
 bool RawBdbEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {
+  DINGO_LOG(INFO) << "Init bdb raw engine...";
   if (BAIDU_UNLIKELY(!config)) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] config empty not support!");
     return false;
@@ -1445,6 +1446,11 @@ dingodb::SnapshotPtr RawBdbEngine::GetSnapshot() {
   return nullptr;
 }
 
+butil::Status RawBdbEngine::MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,  // NOLINT
+                                                 const std::vector<std::string>& cf_names,                 // NOLINT
+                                                 std::vector<std::string>& merge_sst_paths) {              // NOLINT
+  return butil::Status();
+}
 butil::Status RawBdbEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
   rocksdb::Options options;
   options.env = rocksdb::Env::Default();

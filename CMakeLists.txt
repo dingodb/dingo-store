@@ -38,16 +38,31 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" ON)
 option(BUILD_INTEGRATION_TESTS "Build integration test" OFF)
-option(DINGO_BUILD_STATIC "Link libraries statically to generate the DingoDB binary" ON)
+option(DINGO_BUILD_STATIC "Link libraries statically to generate the dingodb binary" ON)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)
 option(WITH_MKL "Build with intel mkl" OFF)
 option(BOOST_SEARCH_PATH "")
-option(BUILD_GOOGLE_SANITIZE "enable google sanitize" OFF)
-option(BRPC_ENABLE_CPU_PROFILER "enable brpc cpu profiler" OFF)
+option(BUILD_GOOGLE_SANITIZE "Enable google sanitize" OFF)
+option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
+option(XDPROCKS_PATH "Enable xdprocks raw engine")
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
+
+# xdprocks
+if(XDPROCKS_PATH)
+    message(STATUS "Enable xdprocks, path: ${XDPROCKS_PATH}")
+    set(ENABLE_XDPROCKS ON)
+    add_definitions(-DENABLE_XDPROCKS=ON)
+
+    execute_process(
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/scripts/prepare_xdprocks.sh --xdprocks_dir ${XDPROCKS_PATH}
+    )
+else()
+    message(STATUS "Disable xdprocks")
+    set(ENABLE_XDPROCKS OFF)
+endif()
 
 if(BRPC_ENABLE_CPU_PROFILER)
     message(STATUS "Enable BRPC_ENABLE_CPU_PROFILER")
@@ -118,26 +133,26 @@ endif()
 
 message(STATUS "OpenMP_LIBRARY=${OPENMP_LIBRARY}")
 
-include(openssl)
+include(lz4)
+include(zstd)
 include(zlib)
+include(snappy)
+include(openssl)
 include(gflags)
 include(glog)
 include(gtest)
-include(snappy)
-include(lz4)
-include(zstd)
-include(leveldb)
-include(protobuf)
-include(rocksdb)
-include(brpc)
-include(braft)
-include(yaml-cpp)
 include(fmt)
+include(protobuf)
+include(yaml-cpp)
 include(libunwind)
 include(libbacktrace)
 include(hnswlib)
-include(bdb)
 include(rapidjson)
+include(leveldb)
+include(rocksdb)
+include(bdb)
+include(brpc)
+include(braft)
 
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}, proto inc: ${PROTOBUF_INCLUDE_DIRS}, lib: ${PROTOBUF_LIBRARIES}, ${PROTOBUF_PROTOC_LIBRARY}, protos: ${PROTO_FILES}")
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -184,28 +199,32 @@ add_custom_target(build_proto ALL
 
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${ZSTD_INCLUDE_DIR})
 include_directories(${BRAFT_INCLUDE_DIR})
 include_directories(${BRPC_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(${GFLAGS_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
+include_directories(${BDB_INCLUDE_DIR})
+include_directories(${RAPIDJSON_INCLUDE_DIR})
+if (ENABLE_XDPROCKS)
+    include_directories(${XDPROCKS_PATH}/include)
+endif()
 include_directories(${YAMLCPP_INCLUDE_DIR})
 include_directories(${FMT_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
-include_directories(${BDB_INCLUDE_DIR})
-include_directories(${RAPIDJSON_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
+
 
 set(DYNAMIC_LIB
     ${GFLAGS_LIBRARIES}
-    ${PROTOBUF_LIBRARY}
+    ${PROTOBUF_LIBRARIES}
     ${LEVELDB_LIBRARIES}
     ${BRAFT_LIBRARIES}
     ${BRPC_LIBRARIES}
-    ${ROCKSDB_LIBRARIES}
     ${SNAPPY_LIBRARIES}
     ${LZ4_LIBRARIES}
     ${ZSTD_LIBRARIES}
@@ -215,18 +234,28 @@ set(DYNAMIC_LIB
     ${OPENSSL_LIBRARIES}
     ${CRYPTO_LIBRARIES}
     ${GLOG_LIBRARIES}
-    ${GTEST_MAIN_LIBRARIES}
     ${GTEST_LIBRARIES}
     ${LIBUNWIND_LIBRARIES}
     ${LIBUNWIND_GENERIC_LIBRARIES}
     ${LIBUNWIND_ARCH_LIBRARIES}
     ${LIBBACKTRACE_LIBRARIES}
     ${OPENMP_LIBRARY}
+    ${ROCKSDB_LIBRARIES}
     ${BDB_LIBRARIES}
-    # rt
+    )
+
+if (ENABLE_XDPROCKS)
+    set(DYNAMIC_LIB
+        ${DYNAMIC_LIB}
+        "-L${XDPROCKS_PATH}/lib -lxdprocks"
+    )
+endif()
+
+set(DYNAMIC_LIB
+    ${DYNAMIC_LIB}
     dl
     Threads::Threads
-    )
+)
 
 set(DEPEND_LIBS
     openssl
@@ -370,6 +399,10 @@ file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/src/serial/schema/*.cc)
 file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
+
+if (NOT ENABLE_XDPROCKS)
+    list(REMOVE_ITEM ENGINE_SRCS "${PROJECT_SOURCE_DIR}/src/engine/xdprocks_raw_engine.cc")
+endif()
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
 

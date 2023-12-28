@@ -20,7 +20,6 @@
 #include "braft/snapshot.h"
 #include "butil/status.h"
 #include "engine/raw_engine.h"
-#include "engine/raw_rocks_engine.h"
 #include "handler/handler.h"
 #include "proto/store_internal.pb.h"
 
@@ -46,9 +45,6 @@ class RaftSnapshot {
   using GenSnapshotFileFunc =
       std::function<butil::Status(const std::string, store::RegionPtr, std::vector<pb::store_internal::SstFileInfo>&)>;
 
-  // Scan region, generate sst snapshot file
-  butil::Status GenSnapshotFileByScan(const std::string& checkpoint_path, store::RegionPtr region,
-                                      std::vector<pb::store_internal::SstFileInfo>& sst_files);
   // Do Checkpoint and hard link, generate sst snapshot file
   butil::Status GenSnapshotFileByCheckpoint(const std::string& checkpoint_path, store::RegionPtr region,
                                             std::vector<pb::store_internal::SstFileInfo>& sst_files);
