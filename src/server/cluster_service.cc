@@ -288,11 +288,15 @@ void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::Tab
    * */
   os << "<li> Columns:";
   os << "<ul>";
-
   for (const auto& column : table_definition.columns()) {
     os << "<li>" << column.name() << ":" << column.sql_type() << "</li>";
   }
+  os << "</ul>";
+  os << "</li>";
 
+  os << "<li> Engine:";
+  os << "<ul>";
+  os << "<li>" << pb::common::Engine_Name(table_definition.engine()) << "</li>";
   os << "</ul>";
   os << "</li>";
 }
@@ -309,9 +313,13 @@ void ClusterStatImpl::PrintIndexDefinition(std::ostream& os, const pb::meta::Tab
    * */
   os << "<li> IndexDefinition:";
   os << "<ul>";
-
   os << "<li>" << table_definition.ShortDebugString() << "</li>";
+  os << "</ul>";
+  os << "</li>";
 
+  os << "<li> Engine:";
+  os << "<ul>";
+  os << "<li>" << pb::common::Engine_Name(table_definition.engine()) << "</li>";
   os << "</ul>";
   os << "</li>";
 }
