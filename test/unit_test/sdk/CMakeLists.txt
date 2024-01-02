@@ -12,14 +12,13 @@ set(TEST_SRCS
   test_region.cc
   # test_rpc_interaction.cc
   test_store_rpc_controller.cc
+  test_thread_pool_executor.cc
   rawkv/test_raw_kv.cc
   rawkv/test_region_scanner.cc
   transaction/test_txn_buffer.cc
   transaction/test_txn_impl.cc
   transaction/test_txn_lock_resolver.cc
 )
-
-# file(GLOB TEST_SRCS "test_*.cc")
 
 add_executable(sdk_unit_test
   main.cc
