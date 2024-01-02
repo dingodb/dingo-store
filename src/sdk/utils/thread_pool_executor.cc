@@ -14,8 +14,6 @@
 
 #include "sdk/utils/thread_pool_executor.h"
 
-#include <bits/chrono.h>
-
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
