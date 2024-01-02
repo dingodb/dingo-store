@@ -15,11 +15,14 @@ add_library(sdk
   transaction/txn_impl.cc
   transaction/txn_lock_resolver.cc
   transaction/txn_region_scanner_impl.cc
+  utils/thread_pool_executor.cc
   # TODO: use libary
   ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
   ${PROJECT_SOURCE_DIR}/src/common/role.cc
   ${PROJECT_SOURCE_DIR}/src/common/helper.cc
   ${PROJECT_SOURCE_DIR}/src/common/service_access.cc
+  ${PROJECT_SOURCE_DIR}/src/common/synchronization.cc
+  ${PROJECT_SOURCE_DIR}/src/common/threadpool.cc
   ${PROJECT_SOURCE_DIR}/src/coprocessor/utils.cc
   ${PROJECT_SOURCE_DIR}/src/vector/codec.cc
   ${SERIAL1_SRCS}
