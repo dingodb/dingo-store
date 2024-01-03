@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 
@@ -15,6 +16,8 @@ import static io.dingodb.sdk.common.utils.EntityConversion.mapping;
 public class AutoIncrementService {
     
     private static final Map<String, Map<DingoCommonId, AutoIncrement>> cache = new ConcurrentHashMap<>();
+
+    ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     private final Map<DingoCommonId, AutoIncrement> innerCache;
     private final AutoIncrementServiceConnector connector;
@@ -78,15 +81,54 @@ public class AutoIncrementService {
     }
 
     public long localCurrent(DingoCommonId tableId) {
-        AutoIncrement autoIncrement = innerCache.get(tableId);
-        if (autoIncrement == null) {
-            return current(tableId);
+        rwLock.readLock().lock();
+        try {
+            AutoIncrement autoIncrement = innerCache.get(tableId);
+            if (autoIncrement == null) {
+                return current(tableId);
+            }
+            return autoIncrement.current();
+        } finally {
+            rwLock.readLock().unlock();
         }
-        return autoIncrement.current();
     }
 
     public long next(DingoCommonId tableId) {
-        return innerCache.computeIfAbsent(tableId, id -> new AutoIncrement(id, increment, offset, this::fetcher)).inc();
+        rwLock.readLock().lock();
+        try {
+            return innerCache.computeIfAbsent(tableId, id -> new AutoIncrement(id, increment, offset, this::fetcher)).inc();
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    private void updateIncrement(DingoCommonId tableId, long increment) {
+        Meta.UpdateAutoIncrementRequest request = Meta.UpdateAutoIncrementRequest.newBuilder()
+                .setTableId(mapping(tableId))
+                .setStartId(increment)
+                .setForce(true)
+                .build();
+        connector.exec(stub -> stub.updateAutoIncrement(request));
+    }
+
+    public void update(DingoCommonId tableId, long incrementId) {
+        rwLock.writeLock().lock();
+        incrementId = incrementId + 1;
+        try {
+            AutoIncrement autoIncrement = innerCache.computeIfAbsent(tableId,
+                    id -> new AutoIncrement(id, increment, offset, this::fetcher));
+            if (incrementId < autoIncrement.getLimit() && incrementId >= autoIncrement.current()) {
+                autoIncrement.inc(incrementId);
+            } else {
+                // update server startid
+                autoIncrement.inc(incrementId);
+                if (autoIncrement.getLimit() > 0 && incrementId > autoIncrement.getLimit()) {
+                    updateIncrement(tableId, incrementId);
+                }
+            }
+        } finally {
+            rwLock.writeLock().unlock();
+        }
     }
 
 }
