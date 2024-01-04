@@ -32,7 +32,6 @@
 #include "sdk/meta_cache.h"
 #include "sdk/status.h"
 #include "sdk/utils/async_util.h"
-#include "sdk/utils/call_back.h"
 
 namespace dingodb {
 namespace sdk {
@@ -41,6 +40,9 @@ using google::protobuf::DynamicCastToGenerated;
 
 StoreRpcController::StoreRpcController(const ClientStub& stub, Rpc& rpc, std::shared_ptr<Region> region)
     : stub_(stub), rpc_(rpc), region_(std::move(region)), rpc_retry_times_(0), next_replica_index_(0) {}
+
+StoreRpcController::StoreRpcController(const ClientStub& stub, Rpc& rpc)
+    : stub_(stub), rpc_(rpc), region_(nullptr), rpc_retry_times_(0), next_replica_index_(0) {}
 
 StoreRpcController::~StoreRpcController() = default;
 
@@ -247,8 +249,10 @@ bool StoreRpcController::PickNextLeader(butil::EndPoint& leader) {
 }
 
 void StoreRpcController::ResetRegion(std::shared_ptr<Region> region) {
-  CHECK(EpochCompare(region_->Epoch(), region->Epoch()) > 0)
-      << "reset region:" << region->ToString() << " expect newer than old region: " << region_->ToString();
+  if (region_) {
+    CHECK(EpochCompare(region_->Epoch(), region->Epoch()) > 0)
+        << "reset region:" << region->ToString() << " expect newer than old region: " << region_->ToString();
+  }
   region_.reset();
   region_ = std::move(region);
 }

@@ -83,6 +83,8 @@ class Status {
   // Returns the string "OK" for success.
   std::string ToString() const;
 
+  int32_t Errno() const { return errno_; }
+
  private:
   enum Code : uint8_t {
     kOk = 0,

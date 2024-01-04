@@ -28,6 +28,16 @@
 #include "sdk/client.h"
 #include "sdk/common/common.h"
 #include "sdk/meta_cache.h"
+#include "sdk/rawkv/raw_kv_batch_compare_and_set_task.h"
+#include "sdk/rawkv/raw_kv_batch_delete_task.h"
+#include "sdk/rawkv/raw_kv_batch_get_task.h"
+#include "sdk/rawkv/raw_kv_batch_put_if_absent_task.h"
+#include "sdk/rawkv/raw_kv_batch_put_task.h"
+#include "sdk/rawkv/raw_kv_compare_and_set_task.h"
+#include "sdk/rawkv/raw_kv_delete_task.h"
+#include "sdk/rawkv/raw_kv_get_task.h"
+#include "sdk/rawkv/raw_kv_put_if_absent_task.h"
+#include "sdk/rawkv/raw_kv_put_task.h"
 #include "sdk/region_scanner.h"
 #include "sdk/status.h"
 #include "sdk/store/store_rpc.h"
@@ -39,424 +49,43 @@ namespace sdk {
 RawKV::RawKVImpl::RawKVImpl(const ClientStub& stub) : stub_(stub) {}
 
 Status RawKV::RawKVImpl::Get(const std::string& key, std::string& value) {
-  std::shared_ptr<MetaCache> meta_cache = stub_.GetMetaCache();
-
-  std::shared_ptr<Region> region;
-  Status got = meta_cache->LookupRegionByKey(key, region);
-  if (!got.IsOK()) {
-    return got;
-  }
-
-  KvGetRpc rpc;
-  FillRpcContext(*rpc.MutableRequest()->mutable_context(), region->RegionId(), region->Epoch());
-  rpc.MutableRequest()->set_key(key);
-
-  StoreRpcController controller(stub_, rpc, region);
-  Status call = controller.Call();
-  if (call.IsOK()) {
-    value = rpc.Response()->value();
-  }
-  return call;
-}
-
-void RawKV::RawKVImpl::ProcessSubBatchGet(SubBatchState* sub) {
-  auto* rpc = CHECK_NOTNULL(dynamic_cast<KvBatchGetRpc*>(sub->rpc));
-
-  StoreRpcController controller(stub_, *sub->rpc, sub->region);
-  Status call = controller.Call();
-  if (call.IsOK()) {
-    for (const auto& kv : rpc->Response()->kvs()) {
-      if (!kv.value().empty()) {
-        sub->result_kvs.push_back({kv.key(), kv.value()});
-      } else {
-        DINGO_LOG(DEBUG) << "Ignore kv key:" << kv.key() << " because value is empty";
-      }
-    }
-  }
-  sub->status = call;
+  RawKvGetTask task(stub_, key, value);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& kvs) {
-  auto meta_cache = stub_.GetMetaCache();
-  std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
-  std::unordered_map<int64_t, std::vector<std::string>> region_keys;
-
-  for (const auto& key : keys) {
-    std::shared_ptr<Region> tmp;
-    Status got = meta_cache->LookupRegionByKey(key, tmp);
-    if (!got.IsOK()) {
-      return got;
-    }
-    auto iter = region_id_to_region.find(tmp->RegionId());
-    if (iter == region_id_to_region.end()) {
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-    }
-
-    region_keys[tmp->RegionId()].push_back(key);
-  }
-
-  std::vector<SubBatchState> sub_batch_state;
-  std::vector<std::unique_ptr<KvBatchGetRpc>> rpcs;
-
-  for (const auto& entry : region_keys) {
-    auto region_id = entry.first;
-
-    auto iter = region_id_to_region.find(region_id);
-    CHECK(iter != region_id_to_region.end());
-    auto region = iter->second;
-
-    auto rpc = std::make_unique<KvBatchGetRpc>();
-    FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-    for (const auto& key : entry.second) {
-      auto* fill = rpc->MutableRequest()->add_keys();
-      *fill = key;
-    }
-
-    sub_batch_state.emplace_back(rpc.get(), region);
-    rpcs.push_back(std::move(rpc));
-  }
-
-  CHECK_EQ(rpcs.size(), region_keys.size());
-  CHECK_EQ(rpcs.size(), sub_batch_state.size());
-
-  std::vector<std::thread> thread_pool;
-  for (auto i = 1; i < sub_batch_state.size(); i++) {
-    thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchGet, this, &sub_batch_state[i]);
-  }
-
-  ProcessSubBatchGet(sub_batch_state.data());
-
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
-
-  Status result;
-
-  std::vector<KVPair> tmp_kvs;
-  for (auto& state : sub_batch_state) {
-    if (!state.status.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << state.rpc->Method() << " send to region: " << state.region->RegionId()
-                         << " fail: " << state.status.ToString();
-      if (result.IsOK()) {
-        // only return first fail status
-        result = state.status;
-      }
-    } else {
-      tmp_kvs.insert(tmp_kvs.end(), std::make_move_iterator(state.result_kvs.begin()),
-                     std::make_move_iterator(state.result_kvs.end()));
-    }
-  }
-
-  kvs = std::move(tmp_kvs);
-
-  return result;
+  RawKvBatchGetTask task(stub_, keys, kvs);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::Put(const std::string& key, const std::string& value) {
-  std::shared_ptr<MetaCache> meta_cache = stub_.GetMetaCache();
-
-  std::shared_ptr<Region> region;
-  Status got = meta_cache->LookupRegionByKey(key, region);
-  if (!got.IsOK()) {
-    return got;
-  }
-
-  KvPutRpc rpc;
-  auto* kv = rpc.MutableRequest()->mutable_kv();
-  FillRpcContext(*rpc.MutableRequest()->mutable_context(), region->RegionId(), region->Epoch());
-  kv->set_key(key);
-  kv->set_value(value);
-
-  StoreRpcController controller(stub_, rpc, region);
-  return controller.Call();
-}
-
-void RawKV::RawKVImpl::ProcessSubBatchPut(SubBatchState* sub) {
-  (void)CHECK_NOTNULL(dynamic_cast<KvBatchPutRpc*>(sub->rpc));
-  StoreRpcController controller(stub_, *sub->rpc, sub->region);
-  sub->status = controller.Call();
+  RawKvPutTask task(stub_, key, value);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::BatchPut(const std::vector<KVPair>& kvs) {
-  auto meta_cache = stub_.GetMetaCache();
-  std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
-  std::unordered_map<int64_t, std::vector<KVPair>> region_kvs;
-
-  for (const auto& kv : kvs) {
-    auto key = kv.key;
-    std::shared_ptr<Region> tmp;
-    Status got = meta_cache->LookupRegionByKey(key, tmp);
-    if (!got.IsOK()) {
-      return got;
-    }
-    auto iter = region_id_to_region.find(tmp->RegionId());
-    if (iter == region_id_to_region.end()) {
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-    }
-
-    region_kvs[tmp->RegionId()].push_back(kv);
-  }
-
-  std::vector<SubBatchState> sub_batch_put_state;
-  std::vector<std::unique_ptr<KvBatchPutRpc>> rpcs;
-  for (const auto& entry : region_kvs) {
-    auto region_id = entry.first;
-
-    auto iter = region_id_to_region.find(region_id);
-    CHECK(iter != region_id_to_region.end());
-    auto region = iter->second;
-
-    auto rpc = std::make_unique<KvBatchPutRpc>();
-    FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-    for (const auto& kv : entry.second) {
-      auto* fill = rpc->MutableRequest()->add_kvs();
-      fill->set_key(kv.key);
-      fill->set_value(kv.value);
-    }
-
-    sub_batch_put_state.emplace_back(rpc.get(), region);
-    rpcs.emplace_back(std::move(rpc));
-  }
-
-  CHECK_EQ(rpcs.size(), region_kvs.size());
-  CHECK_EQ(rpcs.size(), sub_batch_put_state.size());
-
-  std::vector<std::thread> thread_pool;
-  for (auto i = 1; i < sub_batch_put_state.size(); i++) {
-    thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchPut, this, &sub_batch_put_state[i]);
-  }
-
-  ProcessSubBatchPut(sub_batch_put_state.data());
-
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
-
-  Status result;
-  for (auto& state : sub_batch_put_state) {
-    if (!state.status.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << state.rpc->Method() << " send to region: " << state.region->RegionId()
-                         << " fail: " << state.status.ToString();
-      if (result.IsOK()) {
-        // only return first fail status
-        result = state.status;
-      }
-    }
-  }
-
-  return result;
+  RawKvBatchPutTask task(stub_, kvs);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::PutIfAbsent(const std::string& key, const std::string& value, bool& state) {
-  std::shared_ptr<MetaCache> meta_cache = stub_.GetMetaCache();
-
-  std::shared_ptr<Region> region;
-  Status result = meta_cache->LookupRegionByKey(key, region);
-  if (result.IsOK()) {
-    KvPutIfAbsentRpc rpc;
-    FillRpcContext(*rpc.MutableRequest()->mutable_context(), region->RegionId(), region->Epoch());
-
-    auto* kv = rpc.MutableRequest()->mutable_kv();
-    kv->set_key(key);
-    kv->set_value(value);
-
-    StoreRpcController controller(stub_, rpc, region);
-    result = controller.Call();
-    if (result.IsOK()) {
-      state = rpc.Response()->key_state();
-    }
-  }
-
-  return result;
-}
-
-void RawKV::RawKVImpl::ProcessSubBatchPutIfAbsent(SubBatchState* sub) {
-  auto* rpc = CHECK_NOTNULL(dynamic_cast<KvBatchPutIfAbsentRpc*>(sub->rpc));
-  StoreRpcController controller(stub_, *sub->rpc, sub->region);
-  Status call = controller.Call();
-
-  if (call.IsOK()) {
-    CHECK_EQ(rpc->Request()->kvs_size(), rpc->Response()->key_states_size());
-    for (auto i = 0; i < rpc->Request()->kvs_size(); i++) {
-      sub->key_op_states.push_back({rpc->Request()->kvs(i).key(), rpc->Response()->key_states(i)});
-    }
-  }
-
-  sub->status = call;
+  RawKvPutIfAbsentTask task(stub_, key, value, state);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& states) {
-  auto meta_cache = stub_.GetMetaCache();
-  std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
-  std::unordered_map<int64_t, std::vector<KVPair>> region_kvs;
-
-  for (const auto& kv : kvs) {
-    auto key = kv.key;
-    std::shared_ptr<Region> tmp;
-    Status got = meta_cache->LookupRegionByKey(key, tmp);
-    if (!got.IsOK()) {
-      return got;
-    }
-    auto iter = region_id_to_region.find(tmp->RegionId());
-    if (iter == region_id_to_region.end()) {
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-    }
-
-    region_kvs[tmp->RegionId()].push_back(kv);
-  }
-
-  std::vector<SubBatchState> sub_batch_state;
-  std::vector<std::unique_ptr<KvBatchPutIfAbsentRpc>> rpcs;
-  for (const auto& entry : region_kvs) {
-    auto region_id = entry.first;
-
-    auto iter = region_id_to_region.find(region_id);
-    CHECK(iter != region_id_to_region.end());
-    auto region = iter->second;
-
-    auto rpc = std::make_unique<KvBatchPutIfAbsentRpc>();
-    FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-    for (const auto& kv : entry.second) {
-      auto* fill = rpc->MutableRequest()->add_kvs();
-      fill->set_key(kv.key);
-      fill->set_value(kv.value);
-    }
-    rpc->MutableRequest()->set_is_atomic(false);
-
-    sub_batch_state.emplace_back(rpc.get(), region);
-    rpcs.emplace_back(std::move(rpc));
-  }
-
-  CHECK_EQ(rpcs.size(), region_kvs.size());
-  CHECK_EQ(rpcs.size(), sub_batch_state.size());
-
-  std::vector<std::thread> thread_pool;
-  for (auto i = 1; i < sub_batch_state.size(); i++) {
-    thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchPutIfAbsent, this, &sub_batch_state[i]);
-  }
-
-  ProcessSubBatchPutIfAbsent(sub_batch_state.data());
-
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
-
-  Status result;
-  std::vector<KeyOpState> tmp_states;
-  for (auto& state : sub_batch_state) {
-    if (!state.status.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << state.rpc->Method() << " send to region: " << state.region->RegionId()
-                         << " fail: " << state.status.ToString();
-      if (result.IsOK()) {
-        // only return first fail status
-        result = state.status;
-      }
-    } else {
-      tmp_states.insert(tmp_states.end(), std::make_move_iterator(state.key_op_states.begin()),
-                        std::make_move_iterator(state.key_op_states.end()));
-    }
-  }
-
-  states = std::move(tmp_states);
-
-  return result;
+  RawKvBatchPutIfAbsentTask task(stub_, kvs, states);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::Delete(const std::string& key) {
-  std::shared_ptr<MetaCache> meta_cache = stub_.GetMetaCache();
-
-  std::shared_ptr<Region> region;
-  Status ret = meta_cache->LookupRegionByKey(key, region);
-  if (ret.IsOK()) {
-    KvBatchDeleteRpc rpc;
-    FillRpcContext(*rpc.MutableRequest()->mutable_context(), region->RegionId(), region->Epoch());
-    auto* fill = rpc.MutableRequest()->add_keys();
-    *fill = key;
-
-    StoreRpcController controller(stub_, rpc, region);
-    ret = controller.Call();
-    if (!ret.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << rpc.Method() << " send to region: " << region->RegionId()
-                         << " fail: " << ret.ToString();
-    }
-  }
-
-  return ret;
-}
-
-void RawKV::RawKVImpl::ProcessSubBatchDelete(SubBatchState* sub) {
-  (void)CHECK_NOTNULL(dynamic_cast<KvBatchDeleteRpc*>(sub->rpc));
-  StoreRpcController controller(stub_, *sub->rpc, sub->region);
-  sub->status = controller.Call();
+  RawKvDeleteTask task(stub_, key);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::BatchDelete(const std::vector<std::string>& keys) {
-  auto meta_cache = stub_.GetMetaCache();
-  std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
-  std::unordered_map<int64_t, std::vector<std::string>> region_keys;
-
-  for (const auto& key : keys) {
-    std::shared_ptr<Region> tmp;
-    Status got = meta_cache->LookupRegionByKey(key, tmp);
-    if (!got.IsOK()) {
-      return got;
-    }
-
-    auto iter = region_id_to_region.find(tmp->RegionId());
-    if (iter == region_id_to_region.end()) {
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-    }
-
-    region_keys[tmp->RegionId()].emplace_back(key);
-  }
-
-  std::vector<SubBatchState> sub_batch_state;
-  std::vector<std::unique_ptr<KvBatchDeleteRpc>> rpcs;
-  for (const auto& entry : region_keys) {
-    auto region_id = entry.first;
-
-    auto iter = region_id_to_region.find(region_id);
-    CHECK(iter != region_id_to_region.end());
-    auto region = iter->second;
-
-    auto rpc = std::make_unique<KvBatchDeleteRpc>();
-    FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-
-    for (const auto& key : entry.second) {
-      *(rpc->MutableRequest()->add_keys()) = key;
-    }
-
-    sub_batch_state.emplace_back(rpc.get(), region);
-    rpcs.emplace_back(std::move(rpc));
-  }
-
-  CHECK_EQ(rpcs.size(), region_keys.size());
-  CHECK_EQ(rpcs.size(), sub_batch_state.size());
-
-  std::vector<std::thread> thread_pool;
-  for (auto i = 1; i < sub_batch_state.size(); i++) {
-    thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchDelete, this, &sub_batch_state[i]);
-  }
-
-  ProcessSubBatchDelete(sub_batch_state.data());
-
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
-
-  Status result;
-  for (auto& state : sub_batch_state) {
-    if (!state.status.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << state.rpc->Method() << " send to region: " << state.region->RegionId()
-                         << " fail: " << state.status.ToString();
-      if (result.IsOK()) {
-        // only return first fail status
-        result = state.status;
-      }
-    }
-  }
-
-  return result;
+  RawKvBatchDeleteTask task(stub_, keys);
+  return task.Run();
 }
 
 void RawKV::RawKVImpl::ProcessSubBatchDeleteRange(SubBatchState* sub) {
@@ -591,39 +220,8 @@ Status RawKV::RawKVImpl::DeleteRange(const std::string& start_key, const std::st
 
 Status RawKV::RawKVImpl::CompareAndSet(const std::string& key, const std::string& value,
                                        const std::string& expected_value, bool& state) {
-  std::shared_ptr<MetaCache> meta_cache = stub_.GetMetaCache();
-
-  std::shared_ptr<Region> region;
-  Status ret = meta_cache->LookupRegionByKey(key, region);
-  if (ret.IsOK()) {
-    KvCompareAndSetRpc rpc;
-    FillRpcContext(*rpc.MutableRequest()->mutable_context(), region->RegionId(), region->Epoch());
-    auto* kv = rpc.MutableRequest()->mutable_kv();
-    kv->set_key(key);
-    kv->set_value(value);
-    rpc.MutableRequest()->set_expect_value(expected_value);
-
-    StoreRpcController controller(stub_, rpc, region);
-    ret = controller.Call();
-    if (ret.IsOK()) {
-      state = rpc.Response()->key_state();
-    }
-  }
-
-  return ret;
-}
-
-void RawKV::RawKVImpl::ProcessSubBatchCompareAndSet(SubBatchState* sub) {
-  auto* rpc = CHECK_NOTNULL(dynamic_cast<KvBatchCompareAndSetRpc*>(sub->rpc));
-  StoreRpcController controller(stub_, *sub->rpc, sub->region);
-  Status call = controller.Call();
-  if (call.IsOK()) {
-    CHECK_EQ(rpc->Request()->kvs_size(), rpc->Response()->key_states_size());
-    for (auto i = 0; i < rpc->Request()->kvs_size(); i++) {
-      sub->key_op_states.push_back({rpc->Request()->kvs(i).key(), rpc->Response()->key_states(i)});
-    }
-  }
-  sub->status = call;
+  RawKvCompareAndSetTask task(stub_, key, value, expected_value, state);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::BatchCompareAndSet(const std::vector<KVPair>& kvs,
@@ -633,89 +231,8 @@ Status RawKV::RawKVImpl::BatchCompareAndSet(const std::vector<KVPair>& kvs,
     return Status::InvalidArgument(
         fmt::format("kvs size:{} must equal expected_values size:{}", kvs.size(), expected_values.size()));
   }
-
-  struct CompareAndSetContext {
-    KVPair kv_pair;
-    std::string expected_value;
-  };
-
-  auto meta_cache = stub_.GetMetaCache();
-  std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
-  std::unordered_map<int64_t, std::vector<CompareAndSetContext>> region_kvs;
-
-  for (auto i = 0; i < kvs.size(); i++) {
-    auto kv = kvs[i];
-    auto key = kv.key;
-    std::shared_ptr<Region> tmp;
-    Status got = meta_cache->LookupRegionByKey(key, tmp);
-    if (!got.IsOK()) {
-      return got;
-    }
-    auto iter = region_id_to_region.find(tmp->RegionId());
-    if (iter == region_id_to_region.end()) {
-      region_id_to_region.emplace(std::make_pair(tmp->RegionId(), tmp));
-    }
-
-    const auto& expected_value = expected_values[i];
-    region_kvs[tmp->RegionId()].push_back({kv, expected_value});
-  }
-
-  CHECK_EQ(region_id_to_region.size(), region_kvs.size());
-
-  std::vector<SubBatchState> sub_batch_state;
-  std::vector<std::unique_ptr<KvBatchCompareAndSetRpc>> rpcs;
-  for (const auto& entry : region_kvs) {
-    auto region_id = entry.first;
-    auto iter = region_id_to_region.find(region_id);
-    CHECK(iter != region_id_to_region.end());
-    auto region = iter->second;
-
-    auto rpc = std::make_unique<KvBatchCompareAndSetRpc>();
-    FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-    for (const CompareAndSetContext& context : entry.second) {
-      auto* kv = rpc->MutableRequest()->add_kvs();
-      kv->set_key(context.kv_pair.key);
-      kv->set_value(context.kv_pair.value);
-      *(rpc->MutableRequest()->add_expect_values()) = context.expected_value;
-    }
-
-    sub_batch_state.emplace_back(rpc.get(), region);
-    rpcs.emplace_back(std::move(rpc));
-  }
-
-  CHECK_EQ(rpcs.size(), region_kvs.size());
-  CHECK_EQ(rpcs.size(), sub_batch_state.size());
-
-  std::vector<std::thread> thread_pool;
-  for (auto i = 1; i < sub_batch_state.size(); i++) {
-    thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchCompareAndSet, this, &sub_batch_state[i]);
-  }
-
-  ProcessSubBatchCompareAndSet(sub_batch_state.data());
-
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
-
-  Status result;
-  std::vector<KeyOpState> tmp_states;
-  for (auto& state : sub_batch_state) {
-    if (!state.status.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << state.rpc->Method() << " send to region: " << state.region->RegionId()
-                         << " fail: " << state.status.ToString();
-      if (result.IsOK()) {
-        // only return first fail status
-        result = state.status;
-      }
-    } else {
-      tmp_states.insert(tmp_states.end(), std::make_move_iterator(state.key_op_states.begin()),
-                        std::make_move_iterator(state.key_op_states.end()));
-    }
-  }
-
-  states = std::move(tmp_states);
-
-  return result;
+  RawKvBatchCompareAndSetTask task(stub_, kvs, expected_values, states);
+  return task.Run();
 }
 
 // TODO: abstract range scanner

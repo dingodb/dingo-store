@@ -801,10 +801,10 @@ TEST_F(RawKVTest, BatchCompareAndSetInvalid) {
 
 TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
   std::vector<KVPair> kvs;
-  kvs.push_back({"a", "a"});
-  kvs.push_back({"b", "b"});
-  kvs.push_back({"d", "d"});
-  kvs.push_back({"e", "e"});
+  kvs.push_back({"a", "ra"});
+  kvs.push_back({"b", "rb"});
+  kvs.push_back({"d", "rd"});
+  kvs.push_back({"e", "re"});
 
   std::vector<std::string> expect_values;
   expect_values.push_back("z");
@@ -826,16 +826,16 @@ TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
       auto kv = kv_rpc->Request()->kvs(i);
       auto expect = kv_rpc->Request()->expect_values(i);
       if (kv.key() == "a") {
-        EXPECT_EQ("a", kv.value());
+        EXPECT_EQ("ra", kv.value());
         EXPECT_EQ("z", expect);
       } else if (kv.key() == "b") {
-        EXPECT_EQ("b", kv.value());
+        EXPECT_EQ("rb", kv.value());
         EXPECT_EQ("y", expect);
       } else if (kv.key() == "d") {
-        EXPECT_EQ("d", kv.value());
+        EXPECT_EQ("rd", kv.value());
         EXPECT_EQ("x", expect);
       } else if (kv.key() == "e") {
-        EXPECT_EQ("e", kv.value());
+        EXPECT_EQ("re", kv.value());
         EXPECT_EQ("w", expect);
       } else {
         EXPECT_TRUE(false);
@@ -858,10 +858,10 @@ TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
 
 TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
   std::vector<KVPair> kvs;
-  kvs.push_back({"a", "a"});
-  kvs.push_back({"b", "b"});
-  kvs.push_back({"d", "d"});
-  kvs.push_back({"e", "e"});
+  kvs.push_back({"a", "ra"});
+  kvs.push_back({"b", "rb"});
+  kvs.push_back({"d", "rd"});
+  kvs.push_back({"e", "re"});
 
   std::vector<std::string> expect_values;
   expect_values.push_back("z");
@@ -884,20 +884,20 @@ TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
       auto kv = kv_rpc->Request()->kvs(i);
       auto expect = kv_rpc->Request()->expect_values(i);
       if (kv.key() == "a") {
-        EXPECT_EQ("a", kv.value());
+        EXPECT_EQ("ra", kv.value());
         EXPECT_EQ("z", expect);
         kv_rpc->MutableResponse()->add_key_states(true);
       } else if (kv.key() == "b") {
-        EXPECT_EQ("b", kv.value());
+        EXPECT_EQ("rb", kv.value());
         EXPECT_EQ("y", expect);
         kv_rpc->MutableResponse()->add_key_states(true);
       } else if (kv.key() == "d") {
-        EXPECT_EQ("d", kv.value());
+        EXPECT_EQ("rd", kv.value());
         EXPECT_EQ("x", expect);
         kv_rpc->MutableResponse()->add_key_states(false);
         fail = true;
       } else if (kv.key() == "e") {
-        EXPECT_EQ("e", kv.value());
+        EXPECT_EQ("re", kv.value());
         EXPECT_EQ("w", expect);
         kv_rpc->MutableResponse()->add_key_states(true);
       } else {

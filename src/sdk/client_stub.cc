@@ -16,11 +16,13 @@
 
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "sdk/common/param_config.h"
 #include "sdk/meta_cache.h"
 #include "sdk/rawkv/region_scanner_impl.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 #include "sdk/transaction/txn_region_scanner_impl.h"
+#include "sdk/utils/thread_pool_executor.h"
 
 namespace dingodb {
 
@@ -37,9 +39,8 @@ Status ClientStub::Open(std::string naming_service_url) {
 
   // TODO: pass use gflag or add options
   brpc::ChannelOptions options;
-  // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
-  options.timeout_ms = 5000;
-  options.connect_timeout_ms = 3000;
+  options.timeout_ms = kRpcChannelTimeOutMs;
+  options.connect_timeout_ms = kRpcChannelConnectTimeOutMs;
   store_rpc_interaction_.reset(new RpcInteraction(options));
 
   meta_cache_.reset(new MetaCache(coordinator_proxy_));
@@ -51,6 +52,9 @@ Status ClientStub::Open(std::string naming_service_url) {
   admin_tool_.reset(new AdminTool(coordinator_proxy_));
 
   txn_lock_resolver_.reset(new TxnLockResolver(*(this)));
+
+  executor_.reset(new ThreadPoolExecutor());
+  executor_->Start(kExecutorThreadNum);
 
   return Status::OK();
 }
