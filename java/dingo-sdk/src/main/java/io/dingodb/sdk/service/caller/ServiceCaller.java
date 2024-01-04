@@ -3,50 +3,34 @@ package io.dingodb.sdk.service.caller;
 import io.dingodb.sdk.common.DingoClientException.ExhaustedRetryException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
-import io.dingodb.sdk.common.utils.ReflectionUtils;
 import io.dingodb.sdk.service.Caller;
 import io.dingodb.sdk.service.ChannelProvider;
 import io.dingodb.sdk.service.Service;
+import io.dingodb.sdk.service.ServiceCallCycles;
 import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
+import io.dingodb.sdk.service.entity.error.Errno;
 import io.dingodb.sdk.service.entity.error.Error;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
-import java.util.function.Supplier;
+import java.util.function.Function;
 
+import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_NOTLEADER_VALUE;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.errorToStrategy;
 
 @Slf4j
-public class ServiceCaller<S extends Service<S>> implements InvocationHandler, Caller<S> {
-
-    private static final Map<String, ServiceHandler> handlers = new ConcurrentHashMap<>();
-
-    public static <REQ extends Request, RES extends Response> void addHandler(
-        io.dingodb.sdk.service.ServiceHandler<REQ, RES> handler
-    ) {
-        MethodDescriptor<REQ, RES> method = handler.matchMethod();
-        handlers.computeIfAbsent(method.getFullMethodName(), n -> new ServiceHandler(method)).addHandler(handler);
-    }
-
-    public static <REQ extends Request, RES extends Response> void removeHandler(
-        io.dingodb.sdk.service.ServiceHandler<REQ, RES> handler
-    ) {
-        MethodDescriptor<REQ, RES> method = handler.matchMethod();
-        handlers.computeIfAbsent(method.getFullMethodName(), n -> new ServiceHandler(method)).removeHandler(handler);
-    }
+public class ServiceCaller<S extends Service<S>> implements Caller<S> {
 
     private int retry;
     private CallOptions options;
@@ -54,37 +38,26 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
     private final ChannelProvider channelProvider;
 
     @Getter
-    private final Class<S> genericType;
-    @Getter
     private final S service;
 
     private final Set<MethodDescriptor> directCallOnce = new HashSet<>();
 
-    public ServiceCaller(ChannelProvider channelProvider, int retry, CallOptions options) {
+    @Setter
+    @Getter
+    private CallExecutor callExecutor = RpcCaller::call;
+
+    public ServiceCaller(
+        ChannelProvider channelProvider, int retry, CallOptions options, Function<Caller<S>, S> serviceFactory
+    ) {
         this.channelProvider = channelProvider;
         this.retry = retry;
         this.options = options;
-        this.genericType = ReflectionUtils.getGenericType(this.getClass(), 0);
-
-        service = proxy(genericType);
+        this.service = serviceFactory.apply(this);
     }
 
     public ServiceCaller<S> addExcludeErrorCheck(MethodDescriptor method) {
         directCallOnce.add(method);
         return this;
-    }
-
-    private S proxy(Class<S> genericType) {
-        for (Class<?> child : genericType.getClasses()) {
-            if (!child.getSuperclass().equals(genericType)) {
-                try {
-                    return (S) child.getConstructor(Caller.class).newInstance(this);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        }
-        throw new RuntimeException("Not found " + genericType.getName() + " impl.");
     }
 
     public int retry() {
@@ -106,39 +79,17 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
     }
 
     @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        return method.invoke(service, args);
+    public <REQ extends Request, RES extends Response> RES call(
+        MethodDescriptor<REQ, RES> method, REQ request, ServiceCallCycles<REQ, RES> handlers
+    ) {
+        return call(method, request, handlers);
     }
 
     @Override
     public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, Supplier<REQ> provider
+        MethodDescriptor<REQ, RES> method, long requestId, REQ request, ServiceCallCycles<REQ, RES> handler
     ) {
-        return call(method, System.identityHashCode(provider), provider);
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request
-    ) {
-        return call(method, (Supplier<REQ>) () -> request);
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, long requestId, REQ request
-    ) {
-        return call(method, requestId, (Supplier<REQ>) () -> request);
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, long requestId, Supplier<REQ> provider
-    ) {
-        ServiceHandler<REQ, RES> handler = handlers.computeIfAbsent(
-            method.getFullMethodName(), n -> new ServiceHandler(method)
-        );
-        handler.before(System.identityHashCode(provider), options, requestId);
+        handler.before(request, options, requestId);
         Channel channel = channelProvider.channel();
         int retry = this.retry;
         boolean connected = false;
@@ -147,9 +98,8 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
         REQ lastRequest = null;
         while (retry-- > 0) {
             try {
-                REQ request = lastRequest = provider.get();
                 channelProvider.before(request);
-                RES response = RpcCaller.call(method, request, options, channel, requestId);
+                RES response = callExecutor.call(method, request, options, channel, requestId, handler);
                 if (response == null) {
                     channel = updateChannel(channel, requestId);
                     continue;
@@ -162,10 +112,15 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
                     errMsgs.compute(
                         channel.authority() + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1
                     );
-                    switch (errorToStrategy(errCode)) {
+                    switch (handler.onErrStrategy(
+                        errorToStrategy(errCode),
+                        this.retry, retry, request, response, options, channel.authority(), requestId
+                    )) {
                         case RETRY:
                             handler.onRetry(request, response, options, channel.authority(), requestId);
-                            channel = updateChannel(channel, requestId);
+                            if (errCode == Errno.ERAFT_NOTLEADER.number) {
+                                channel = updateChannel(channel, requestId);
+                            }
                             continue;
                         case FAILED:
                             handler.onFailed(request, response, options, channel.authority(), requestId);
@@ -207,7 +162,7 @@ public class ServiceCaller<S extends Service<S>> implements InvocationHandler, C
     }
 
     private <REQ extends Request> RuntimeException generateException(
-        String name, long traceId, REQ request, boolean connected, Map<String, Integer> errMsgs, ServiceHandler handler
+        String name, long traceId, REQ request, boolean connected, Map<String, Integer> errMsgs, ServiceCallCycles handler
     ) {
         // if connected is false, means can not get leader connection
         if (connected) {

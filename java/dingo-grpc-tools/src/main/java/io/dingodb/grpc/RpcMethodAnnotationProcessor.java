@@ -21,6 +21,7 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
@@ -30,13 +31,13 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -56,12 +57,14 @@ import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 
 import static io.dingodb.grpc.Constant.CALLER;
-import static io.dingodb.grpc.Constant.MARSHALLER;
 import static io.dingodb.grpc.Constant.MSG_PKG;
-import static io.grpc.MethodDescriptor.MethodType.UNARY;
+import static io.dingodb.grpc.Constant.SERVICE_CALL_CYCLE;
+import static io.dingodb.grpc.Constant.SERVICE_METHOD_BUILDER;
+import static io.dingodb.grpc.Constant.SERVICE_PKG;
 import static javax.lang.model.element.Modifier.ABSTRACT;
 import static javax.lang.model.element.Modifier.DEFAULT;
 import static javax.lang.model.element.Modifier.FINAL;
+import static javax.lang.model.element.Modifier.PRIVATE;
 import static javax.lang.model.element.Modifier.PUBLIC;
 import static javax.lang.model.element.Modifier.STATIC;
 
@@ -98,6 +101,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             return true;
         }
         Map<ClassName, TypeSpec.Builder> rpcs = new HashMap<>();
+        Map<ClassName, TypeSpec.Builder> rpcDescriptors = new HashMap<>();
         Set<FileObject> sources = new TreeSet<>(Comparator.comparing(FileObject::getName));
         Set<TypeElement> serviceElements = new TreeSet<>(Comparator.comparing(Element::toString));
         Set<TypeElement> entityElements = new TreeSet<>(Comparator.comparing(Element::toString));
@@ -112,21 +116,26 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             Map<String, AnnotationValue> annotationValues = getAnnotationValues(annotationMirror);
             String name = element.getEnclosingElement().getSimpleName().toString();
             name = name.substring(0, name.length() - 4);
-            ClassName className = ClassName.get(Constant.SERVICE_PKG, name);
-            TypeSpec.Builder typeBuilder = rpcs.computeIfAbsent(className, TypeSpec::interfaceBuilder);
+            ClassName serviceName = ClassName.get(SERVICE_PKG, name);
+            ClassName serviceDescName = ClassName.get(SERVICE_PKG, name + "Descriptors");
+            TypeSpec.Builder typeBuilder = rpcs.computeIfAbsent(serviceName, TypeSpec::interfaceBuilder);
+            TypeSpec.Builder typeDescBuilder = rpcDescriptors.computeIfAbsent(
+                serviceName, k -> TypeSpec.interfaceBuilder(serviceDescName)
+            );
             String methodName = cleanFullMethodName(annotationValues.get(fullMethodName).toString());
             try {
                 TypeElement reqTypeElement = (TypeElement) types.asElement((TypeMirror) annotationValues.get(requestType).getValue());
                 TypeElement resTypeElement = (TypeElement) types.asElement((TypeMirror) annotationValues.get(responseType).getValue());
                 ClassName reqTypeName = messageGenerateProcessor.generateMessage(reqTypeElement);
                 ClassName resTypeName = messageGenerateProcessor.generateMessage(resTypeElement);
-                typeBuilder.addField(makeMethodFieldSpec(
+                typeDescBuilder.addField(makeMethodFieldSpec(
                     methodName,
                     annotationValues.get(fullMethodName).toString(), reqTypeName, resTypeName
                 ));
+                typeDescBuilder.addField(addHandlers(methodName, reqTypeName, resTypeName));
                 typeBuilder
-                    .addMethod(makeRequestMethod(methodName, reqTypeName, resTypeName))
-                    .addMethod(makeRequestWithIdMethod(methodName, reqTypeName, resTypeName));
+                    .addMethod(makeRequestMethod(methodName, serviceDescName, reqTypeName, resTypeName))
+                    .addMethod(makeRequestWithIdMethod(methodName, serviceDescName, reqTypeName, resTypeName));
                 messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.REQUEST);
                 messageGenerateProcessor.messages.get(resTypeName).addSuperinterface(Constant.RESPONSE);
                 if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("store")) {
@@ -154,14 +163,21 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                     ), element);
                 });
             for (Map.Entry<ClassName, TypeSpec.Builder> entry : messageGenerateProcessor.messages.entrySet()) {
+                entry.getValue().addField(FieldSpec.builder(TypeName.OBJECT, "ext$", PRIVATE).build());
                 createJavaFile(entry.getKey().packageName(), entry.getValue().build());
             }
+
+            for (Map.Entry<ClassName, TypeSpec.Builder> entry : rpcDescriptors.entrySet()) {
+                createJavaFile(entry.getKey().packageName(), entry.getValue().addModifiers(PUBLIC).build());
+            }
+
             for (Map.Entry<ClassName, TypeSpec.Builder> entry : rpcs.entrySet()) {
                 TypeSpec.Builder builder = entry.getValue();
 
-                ParameterizedTypeName caller = ParameterizedTypeName.get(CALLER, entry.getKey());
+                ClassName serviceName = entry.getKey();
+                ParameterizedTypeName caller = ParameterizedTypeName.get(CALLER, serviceName);
                 TypeSpec implType = TypeSpec.classBuilder("Impl")
-                    .addSuperinterface(entry.getKey())
+                    .addSuperinterface(serviceName)
                     .addAnnotation(Getter.class)
                     .addAnnotation(AllArgsConstructor.class)
                     .addField(caller, "caller", PUBLIC, FINAL)
@@ -176,10 +192,12 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                         .returns(caller)
                         .build()
                     )
-                    .addSuperinterface(ParameterizedTypeName.get(Constant.SERVICE, entry.getKey()))
+                    .addSuperinterface(ParameterizedTypeName.get(Constant.SERVICE, serviceName))
                     .addModifiers(PUBLIC);
 
-                createJavaFile(Constant.SERVICE_PKG, builder.build());
+                createJavaFile(
+                    SERVICE_PKG, builder.build(), ClassName.get(SERVICE_PKG, serviceName.simpleName() + "Descriptors")
+                );
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -200,75 +218,46 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
         ParameterizedTypeName type = ParameterizedTypeName.get(ClassName.get(MethodDescriptor.class), req, res);
         return FieldSpec.builder(type, name, PUBLIC, STATIC, FINAL)
             .initializer(
-                "$T.newBuilder()\n" +
-                    "    .setType($T.$L)\n" +
-                    "    .setFullMethodName($L)\n" +
-                    "    .setSampledToLocalTracing(true)\n" +
-                    "    .setRequestMarshaller(new $L($T::new))\n" +
-                    "    .setResponseMarshaller(new $L($T::new))" +
-                    "    .build()",
-                MethodDescriptor.class,
-                MethodDescriptor.MethodType.class, UNARY,
-                fullMethodName,
-                MARSHALLER, req,
-                MARSHALLER, res
+                "$T.buildUnary($L, $T::new, $T::new)",
+                SERVICE_METHOD_BUILDER, fullMethodName, req, res
             )
             .build();
     }
 
     private MethodSpec makeRequestMethod(
-        String methodName,
-        TypeName requestTypeName,
-        TypeName responseTypeName
+        String methodName, TypeName descTypeName, TypeName requestTypeName, TypeName responseTypeName
     ) {
-
         return MethodSpec.methodBuilder(methodName)
             .returns(responseTypeName)
             .addParameter(requestTypeName, "request")
             .addModifiers(PUBLIC, DEFAULT)
-            .addStatement("return getCaller().call($L, request)", methodName)
+            .addStatement("return $L($T.identityHashCode(request), request)", methodName, System.class)
             .build();
     }
 
     private MethodSpec makeRequestWithIdMethod(
-        String methodName,
-        TypeName requestTypeName,
-        TypeName responseTypeName
+        String methodName, TypeName descTypeName, TypeName requestTypeName, TypeName responseTypeName
     ) {
 
         return MethodSpec.methodBuilder(methodName)
             .returns(responseTypeName)
-            .addParameter(TypeName.LONG, "requestId")
-            .addParameter(requestTypeName, "request")
-            .addModifiers(PUBLIC, DEFAULT)
-            .addStatement("return getCaller().call($L, requestId, request)", methodName)
-            .build();
+            .addParameters(Arrays.asList(
+                ParameterSpec.builder(TypeName.LONG, "requestId").build(),
+                ParameterSpec.builder(requestTypeName, "request").build())
+            ).addModifiers(PUBLIC, DEFAULT)
+            .addStatement(
+                "return getCaller().call($L, requestId, request, $LHandlers)",
+                methodName, methodName
+            ).build();
     }
 
-    private MethodSpec makeProviderMethod(
-        String methodName,
-        TypeName requestTypeName,
-        TypeName responseTypeName
-    ) {
-        return MethodSpec.methodBuilder(methodName)
-            .returns(responseTypeName)
-            .addParameter(ParameterizedTypeName.get(ClassName.get(Supplier.class), requestTypeName), "provider")
-            .addModifiers(PUBLIC, DEFAULT)
-            .addStatement("return getCaller().call($L, provider)", methodName)
-            .build();
-    }
-
-    private MethodSpec makeProviderWithIdMethod(
-        String methodName,
-        TypeName requestTypeName,
-        TypeName responseTypeName
-    ) {
-        return MethodSpec.methodBuilder(methodName)
-            .returns(responseTypeName)
-            .addParameter(TypeName.LONG, "requestId")
-            .addParameter(ParameterizedTypeName.get(ClassName.get(Supplier.class), requestTypeName), "provider")
-            .addModifiers(PUBLIC, DEFAULT)
-            .addStatement("return getCaller().call($L, requestId, provider)", methodName)
+    private FieldSpec addHandlers(String method, TypeName req, TypeName res) {
+        return FieldSpec
+            .builder(ParameterizedTypeName.get(SERVICE_CALL_CYCLE, req, res), method + "Handlers")
+            .addModifiers(PUBLIC, FINAL, STATIC)
+            .initializer(
+                "new $T<>($L)", SERVICE_CALL_CYCLE, method
+            )
             .build();
     }
 
@@ -290,9 +279,12 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             .findAny().orElse(null);
     }
 
-    private void createJavaFile(String packageName, TypeSpec typeSpec) throws IOException {
-
-        JavaFile javaFile = JavaFile.builder(packageName, typeSpec)
+    private void createJavaFile(String packageName, TypeSpec typeSpec, ClassName... staticImport) throws IOException {
+        JavaFile.Builder builder = JavaFile.builder(packageName, typeSpec);
+        for (ClassName className : staticImport) {
+            builder.addStaticImport(className, "*");
+        }
+        JavaFile javaFile = builder
             .indent("    ")
             .skipJavaLangImports(true)
             .build();

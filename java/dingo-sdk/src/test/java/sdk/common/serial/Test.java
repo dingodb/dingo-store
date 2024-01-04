@@ -44,6 +44,7 @@ public class Test {
         for(Object[] record : records) {
             KeyValue kv = re.encode(record);
             kvs.add(kv);
+            System.out.println("=====" + kv.getValue().length);
         }
 
         long tag5 = System.currentTimeMillis();
@@ -208,8 +209,8 @@ public class Test {
     }
 
     private static List<Object[]> getRecords() {
-        byte[] k1 = new byte[1024];
-        for (int i = 0; i < 1024; i++) {
+        byte[] k1 = new byte[1049076];
+        for (int i = 0; i < 1049076; i++) {
             k1[i] = ((byte) (i%256));
         }
 
@@ -232,7 +233,7 @@ public class Test {
         };
 
         List<Object[]> allRecord = new ArrayList<>();
-        for (int i = 0; i < 1000000; i ++) {
+        for (int i = 0; i < 100; i ++) {
             Object[] r = new Object[12];
             System.arraycopy(record, 1, r, 1, 11);
             r[0] = i;

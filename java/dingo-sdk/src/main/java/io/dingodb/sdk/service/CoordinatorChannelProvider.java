@@ -9,6 +9,7 @@ import io.dingodb.sdk.service.entity.coordinator.GetCoordinatorMapResponse;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ManagedChannel;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+@Slf4j
 public class CoordinatorChannelProvider implements ChannelProvider {
 
     private final Function<GetCoordinatorMapResponse, Location> locationGetter;
@@ -51,7 +53,7 @@ public class CoordinatorChannelProvider implements ChannelProvider {
                     .map(ChannelManager::getChannel)
                     .ifPresent(ch -> this.channel = ch)
                     .ifPresent($ -> findLeader.set(true))
-                    .map(ch ->requestCoordinatorMap(trace, ch))
+                    .map(ch ->requestCoordinatorMap(trace, ChannelManager.getChannel(response.getLeaderLocation())))
                     .map(GetCoordinatorMapResponse::getCoordinatorLocations)
                     .filter($ -> !$.isEmpty())
                     .ifPresent($ -> locations = new HashSet<>($));
@@ -66,11 +68,12 @@ public class CoordinatorChannelProvider implements ChannelProvider {
     private GetCoordinatorMapResponse requestCoordinatorMap(long trace, Channel channel) {
         return RpcCaller
             .call(
-                CoordinatorService.getCoordinatorMap,
+                CoordinatorServiceDescriptors.getCoordinatorMap,
                 new GetCoordinatorMapRequest(),
                 CallOptions.DEFAULT.withDeadlineAfter(30, TimeUnit.SECONDS),
                 channel,
-                trace
+                trace,
+                CoordinatorServiceDescriptors.getCoordinatorMapHandlers
             );
     }
 

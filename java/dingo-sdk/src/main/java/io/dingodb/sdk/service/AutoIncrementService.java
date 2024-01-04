@@ -1,5 +1,6 @@
 package io.dingodb.sdk.service;
 
+import io.dingodb.sdk.service.entity.common.Location;
 import io.dingodb.sdk.service.entity.meta.DingoCommonId;
 import io.dingodb.sdk.service.entity.meta.GenerateAutoIncrementRequest;
 import io.dingodb.sdk.service.entity.meta.GenerateAutoIncrementResponse;
@@ -9,12 +10,13 @@ import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class AutoIncrementService {
     
-    private static final Map<String, Map<DingoCommonId, AutoIncrement>> cache = new ConcurrentHashMap<>();
+    private static final Map<Set<Location>, Map<DingoCommonId, AutoIncrement>> cache = new ConcurrentHashMap<>();
 
     @AllArgsConstructor
     protected static class Increment {
@@ -74,8 +76,14 @@ public class AutoIncrementService {
     private Integer offset = 1;
 
     public AutoIncrementService(String servers) {
-        this.metaService = Services.metaService(Services.parse(servers));
-        innerCache = cache.computeIfAbsent(servers, s -> new ConcurrentHashMap<>());
+        Set<Location> coordinators = Services.parse(servers);
+        this.metaService = Services.autoIncrementMetaService(coordinators);
+        innerCache = cache.computeIfAbsent(coordinators, s -> new ConcurrentHashMap<>());
+    }
+
+    public AutoIncrementService(Set<Location> coordinators) {
+        this.metaService = Services.autoIncrementMetaService(coordinators);
+        innerCache = cache.computeIfAbsent(coordinators, s -> new ConcurrentHashMap<>());
     }
 
     public void resetCount(long count) {
@@ -101,7 +109,6 @@ public class AutoIncrementService {
 
     private Increment fetch(DingoCommonId tableId) {
         try {
-            log.info("Generate {} auto increment count:{}, increment:{}, offset:{}", tableId, count, increment, offset);
             GenerateAutoIncrementResponse response = metaService.generateAutoIncrement(GenerateAutoIncrementRequest
                 .builder()
                 .tableId(tableId)
@@ -110,10 +117,9 @@ public class AutoIncrementService {
                 .autoIncrementOffset(offset)
                 .build()
             );
-
             log.info(
-                "Generated {} auto increment response startId:{}, endId:{}",
-                tableId, response.getStartId(), response.getEndId()
+                "Generated {} auto increment count: {}, increment: {}, offset:{}, startId:{}, endId:{}",
+                tableId , count, increment, offset, response.getStartId(), response.getEndId()
             );
             return new Increment(response.getEndId(), response.getStartId());
         } catch (Exception e) {

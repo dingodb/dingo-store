@@ -19,18 +19,16 @@ package io.dingodb.sdk.common.codec;
 import io.dingodb.sdk.common.KeyValue;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.io.IOException;
-
 public interface KeyValueCodec {
-    Object[] decode(KeyValue keyValue) throws IOException;
+    Object[] decode(KeyValue keyValue);
 
-    Object[] decodeKeyPrefix(byte[] keyPrefix) throws IOException;
+    Object[] decodeKeyPrefix(byte[] keyPrefix);
 
-    KeyValue encode(Object @NonNull [] record) throws IOException;
+    KeyValue encode(Object @NonNull [] record);
 
-    byte[] encodeKey(Object[] record) throws IOException;
+    byte[] encodeKey(Object[] record);
 
-    byte[] encodeKeyPrefix(Object[] record, int columnCount) throws IOException;
+    byte[] encodeKeyPrefix(Object[] record, int columnCount);
 
     byte[] encodeMinKeyPrefix();
 
