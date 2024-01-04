@@ -171,6 +171,7 @@ enum MetaIncrementOpType {
   CREATE = 0;
   UPDATE = 1;
   DELETE = 2;
+  MODIFY = 3;  // this is for modify operation, defined by each type
 }
 
 message MetaIncrementCoordinator {
@@ -263,9 +264,19 @@ message MetaIncrementIdEpoch {
 }
 
 message MetaIncrementStoreOperation {
+  message MoveRegionCmd {
+    int64 region_cmd_id = 1;
+    int64 from_store_id = 2;
+    int64 to_store_id = 3;
+  }
+
   int64 id = 1;  // this is store id
   StoreOperationInternal store_operation = 2;
   MetaIncrementOpType op_type = 3;
+
+  oneof Modify {
+    MoveRegionCmd move_region_cmd = 4;
+  }
 }
 
 message MetaIncrementRegionCmd {

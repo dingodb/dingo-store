@@ -186,6 +186,7 @@ message RegionCmd {
   int64 region_id = 3;                // this is region id
   RegionCmdType region_cmd_type = 4;  // the cmd want to be executed
   int64 create_timestamp = 5;         // the timestamp when this cmd is created
+  int64 store_id = 6;                 // the store id of this cmd
   oneof Request {
     CreateRequest create_request = 11;           // create parameters
     DeleteRequest delete_request = 12;           // delete parameters

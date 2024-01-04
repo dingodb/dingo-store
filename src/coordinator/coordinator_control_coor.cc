@@ -3243,6 +3243,50 @@ butil::Status CoordinatorControl::CleanStoreOperation(int64_t store_id,
   return butil::Status::OK();
 }
 
+// MoveRegionCmd
+// move region_cmd from one store to another store
+butil::Status CoordinatorControl::MoveRegionCmd(int64_t old_store_id, int64_t new_store_id, int64_t region_cmd_id,
+                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // validate old_store_id
+  int ret = store_map_.Exists(old_store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "MoveRegionCmd store not exists, old_store_id = " << old_store_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "MoveRegionCmd old_store_id not exists");
+  }
+
+  // validate new_store_id
+  ret = store_map_.Exists(new_store_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "MoveRegionCmd store not exists, new_store_id = " << new_store_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "MoveRegionCmd new_store_id not exists");
+  }
+
+  // validate region_cmd_id
+  if (region_cmd_id <= 0) {
+    DINGO_LOG(ERROR) << "MoveRegionCmd region_cmd_id <= 0, region_cmd_id = " << region_cmd_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "MoveRegionCmd region_cmd_id <= 0");
+  }
+
+  // validate region_cmd_id exists in region_cmd_map_
+  ret = region_cmd_map_.Exists(region_cmd_id);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "MoveRegionCmd region_cmd_id not exists, region_cmd_id = " << region_cmd_id;
+    return butil::Status(pb::error::Errno::EREGION_CMD_NOT_FOUND, "MoveRegionCmd region_cmd_id not exists");
+  }
+
+  auto* store_operation_increment = meta_increment.add_store_operations();
+  store_operation_increment->set_id(old_store_id);  // this store id
+  store_operation_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::MODIFY);
+  auto* store_operation = store_operation_increment->mutable_store_operation();
+  store_operation->set_id(old_store_id);
+  auto* move_region_cmd = store_operation_increment->mutable_move_region_cmd();
+  move_region_cmd->set_region_cmd_id(region_cmd_id);
+  move_region_cmd->set_from_store_id(old_store_id);
+  move_region_cmd->set_to_store_id(new_store_id);
+
+  return butil::Status::OK();
+}
+
 // AddRegionCmd
 butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, int64_t job_id,
                                                const pb::coordinator::RegionCmd& region_cmd,
@@ -3278,6 +3322,7 @@ butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, int64_t job_id,
   *cmd_tmp = region_cmd;
   cmd_tmp->set_id(region_cmd_id);
   cmd_tmp->set_job_id(job_id);
+  cmd_tmp->set_store_id(store_id);
 
   return butil::Status::OK();
 }
@@ -5393,8 +5438,11 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
     for (const auto& region_cmd : store_operation.region_cmds()) {
       auto ret = RemoveRegionCmd(store_operation.id(), region_cmd.id(), meta_increment);
       if (!ret.ok()) {
-        DINGO_LOG(ERROR) << "... remove region_cmd failed, store_id=" << store.id()
+        DINGO_LOG(ERROR) << "... region_cmd is success, but remove region_cmd failed, store_id=" << store.id()
                          << " region_cmd_id=" << region_cmd.id();
+      } else {
+        DINGO_LOG(INFO) << "... region_cmd is success, and remove region_cmd success, store_id=" << store.id()
+                        << " region_cmd_id=" << region_cmd.id();
       }
     }
 
@@ -5449,21 +5497,34 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
             break;
           }
 
-          auto ret = AddRegionCmd(it_cmd.error().store_id(), region_cmd.job_id(), region_cmd, meta_increment);
+          auto ret = MoveRegionCmd(store.id(), it_cmd.error().store_id(), it_cmd.region_cmd_id(), meta_increment);
           if (!ret.ok()) {
-            DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << store.id()
-                             << " region_cmd_id=" << region_cmd.id();
+            DINGO_LOG(ERROR) << "... MoveRegionCmd failed, store_id=" << store.id()
+                             << " region_cmd_id=" << it_cmd.region_cmd_id()
+                             << " new_store_id=" << it_cmd.error().store_id();
           } else {
-            // delete store_operation
-            auto ret = RemoveRegionCmd(store.id(), it_cmd.region_cmd_id(), meta_increment);
-            if (!ret.ok()) {
-              DINGO_LOG(ERROR) << "... remove store_operation failed for NOTLEADER re-routing, store_id=" << store.id()
-                               << " region_cmd_id=" << it_cmd.region_cmd_id();
-            } else {
-              DINGO_LOG(INFO) << "... remove store_operation success for NOTLEADER re-routing, store_id=" << store.id()
-                              << " region_cmd_id=" << it_cmd.region_cmd_id();
-            }
+            DINGO_LOG(INFO) << "... MoveRegionCmd success, store_id=" << store.id()
+                            << " region_cmd_id=" << it_cmd.region_cmd_id()
+                            << " new_store_id=" << it_cmd.error().store_id();
           }
+
+          // auto ret = AddRegionCmd(it_cmd.error().store_id(), region_cmd.job_id(), region_cmd, meta_increment);
+          // if (!ret.ok()) {
+          //   DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << store.id()
+          //                    << " region_cmd_id=" << region_cmd.id();
+          // } else {
+          //   // delete store_operation
+          //   auto ret = RemoveRegionCmd(store.id(), it_cmd.region_cmd_id(), meta_increment);
+          //   if (!ret.ok()) {
+          //     DINGO_LOG(ERROR) << "... remove store_operation failed for NOTLEADER re-routing, store_id=" <<
+          //     store.id()
+          //                      << " region_cmd_id=" << it_cmd.region_cmd_id();
+          //   } else {
+          //     DINGO_LOG(INFO) << "... remove store_operation success for NOTLEADER re-routing, store_id=" <<
+          //     store.id()
+          //                     << " region_cmd_id=" << it_cmd.region_cmd_id();
+          //   }
+          // }
           break;
         }
       }
