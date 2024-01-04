@@ -19,11 +19,13 @@
 
 // TODO: make params in this file use glfags
 
-// start: each rpc call params
-const int64_t kRpcCallMaxRetry = 3;
+// ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
+const int64_t kRpcChannelTimeOutMs = 5000;
+const int64_t kRpcChannelConnectTimeOutMs  = 3000;
 
+// each rpc call params
+const int64_t kRpcCallMaxRetry = 3;
 const int64_t kRpcTimeOutMs = 5000;
-// end: each rpc call params
 
 // use case: wrong leader or request range invalid
 const int64_t kRpcMaxRetry = 5;
@@ -41,5 +43,10 @@ const int64_t kPrefetchRegionCount = 3;
 const int64_t kCoordinatorInteractionMaxRetry = 3;
 
 const int64_t kTxnOpMaxRetry = 2;
+
+const int64_t kExecutorThreadNum = 8;
+
+const int64_t kRawkvBackoffMs = 200;
+const int64_t kRawkvMaxRetry = 5;
 
 #endif  // DINGODB_SDK_PARAM_CONFIG_H_

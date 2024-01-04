@@ -18,7 +18,7 @@
 #include "gmock/gmock.h"
 #include "google/protobuf/message.h"
 #include "rpc/rpc.h"
-#include "utils/call_back.h"
+#include "utils/callback.h"
 
 namespace dingodb {
 namespace sdk {

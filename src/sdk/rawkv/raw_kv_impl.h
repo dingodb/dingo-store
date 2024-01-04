@@ -78,14 +78,6 @@ class RawKV::RawKVImpl {
         : rpc(p_rpc), region(std::move(p_region)), delete_count(0) {}
   };
 
-  void ProcessSubBatchGet(SubBatchState* sub);
-
-  void ProcessSubBatchPut(SubBatchState* sub);
-
-  void ProcessSubBatchPutIfAbsent(SubBatchState* sub);
-
-  void ProcessSubBatchDelete(SubBatchState* sub);
-
   void ProcessSubBatchDeleteRange(SubBatchState* sub);
 
   void ProcessSubBatchCompareAndSet(SubBatchState* sub);

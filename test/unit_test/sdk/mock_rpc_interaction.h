@@ -22,7 +22,7 @@
 #include "gmock/gmock.h"
 #include "rpc/rpc_interaction.h"
 #include "status.h"
-#include "utils/call_back.h"
+#include "utils/callback.h"
 
 namespace dingodb {
 namespace sdk {

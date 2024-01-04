@@ -92,17 +92,17 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
 
   ~RawKV();
 
-  Status Get(const std::string& key, std::string& value);
+  Status Get(const std::string& key, std::string& out_value);
 
-  Status BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& kvs);
+  Status BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& out_kvs);
 
   Status Put(const std::string& key, const std::string& value);
 
   Status BatchPut(const std::vector<KVPair>& kvs);
 
-  Status PutIfAbsent(const std::string& key, const std::string& value, bool& state);
+  Status PutIfAbsent(const std::string& key, const std::string& value, bool& out_state);
 
-  Status BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& states);
+  Status BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& out_states);
 
   Status Delete(const std::string& key);
 
@@ -110,22 +110,22 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
 
   // delete key in [start_key, end_key)
   // output_param: delete_count
-  Status DeleteRangeNonContinuous(const std::string& start_key, const std::string& end_key, int64_t& delete_count);
+  Status DeleteRangeNonContinuous(const std::string& start_key, const std::string& end_key, int64_t& out_delete_count);
 
   // delete key in [start_key, end_key), but region between [start_key, end_key) must continuous
   // output_param: delete_count
-  Status DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& delete_count);
+  Status DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& out_delete_count);
 
   // expected_value: empty means key not exist
   Status CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,
-                       bool& state);
+                       bool& out_state);
 
   // expected_values size must equal kvs size
   Status BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
-                            std::vector<KeyOpState>& states);
+                            std::vector<KeyOpState>& out_states);
 
   // limit: 0 means no limit, will scan all key in [start_key, end_key)
-  Status Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs);
+  Status Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& out_kvs);
 
  private:
   friend class Client;

@@ -22,7 +22,7 @@
 #include "proto/error.pb.h"
 #include "sdk/client_stub.h"
 #include "sdk/status.h"
-#include "sdk/utils/call_back.h"
+#include "sdk/utils/callback.h"
 
 namespace dingodb {
 namespace sdk {
@@ -30,6 +30,8 @@ class DingoStub;
 // TODO: support backoff strategy
 class StoreRpcController {
  public:
+  explicit StoreRpcController(const ClientStub& stub, Rpc& rpc);
+
   explicit StoreRpcController(const ClientStub& stub, Rpc& rpc, std::shared_ptr<Region> region);
 
   virtual ~StoreRpcController();
