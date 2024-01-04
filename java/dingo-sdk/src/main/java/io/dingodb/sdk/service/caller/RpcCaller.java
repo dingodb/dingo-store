@@ -2,6 +2,7 @@ package io.dingodb.sdk.service.caller;
 
 import io.dingodb.sdk.service.Caller;
 import io.dingodb.sdk.service.Service;
+import io.dingodb.sdk.service.ServiceCallCycles;
 import io.dingodb.sdk.service.entity.Message;
 import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
@@ -18,29 +19,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 
 @Slf4j
 @AllArgsConstructor
 public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHandler {
-
-    private static final Map<String, RpcHandler> handlers = new ConcurrentHashMap<>();
-
-    public static <REQ extends Request, RES extends Response> void addHandler(
-        io.dingodb.sdk.service.RpcHandler<REQ, RES> handler
-    ) {
-        MethodDescriptor method = handler.matchMethod();
-        handlers.computeIfAbsent(method.getFullMethodName(), n -> new RpcHandler<>(method)).addHandler(handler);
-    }
-
-    public static <REQ extends Request, RES extends Response> void removeHandler(
-        io.dingodb.sdk.service.RpcHandler<REQ, RES> handler
-    ) {
-        MethodDescriptor method = handler.matchMethod();
-        handlers.computeIfAbsent(method.getFullMethodName(), n -> new RpcHandler<>(method)).removeHandler(handler);
-    }
 
     @Getter
     private final Channel channel;
@@ -75,31 +57,16 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
 
     @Override
     public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, Supplier<REQ> provider
+        MethodDescriptor<REQ, RES> method, REQ request, ServiceCallCycles<REQ, RES> handler
     ) {
-        return call(method, provider.get());
+        return call(method, request, options, channel, System.identityHashCode(request), handler);
     }
 
     @Override
     public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request
+        MethodDescriptor<REQ, RES> method, long requestId, REQ request, ServiceCallCycles<REQ, RES> handler
     ) {
-        return call(method, request, options, channel, System.identityHashCode(request));
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, long requestId, Supplier<REQ> provider
-    ) {
-        REQ request = provider.get();
-        return call(method, request, options, channel, System.identityHashCode(request));
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, long requestId, REQ request
-    ) {
-        return call(method, request, options, channel, System.identityHashCode(request));
+        return call(method, request, options, channel, System.identityHashCode(request), handler);
     }
 
     protected static <REQ extends Message, RES extends Response> RpcFuture<RES> asyncCall(
@@ -115,25 +82,29 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
     }
 
     public static <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request, CallOptions options, Channel channel, long trace
+        MethodDescriptor<REQ, RES> method,
+        REQ request,
+        CallOptions options,
+        Channel channel,
+        long trace,
+        ServiceCallCycles<REQ, RES> handler
     ) {
         String methodName = method.getFullMethodName();
-        RpcHandler<REQ, RES> handler = handlers.computeIfAbsent(methodName, n -> new RpcHandler<>(method));
 
-        handler.enter(request, options, channel == null ? null : channel.authority(), trace);
         if (channel == null) {
+            handler.rBefore(request, options, null, trace);
             return null;
         }
-        handler.before(request, options, channel.authority(), trace);
+        handler.rBefore(request, options, channel.authority(), trace);
         RES response;
         try {
             response = ClientCalls.blockingUnaryCall(channel, method, options, request);
         } catch (StatusRuntimeException e) {
-            handler.onNonResponse(request, options, channel.authority(), trace, e.getMessage());
+            handler.rError(request, options, channel.authority(), trace, e.getMessage());
             return null;
         }
 
-        handler.after(request, response, options, channel.authority(), trace);
+        handler.rAfter(request, response, options, channel.authority(), trace);
         return response;
     }
 

@@ -28,6 +28,8 @@ public class Constant {
 
 
     public static final ClassName SERVICE = ClassName.get(SERVICE_PKG, "Service");
+    public static final ClassName SERVICE_METHOD_BUILDER = ClassName.get(SERVICE_PKG, "ServiceMethodBuilder");
+    public static final ClassName SERVICE_CALL_CYCLE = ClassName.get(SERVICE_PKG, "ServiceCallCycles");
     public static final ClassName CALLER = ClassName.get(SERVICE_PKG, "Caller");
     public static final ClassName FUTURE = ClassName.get(SERVICE_PKG, "RpcFuture");
     public static final ClassName NUMERIC = ClassName.get(MSG_PKG, "Numeric");
@@ -49,6 +51,5 @@ public class Constant {
     public static final ClassName SIZE_UTILS = ClassName.get(SERIALIZE_PACKAGE, "SizeUtils");
 
     public static final ClassName MARSHALLER = ClassName.get(SERIALIZE_PACKAGE, "Marshaller");
-
 
 }

@@ -1,5 +1,6 @@
 package io.dingodb.sdk.service.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
 import io.dingodb.sdk.common.utils.Optional;
@@ -15,6 +16,15 @@ public interface Message {
     boolean read(CodedInputStream input);
     void write(CodedOutputStream outputStream);
     int sizeOf();
+
+    @JsonIgnore
+    default Object getExt$() {
+        throw new UnsupportedOperationException();
+    }
+
+    default void setExt$(Object ext$) {
+        throw new UnsupportedOperationException();
+    }
 
     interface Request extends Message {
         default RequestInfo getRequestInfo() {
@@ -46,13 +56,13 @@ public interface Message {
 
     interface StoreRequest extends Request {
 
-        default void setIsolationLevel$(IsolationLevel isolationLevel) {
+        default void setIsolationLevel(IsolationLevel isolationLevel) {
             if (getContext() == null) {
                 setContext(Context.builder().isolationLevel(isolationLevel).build());
             }
         }
 
-        default IsolationLevel getIsolationLevel$() {
+        default IsolationLevel getIsolationLevel() {
             return Optional.mapOrNull(getContext(), Context::getIsolationLevel);
         }
 

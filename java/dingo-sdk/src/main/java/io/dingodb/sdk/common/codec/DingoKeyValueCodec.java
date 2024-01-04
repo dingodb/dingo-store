@@ -60,27 +60,27 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     }
 
     @Override
-    public Object[] decode(KeyValue keyValue) throws IOException {
+    public Object[] decode(KeyValue keyValue) {
         return rd.decode(keyValue);
     }
 
     @Override
-    public Object[] decodeKeyPrefix(byte[] keyPrefix) throws IOException {
+    public Object[] decodeKeyPrefix(byte[] keyPrefix) {
         return rd.decodeKeyPrefix(keyPrefix);
     }
 
     @Override
-    public KeyValue encode(Object @NonNull [] record) throws IOException {
+    public KeyValue encode(Object @NonNull [] record) {
         return re.encode(record);
     }
 
     @Override
-    public byte[] encodeKey(Object[] record) throws IOException {
+    public byte[] encodeKey(Object[] record) {
         return re.encodeKey(record);
     }
 
     @Override
-    public byte[] encodeKeyPrefix(Object[] record, int columnCount) throws IOException {
+    public byte[] encodeKeyPrefix(Object[] record, int columnCount) {
         return re.encodeKeyPrefix(record, columnCount);
     }
 

@@ -1,6 +1,7 @@
 package io.dingodb.grpc;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.base.CaseFormat;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MapField;
@@ -16,9 +17,12 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.ToString;
 import lombok.experimental.Delegate;
+import lombok.experimental.FieldNameConstants;
 import lombok.experimental.SuperBuilder;
 
 import java.util.AbstractMap;
@@ -250,7 +254,10 @@ public class MessageGenerateProcessor {
         }
 
         TypeSpec.Builder builder = TypeSpec.classBuilder(newClassName).addModifiers(PUBLIC).addSuperinterface(MESSAGE)
-            .addAnnotation(Data.class).addAnnotation(SuperBuilder.class).addAnnotation(NoArgsConstructor.class);
+            .addAnnotation(Data.class)
+            .addAnnotation(SuperBuilder.class)
+            .addAnnotation(NoArgsConstructor.class)
+            .addAnnotation(FieldNameConstants.class);
 
         Map<String, Integer> real = new HashMap<>();
         NavigableMap<Integer, Map.Entry<String, TypeName>> all = new TreeMap<>();
@@ -312,6 +319,7 @@ public class MessageGenerateProcessor {
 
             if (fieldType.equals(BYTE_ARRARY)) {
                 builder.addMethod(methodBuilder(fieldName + "Hex$", TypeName.get(String.class), PUBLIC)
+                    .addAnnotation(JsonIgnore.class)
                     .addAnnotation(ToString.Include.class)
                     .addCode("return io.dingodb.sdk.common.utils.ByteArrayUtils.toHex(" + fieldName + ");")
                     .build()
@@ -319,10 +327,6 @@ public class MessageGenerateProcessor {
             }
             builder.addField(FieldSpec.builder(fieldType, fieldName, PRIVATE).build());
 
-        }
-
-        if (builder.fieldSpecs.size() > 0) {
-            builder.addAnnotation(AllArgsConstructor.class);
         }
 
         makeReadWriteMethod(builder, real, all);
@@ -350,6 +354,8 @@ public class MessageGenerateProcessor {
             .addSuperinterface(MESSAGE).addSuperinterface(NUMERIC)
             .addMethod(methodBuilder(NUMBER, INT, PUBLIC, ABSTRACT).build())
             .addMethod(methodBuilder("nest", nest, PUBLIC, ABSTRACT).build());
+
+        OneOfNestMethod.addNestMethod(className, builder);
 
         TypeSpec.Builder nestBuilder = TypeSpec.enumBuilder(nest).addModifiers(PUBLIC, STATIC)
             .addSuperinterface(NUMERIC)
@@ -387,15 +393,18 @@ public class MessageGenerateProcessor {
                 TypeMirror realType = returnType;
                 realTypeName = fieldType(null, realType, parentElements);
                 realValueField = FieldSpec.builder(realTypeName, VALUE, PRIVATE);
-                if (realTypeName instanceof ClassName) {
+                if (realTypeName instanceof ClassName && !realTypeName.equals(TypeName.get(String.class))) {
                     generateMessage((ClassName) realTypeName, (TypeElement) types.asElement(realType));
                     realValueField.addAnnotation(Delegate.class);
                 }
             }
+            realValueField.addAnnotation(Getter.class);
 
             if (canDirect(realTypeName)) {
                 nestClassBuilder.addMethod(overrideBuilder("read", TypeName.BOOLEAN, INPUT_ARG)
+                        .addAnnotation(SneakyThrows.class)
                         .addStatement("$L = $T.$L($L)", VALUE, READER, directRead(realTypeName), INPUT)
+                        .addStatement("input.readTag()")
                         .addStatement("return true")
                         .build()
                     ).addMethod(overrideBuilder("write", VOID, OUT_ARG)
@@ -411,6 +420,7 @@ public class MessageGenerateProcessor {
                     .addField(realValueField.build());
                 if (realTypeName.equals(BYTE_ARRARY)) {
                     nestClassBuilder.addMethod(methodBuilder("valueHex$", TypeName.get(String.class), PUBLIC)
+                        .addAnnotation(JsonIgnore.class)
                         .addAnnotation(ToString.Include.class)
                         .addCode("return io.dingodb.sdk.common.utils.ByteArrayUtils.toHex(value);")
                         .build()

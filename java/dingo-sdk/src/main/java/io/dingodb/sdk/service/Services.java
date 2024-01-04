@@ -33,73 +33,63 @@ public class Services {
 
     public static final int DEFAULT_RETRY_TIMES = 30;
 
-    private static final LoadingCache<Set<Location>, CoordinatorService> coordinatorServiceCache = CacheBuilder
+    private static final LoadingCache<Set<Location>, CoordinatorChannelProvider> coordinatorCache = CacheBuilder
         .newBuilder()
         .expireAfterAccess(60, TimeUnit.MINUTES)
         .expireAfterWrite(60, TimeUnit.MINUTES)
         .maximumSize(8)
-        .build(new CacheLoader<Set<Location>, CoordinatorService>() {
+        .build(new CacheLoader<Set<Location>, CoordinatorChannelProvider>() {
             @Override
-            public CoordinatorService load(Set<Location> key) {
-                return new ServiceCaller<CoordinatorService>(
-                        coordinatorServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}.getService();
+            public CoordinatorChannelProvider load(Set<Location> key) {
+                return coordinatorServiceChannelProvider(key);
             }
         });
 
-    private static final LoadingCache<Set<Location>, MetaService> autoIncrementServiceCache = CacheBuilder
+    private static final LoadingCache<Set<Location>, CoordinatorChannelProvider> autoIncrementCache = CacheBuilder
         .newBuilder()
         .expireAfterAccess(60, TimeUnit.MINUTES)
         .expireAfterWrite(60, TimeUnit.MINUTES)
         .maximumSize(8)
-        .build(new CacheLoader<Set<Location>, MetaService>() {
+        .build(new CacheLoader<Set<Location>, CoordinatorChannelProvider>() {
             @Override
-            public MetaService load(Set<Location> key) {
-                return new ServiceCaller<MetaService>(
-                        autoIncrementChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}.getService();
+            public CoordinatorChannelProvider load(Set<Location> key) {
+                return autoIncrementChannelProvider(key);
             }
         });
 
-    private static final LoadingCache<Set<Location>, MetaService> metaServiceCache = CacheBuilder
+    private static final LoadingCache<Set<Location>, CoordinatorChannelProvider> metaCache = CacheBuilder
         .newBuilder()
         .expireAfterAccess(60, TimeUnit.MINUTES)
         .expireAfterWrite(60, TimeUnit.MINUTES)
         .maximumSize(8)
-        .build(new CacheLoader<Set<Location>, MetaService>() {
+        .build(new CacheLoader<Set<Location>, CoordinatorChannelProvider>() {
             @Override
-            public MetaService load(Set<Location> key) {
-                return new ServiceCaller<MetaService>(
-                        metaServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}.getService();
+            public CoordinatorChannelProvider load(Set<Location> key) {
+                return metaServiceChannelProvider(key);
             }
         });
 
-    private static final LoadingCache<Set<Location>, MetaService> tsoServiceCache = CacheBuilder
+    private static final LoadingCache<Set<Location>, CoordinatorChannelProvider> tsoCache = CacheBuilder
         .newBuilder()
         .expireAfterAccess(60, TimeUnit.MINUTES)
         .expireAfterWrite(60, TimeUnit.MINUTES)
         .maximumSize(8)
-        .build(new CacheLoader<Set<Location>, MetaService>() {
+        .build(new CacheLoader<Set<Location>, CoordinatorChannelProvider>() {
             @Override
-            public MetaService load(Set<Location> key) {
-                return new ServiceCaller<MetaService>(
-                        tsoServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                    ){}.getService();
+            public CoordinatorChannelProvider load(Set<Location> key) {
+                return tsoServiceChannelProvider(key);
             }
         });
 
-    private static final LoadingCache<Set<Location>, VersionService> versionServiceCache = CacheBuilder
+    private static final LoadingCache<Set<Location>, CoordinatorChannelProvider> versionCache = CacheBuilder
         .newBuilder()
         .expireAfterAccess(60, TimeUnit.MINUTES)
         .expireAfterWrite(60, TimeUnit.MINUTES)
         .maximumSize(8)
-        .build(new CacheLoader<Set<Location>, VersionService>() {
+        .build(new CacheLoader<Set<Location>, CoordinatorChannelProvider>() {
             @Override
-            public VersionService load(Set<Location> key) {
-                return new ServiceCaller<VersionService>(
-                    kvServiceChannelProvider(key), DEFAULT_RETRY_TIMES, DEFAULT
-                ){}.getService();
+            public CoordinatorChannelProvider load(Set<Location> key) {
+                return kvServiceChannelProvider(key);
             }
         });
 
@@ -139,7 +129,7 @@ public class Services {
                         .build(new CacheLoader<DingoCommonId, TableRegionsFailOver>() {
                             @Override
                             public TableRegionsFailOver load(DingoCommonId tableId) throws Exception {
-                                return new TableRegionsFailOver(tableId, metaServiceCache.get(locations));
+                                return new TableRegionsFailOver(tableId, metaService(locations));
                             }
                         });
                 }
@@ -177,27 +167,40 @@ public class Services {
 
     @SneakyThrows
     public static CoordinatorService coordinatorService(Set<Location> locations) {
-        return coordinatorServiceCache.get(Parameters.notEmpty(locations, "locations"));
+        Parameters.notEmpty(locations, "locations");
+        return new ServiceCaller<>(
+            coordinatorCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, CoordinatorService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
     public static MetaService metaService(Set<Location> locations) {
-        return metaServiceCache.get(Parameters.notEmpty(locations, "locations"));
+        Parameters.notEmpty(locations, "locations");
+        return new ServiceCaller<>(metaCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, MetaService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
     public static MetaService tsoService(Set<Location> locations) {
-        return tsoServiceCache.get(Parameters.notEmpty(locations, "locations"));
+        Parameters.notEmpty(locations, "locations");
+        return new ServiceCaller<>(tsoCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, MetaService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
     public static MetaService autoIncrementMetaService(Set<Location> locations) {
-        return autoIncrementServiceCache.get(Parameters.notEmpty(locations, "locations"));
+        Parameters.notEmpty(locations, "locations");
+        return new ServiceCaller<>(
+            autoIncrementCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, MetaService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
     public static VersionService versionService(Set<Location> locations) {
-        return versionServiceCache.get(Parameters.notEmpty(locations, "locations"));
+        Parameters.notEmpty(locations, "locations");
+        return new ServiceCaller<>(
+            versionCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, VersionService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
@@ -205,6 +208,16 @@ public class Services {
         Set<Location> locations, DingoCommonId tableId, DingoCommonId regionId
     ) {
         return tableFailOverCache.get(locations).get(tableId).createRegionProvider(regionId);
+    }
+
+    @SneakyThrows
+    public static long findRegion(Set<Location> locations, byte[] key) {
+        return regionChannelProvider(locations, key).getRegionId();
+    }
+
+    @SneakyThrows
+    public static long findRegionNewly(Set<Location> locations, byte[] key) {
+        return regionChannelProviderNewly(locations, key).getRegionId();
     }
 
     @SneakyThrows
@@ -268,18 +281,18 @@ public class Services {
     public static StoreService storeRegionService(
         Set<Location> locations, byte[] key, int retry
     ) {
-        return new ServiceCaller<StoreService>(
-            regionChannelProvider(locations, key), retry, DEFAULT
-        ){}.getService();
+        return new ServiceCaller<>(
+            regionChannelProvider(locations, key), retry, DEFAULT, StoreService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
     public static IndexService indexRegionService(
         Set<Location> locations, byte[] key, int retry
     ) {
-        return new ServiceCaller<IndexService>(
-            regionChannelProvider(locations, key), retry, DEFAULT
-        ){}.getService();
+        return new ServiceCaller<>(
+            regionChannelProvider(locations, key), retry, DEFAULT, IndexService.Impl::new
+        ).getService();
     }
 
     @SneakyThrows
@@ -288,12 +301,7 @@ public class Services {
     ) {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
-        ServiceCaller<StoreService> serviceCaller = new ServiceCaller<StoreService>(
-            regionProvider, retry, DEFAULT
-        ){};
-        serviceCaller.addExcludeErrorCheck(StoreService.kvScanContinue);
-        serviceCaller.addExcludeErrorCheck(StoreService.kvScanRelease);
-        return serviceCaller.getService();
+        return new ServiceCaller<>(regionProvider, retry, DEFAULT, StoreService.Impl::new).getService();
     }
 
     @SneakyThrows
@@ -302,9 +310,7 @@ public class Services {
     ) {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
-        return new ServiceCaller<IndexService>(
-            regionProvider, retry, DEFAULT
-        ){}.getService();
+        return new ServiceCaller<>(regionProvider, retry, DEFAULT, IndexService.Impl::new).getService();
     }
 
     @SneakyThrows
@@ -314,12 +320,7 @@ public class Services {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = tableFailOverCache.get(locationsStr).get(tableId)
             .createRegionProvider(regionId);
-        ServiceCaller<StoreService> serviceCaller = new ServiceCaller<StoreService>(
-            regionProvider, retry, DEFAULT
-        ){};
-        serviceCaller.addExcludeErrorCheck(StoreService.kvScanContinue);
-        serviceCaller.addExcludeErrorCheck(StoreService.kvScanRelease);
-        return serviceCaller.getService();
+        return new ServiceCaller<>(regionProvider, retry, DEFAULT, StoreService.Impl::new).getService();
     }
 
     @SneakyThrows
@@ -329,9 +330,7 @@ public class Services {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = tableFailOverCache.get(locationsStr).get(indexId)
             .createRegionProvider(regionId);
-        return new ServiceCaller<IndexService>(
-            regionProvider, retry, DEFAULT
-        ){}.getService();
+        return new ServiceCaller<>(regionProvider, retry, DEFAULT, IndexService.Impl::new).getService();
     }
 
 }

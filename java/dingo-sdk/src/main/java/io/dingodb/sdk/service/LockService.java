@@ -17,7 +17,7 @@
 package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.DingoClientException;
-import io.dingodb.sdk.service.caller.RpcCaller;
+import io.dingodb.sdk.service.ServiceCallCycle.RBefore;
 import io.dingodb.sdk.service.entity.common.KeyValue;
 import io.dingodb.sdk.service.entity.version.DeleteRangeRequest;
 import io.dingodb.sdk.service.entity.version.EventType;
@@ -32,7 +32,6 @@ import io.dingodb.sdk.service.entity.version.RangeResponse;
 import io.dingodb.sdk.service.entity.version.WatchRequest;
 import io.dingodb.sdk.service.entity.version.WatchRequest.RequestUnionNest.OneTimeRequest;
 import io.grpc.CallOptions;
-import io.grpc.MethodDescriptor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -56,14 +55,9 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class LockService {
 
     static {
-        RpcCaller.addHandler(new RpcHandler<LeaseGrantRequest, LeaseGrantResponse>() {
+        VersionServiceDescriptors.leaseGrantHandlers.addListener(new RBefore<LeaseGrantRequest, LeaseGrantResponse>() {
             @Override
-            public MethodDescriptor<LeaseGrantRequest, LeaseGrantResponse> matchMethod() {
-                return VersionService.leaseGrant;
-            }
-
-            @Override
-            public void enter(LeaseGrantRequest request, CallOptions options, String remote, long trace) {
+            public void rBefore(LeaseGrantRequest request, CallOptions options, String remote, long trace) {
                 if (request.getID() == -1) {
                     request.setID(Math.abs((((long) System.identityHashCode(request)) << 32) + System.nanoTime()));
                 }
@@ -72,10 +66,10 @@ public class LockService {
     }
 
     private final ScheduledExecutorService executors = Executors.newScheduledThreadPool(1);
+    private final MetaService tsoService;
     private ScheduledFuture<?> renewFuture;
 
     public final long leaseTtl;
-
     private volatile long lease = -1;
     private final int delay;
     private final VersionService kvService;
@@ -110,6 +104,7 @@ public class LockService {
         this.resourcePrefixEnd = resource + "|1|";
         this.delay = Math.max(Math.abs(leaseTtl * 1000) / 3, 1000);
         this.executors.execute(this::grantLease);
+        this.tsoService = Services.tsoService(Services.parse(servers));
     }
 
     private void grantLease() {

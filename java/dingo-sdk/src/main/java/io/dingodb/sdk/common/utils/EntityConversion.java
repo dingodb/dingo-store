@@ -355,7 +355,7 @@ public class EntityConversion {
                 .map(__ -> codec.resetPrefix(__, id))
                 .sorted(ByteArrayUtils::compare)
                 .skip(1)
-                .map(wrap(codec::decodeKeyPrefix))
+                .map(codec::decodeKeyPrefix)
                 .map(key -> new PartitionDetailDefinition("", "", key))
                 .collect(Collectors.toList());
 
