@@ -31,10 +31,6 @@ ExternalProject_Add(
     extern_openssl
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
-    # LOG_CONFIGURE ON
-    # LOG_BUILD ON
-    # LOG_INSTALL ON
-
     SOURCE_DIR ${OPENSSL_BUILD_DIR}
     PREFIX ${OPENSSL_BUILD_DIR}
     

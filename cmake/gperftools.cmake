@@ -40,10 +40,6 @@ ExternalProject_Add(
     extern_gperftools
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-    LOG_INSTALL ON
-
     SOURCE_DIR ${GPERFTOOLS_BUILD_DIR}
     PREFIX ${GPERFTOOLS_BUILD_DIR}
 

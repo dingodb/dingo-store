@@ -53,6 +53,18 @@ message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
 # xdprocks
 if(XDPROCKS_PATH)
     message(STATUS "Enable xdprocks, path: ${XDPROCKS_PATH}")
+    if(NOT EXISTS ${XDPROCKS_PATH})
+        message(FATAL_ERROR "xdprocks path(${XDPROCKS_PATH}) is not exist.")
+    endif()
+    if(NOT EXISTS ${XDPROCKS_PATH}/lib/libxdprocks.a)
+        message(FATAL_ERROR "libxdprocks.a is not exist.")
+    endif()
+    if(NOT EXISTS ${XDPROCKS_PATH}/lib/libstorelib.a)
+        message(FATAL_ERROR "libstorelib.a is not exist.")
+    endif()
+    if(NOT EXISTS ${XDPROCKS_PATH}/lib/libzlog.a)
+        message(FATAL_ERROR "libzlog.a is not exist.")
+    endif()
     set(ENABLE_XDPROCKS ON)
     add_definitions(-DENABLE_XDPROCKS=ON)
 
@@ -249,7 +261,11 @@ set(DYNAMIC_LIB
 if (ENABLE_XDPROCKS)
     set(DYNAMIC_LIB
         ${DYNAMIC_LIB}
-        "-L${XDPROCKS_PATH}/lib -lxdprocks"
+        "${XDPROCKS_PATH}/lib/libxdprocks.a"
+        "${XDPROCKS_PATH}/lib/libstorelib.a"
+        "${XDPROCKS_PATH}/lib/libzlog.a"
+        "-l:libpci.so.3"
+        "-l:libudev.so.1"
     )
 endif()
 

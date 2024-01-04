@@ -24,7 +24,6 @@
 #include <vector>
 
 #include "butil/status.h"
-#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
@@ -45,7 +44,6 @@
 #include "store/heartbeat.h"
 #include "vector/codec.h"
 #include "vector/vector_index_hnsw.h"
-#include "vector/vector_index_snapshot_manager.h"
 
 DEFINE_int64(merge_committed_log_gap, 16, "merge commited log gap");
 DEFINE_int32(init_election_timeout_ms, 1000, "init election timeout");

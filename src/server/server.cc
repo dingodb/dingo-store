@@ -22,9 +22,7 @@
 #include <memory>
 #include <vector>
 
-#include "braft/util.h"
 #include "butil/endpoint.h"
-#include "butil/files/file_path.h"
 #include "butil/time.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -36,21 +34,17 @@
 #include "coordinator/coordinator_control.h"
 #include "engine/bdb_raw_engine.h"
 #include "engine/engine.h"
-#include "engine/mem_engine.h"
 #include "engine/raft_store_engine.h"
-#ifndef ENABLE_XDPROCKS
 #include "engine/rocks_raw_engine.h"
-#else
+#ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
-#include "engine/rocks_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "scan/scan_manager.h"
 #include "store/heartbeat.h"

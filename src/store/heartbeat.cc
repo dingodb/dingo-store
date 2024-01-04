@@ -35,12 +35,8 @@
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
-#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
-#include "proto/push.pb.h"
 #include "server/server.h"
-#include "server/service_helper.h"
-#include "store/region_controller.h"
 
 namespace dingodb {
 

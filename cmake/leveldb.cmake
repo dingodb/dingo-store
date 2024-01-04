@@ -24,10 +24,6 @@ SET(LEVELDB_LIBRARIES "${LEVELDB_INSTALL_DIR}/lib/libleveldb.a" CACHE FILEPATH "
 ExternalProject_Add(
     extern_leveldb
     ${EXTERNAL_PROJECT_LOG_ARGS}
-
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-    LOG_INSTALL ON
     
     PREFIX ${leveldb_SOURCES_DIR}
     SOURCE_DIR ${LEVELDB_SOURCES_DIR}

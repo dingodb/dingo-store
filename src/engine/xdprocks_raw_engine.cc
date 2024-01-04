@@ -657,7 +657,7 @@ XDPRocksRawEngine::~XDPRocksRawEngine() = default;
 
 static xdp::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
   xdp::ColumnFamily::ColumnFamilyConfig default_config;
-  default_config.emplace(Constant::kBlockSize, Constant::kBlockSizeDefaultValue);
+  default_config.emplace(Constant::kBlockSize, "4096");
   default_config.emplace(Constant::kBlockCache, Constant::kBlockCacheDefaultValue);
   default_config.emplace(Constant::kArenaBlockSize, Constant::kArenaBlockSizeDefaultValue);
   default_config.emplace(Constant::kMinWriteBufferNumberToMerge, Constant::kMinWriteBufferNumberToMergeDefaultValue);
@@ -835,6 +835,15 @@ static xdprocks::DB* InitDB(const std::string& db_path, xdp::ColumnFamilyMap& co
   DINGO_LOG(INFO) << fmt::format("[xdprocks] config max_background_jobs({}) max_subcompactions({})",
                                  db_options.max_background_jobs, db_options.max_subcompactions);
 
+  // Disable xdp kv fs
+  // db_options.pliops_db_options.wal_storage_location = xdprocks::WALStorageLocation::FS;
+
+  std::vector<std::string> configured_options;
+  db_options.OptimizeForXdpRocks(&configured_options);
+  for (const auto& option : configured_options) {
+    DINGO_LOG(INFO) << fmt::format("[xdprocks] optimize option: {}", option);
+  }
+
   xdprocks::DB* db;
   std::vector<xdprocks::ColumnFamilyHandle*> family_handles;
   xdprocks::Status s = xdprocks::DB::Open(db_options, db_path, column_family_descs, &family_handles, &db);
@@ -893,9 +902,9 @@ std::shared_ptr<XDPRocksRawEngine> XDPRocksRawEngine::GetSelfPtr() {
   return std::dynamic_pointer_cast<XDPRocksRawEngine>(shared_from_this());
 }
 
-std::string XDPRocksRawEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_ROCKSDB); }
+std::string XDPRocksRawEngine::GetName() { return pb::common::RawEngine_Name(pb::common::RAW_ENG_XDPROCKS); }
 
-pb::common::RawEngine XDPRocksRawEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_ROCKSDB; }
+pb::common::RawEngine XDPRocksRawEngine::GetRawEngineType() { return pb::common::RawEngine::RAW_ENG_XDPROCKS; }
 
 std::string XDPRocksRawEngine::DbPath() { return db_path_; }
 
