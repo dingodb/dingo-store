@@ -25,10 +25,6 @@ ExternalProject_Add(
     extern_fmt
     ${EXTERNAL_PROJECT_LOG_ARGS}
     
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-    LOG_INSTALL ON
-    
     SOURCE_DIR ${FMT_SOURCES_DIR}
     BINARY_DIR ${FMT_BINARY_DIR}
     PREFIX ${FMT_BINARY_DIR}

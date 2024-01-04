@@ -29,10 +29,6 @@ set(prefix_path "${THIRD_PARTY_PATH}/install/gflags|${THIRD_PARTY_PATH}/install/
 ExternalProject_Add(
     extern_brpc
     ${EXTERNAL_PROJECT_LOG_ARGS}
-
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-    LOG_INSTALL ON
     
     SOURCE_DIR ${BRPC_SOURCES_DIR}
     BINARY_DIR ${BRPC_BINARY_DIR}

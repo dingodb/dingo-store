@@ -32,10 +32,6 @@ ExternalProject_Add(
     extern_bdb
     ${EXTERNAL_PROJECT_LOG_ARGS}
     
-    LOG_CONFIGURE ON
-    LOG_BUILD ON
-    LOG_INSTALL ON
-    
     SOURCE_DIR ${BDB_SOURCES_DIR}
     BINARY_DIR ${BDB_BINARY_DIR}
     PREFIX ${BDB_BINARY_DIR}

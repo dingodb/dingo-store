@@ -155,17 +155,17 @@ class SstFileWriter {
 };
 using SstFileWriterPtr = std::shared_ptr<SstFileWriter>;
 
-class Checkpoint {
+class Checkpoint : public RawEngine::Checkpoint {
  public:
   explicit Checkpoint(std::shared_ptr<XDPRocksRawEngine> raw_engine) : raw_engine_(raw_engine) {}
-  ~Checkpoint() = default;
+  ~Checkpoint() override = default;
 
   Checkpoint(Checkpoint&& rhs) = delete;
   Checkpoint& operator=(Checkpoint&& rhs) = delete;
 
-  butil::Status Create(const std::string& dirpath);
+  butil::Status Create(const std::string& dirpath) override;
   butil::Status Create(const std::string& dirpath, const std::vector<std::string>& cf_names,
-                       std::vector<pb::store_internal::SstFileInfo>& sst_files);
+                       std::vector<pb::store_internal::SstFileInfo>& sst_files) override;
 
  private:
   std::shared_ptr<XDPRocksRawEngine> GetRawEngine();

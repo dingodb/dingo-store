@@ -19,16 +19,13 @@
 #include <cstdint>
 #include <memory>
 
-#include "brpc/channel.h"
 #include "common/logging.h"
 #include "common/runnable.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"
 #include "coordinator/kv_control.h"
 #include "meta/store_meta_manager.h"
-#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
-#include "store/region_controller.h"
 
 namespace dingodb {
 

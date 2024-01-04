@@ -45,6 +45,7 @@ enum StorageEngine {
 enum RawEngine {
   RAW_ENG_ROCKSDB = 0;
   RAW_ENG_BDB = 1;
+  RAW_ENG_XDPROCKS = 2;
 };
 
 message Location {
