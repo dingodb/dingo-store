@@ -976,51 +976,51 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   std::vector<pb::common::KeyValue> meta_write_to_kv;
   std::vector<std::string> meta_delete_to_kv;
 
+  // if index < local apply index, just return
+  int64_t applied_index = 0;
+  int64_t applied_term = 0;
+
+  id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_term);
+  id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, applied_index);
+
+  if (index <= applied_index && term <= applied_term) {
+    DINGO_LOG(WARNING)
+        << "SKIP ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index=" << index
+        << "][applied_index=" << applied_index << "]"
+        << "[term=" << term << "][applied_term=" << applied_term << "]";
+    return;
+  } else if (meta_increment.ByteSizeLong() > 0) {
+    DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement [index=" << index << "][applied_index=" << applied_index << "]"
+                    << "[term=" << term << "][applied_term=" << applied_term << "]";
+    LogMetaIncrementSize(meta_increment);
+  } else {
+    DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
+    return;
+  }
+
+  if (meta_increment.idepochs_size() > 0) {
+    DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
+  }
+
+  // raft_apply_term & raft_apply_index stores in id_epoch_map too
+  pb::coordinator_internal::IdEpochInternal raft_apply_term;
+  raft_apply_term.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
+  raft_apply_term.set_value(term);
+
+  pb::coordinator_internal::IdEpochInternal raft_apply_index;
+  raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+  raft_apply_index.set_value(index);
+
+  // update applied term & index after all fsm apply is fininshed
+  DEFER(id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
+        id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
+
+        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
+        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index)););
+
+  // 0.id & epoch
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
-    // if index < local apply index, just return
-    int64_t applied_index = 0;
-    int64_t applied_term = 0;
-
-    id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, applied_term);
-    id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, applied_index);
-
-    if (index <= applied_index && term <= applied_term) {
-      DINGO_LOG(WARNING)
-          << "SKIP ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index=" << index
-          << "][applied_index=" << applied_index << "]"
-          << "[term=" << term << "][applied_term=" << applied_term << "]";
-      return;
-    } else if (meta_increment.ByteSizeLong() > 0) {
-      DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement [index=" << index << "][applied_index=" << applied_index << "]"
-                      << "[term=" << term << "][applied_term=" << applied_term;
-      LogMetaIncrementSize(meta_increment);
-    } else {
-      DINGO_LOG(WARNING) << "meta_increment.ByteSizeLong() == 0, just return";
-      return;
-    }
-
-    if (meta_increment.idepochs_size() > 0) {
-      DINGO_LOG(INFO) << "0.idepochs_size=" << meta_increment.idepochs_size();
-    }
-
-    // 0.id & epoch
-    // raft_apply_term & raft_apply_index stores in id_epoch_map too
-    pb::coordinator_internal::IdEpochInternal raft_apply_term;
-    raft_apply_term.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
-    raft_apply_term.set_value(term);
-
-    pb::coordinator_internal::IdEpochInternal raft_apply_index;
-    raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
-    raft_apply_index.set_value(index);
-
-    // update applied term & index in fsm
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
-
-    meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
-    meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
-
     for (int i = 0; i < meta_increment.idepochs_size(); i++) {
       const auto& idepoch = meta_increment.idepochs(i);
       if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
@@ -1611,6 +1611,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   }
 
   // 8.table_metrics map
+  // table_metrics_map is a temp map, only used in memory, so we don't need to update it in raft apply
 
   // 9.store_operation map
   // only on_apply will really write store_operation_map_, so we don't need to lock it
@@ -1696,6 +1697,87 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                          << store_operation_residual.region_cmd_ids_size() << "]  orig_store_operation=["
                          << store_operation.ShortDebugString() << "] new_store_operation=["
                          << store_operation_residual.ShortDebugString() << "]";
+      } else if (store_operation.op_type() == pb::coordinator_internal::MetaIncrementOpType::MODIFY) {
+        if (store_operation.has_move_region_cmd()) {
+          int64_t region_cmd_id = store_operation.move_region_cmd().region_cmd_id();
+          int64_t old_store_id = store_operation.move_region_cmd().from_store_id();
+          int64_t new_store_id = store_operation.move_region_cmd().to_store_id();
+
+          DINGO_LOG(INFO) << "ApplyMetaIncrement store_operation MODIFY, region_cmd_id=" << region_cmd_id
+                          << ", old_store_id=" << old_store_id << ", new_store_id=" << new_store_id;
+
+          pb::coordinator_internal::StoreOperationInternal old_store_operation_in_map;
+          pb::coordinator_internal::StoreOperationInternal new_store_operation_in_map;
+
+          store_operation_map_.Get(old_store_id, old_store_operation_in_map);
+          store_operation_map_.Get(new_store_id, new_store_operation_in_map);
+
+          if (old_store_operation_in_map.id() != old_store_id || new_store_operation_in_map.id() != new_store_id) {
+            DINGO_LOG(ERROR) << "ApplyMetaIncrement store_operation MODIFY, but not found, store_operation="
+                             << store_operation.ShortDebugString() << ", old_store_id=" << old_store_id
+                             << ", new_store_id=" << new_store_id
+                             << ", old_store_operation_in_map=" << old_store_operation_in_map.ShortDebugString()
+                             << ", new_store_operation_in_map=" << new_store_operation_in_map.ShortDebugString();
+            continue;
+          }
+
+          pb::coordinator_internal::RegionCmdInternal region_cmd_internal;
+          region_cmd_meta_->Get(region_cmd_id, region_cmd_internal);
+
+          if (region_cmd_internal.id() != region_cmd_id) {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement store_operation MODIFY, but not found, store_operation="
+                             << store_operation.ShortDebugString() << ", region_cmd_id=" << region_cmd_id
+                             << ", region_cmd_internal=" << region_cmd_internal.ShortDebugString();
+          }
+
+          // delete region_cmd from old_store_operation
+          pb::coordinator_internal::StoreOperationInternal old_store_operation_residual;
+          old_store_operation_residual.set_id(old_store_id);
+
+          for (int i = 0; i < old_store_operation_in_map.region_cmd_ids_size(); i++) {
+            if (old_store_operation_in_map.region_cmd_ids(i) != region_cmd_id) {
+              old_store_operation_residual.add_region_cmd_ids(old_store_operation_in_map.region_cmd_ids(i));
+            }
+          }
+
+          int ret = store_operation_map_.Put(old_store_id, old_store_operation_residual);
+          if (ret > 0) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement store_operation MODIFY, [old_store_id=" << old_store_id
+                            << "] success";
+          } else {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement store_operation MODIFY, [old_store_id=" << old_store_id
+                             << "] failed, ret = " << ret
+                             << ", old_store_operation_residual=" << old_store_operation_residual.ShortDebugString();
+          }
+
+          // add region_cmd to new_store_operation
+          new_store_operation_in_map.add_region_cmd_ids(region_cmd_id);
+          ret = store_operation_map_.Put(new_store_id, new_store_operation_in_map);
+          if (ret > 0) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement store_operation MODIFY, [new_store_id=" << new_store_id
+                            << "] success";
+          } else {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement store_operation MODIFY, [new_store_id=" << new_store_id
+                             << "] failed, ret = " << ret
+                             << ", new_store_operation_in_map=" << new_store_operation_in_map.ShortDebugString();
+          }
+
+          // update region_cmd's store_id
+          region_cmd_internal.mutable_region_cmd()->set_store_id(new_store_id);
+          auto ret1 = region_cmd_meta_->Put(region_cmd_id, region_cmd_internal);
+          if (ret1.ok()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement store_operation MODIFY, [region_cmd_id=" << region_cmd_id
+                            << "] success";
+          } else {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement store_operation MODIFY, [region_cmd_id=" << region_cmd_id
+                             << "] failed, ret1 = " << ret1.error_code() << ", errmsg: " << ret1.error_str()
+                             << ", region_cmd_internal=" << region_cmd_internal.ShortDebugString();
+          }
+
+        } else {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement store_operation MODIFY, but not support, store_operation="
+                           << store_operation.ShortDebugString();
+        }
       }
     }
   }
@@ -2003,6 +2085,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   }
 
   // 13.index_metrics map
+  // index_metrics_map is a temp map, only used in memory, so we don't need to update it in raft apply
 
   // 50.table_index map
   {
