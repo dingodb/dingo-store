@@ -41,19 +41,19 @@ class MetaCache {
 
   ~MetaCache();
 
-  Status LookupRegionByKey(const std::string& key, std::shared_ptr<Region>& region);
+  Status LookupRegionByKey(std::string_view key, std::shared_ptr<Region>& region);
 
   // return first region between [start_key, end_key), this will prefetch regions and put into cache
-  Status LookupRegionBetweenRange(const std::string& start_key, const std::string& end_key,
+  Status LookupRegionBetweenRange(std::string_view start_key, std::string_view end_key,
                                   std::shared_ptr<Region>& region);
 
   // return first region between [start_key, end_key), no prefetch regions
-  Status LookupRegionBetweenRangeNoPrefetch(const std::string& start_key, const std::string& end_key,
+  Status LookupRegionBetweenRangeNoPrefetch(std::string_view start_key, std::string_view end_key,
                                             std::shared_ptr<Region>& region);
 
   // NOTE: this will not lookup cache and will send rpc request directly to coordinator
   // limit: 0 means no limit and will return all regions between [start_key, end_key)
-  Status ScanRegionsBetweenRange(const std::string& start_key, const std::string& end_key, int64_t limit,
+  Status ScanRegionsBetweenRange(std::string_view start_key, std::string_view end_key, int64_t limit,
                                  std::vector<std::shared_ptr<Region>>& regions);
 
   void ClearRange(const std::shared_ptr<Region>& region);
@@ -61,7 +61,7 @@ class MetaCache {
   // be sure new_region will not destroy when call this func
   void MaybeAddRegion(const std::shared_ptr<Region>& new_region);
 
-  Status TEST_FastLookUpRegionByKey(const std::string& key, std::shared_ptr<Region>& region) {  // NOLINT
+  Status TEST_FastLookUpRegionByKey(std::string_view key, std::shared_ptr<Region>& region) {  // NOLINT
     std::shared_lock<std::shared_mutex> r(rw_lock_);
     return FastLookUpRegionByKeyUnlocked(key, region);
   }
@@ -70,9 +70,9 @@ class MetaCache {
 
  private:
   // TODO: backoff when region not ready
-  Status SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<Region>& region);
+  Status SlowLookUpRegionByKey(std::string_view key, std::shared_ptr<Region>& region);
 
-  Status FastLookUpRegionByKeyUnlocked(const std::string& key, std::shared_ptr<Region>& region);
+  Status FastLookUpRegionByKeyUnlocked(std::string_view key, std::shared_ptr<Region>& region);
 
   Status SendScanRegionsRequest(const pb::coordinator::ScanRegionsRequest& request,
                                 pb::coordinator::ScanRegionsResponse& response);
@@ -95,6 +95,8 @@ class MetaCache {
 
   void AddRangeToCacheUnlocked(const std::shared_ptr<Region>& region);
 
+  void DumpUnlocked();
+
   static bool NeedUpdateRegion(const std::shared_ptr<Region>& old_region, const std::shared_ptr<Region>& new_region);
 
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
@@ -102,7 +104,7 @@ class MetaCache {
   mutable std::shared_mutex rw_lock_;
   std::unordered_map<int64_t, std::shared_ptr<Region>> region_by_id_;
   // start-key -> region
-  std::map<std::string, std::shared_ptr<Region>> region_by_key_;
+  std::map<std::string, std::shared_ptr<Region>, std::less<void>> region_by_key_;
 };
 
 }  // namespace sdk

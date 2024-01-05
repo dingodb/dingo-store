@@ -64,9 +64,7 @@ void RawKvBatchCompareAndSetTask::DoAsync() {
 
   for (const auto& key : next_batch) {
     std::shared_ptr<Region> region;
-    // TODO: maybe support string view
-    std::string search_key{key};
-    Status s = meta_cache->LookupRegionByKey(search_key, region);
+    Status s = meta_cache->LookupRegionByKey(key, region);
     if (!s.ok()) {
       // TODO: continue
       DoAsyncDone(s);

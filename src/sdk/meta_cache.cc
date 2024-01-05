@@ -14,6 +14,8 @@
 
 #include "sdk/meta_cache.h"
 
+#include <string_view>
+
 #include "common/logging.h"
 #include "glog/logging.h"
 #include "sdk/common/common.h"
@@ -29,7 +31,7 @@ MetaCache::MetaCache(std::shared_ptr<CoordinatorProxy> coordinator_proxy)
 
 MetaCache::~MetaCache() = default;
 
-Status MetaCache::LookupRegionByKey(const std::string& key, std::shared_ptr<Region>& region) {
+Status MetaCache::LookupRegionByKey(std::string_view key, std::shared_ptr<Region>& region) {
   CHECK(!key.empty()) << "key should not empty";
   Status s;
   {
@@ -44,7 +46,7 @@ Status MetaCache::LookupRegionByKey(const std::string& key, std::shared_ptr<Regi
   return s;
 }
 
-Status MetaCache::LookupRegionBetweenRange(const std::string& start_key, const std::string& end_key,
+Status MetaCache::LookupRegionBetweenRange(std::string_view start_key, std::string_view end_key,
                                            std::shared_ptr<Region>& region) {
   CHECK(!start_key.empty()) << "start_key should not empty";
   CHECK(!end_key.empty()) << "end_key should not empty";
@@ -66,7 +68,7 @@ Status MetaCache::LookupRegionBetweenRange(const std::string& start_key, const s
   return s;
 }
 
-Status MetaCache::LookupRegionBetweenRangeNoPrefetch(const std::string& start_key, const std::string& end_key,
+Status MetaCache::LookupRegionBetweenRangeNoPrefetch(std::string_view start_key, std::string_view end_key,
                                                      std::shared_ptr<Region>& region) {
   CHECK(!start_key.empty()) << "start_key should not empty";
   CHECK(!end_key.empty()) << "end_key should not empty";
@@ -88,7 +90,7 @@ Status MetaCache::LookupRegionBetweenRangeNoPrefetch(const std::string& start_ke
   return s;
 }
 
-Status MetaCache::ScanRegionsBetweenRange(const std::string& start_key, const std::string& end_key, int64_t limit,
+Status MetaCache::ScanRegionsBetweenRange(std::string_view start_key, std::string_view end_key, int64_t limit,
                                           std::vector<std::shared_ptr<Region>>& regions) {
   CHECK(!start_key.empty()) << "start_key should not empty";
   CHECK(!end_key.empty()) << "end_key should not empty";
@@ -96,8 +98,8 @@ Status MetaCache::ScanRegionsBetweenRange(const std::string& start_key, const st
 
   pb::coordinator::ScanRegionsRequest request;
   pb::coordinator::ScanRegionsResponse response;
-  request.set_key(start_key);
-  request.set_range_end(end_key);
+  request.set_key(std::string(start_key));
+  request.set_range_end(std::string(end_key));
   request.set_limit(limit);
 
   Status send = SendScanRegionsRequest(request, response);
@@ -143,7 +145,7 @@ void MetaCache::MaybeAddRegionUnlocked(const std::shared_ptr<Region>& new_region
   AddRangeToCacheUnlocked(new_region);
 }
 
-Status MetaCache::FastLookUpRegionByKeyUnlocked(const std::string& key, std::shared_ptr<Region>& region) {
+Status MetaCache::FastLookUpRegionByKeyUnlocked(std::string_view key, std::shared_ptr<Region>& region) {
   auto iter = region_by_key_.upper_bound(key);
   if (iter == region_by_key_.begin()) {
     return Status::NotFound(fmt::format("not found region for key:{}", key));
@@ -170,10 +172,10 @@ Status MetaCache::FastLookUpRegionByKeyUnlocked(const std::string& key, std::sha
   }
 }
 
-Status MetaCache::SlowLookUpRegionByKey(const std::string& key, std::shared_ptr<Region>& region) {
+Status MetaCache::SlowLookUpRegionByKey(std::string_view key, std::shared_ptr<Region>& region) {
   pb::coordinator::ScanRegionsRequest request;
   pb::coordinator::ScanRegionsResponse response;
-  request.set_key(key);
+  request.set_key(std::string(key));
   Status send = SendScanRegionsRequest(request, response);
   if (!send.IsOK()) {
     return send;
@@ -342,6 +344,10 @@ void MetaCache::AddRangeToCacheUnlocked(const std::shared_ptr<Region>& region) {
 
 void MetaCache::Dump() {
   std::shared_lock<std::shared_mutex> r(rw_lock_);
+  DumpUnlocked();
+}
+
+void MetaCache::DumpUnlocked() {
   for (const auto& r : region_by_id_) {
     std::string dump = fmt::format("region_id:{}, region:{}", r.first, r.second->ToString());
     DINGO_LOG(INFO) << dump;
@@ -352,6 +358,5 @@ void MetaCache::Dump() {
     DINGO_LOG(INFO) << dump;
   }
 }
-
 }  // namespace sdk
 }  // namespace dingodb
