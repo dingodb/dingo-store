@@ -53,9 +53,7 @@ void RawKvBatchPutTask::DoAsync() {
 
   for (const auto& key : next_batch) {
     std::shared_ptr<Region> tmp;
-    // TODO: maybe support string view
-    std::string search_key{key};
-    Status s = meta_cache->LookupRegionByKey(search_key, tmp);
+    Status s = meta_cache->LookupRegionByKey(key, tmp);
     if (!s.ok()) {
       // TODO: continue
       DoAsyncDone(s);
