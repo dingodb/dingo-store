@@ -33,6 +33,7 @@ class MockClientStub final : public ClientStub {
   MOCK_METHOD(std::shared_ptr<RegionScannerFactory>, GetRegionScannerFactory, (), (const, override));
   MOCK_METHOD(std::shared_ptr<AdminTool>, GetAdminTool, (), (const, override));
   MOCK_METHOD(std::shared_ptr<TxnLockResolver>, GetTxnLockResolver, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<Executor>, GetExecutor, (), (const, override));
 };
 
 }  // namespace sdk

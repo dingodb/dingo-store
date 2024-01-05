@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <iostream>
 #include <memory>
 #include <mutex>
 
@@ -75,15 +76,11 @@ TEST_F(ThreadPoolExecutorTest, Execute) {
     cond.notify_all();
   });
 
-  int max_wait = 10;
   {
     std::unique_lock<std::mutex> lg(mutex);
     while (count.load() != 0) {
-      if (max_wait-- != 0) {
-        cond.wait_for(lg, std::chrono::milliseconds(1));
-      } else {
-        break;
-      }
+      std::cout << "wait 1 ms" << std::endl;
+      cond.wait_for(lg, std::chrono::milliseconds(1));
     }
   }
 
@@ -116,11 +113,8 @@ TEST_F(ThreadPoolExecutorTest, Schedule) {
   {
     std::unique_lock<std::mutex> lg(mutex);
     while (count.load() != 0) {
-      if (max_wait-- != 0) {
-        cond.wait_for(lg, std::chrono::milliseconds(1));
-      } else {
-        break;
-      }
+      std::cout << "wait 1 ms" << std::endl;
+      cond.wait_for(lg, std::chrono::milliseconds(1));
     }
   }
 
