@@ -15,6 +15,7 @@
 
 #include <gflags/gflags.h>
 
+#include <string>
 #include <vector>
 
 #include "common/constant.h"
@@ -112,7 +113,8 @@ Iterator::~Iterator() {
     try {
       cursorp_->close();
     } catch (DbException& db_exception) {
-      DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+      DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
     }
   }
 };
@@ -174,7 +176,8 @@ void Iterator::SeekToLast() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -208,7 +211,8 @@ void Iterator::Seek(const std::string& target) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -252,7 +256,8 @@ void Iterator::SeekForPrev(const std::string& target) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     status_ =
         butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek for prev failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
@@ -280,7 +285,8 @@ void Iterator::Next() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor next failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor next failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db cursor next failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -307,7 +313,8 @@ void Iterator::Prev() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor prev failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor prev failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db cursor prev failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -326,7 +333,8 @@ Snapshot::~Snapshot() {
         txn_ = nullptr;
       }
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
       ret = BdbHelper::kCommitException;
     }
 
@@ -385,7 +393,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
     DINGO_LOG(ERROR) << fmt::format("[bdb] db get failed, ret: {}.", ret);
     return butil::Status(pb::error::EINTERNAL, "Internal get error.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << "[bdb] db exception: " << db_exception.what();
+    DINGO_LOG(ERROR) << "[bdb] db exception: " << db_exception.get_errno() << " " << db_exception.what();
     return butil::Status(pb::error::EBDB_EXCEPTION, "%s", db_exception.what());
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << "[bdb] std exception: " << std_exception.what();
@@ -428,7 +436,8 @@ butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr sn
         try {
           cursorp->close();
         } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+          LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
         }
       });
 
@@ -500,7 +509,8 @@ butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr sn
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db scan failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db scan failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db scan failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -574,7 +584,8 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
   } catch (DbDeadlockException&) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
   }
@@ -608,7 +619,8 @@ butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* t
         try {
           cursorp->close();
         } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+          LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
         }
       });
 
@@ -645,6 +657,7 @@ butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* t
       ++count;
     }
   }
+
   return butil::Status();
 }
 
@@ -676,7 +689,8 @@ butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, c
           cursorp->close();
           cursorp = nullptr;
         } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("[bdb] cursor close failed, exception: {}.", db_exception.what());
+          LOG(WARNING) << fmt::format("[bdb] cursor close failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
         }
       });
 
@@ -701,7 +715,8 @@ butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, c
     DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got deadlock.");
     return butil::Status(pb::error::EBDB_DEADLOCK, "retrive by cursor, got deadlock.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got db exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got db exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("retrive by cursor, failed, {}.", db_exception.what()));
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -759,7 +774,8 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
           return butil::Status();
         }
       } catch (DbException& db_exception) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
         ret = BdbHelper::kCommitException;
       }
 
@@ -789,7 +805,8 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
     } catch (std::exception& std_exception) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -870,7 +887,8 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
           return butil::Status();
         }
       } catch (DbException& db_exception) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
         ret = BdbHelper::kCommitException;
       }
 
@@ -900,7 +918,8 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
     } catch (std::exception& std_exception) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -992,7 +1011,8 @@ butil::Status Writer::KvBatchPutAndDelete(
           return butil::Status();
         }
       } catch (DbException& db_exception) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
         ret = BdbHelper::kCommitException;
       }
 
@@ -1022,7 +1042,8 @@ butil::Status Writer::KvBatchPutAndDelete(
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {}.", db_exception.what());
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
     } catch (std::exception& std_exception) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -1077,7 +1098,8 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
           return butil::Status();
         }
       } catch (DbException& db_exception) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
         ret = BdbHelper::kCommitException;
       }
 
@@ -1300,11 +1322,12 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
     }
 
     // Now open the database */
-    open_flags = DB_CREATE |            // Allow database creation
-                 DB_READ_UNCOMMITTED |  // Allow uncommitted reads
-                 DB_AUTO_COMMIT |       // Allow autocommit
-                 DB_MULTIVERSION |      // Multiversion concurrency control
-                 DB_THREAD;             // Cause the database to be free-threade1
+    open_flags = DB_CREATE | DB_AUTO_COMMIT;
+    // open_flags = DB_CREATE |            // Allow database creation
+    //              DB_READ_UNCOMMITTED |  // Allow uncommitted reads
+    //              DB_AUTO_COMMIT |       // Allow autocommit
+    //              DB_MULTIVERSION |      // Multiversion concurrency control
+    //              DB_THREAD;             // Cause the database to be free-threade1
 
     db->open(nullptr,     // Txn pointer
              file_name,   // File name
@@ -1312,12 +1335,17 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
              DB_BTREE,    // Database type (using btree)
              open_flags,  // Open flags
              0);          // File mode. Using defaults
+
   } catch (DbException& db_exception) {
     DINGO_LOG(ERROR) << fmt::format("OpenDb: db open failed: {}.", db_exception.what());
     return -1;
   }
 
   return 0;
+}
+
+void LogBDBError(const DbEnv*, const char* /*errpfx*/, const char* msg) {
+  DINGO_LOG(ERROR) << "[bdb] error msg: " << msg;
 }
 
 // override functions
@@ -1368,6 +1396,20 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     envp->set_lk_detect(DB_LOCK_MINWRITE);
     envp->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 0);
 
+    // set error call back
+    envp->set_errcall(LogBDBError);
+
+    // print txn_max
+    uint32_t txn_max = 0;
+    envp->get_tx_max(&txn_max);
+
+    DINGO_LOG(INFO) << fmt::format("[bdb] default txn_max: {}.", txn_max);
+
+    envp->set_tx_max(512);
+    envp->get_tx_max(&txn_max);
+
+    DINGO_LOG(INFO) << fmt::format("[bdb] set txn_max to: {}.", txn_max);
+
     envp->open((const char*)bdb_path.c_str(), env_flags, 0);
 
     // If we had utility threads (for running checkpoints or
@@ -1380,9 +1422,10 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
       DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
       return false;
     }
+
   } catch (DbException& db_exctption) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database environment: {}, exception: {}.", db_path_,
-                                    db_exctption.what());
+    DINGO_LOG(FATAL) << fmt::format("[bdb] error opening database environment: {}, exception: {} {}.", db_path_,
+                                    db_exctption.get_errno(), db_exctption.what());
     return false;
   }
 
@@ -1412,8 +1455,8 @@ void BdbRawEngine::Close() {
       envp = nullptr;
     }
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] error closing database and environment, exception: {}.",
-                                    db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] error closing database and environment, exception: {} {}.",
+                                    db_exception.get_errno(), db_exception.what());
   }
 
   DINGO_LOG(INFO) << "[bdb] I'm all done.";
@@ -1437,7 +1480,8 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
   } catch (DbDeadlockException&) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
   } catch (std::exception& std_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
   }
@@ -1523,7 +1567,8 @@ void BdbRawEngine::Flush(const std::string& /*cf_name*/) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] flush failed, ret: {}.", ret);
     }
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] error flushing, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] error flushing, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
   }
 }
 
@@ -1552,7 +1597,8 @@ butil::Status BdbRawEngine::Compact(const std::string& cf_name) {
 
     DINGO_LOG(ERROR) << fmt::format("[bdb] compact failed, ret: {}.", ret);
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] error compacting, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] error compacting, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
   }
 
   return butil::Status(pb::error::EINTERNAL, "Internal compact error.");
@@ -1653,7 +1699,8 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
       result_counts.push_back(count);
     }
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] error get approximate sizes, exception: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("[bdb] error get approximate sizes, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
     return std::vector<int64_t>();
   }
 
