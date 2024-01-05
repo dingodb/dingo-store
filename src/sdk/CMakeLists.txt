@@ -43,11 +43,17 @@ add_library(sdk
 target_link_libraries(
   sdk
   PRIVATE $<TARGET_OBJECTS:PROTO_OBJS>
+          brpc
           protobuf
           glog
-          brpc
           fmt
-          ${GFLAGS_LIBRARIES}
-          ${DYNAMIC_LIB})
+          gflags
+          openssl
+          crypto
+          leveldb
+          zlib
+          dl
+          Threads::Threads
+          )
 
 add_dependencies(sdk ${DEPEND_LIBS})

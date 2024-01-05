@@ -24,6 +24,8 @@ SET(LEVELDB_LIBRARIES "${LEVELDB_INSTALL_DIR}/lib/libleveldb.a" CACHE FILEPATH "
 ExternalProject_Add(
     extern_leveldb
     ${EXTERNAL_PROJECT_LOG_ARGS}
+
+    DEPENDS gflags zlib snappy
     
     PREFIX ${leveldb_SOURCES_DIR}
     SOURCE_DIR ${LEVELDB_SOURCES_DIR}
@@ -48,7 +50,6 @@ ExternalProject_Add(
     -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
 )
 
-ADD_DEPENDENCIES(extern_leveldb gflags zlib snappy)
 ADD_LIBRARY(leveldb STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET leveldb PROPERTY IMPORTED_LOCATION ${LEVELDB_LIBRARIES})
 ADD_DEPENDENCIES(leveldb extern_leveldb)

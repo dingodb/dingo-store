@@ -30,6 +30,8 @@ message(STATUS "Rocksdb protable option(ROCKSDB_PROTABLE_OPTION): ${ROCKSDB_PROT
 ExternalProject_Add(
     extern_rocksdb
     ${EXTERNAL_PROJECT_LOG_ARGS}
+
+    DEPENDS gflags zlib snappy lz4 zstd
     
     SOURCE_DIR ${ROCKSDB_SOURCES_DIR}
     BINARY_DIR ${ROCKSDB_BINARY_DIR}
@@ -69,7 +71,6 @@ ExternalProject_Add(
     -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
 )
 
-ADD_DEPENDENCIES(extern_rocksdb zlib snappy gflags lz4 zstd)
 ADD_LIBRARY(rocksdb STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET rocksdb PROPERTY IMPORTED_LOCATION ${ROCKSDB_LIBRARIES})
 ADD_DEPENDENCIES(rocksdb extern_rocksdb)
