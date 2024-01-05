@@ -34,6 +34,7 @@
 #include "sdk/rawkv/raw_kv_batch_put_if_absent_task.h"
 #include "sdk/rawkv/raw_kv_batch_put_task.h"
 #include "sdk/rawkv/raw_kv_compare_and_set_task.h"
+#include "sdk/rawkv/raw_kv_delete_range_task.h"
 #include "sdk/rawkv/raw_kv_delete_task.h"
 #include "sdk/rawkv/raw_kv_get_task.h"
 #include "sdk/rawkv/raw_kv_put_if_absent_task.h"
@@ -88,13 +89,6 @@ Status RawKV::RawKVImpl::BatchDelete(const std::vector<std::string>& keys) {
   return task.Run();
 }
 
-void RawKV::RawKVImpl::ProcessSubBatchDeleteRange(SubBatchState* sub) {
-  auto* rpc = CHECK_NOTNULL(dynamic_cast<KvDeleteRangeRpc*>(sub->rpc));
-  StoreRpcController controller(stub_, *sub->rpc, sub->region);
-  sub->status = controller.Call();
-  sub->delete_count = rpc->Response()->delete_count();
-}
-
 Status RawKV::RawKVImpl::DeleteRange(const std::string& start_key, const std::string& end_key, bool continuous,
                                      int64_t& delete_count) {
   if (start_key.empty() || end_key.empty()) {
@@ -105,117 +99,8 @@ Status RawKV::RawKVImpl::DeleteRange(const std::string& start_key, const std::st
     return Status::InvalidArgument("end_key must greater than start_key, check params");
   }
 
-  auto meta_cache = stub_.GetMetaCache();
-
-  std::vector<std::shared_ptr<Region>> regions;
-  Status ret = meta_cache->ScanRegionsBetweenRange(start_key, end_key, 0, regions);
-  if (!ret.IsOK()) {
-    if (ret.IsNotFound()) {
-      DINGO_LOG(WARNING) << fmt::format("region not found between [{},{}), no need retry, status:{}", start_key,
-                                        end_key, ret.ToString());
-    } else {
-      DINGO_LOG(WARNING) << fmt::format("lookup region fail between [{},{}), need retry, status:{}", start_key, end_key,
-                                        ret.ToString());
-    }
-    return ret;
-  }
-
-  CHECK(!regions.empty()) << "regions must not empty";
-
-  if (continuous) {
-    for (int i = 0; i < regions.size() - 1; i++) {
-      auto cur = regions[i];
-      auto next = regions[i + 1];
-      if (cur->Range().end_key() != next->Range().start_key()) {
-        std::string msg = fmt::format("regions bewteen [{}, {}) not continuous", start_key, end_key);
-        DINGO_LOG(WARNING) << msg
-                           << fmt::format(", cur region:{} ({}-{}), next region:{} ({}-{})", cur->RegionId(),
-                                          cur->Range().start_key(), cur->Range().end_key(), next->RegionId(),
-                                          next->Range().start_key(), next->Range().end_key());
-        return Status::Aborted(msg);
-      }
-    }
-  }
-
-  struct DeleteRangeContext {
-    std::string start;
-    std::string end;
-  };
-
-  std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;
-  std::unordered_map<int64_t, std::vector<DeleteRangeContext>> to_delete;
-
-  for (const auto& region : regions) {
-    const auto& range = region->Range();
-    auto start = (range.start_key() <= start_key ? start_key : range.start_key());
-    auto end = (range.end_key() <= end_key) ? range.end_key() : end_key;
-
-    auto iter = region_id_to_region.find(region->RegionId());
-    DCHECK(iter == region_id_to_region.end());
-    region_id_to_region.emplace(std::make_pair(region->RegionId(), region));
-
-    to_delete[region->RegionId()].push_back({start, end});
-  }
-
-  DCHECK_EQ(region_id_to_region.size(), to_delete.size());
-
-  std::vector<SubBatchState> sub_batch_state;
-  std::vector<std::unique_ptr<KvDeleteRangeRpc>> rpcs;
-  for (const auto& entry : to_delete) {
-    auto region_id = entry.first;
-    auto iter = region_id_to_region.find(region_id);
-    CHECK(iter != region_id_to_region.end());
-    auto region = iter->second;
-
-    auto rpc = std::make_unique<KvDeleteRangeRpc>();
-    FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-    for (const DeleteRangeContext& delete_range : entry.second) {
-      auto* range_with_option = rpc->MutableRequest()->mutable_range();
-
-      auto* range = range_with_option->mutable_range();
-      range->set_start_key(delete_range.start);
-      range->set_end_key(delete_range.end);
-
-      range_with_option->set_with_start(true);
-      range_with_option->set_with_end(false);
-    }
-
-    sub_batch_state.emplace_back(rpc.get(), region);
-    rpcs.emplace_back(std::move(rpc));
-  }
-
-  CHECK_EQ(rpcs.size(), to_delete.size());
-  CHECK_EQ(rpcs.size(), sub_batch_state.size());
-
-  std::vector<std::thread> thread_pool;
-  thread_pool.reserve(sub_batch_state.size());
-  for (auto& batch_state : sub_batch_state) {
-    thread_pool.emplace_back(&RawKV::RawKVImpl::ProcessSubBatchDeleteRange, this, &batch_state);
-  }
-
-  for (auto& thread : thread_pool) {
-    thread.join();
-  }
-
-  Status result;
-  int64_t tmp_delete_count = 0;
-
-  for (auto& state : sub_batch_state) {
-    if (!state.status.IsOK()) {
-      DINGO_LOG(WARNING) << "rpc: " << state.rpc->Method() << " send to region: " << state.region->RegionId()
-                         << " fail: " << state.status.ToString();
-      if (result.IsOK()) {
-        // only return first fail status
-        result = state.status;
-      }
-    } else {
-      tmp_delete_count += state.delete_count;
-    }
-  }
-
-  delete_count = tmp_delete_count;
-
-  return result;
+  RawKvDeleteRangeTask task(stub_, start_key, end_key, continuous, delete_count);
+  return task.Run();
 }
 
 Status RawKV::RawKVImpl::CompareAndSet(const std::string& key, const std::string& value,

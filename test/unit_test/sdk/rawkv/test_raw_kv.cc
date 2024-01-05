@@ -709,6 +709,14 @@ TEST_F(RawKVTest, DeleteRangeNonContinuous) {
             Region2ScanRegionInfo(RegionL2N(), response.add_regions());
 
             return Status::OK();
+          })
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "g");
+            EXPECT_EQ(request.range_end(), end);
+            Region2ScanRegionInfo(RegionL2N(), response.add_regions());
+
+            return Status::OK();
           });
 
   EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
