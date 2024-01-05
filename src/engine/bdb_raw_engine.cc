@@ -35,6 +35,7 @@ namespace dingodb {
 
 DEFINE_int32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
 DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
+DEFINE_int32(bdb_txn_max, 10240, "bdb txn max");
 DEFINE_int32(bdb_max_retries, 20, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 
@@ -747,7 +748,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, 0);
+      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -839,7 +840,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, 0);
+      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -947,7 +948,7 @@ butil::Status Writer::KvBatchPutAndDelete(
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, 0);
+      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1074,7 +1075,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, 0);
+      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1169,7 +1170,7 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, 0);
+      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1230,7 +1231,8 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {}.", db_exception.what());
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
     } catch (std::exception& std_exception) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
@@ -1256,11 +1258,12 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
         try {
           cursorp->close();
         } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("cursor close failed, exception: {}.", db_exception.what());
+          LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
         }
       });
 
-  GetDb()->cursor(txn, &cursorp, DB_READ_COMMITTED);
+  GetDb()->cursor(txn, &cursorp, DB_CURSOR_BULK | DB_TXN_SNAPSHOT);
 
   std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
   Dbt bdb_key;
@@ -1322,12 +1325,11 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
     }
 
     // Now open the database */
-    open_flags = DB_CREATE | DB_AUTO_COMMIT;
-    // open_flags = DB_CREATE |            // Allow database creation
-    //              DB_READ_UNCOMMITTED |  // Allow uncommitted reads
-    //              DB_AUTO_COMMIT |       // Allow autocommit
-    //              DB_MULTIVERSION |      // Multiversion concurrency control
-    //              DB_THREAD;             // Cause the database to be free-threade1
+    open_flags = DB_CREATE |        // Allow database creation
+                                    //  DB_READ_UNCOMMITTED |  // Allow uncommitted reads
+                 DB_AUTO_COMMIT |   // Allow autocommit
+                 DB_MULTIVERSION |  // Multiversion concurrency control
+                 DB_THREAD;         // Cause the database to be free-threade1
 
     db->open(nullptr,     // Txn pointer
              file_name,   // File name
@@ -1337,7 +1339,7 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
              0);          // File mode. Using defaults
 
   } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("OpenDb: db open failed: {}.", db_exception.what());
+    DINGO_LOG(ERROR) << fmt::format("OpenDb: db open failed: {} {}.", db_exception.get_errno(), db_exception.what());
     return -1;
   }
 
@@ -1394,7 +1396,7 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // the fewest number of write locks will receive the
     // deadlock notification in the event of a deadlock.
     envp->set_lk_detect(DB_LOCK_MINWRITE);
-    envp->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 0);
+    envp->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
 
     // set error call back
     envp->set_errcall(LogBDBError);
@@ -1405,7 +1407,7 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
 
     DINGO_LOG(INFO) << fmt::format("[bdb] default txn_max: {}.", txn_max);
 
-    envp->set_tx_max(512);
+    envp->set_tx_max(FLAGS_bdb_txn_max);
     envp->get_tx_max(&txn_max);
 
     DINGO_LOG(INFO) << fmt::format("[bdb] set txn_max to: {}.", txn_max);
