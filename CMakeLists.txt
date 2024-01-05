@@ -214,6 +214,7 @@ add_custom_target(build_proto ALL
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${ZSTD_INCLUDE_DIR})
+include_directories(${ZLIB_INCLUDE_DIR})
 include_directories(${BRAFT_INCLUDE_DIR})
 include_directories(${BRPC_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
