@@ -26,6 +26,8 @@ set(prefix_path "${THIRD_PARTY_PATH}/install/openblas")
 ExternalProject_Add(
     extern_faiss
     ${EXTERNAL_PROJECT_LOG_ARGS}
+
+    DEPENDS openblas
     
     SOURCE_DIR ${FAISS_SOURCES_DIR}
     BINARY_DIR ${FAISS_BINARY_DIR}
@@ -53,7 +55,6 @@ ExternalProject_Add(
     INSTALL_COMMAND $(MAKE) install
 )
 
-ADD_DEPENDENCIES(extern_faiss openblas)
 ADD_LIBRARY(faiss STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET faiss PROPERTY IMPORTED_LOCATION ${FAISS_LIBRARIES})
 ADD_DEPENDENCIES(faiss extern_faiss)

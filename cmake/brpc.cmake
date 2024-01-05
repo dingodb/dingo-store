@@ -29,6 +29,8 @@ set(prefix_path "${THIRD_PARTY_PATH}/install/gflags|${THIRD_PARTY_PATH}/install/
 ExternalProject_Add(
     extern_brpc
     ${EXTERNAL_PROJECT_LOG_ARGS}
+
+    DEPENDS zlib protobuf leveldb gflags glog openssl crypto
     
     SOURCE_DIR ${BRPC_SOURCES_DIR}
     BINARY_DIR ${BRPC_BINARY_DIR}
@@ -61,7 +63,7 @@ ExternalProject_Add(
     INSTALL_COMMAND mkdir -p ${BRPC_INSTALL_DIR}/lib/ COMMAND cp ${BRPC_BINARY_DIR}/output/lib/libbrpc.a ${BRPC_LIBRARIES} COMMAND cp -r ${BRPC_BINARY_DIR}/output/include ${BRPC_INCLUDE_DIR}/
 )
 
-ADD_DEPENDENCIES(extern_brpc zlib protobuf leveldb gflags glog openssl)
+
 ADD_LIBRARY(brpc STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET brpc PROPERTY IMPORTED_LOCATION ${BRPC_LIBRARIES})
 ADD_DEPENDENCIES(brpc extern_brpc)

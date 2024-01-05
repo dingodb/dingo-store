@@ -141,12 +141,12 @@ endif()
 
 message(STATUS "OpenMP library: ${OPENMP_LIBRARY}")
 
+include(gflags)
 include(lz4)
 include(zstd)
 include(zlib)
 include(snappy)
 include(openssl)
-include(gflags)
 include(glog)
 include(gtest)
 include(fmt)
@@ -277,6 +277,7 @@ set(DYNAMIC_LIB
 
 set(DEPEND_LIBS
     openssl
+    crypto
     zlib
     gflags
     protobuf

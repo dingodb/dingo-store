@@ -40,6 +40,8 @@ ExternalProject_Add(
     extern_gperftools
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
+    DEPENDS libunwind
+
     SOURCE_DIR ${GPERFTOOLS_BUILD_DIR}
     PREFIX ${GPERFTOOLS_BUILD_DIR}
 
@@ -49,7 +51,6 @@ ExternalProject_Add(
     INSTALL_COMMAND $(MAKE) install
 )
 
-ADD_DEPENDENCIES(extern_gperftools libunwind)
 ADD_LIBRARY(gperftools STATIC IMPORTED GLOBAL)
 SET_PROPERTY(TARGET gperftools PROPERTY IMPORTED_LOCATION ${GPERFTOOLS_LIBRARIES})
 ADD_DEPENDENCIES(gperftools extern_gperftools)
