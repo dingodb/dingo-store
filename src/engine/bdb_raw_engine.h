@@ -57,9 +57,29 @@ class BdbHelper {
   static const int kCommitException = -60000;
 };
 
+// Snapshot
+class BdbSnapshot : public dingodb::Snapshot {
+ public:
+  explicit BdbSnapshot(std::shared_ptr<Db> db, DbTxn* txn, Dbc* cursorp) : db_(db), txn_(txn), cursorp_(cursorp) {}
+  ~BdbSnapshot() override;
+  const void* Inner() override { return nullptr; }
+
+  DbTxn* GetDbTxn() { return txn_; };
+
+ private:
+  std::shared_ptr<Db> db_;
+
+  // Note: use DbEnv::txn_begin() to get pointers to a DbTxn,
+  // and call DbTxn::abort() or DbTxn::commit rather than
+  // delete to release them.
+  DbTxn* txn_;
+  Dbc* cursorp_;
+};
+
 class Iterator : public dingodb::Iterator {
  public:
-  explicit Iterator(const std::string& cf_name, /*bool snapshot_mode,*/ IteratorOptions options, Dbc* cursorp);
+  explicit Iterator(const std::string& cf_name, /*bool snapshot_mode,*/ IteratorOptions options, Dbc* cursorp,
+                    std::shared_ptr<bdb::BdbSnapshot> bdb_snapshot);
 
   ~Iterator() override;
 
@@ -79,11 +99,13 @@ class Iterator : public dingodb::Iterator {
 
   std::string_view Key() const override {
     // size check is in Valid() function
-    return std::string_view((const char*)bdb_key_.get_data() + encoded_cf_name_.size(),
-                            bdb_key_.get_size() - encoded_cf_name_.size());
+    // return std::string_view((const char*)bdb_key_.get_data() + encoded_cf_name_.size(),
+    //                         bdb_key_.get_size() - encoded_cf_name_.size());
+    return std::string_view(key_);
   }
   std::string_view Value() const override {
-    return std::string_view((const char*)bdb_value_.get_data(), bdb_value_.get_size());
+    // return std::string_view((const char*)bdb_value_.get_data(), bdb_value_.get_size());
+    return std::string_view(value_);
   }
 
   butil::Status Status() const override { return status_; };
@@ -98,28 +120,14 @@ class Iterator : public dingodb::Iterator {
   Dbt bdb_key_;
   Dbt bdb_value_;
   bool valid_;
+
   // bool snapshot_mode_;
   butil::Status status_;
+  std::shared_ptr<bdb::BdbSnapshot> snapshot_;
+  std::string key_;
+  std::string value_;
 };
 using IteratorPtr = std::shared_ptr<Iterator>;
-
-// Snapshot
-class Snapshot : public dingodb::Snapshot {
- public:
-  explicit Snapshot(std::shared_ptr<Db> db, DbTxn* txn) : db_(db), txn_(txn) {}
-  ~Snapshot() override;
-  const void* Inner() override { return nullptr; }
-
-  DbTxn* GetDbTxn() { return txn_; };
-
- private:
-  std::shared_ptr<Db> db_;
-
-  // Note: use DbEnv::txn_begin() to get pointers to a DbTxn,
-  // and call DbTxn::abort() or DbTxn::commit rather than
-  // delete to release them.
-  DbTxn* txn_;
-};
 
 class Reader : public RawEngine::Reader {
  public:
@@ -172,6 +180,7 @@ class Writer : public RawEngine::Writer {
   butil::Status KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) override;
   butil::Status KvBatchDeleteRange(
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
+  butil::Status KvBatchDeleteRangeNew(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs);
 
  private:
   butil::Status KvBatchDelete(const std::vector<std::string>& keys);
