@@ -1035,7 +1035,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange6) {
   }
 }
 
-TEST_F(RawBdbEngineTest, Iterator) {
+TEST_F(RawBdbEngineTest, Iterator1) {
   auto writer = RawBdbEngineTest::engine->Writer();
   {
     pb::common::KeyValue kv;
@@ -1129,6 +1129,152 @@ TEST_F(RawBdbEngineTest, Iterator) {
 
     EXPECT_EQ(count, 4);
   }
+}
+
+TEST_F(RawBdbEngineTest, Iterator2) {
+  auto writer = RawBdbEngineTest::engine->Writer();
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("tttt_01");
+    kv.set_value("123456789123456789");
+    writer->KvPut(kDefaultCf, kv);
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("tttt_02");
+    kv.set_value("22222222");
+    writer->KvPut(kDefaultCf, kv);
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("tttt_03");
+    kv.set_value("3333333");
+    writer->KvPut(kDefaultCf, kv);
+  }
+
+  {
+    const std::string &cf_name = kDefaultCf;
+    auto reader = RawBdbEngineTest::engine->Reader();
+
+    std::string start_key = "ttt";
+    std::string end_key = "uuu";
+    std::vector<pb::common::KeyValue> kvs;
+
+    butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << '\n';
+
+    int32_t count = 0;
+    for (const auto &kv : kvs) {
+      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      count++;
+    }
+
+    EXPECT_EQ(count, 3);
+  }
+
+  std::cout << "------------------scan1" << '\n';
+
+  {
+    {
+      pb::common::KeyValue kv;
+      kv.set_key("tttt_03");
+      kv.set_value("555555");
+      writer->KvPut(kDefaultCf, kv);
+    }
+    std::cout << "write tttt_03 to 555555" << '\n';
+
+    {
+      auto snapshot = engine->GetSnapshot();
+      std::cout << "create snapshot" << '\n';
+    }
+
+    const std::string &cf_name = kDefaultCf;
+    auto reader = RawBdbEngineTest::engine->Reader();
+
+    std::string start_key = "ttt";
+    std::string end_key = "uuu";
+    std::vector<pb::common::KeyValue> kvs;
+
+    // butil::Status ok = reader->KvScan(cf_name, snapshot, start_key, end_key, kvs);
+    butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    std::cout << "start_key : " << start_key << " "
+              << "end_key : " << end_key << '\n';
+
+    int32_t count = 0;
+    for (const auto &kv : kvs) {
+      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      count++;
+    }
+  }
+
+  std::cout << "------------------scan2" << '\n';
+
+  int count = 0;
+  IteratorOptions options;
+  options.upper_bound = "uuu";
+  {
+    count = 0;
+    auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
+
+    {
+      pb::common::KeyValue kv;
+      kv.set_key("tttt_03");
+      kv.set_value("4444444");
+      writer->KvPut(kDefaultCf, kv);
+    }
+
+    std::cout << "count=" << count << '\n';
+    for (iter->Seek("tttt_01"); iter->Valid(); iter->Next()) {
+      count = count + 1;
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << ", count=" << count << '\n';
+
+      {
+        pb::common::KeyValue kv;
+        kv.set_key("tttt_03");
+        kv.set_value("test+" + std::to_string(count));
+        writer->KvPut(kDefaultCf, kv);
+      }
+    }
+
+    EXPECT_EQ(count, 3);
+  }
+
+  std::cout << "------------------1" << '\n';
+
+  {
+    count = 0;
+    auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
+    for (iter->Seek("tttt_01"); iter->Valid(); iter->Next()) {
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
+      ++count;
+    }
+
+    EXPECT_EQ(count, 3);
+  }
+
+  std::cout << "------------------2" << '\n';
+
+  {
+    count = 0;
+    auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
+    for (iter->Seek("tttt_02"); iter->Valid(); iter->Next()) {
+      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
+      ++count;
+    }
+
+    EXPECT_EQ(count, 2);
+  }
+
+  std::cout << "------------------3" << '\n';
 }
 
 TEST_F(RawBdbEngineTest, GetApproximateSizes) {
@@ -1238,6 +1384,187 @@ TEST_F(RawBdbEngineTest, IngestExternalFile) {
     EXPECT_EQ("value_099", value);
   } else {
     std::cout << "Warning: cannot find sst file: " << sst_file_name << ", skip IngestExternalFile test!" << '\n';
+  }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange7) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
+  auto reader = RawBdbEngineTest::engine->Reader();
+
+  // write data
+  {
+    std::vector<pb::common::KeyValue> kv_puts;
+    std::vector<std::string> key_deletes;
+
+    for (int i = 0; i < 100; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KvDeleteRange7" + std::to_string(1000 + i));
+      kv.set_value(kv.key());
+      kv_puts.emplace_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange7", "KvDeleteRange8", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 100);
+  }
+
+  // test snapshot isolation
+  // we do a special snapshot operation in our bdb engine implementation, which use a cursor do a pre-seek
+  // to make sure the snapshot isolation is activated.
+  // this is a limitation of bdb, if we do not do this, the snapshot isolation will not be activated, and will perform
+  // as read committed isolation.
+  {
+    pb::common::Range range;
+    range.set_start_key("KvDeleteRange71010");
+    range.set_end_key("KvDeleteRange71030");
+
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange7", "KvDeleteRange8", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 80);
+
+    range.set_start_key("KvDeleteRange71090");
+    range.set_end_key("KvDeleteRange8");
+
+    ok = writer->KvDeleteRange(cf_name, range);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange7", "KvDeleteRange8", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 70);
+
+    range.set_start_key("KvDeleteRange71080");
+    range.set_end_key("KvDeleteRange71081");
+
+    ok = writer->KvDeleteRange(cf_name, range);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange7", "KvDeleteRange8", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 69);
+
+    // test if iterator can see the deleted data
+    {
+      int count = 0;
+
+      IteratorOptions options;
+      options.upper_bound = "KvDeleteRange8";
+      auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
+      // iter->SeekToFirst();
+
+      range.set_start_key("KvDeleteRange71070");
+      range.set_end_key("KvDeleteRange71080");
+      ok = writer->KvDeleteRange(cf_name, range);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+      for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
+        ++count;
+        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      }
+
+      EXPECT_EQ(count, 69);
+    }
+
+    // test if iterator with a pre-created snapshot can see the deleted data
+    {
+      int count = 0;
+
+      auto snapshot = engine->GetSnapshot();
+      // {
+      //   IteratorOptions options;
+      //   options.upper_bound = "KvDeleteRange8";
+      //   auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
+      //   iter->SeekToFirst();
+      // }
+
+      range.set_start_key("KvDeleteRange71060");
+      range.set_end_key("KvDeleteRange71070");
+      ok = writer->KvDeleteRange(cf_name, range);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+      IteratorOptions options;
+      options.upper_bound = "KvDeleteRange8";
+      auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
+
+      for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
+        ++count;
+        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      }
+
+      EXPECT_EQ(count, 59);
+    }
+
+    /// test if iterator with a pre-created snapshot can see the committed data
+    {
+      int count = 0;
+
+      auto snapshot = engine->GetSnapshot();
+
+      IteratorOptions options;
+      options.upper_bound = "KvDeleteRange8";
+      auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
+
+      for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
+        ++count;
+        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      }
+
+      EXPECT_EQ(count, 49);
+    }
+
+    // test the delete range with no keys
+    {
+      int count = 0;
+
+      auto snapshot = engine->GetSnapshot();
+
+      range.set_start_key("KvDeleteRange8");
+      range.set_end_key("KvDeleteRange9");
+      ok = writer->KvDeleteRange(cf_name, range);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+      IteratorOptions options;
+      options.upper_bound = "KvDeleteRange8";
+      auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
+
+      for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
+        ++count;
+        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      }
+
+      EXPECT_EQ(count, 49);
+
+      count = 0;
+      auto iter2 = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
+      for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
+        ++count;
+        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      }
+
+      EXPECT_EQ(count, 49);
+    }
+
+    // std::string start_key = "key";
+    // std::string end_key = "key99999";
+    // std::vector<pb::common::KeyValue> kvs;
+
+    // auto reader = RawBdbEngineTest::engine->Reader();
+
+    // ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    // EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    // std::cout << "start_key : " << start_key << " "
+    //           << "end_key : " << end_key << '\n';
+    // for (const auto &kv : kvs) {
+    //   std::cout << kv.key() << ":" << kv.value() << '\n';
+    // }
   }
 }
 
