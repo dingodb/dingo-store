@@ -26,7 +26,7 @@ ExternalProject_Add(
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
     DEPENDS gflags zlib snappy
-    
+
     PREFIX ${leveldb_SOURCES_DIR}
     SOURCE_DIR ${LEVELDB_SOURCES_DIR}
     BINARY_DIR ${LEVELDB_BINARY_DIR}

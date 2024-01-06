@@ -29,7 +29,7 @@ execute_process(COMMAND sh ${ZSTD_BUILD_DIR}/copy_repo.sh)
 ExternalProject_Add(
     extern_zstd
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${ZSTD_BUILD_DIR}
     PREFIX ${ZSTD_BUILD_DIR}
 
@@ -38,9 +38,9 @@ ExternalProject_Add(
     BUILD_IN_SOURCE 1
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND mkdir -p ${ZSTD_INSTALL_DIR}/lib ${ZSTD_INCLUDE_DIR}
-        COMMAND cp ${ZSTD_BUILD_DIR}/lib/libzstd.a ${ZSTD_INSTALL_DIR}/lib 
-        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zstd.h ${ZSTD_INCLUDE_DIR} 
-        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zdict.h ${ZSTD_INCLUDE_DIR} 
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/libzstd.a ${ZSTD_INSTALL_DIR}/lib
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zstd.h ${ZSTD_INCLUDE_DIR}
+        COMMAND cp ${ZSTD_BUILD_DIR}/lib/zdict.h ${ZSTD_INCLUDE_DIR}
         COMMAND cp ${ZSTD_BUILD_DIR}/lib/zstd_errors.h ${ZSTD_INCLUDE_DIR}
 )
 

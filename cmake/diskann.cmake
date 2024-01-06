@@ -35,7 +35,7 @@ endif()
 ExternalProject_Add(
     extern_diskann
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${DISKANN_SOURCES_DIR}
     BINARY_DIR ${DISKANN_BINARY_DIR}
     PREFIX ${DISKANN_BINARY_DIR}

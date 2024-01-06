@@ -29,7 +29,7 @@ execute_process(COMMAND sh ${LZ4_BUILD_DIR}/copy_repo.sh)
 ExternalProject_Add(
     extern_lz4
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${LZ4_BUILD_DIR}
     PREFIX ${LZ4_BUILD_DIR}
 
@@ -38,7 +38,7 @@ ExternalProject_Add(
     BUILD_IN_SOURCE 1
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND mkdir -p ${LZ4_INSTALL_DIR}/lib ${LZ4_INCLUDE_DIR}
-        COMMAND cp ${LZ4_BUILD_DIR}/lib/liblz4.a ${LZ4_INSTALL_DIR}/lib 
+        COMMAND cp ${LZ4_BUILD_DIR}/lib/liblz4.a ${LZ4_INSTALL_DIR}/lib
         COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4.h ${LZ4_INCLUDE_DIR}
         COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4hc.h ${LZ4_INCLUDE_DIR}
         COMMAND cp -r ${LZ4_BUILD_DIR}/lib/lz4file.h ${LZ4_INCLUDE_DIR}

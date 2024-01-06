@@ -35,7 +35,7 @@ message(STATUS "faiss prefix_path is: ${prefix_path}")
 ExternalProject_Add(
     extern_faiss
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${FAISS_SOURCES_DIR}
     BINARY_DIR ${FAISS_BINARY_DIR}
     PREFIX ${FAISS_BINARY_DIR}

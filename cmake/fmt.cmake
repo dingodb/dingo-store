@@ -24,7 +24,7 @@ SET(FMT_LIBRARIES "${FMT_INSTALL_DIR}/lib/libfmt.a" CACHE FILEPATH "fmt library.
 ExternalProject_Add(
     extern_fmt
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${FMT_SOURCES_DIR}
     BINARY_DIR ${FMT_BINARY_DIR}
     PREFIX ${FMT_BINARY_DIR}

@@ -29,7 +29,7 @@ set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -DUSE_BTHREAD_MUTEX)
 ExternalProject_Add(
     extern_braft
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     DEPENDS brpc
 
     SOURCE_DIR ${BRAFT_SOURCES_DIR}

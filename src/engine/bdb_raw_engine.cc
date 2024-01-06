@@ -1325,11 +1325,11 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
     }
 
     // Now open the database */
-    open_flags = DB_CREATE |        // Allow database creation
-                                    //  DB_READ_UNCOMMITTED |  // Allow uncommitted reads
-                 DB_AUTO_COMMIT |   // Allow autocommit
-                 DB_MULTIVERSION |  // Multiversion concurrency control
-                 DB_THREAD;         // Cause the database to be free-threade1
+    open_flags = DB_CREATE |            // Allow database creation
+                 DB_READ_UNCOMMITTED |  // Allow uncommitted reads
+                 DB_AUTO_COMMIT |       // Allow autocommit
+                 DB_MULTIVERSION |      // Multiversion concurrency control
+                 DB_THREAD;             // Cause the database to be free-threade1
 
     db->open(nullptr,     // Txn pointer
              file_name,   // File name
@@ -1502,6 +1502,7 @@ butil::Status BdbRawEngine::MergeCheckpointFiles(const std::string& path, const 
                                                  std::vector<std::string>& merge_sst_paths) {              // NOLINT
   return butil::Status();
 }
+
 butil::Status BdbRawEngine::IngestExternalFile(const std::string& cf_name, const std::vector<std::string>& files) {
   rocksdb::Options options;
   options.env = rocksdb::Env::Default();

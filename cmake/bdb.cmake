@@ -31,7 +31,7 @@ endif()
 ExternalProject_Add(
     extern_bdb
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${BDB_SOURCES_DIR}
     BINARY_DIR ${BDB_BINARY_DIR}
     PREFIX ${BDB_BINARY_DIR}

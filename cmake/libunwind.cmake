@@ -23,7 +23,7 @@ SET(LIBUNWIND_LIBRARIES "${LIBUNWIND_INSTALL_DIR}/lib/libunwind.a" CACHE FILEPAT
 SET(LIBUNWIND_GENERIC_LIBRARIES "${LIBUNWIND_INSTALL_DIR}/lib/libunwind-generic.a" CACHE FILEPATH "libunwind generic library." FORCE)
 SET(LIBUNWIND_ARCH_LIBRARIES "${LIBUNWIND_INSTALL_DIR}/lib/libunwind-x86_64.a" CACHE FILEPATH "libunwind x86_64 library." FORCE)
 
-FILE(WRITE ${LIBUNWIND_BUILD_DIR}/copy_repo.sh 
+FILE(WRITE ${LIBUNWIND_BUILD_DIR}/copy_repo.sh
     "mkdir -p ${LIBUNWIND_BUILD_DIR} && cp -rf ${LIBUNWIND_SOURCES_DIR}/* ${LIBUNWIND_BUILD_DIR}/")
 
 execute_process(COMMAND sh ${LIBUNWIND_BUILD_DIR}/copy_repo.sh)
@@ -34,7 +34,7 @@ ExternalProject_Add(
 
     SOURCE_DIR ${LIBUNWIND_BUILD_DIR}
     PREFIX ${LIBUNWIND_BUILD_DIR}
-    
+
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND autoreconf -i COMMAND ./configure --prefix ${LIBUNWIND_INSTALL_DIR} --disable-minidebuginfo --disable-shared --enable-static --disable-msabi-support
     BUILD_COMMAND $(MAKE)
