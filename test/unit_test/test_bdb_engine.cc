@@ -875,7 +875,7 @@ TEST_F(RawBdbEngineTest, KvBatchDelete) {
   }
 }
 
-TEST_F(RawBdbEngineTest, KvDeleteRange) {
+TEST_F(RawBdbEngineTest, KvDeleteRange1) {
   const std::string &cf_name = kDefaultCf;
   auto writer = RawBdbEngineTest::engine->Writer();
 
@@ -894,6 +894,11 @@ TEST_F(RawBdbEngineTest, KvDeleteRange) {
     butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kvs, {});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange2) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
 
   // key empty
   {
@@ -902,6 +907,11 @@ TEST_F(RawBdbEngineTest, KvDeleteRange) {
     butil::Status ok = writer->KvDeleteRange(cf_name, range);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange3) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
 
   // start key not empty but end key empty
   {
@@ -912,6 +922,11 @@ TEST_F(RawBdbEngineTest, KvDeleteRange) {
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange4) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
 
   // ok
   {
@@ -947,6 +962,11 @@ TEST_F(RawBdbEngineTest, KvDeleteRange) {
     ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange5) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
 
   // ok
   {
@@ -982,6 +1002,11 @@ TEST_F(RawBdbEngineTest, KvDeleteRange) {
     ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange6) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
 
   // ok
   {

@@ -15,6 +15,10 @@
 #ifndef DINGODB_ENGINE_RAW_BDB_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_RAW_BDB_ENGINE_H_
 
+#include <sys/types.h>
+
+#include <vector>
+
 #include "config/config.h"
 #include "db_cxx.h"
 #include "engine/iterator.h"
@@ -34,6 +38,10 @@ class BdbHelper {
   static int DecodeKey(const std::string& cf_name, const Dbt& bdb_key, std::string& key);
 
   static void DbtToBinary(const Dbt& dbt, std::string& binary);
+  static std::string DbtToBinary(const Dbt& dbt);
+  static size_t NextPowerOf1024(size_t n);
+
+  static uint32_t GetKeysSize(const std::vector<std::string>& keys);
 
   // static std::string DbtToBinary(const Dbt& dbt);
   static void BinaryToDbt(const std::string& binary, Dbt& dbt);
@@ -166,7 +174,10 @@ class Writer : public RawEngine::Writer {
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
 
  private:
+  butil::Status KvBatchDelete(const std::vector<std::string>& keys);
   butil::Status DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn);
+  butil::Status GetKeysInRange(const std::string& cf_name, const pb::common::Range& range,
+                               std::vector<std::string>& keys);
 
   std::shared_ptr<BdbRawEngine> GetRawEngine();
   std::shared_ptr<Db> GetDb();
