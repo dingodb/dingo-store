@@ -28,7 +28,7 @@ ExternalProject_Add(
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
     DEPENDS openblas
-    
+
     SOURCE_DIR ${FAISS_SOURCES_DIR}
     BINARY_DIR ${FAISS_BINARY_DIR}
     PREFIX ${FAISS_BINARY_DIR}

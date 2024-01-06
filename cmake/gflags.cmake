@@ -35,7 +35,7 @@ ENDIF (WIN32)
 ExternalProject_Add(
     extern_gflags
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${GFLAGS_SOURCES_DIR}
     BINARY_DIR ${GFLAGS_BINARY_DIR}
     PREFIX ${GFLAGS_BINARY_DIR}

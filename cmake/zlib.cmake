@@ -30,7 +30,7 @@ execute_process(COMMAND sh ${ZLIB_BINARY_DIR}/copy_repo.sh)
 ExternalProject_Add(
     extern_zlib
     ${EXTERNAL_PROJECT_LOG_ARGS}
-    
+
     SOURCE_DIR ${ZLIB_BINARY_DIR}
     BINARY_DIR ${ZLIB_BINARY_DIR}
     PREFIX ${ZLIB_INSTALL_DIR}
