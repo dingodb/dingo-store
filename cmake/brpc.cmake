@@ -30,7 +30,7 @@ ExternalProject_Add(
     extern_brpc
     ${EXTERNAL_PROJECT_LOG_ARGS}
 
-    DEPENDS zlib protobuf leveldb gflags glog openssl crypto
+    DEPENDS zlib snappy protobuf leveldb gflags glog openssl crypto
     
     SOURCE_DIR ${BRPC_SOURCES_DIR}
     BINARY_DIR ${BRPC_BINARY_DIR}
@@ -46,6 +46,9 @@ ExternalProject_Add(
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
     -DCMAKE_PREFIX_PATH=${prefix_path}
+    -DWITH_SNAPPY=ON
+    -DSNAPPY_INCLUDE_PATH=${SNAPPY_INCLUDE_DIR}
+    -DSNAPPY_LIB=${SNAPPY_LIBRARIES}
     -DWITH_GLOG=ON
     -DGLOG_INCLUDE_PATH=${GLOG_INCLUDE_DIR}
     -DGLOG_LIB=${GLOG_LIBRARIES}
