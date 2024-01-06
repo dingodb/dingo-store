@@ -51,9 +51,9 @@ target_link_libraries(
     openssl
     crypto
     leveldb
+    snappy
     zlib
     dl
-    Threads::Threads
-          )
+    Threads::Threads)
 
 add_dependencies(sdk ${DEPEND_LIBS})
