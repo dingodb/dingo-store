@@ -48,7 +48,6 @@ class BdbHelper {
   static void DbtToString(const Dbt& dbt, std::string& str);
   static void DbtToUserKey(const Dbt& dbt, std::string& user_data);
   static std::string DbtToString(const Dbt& dbt);
-  static size_t NextPowerOf1024(size_t n);
 
   static uint32_t GetKeysSize(const std::vector<std::string>& keys);
 
