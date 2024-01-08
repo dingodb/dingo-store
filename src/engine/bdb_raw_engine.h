@@ -55,12 +55,7 @@ class BdbHelper {
   // static std::string DbtToBinary(const Dbt& dbt);
   static void StringToDbt(const std::string& str, Dbt& dbt);
 
-  static int DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv);
-
-  static int DbtCompare(const Dbt& dbt1, const Dbt& dbt2);
-
-  static bool IsBdbKeyMatchCfName(const Dbt& bdb_key, const std::string& cf_name);
-  static bool IsBdbKeyMatchCfId(const Dbt& bdb_key, char cf_id);
+  static int CompareDbt(const Dbt& dbt1, const Dbt& dbt2);
 
   static std::string EncodedCfUpperBound(const std::string& cf_name);
   static std::string EncodedCfUpperBound(char cf_id);
@@ -173,8 +168,6 @@ class Reader : public RawEngine::Reader {
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
                                    IteratorOptions options) override;
 
-  butil::Status GetRangeCount(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
-                              int64_t& count);
   butil::Status GetRangeKeys(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
                              std::vector<std::string>& keys);
 
