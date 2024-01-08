@@ -57,13 +57,6 @@ public class RpcCaller<S extends Service<S>> implements Caller<S>, InvocationHan
 
     @Override
     public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request, ServiceCallCycles<REQ, RES> handler
-    ) {
-        return call(method, request, options, channel, System.identityHashCode(request), handler);
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
         MethodDescriptor<REQ, RES> method, long requestId, REQ request, ServiceCallCycles<REQ, RES> handler
     ) {
         return call(method, request, options, channel, System.identityHashCode(request), handler);

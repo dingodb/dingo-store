@@ -183,7 +183,8 @@ public class Services {
     @SneakyThrows
     public static MetaService tsoService(Set<Location> locations) {
         Parameters.notEmpty(locations, "locations");
-        return new ServiceCaller<>(tsoCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, MetaService.Impl::new
+        return new ServiceCaller<>(
+            tsoCache.get(locations), DEFAULT_RETRY_TIMES, DEFAULT, MetaService.Impl::new
         ).getService();
     }
 

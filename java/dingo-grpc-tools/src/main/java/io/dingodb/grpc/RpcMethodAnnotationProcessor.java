@@ -17,6 +17,7 @@
 
 package io.dingodb.grpc;
 
+import com.google.common.base.CaseFormat;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
@@ -29,6 +30,9 @@ import io.grpc.MethodDescriptor;
 import io.grpc.stub.annotations.RpcMethod;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -56,6 +60,8 @@ import javax.lang.model.util.Types;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
 
+import static com.google.common.base.CaseFormat.LOWER_CAMEL;
+import static com.google.common.base.CaseFormat.UPPER_CAMEL;
 import static io.dingodb.grpc.Constant.CALLER;
 import static io.dingodb.grpc.Constant.MSG_PKG;
 import static io.dingodb.grpc.Constant.SERVICE_CALL_CYCLE;
@@ -133,6 +139,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                     annotationValues.get(fullMethodName).toString(), reqTypeName, resTypeName
                 ));
                 typeDescBuilder.addField(addHandlers(methodName, reqTypeName, resTypeName));
+                typeDescBuilder.addType(addHandlerLogClass(serviceName, methodName));
                 typeBuilder
                     .addMethod(makeRequestMethod(methodName, serviceDescName, reqTypeName, resTypeName))
                     .addMethod(makeRequestWithIdMethod(methodName, serviceDescName, reqTypeName, resTypeName));
@@ -228,6 +235,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
         String methodName, TypeName descTypeName, TypeName requestTypeName, TypeName responseTypeName
     ) {
         return MethodSpec.methodBuilder(methodName)
+            .addAnnotation(Deprecated.class)
             .returns(responseTypeName)
             .addParameter(requestTypeName, "request")
             .addModifiers(PUBLIC, DEFAULT)
@@ -256,8 +264,19 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             .builder(ParameterizedTypeName.get(SERVICE_CALL_CYCLE, req, res), method + "Handlers")
             .addModifiers(PUBLIC, FINAL, STATIC)
             .initializer(
-                "new $T<>($L)", SERVICE_CALL_CYCLE, method
+                "new $T<>($L, $L.$L)", SERVICE_CALL_CYCLE, method, LOWER_CAMEL.to(UPPER_CAMEL, method), "logger"
             )
+            .build();
+    }
+
+    private TypeSpec addHandlerLogClass(ClassName serviceClass, String method) {
+        String methodClassName = LOWER_CAMEL.to(UPPER_CAMEL, method);
+        return TypeSpec.classBuilder(serviceClass.nestedClass(methodClassName))
+            .addModifiers(PUBLIC, FINAL, STATIC)
+            .addField(FieldSpec
+                .builder(Logger.class, "logger", PUBLIC, FINAL, STATIC)
+                .initializer("$T.getLogger($L.class)", LoggerFactory.class, methodClassName)
+                .build())
             .build();
     }
 

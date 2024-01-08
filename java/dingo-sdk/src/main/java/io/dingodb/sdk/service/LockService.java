@@ -19,7 +19,11 @@ package io.dingodb.sdk.service;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.service.ServiceCallCycle.RBefore;
 import io.dingodb.sdk.service.entity.common.KeyValue;
+import io.dingodb.sdk.service.entity.meta.TsoOpType;
+import io.dingodb.sdk.service.entity.meta.TsoRequest;
+import io.dingodb.sdk.service.entity.meta.TsoTimestamp;
 import io.dingodb.sdk.service.entity.version.DeleteRangeRequest;
+import io.dingodb.sdk.service.entity.version.EventFilterType;
 import io.dingodb.sdk.service.entity.version.EventType;
 import io.dingodb.sdk.service.entity.version.Kv;
 import io.dingodb.sdk.service.entity.version.LeaseGrantRequest;
@@ -36,6 +40,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -53,17 +58,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
 public class LockService {
-
-    static {
-        VersionServiceDescriptors.leaseGrantHandlers.addListener(new RBefore<LeaseGrantRequest, LeaseGrantResponse>() {
-            @Override
-            public void rBefore(LeaseGrantRequest request, CallOptions options, String remote, long trace) {
-                if (request.getID() == -1) {
-                    request.setID(Math.abs((((long) System.identityHashCode(request)) << 32) + System.nanoTime()));
-                }
-            }
-        });
-    }
 
     private final ScheduledExecutorService executors = Executors.newScheduledThreadPool(1);
     private final MetaService tsoService;
@@ -97,6 +91,7 @@ public class LockService {
 
     public LockService(String resource, String servers, int leaseTtl) {
         this.kvService = Services.versionService(Services.parse(servers));
+        this.tsoService = Services.tsoService(Services.parse(servers));
         this.resource = resource;
         this.resourceSepIndex = resource.length() + 1;
         this.leaseTtl = leaseTtl;
@@ -104,13 +99,18 @@ public class LockService {
         this.resourcePrefixEnd = resource + "|1|";
         this.delay = Math.max(Math.abs(leaseTtl * 1000) / 3, 1000);
         this.executors.execute(this::grantLease);
-        this.tsoService = Services.tsoService(Services.parse(servers));
     }
 
-    private void grantLease() {
+    private synchronized void grantLease() {
         do {
             try {
-                lease = kvService.leaseGrant(LeaseGrantRequest.builder().iD(lease).tTL(leaseTtl).build()).getID();
+                long ts = lease;
+                if (ts == -1) {
+                    TsoTimestamp tso = tsoService.tsoService(
+                        TsoRequest.builder().count(1).opType(TsoOpType.OP_GEN_TSO).build()).getStartTimestamp();
+                    ts = (tso.getPhysical() << 18) + tso.getLogical();
+                }
+                lease = kvService.leaseGrant(LeaseGrantRequest.builder().iD(ts).tTL(leaseTtl).build()).getID();
             } catch (Exception e) {
                 if (lease == -1) {
                     log.error("Grant lease failed, will retry...", e);
@@ -146,6 +146,20 @@ public class LockService {
         return lease;
     }
 
+    public String getResourcePrefixKeyBegin() {
+        while (resourcePrefixKeyBegin == null) {
+            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+        }
+        return resourcePrefixKeyBegin;
+    }
+
+    public String getResourcePrefixKeyEnd() {
+        while (resourcePrefixKeyEnd == null) {
+            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+        }
+        return resourcePrefixKeyEnd;
+    }
+
     public List<Kv> listLock() {
         return kvService.kvRange(rangeRequest()).getKvs();
     }
@@ -176,7 +190,7 @@ public class LockService {
     public class Lock implements java.util.concurrent.locks.Lock {
 
         public final String lockId = UUID.randomUUID().toString();
-        public final String resourceKey = resourcePrefixKeyBegin + lockId;
+        public final String resourceKey = getResourcePrefixKeyBegin() + lockId;
         public final String resourceValue;
 
         private final Consumer<Lock> onReset;
@@ -252,8 +266,10 @@ public class LockService {
                         resourceKey, revision, rangeResponse.getKvs()
                     );
                 }
-                locked++;
-                watchLock(current);
+                if (!destroyFuture.isDone()) {
+                    locked++;
+                    watchLock(current);
+                }
                 return true;
             }
             return false;
@@ -282,13 +298,16 @@ public class LockService {
                     try {
                         kvService.watch(watchRequest(previous.getKv().getKey(), previous.getModRevision()));
                         if (isLockRevision(revision, kvService.kvRange(rangeRequest()))) {
-                            return;
+                            break;
                         }
                     } catch (Exception ignored) {
                     }
                 } catch (Exception e) {
                     log.error("Lock {} error, id: {}", resourceKey, lockId, e);
                 }
+            }
+            if (destroyFuture.isDone()) {
+                throw new RuntimeException("Destroyed!");
             }
         }
 
@@ -341,9 +360,12 @@ public class LockService {
                         if (log.isDebugEnabled()) {
                             log.debug("Lock {} wait...", resourceKey);
                         }
-                        locked++;
-                        watchLock(current);
-                        return true;
+                        if (!destroyFuture.isDone()) {
+                            locked++;
+                            watchLock(current);
+                            return true;
+                        }
+                        throw new RuntimeException("Destroyed!");
                     }
                     LockSupport.parkNanos(unit.toNanos(1));
                     if (Thread.interrupted()) {
@@ -437,6 +459,7 @@ public class LockService {
                 .key(resourceKey)
                 .needPrevKv(true)
                 .startRevision(revision)
+                .filters(Collections.singletonList(EventFilterType.NOPUT))
                 .build()
             ).build();
     }
