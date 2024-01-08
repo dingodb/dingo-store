@@ -17,6 +17,8 @@
 
 #include <sys/types.h>
 
+#include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 #include "config/config.h"
@@ -30,6 +32,10 @@ class BdbRawEngine;
 
 namespace bdb {
 
+// CF_ID_LEN is the length of cf id in bdb key.
+// the cf_id is the first byte of bdb key, now it is a char.
+#define CF_ID_LEN 1
+
 class BdbHelper {
  public:
   static std::string EncodeKey(const std::string& cf_name, const std::string& key);
@@ -37,24 +43,34 @@ class BdbHelper {
 
   static int DecodeKey(const std::string& cf_name, const Dbt& bdb_key, std::string& key);
 
-  static void DbtToBinary(const Dbt& dbt, std::string& binary);
-  static std::string DbtToBinary(const Dbt& dbt);
+  static void DbtToString(const Dbt& dbt, std::string& binary);
+  static void DbtToUserKey(const Dbt& dbt, std::string& user_data);
+  static std::string DbtToString(const Dbt& dbt);
   static size_t NextPowerOf1024(size_t n);
 
   static uint32_t GetKeysSize(const std::vector<std::string>& keys);
 
   // static std::string DbtToBinary(const Dbt& dbt);
-  static void BinaryToDbt(const std::string& binary, Dbt& dbt);
+  static void StringToDbt(const std::string& binary, Dbt& dbt);
 
   static int DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv);
 
   static int DbtCompare(const Dbt& dbt1, const Dbt& dbt2);
 
-  static bool IsBdbKeyPrefixWith(const Dbt& bdb_key, const std::string& binary);
+  static bool IsBdbKeyMatchCfName(const Dbt& bdb_key, const std::string& cf_name);
+  static bool IsBdbKeyMatchCfId(const Dbt& bdb_key, char cf_id);
 
-  static std::string GetEncodedCfNameUpperBound(const std::string& cf_name);
+  static std::string EncodedCfNameUpperBound(const std::string& cf_name);
 
   static const int kCommitException = -60000;
+
+  // we use a char to represent cf_id, so we can support 256 cf at most
+  // in dingo-store v0.8.0, we add a prefix to the user_key to represent the column family in bdb.
+  static char GetCfId(const std::string& cf_name);
+  static std::string GetCfName(char cf_id);
+
+  static std::unordered_map<std::string, char> cf_name_to_id;
+  static std::unordered_map<char, std::string> cf_id_to_name;
 };
 
 // Snapshot
@@ -99,34 +115,29 @@ class Iterator : public dingodb::Iterator {
 
   std::string_view Key() const override {
     // size check is in Valid() function
-    // return std::string_view((const char*)bdb_key_.get_data() + encoded_cf_name_.size(),
-    //                         bdb_key_.get_size() - encoded_cf_name_.size());
-    return std::string_view(key_);
+    return std::string_view((const char*)bdb_key_.get_data() + CF_ID_LEN, bdb_key_.get_size() - CF_ID_LEN);
   }
+
   std::string_view Value() const override {
-    // return std::string_view((const char*)bdb_value_.get_data(), bdb_value_.get_size());
-    return std::string_view(value_);
+    return std::string_view((const char*)bdb_value_.get_data(), bdb_value_.get_size());
   }
 
   butil::Status Status() const override { return status_; };
 
  private:
   IteratorOptions options_;
-  // const std::string& cf_name_;
-  std::string encoded_cf_name_;
-  std::string encoded_cf_name_upper_bound_;
+  char cf_id_;
+  std::string cf_upper_bound_;
 
   Dbc* cursorp_;
   Dbt bdb_key_;
   Dbt bdb_value_;
   bool valid_;
 
-  // bool snapshot_mode_;
   butil::Status status_;
   std::shared_ptr<bdb::BdbSnapshot> snapshot_;
-  std::string key_;
-  std::string value_;
 };
+
 using IteratorPtr = std::shared_ptr<Iterator>;
 
 class Reader : public RawEngine::Reader {
@@ -180,13 +191,14 @@ class Writer : public RawEngine::Writer {
   butil::Status KvDeleteRange(const std::string& cf_name, const pb::common::Range& range) override;
   butil::Status KvBatchDeleteRange(
       const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) override;
-  butil::Status KvBatchDeleteRangeNew(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs);
+  butil::Status KvBatchDeleteRangeNormal(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs);
+  butil::Status KvBatchDeleteRangeBulk(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs);
 
  private:
   butil::Status KvBatchDelete(const std::vector<std::string>& keys);
   butil::Status DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn);
-  butil::Status GetKeysInRange(const std::string& cf_name, const pb::common::Range& range,
-                               std::vector<std::string>& keys);
+  butil::Status GetRawKeysInRange(const std::string& cf_name, const pb::common::Range& range,
+                                  std::vector<std::string>& keys);
 
   std::shared_ptr<BdbRawEngine> GetRawEngine();
   std::shared_ptr<Db> GetDb();

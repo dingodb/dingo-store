@@ -19,7 +19,9 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "common/constant.h"
@@ -37,6 +39,7 @@
 
 #define BDB_BUILD_USE_SNAPSHOT
 #define BDB_FAST_GET_APROX_SIZE
+#define BDB_BUILD_USE_BULK_DELETE
 
 namespace dingodb {
 
@@ -48,26 +51,50 @@ DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external
 
 namespace bdb {
 
+// we use visable char as prefix, so we can use it as a range upper bound and better for debug.
+std::unordered_map<std::string, char> BdbHelper::cf_name_to_id = {
+    {"default", '0'}, {"meta", '1'}, {"vector_scalar", '2'}, {"vector_table", '3'},
+    {"data", '4'},    {"lock", '5'}, {"write", '6'}};
+
+std::unordered_map<char, std::string> BdbHelper::cf_id_to_name = {
+    {'0', "default"}, {'1', "meta"}, {'2', "vector_scalar"}, {'3', "vector_table"},
+    {'4', "data"},    {'5', "lock"}, {'6', "write"}};
+
 // BdbHelper
 std::string BdbHelper::EncodeKey(const std::string& cf_name, const std::string& key) {
-  Buf buf(32);
+  return std::string(CF_ID_LEN, GetCfId(cf_name)).append(key);
+  // Buf buf(32);
 
-  DingoSchema<std::optional<std::shared_ptr<std::string>>> schema;
-  schema.SetIsKey(true);
-  schema.SetAllowNull(false);
-  schema.EncodeKeyPrefix(&buf, std::make_shared<std::string>(cf_name));
-  return buf.GetString().append(key);
+  // DingoSchema<std::optional<std::shared_ptr<std::string>>> schema;
+  // schema.SetIsKey(true);
+  // schema.SetAllowNull(false);
+  // schema.EncodeKeyPrefix(&buf, std::make_shared<std::string>(cf_name));
+  // return buf.GetString().append(key);
 }
 
-std::string BdbHelper::EncodeCfName(const std::string& cf_name) { return BdbHelper::EncodeKey(cf_name, std::string()); }
+std::string BdbHelper::EncodeCfName(const std::string& cf_name) {
+  return std::string(CF_ID_LEN, GetCfId(cf_name));
+  // return BdbHelper::EncodeKey(cf_name, std::string());
+}
 
-int BdbHelper::DecodeKey(const std::string& /*cf_name*/, const Dbt& /*bdb_key*/, std::string& /*key*/) { return -1; }
+int BdbHelper::DecodeKey(const std::string& /*cf_name*/, const Dbt& bdb_key, std::string& key) {
+  CHECK(bdb_key.get_data() != nullptr);
+  CHECK(bdb_key.get_size() > CF_ID_LEN);
 
-void BdbHelper::DbtToBinary(const Dbt& dbt, std::string& binary) {
+  key.assign((const char*)bdb_key.get_data() + CF_ID_LEN, bdb_key.get_size() - CF_ID_LEN);
+  return -1;
+}
+
+void BdbHelper::DbtToString(const Dbt& dbt, std::string& binary) {
   binary.assign((const char*)dbt.get_data(), dbt.get_size());
 }
 
-std::string BdbHelper::DbtToBinary(const Dbt& dbt) { return std::string((const char*)dbt.get_data(), dbt.get_size()); }
+// This function is only used to decode the key, for the value, the data in dbt is equal the user data.
+void BdbHelper::DbtToUserKey(const Dbt& dbt, std::string& user_data) {
+  user_data.assign((const char*)(dbt.get_data()) + CF_ID_LEN, dbt.get_size() - CF_ID_LEN);
+}
+
+std::string BdbHelper::DbtToString(const Dbt& dbt) { return std::string((const char*)dbt.get_data(), dbt.get_size()); }
 
 uint32_t BdbHelper::GetKeysSize(const std::vector<std::string>& keys) {
   uint32_t size = 0;
@@ -79,18 +106,17 @@ uint32_t BdbHelper::GetKeysSize(const std::vector<std::string>& keys) {
   return size;
 }
 
-void BdbHelper::BinaryToDbt(const std::string& binary, Dbt& dbt) {
+void BdbHelper::StringToDbt(const std::string& binary, Dbt& dbt) {
   dbt.set_data((void*)binary.data());
   dbt.set_size(binary.size());
 }
 
 int BdbHelper::DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv) {
-  std::string encoded_cf_name = EncodeCfName(cf_name);
-  if (!IsBdbKeyPrefixWith(bdb_key, encoded_cf_name)) {
+  if (!IsBdbKeyMatchCfName(bdb_key, cf_name)) {
     return -1;
   }
 
-  kv.set_key((const char*)bdb_key.get_data() + encoded_cf_name.size(), bdb_key.get_size() - encoded_cf_name.size());
+  kv.set_key((const char*)bdb_key.get_data() + CF_ID_LEN, bdb_key.get_size() - CF_ID_LEN);
   kv.set_value((const char*)value.get_data(), value.get_size());
   return 0;
 }
@@ -109,22 +135,44 @@ int BdbHelper::DbtCompare(const Dbt& dbt1, const Dbt& dbt2) {
   return ret;
 }
 
-bool BdbHelper::IsBdbKeyPrefixWith(const Dbt& bdb_key, const std::string& binary) {
-  if (binary.size() > bdb_key.get_size()) {
-    return false;
-  }
+bool BdbHelper::IsBdbKeyMatchCfName(const Dbt& bdb_key, const std::string& cf_name) {
+  CHECK(bdb_key.get_data() != nullptr);
+  char cf_id = GetCfId(cf_name);
 
-  return memcmp(bdb_key.get_data(), binary.c_str(), binary.size()) == 0;
+  return *(char*)bdb_key.get_data() == cf_id;
 }
 
-std::string BdbHelper::GetEncodedCfNameUpperBound(const std::string& cf_name) { return EncodeCfName(cf_name + "\1"); };
+bool BdbHelper::IsBdbKeyMatchCfId(const Dbt& bdb_key, char cf_id) {
+  CHECK(bdb_key.get_data() != nullptr);
+  return *(char*)bdb_key.get_data() == cf_id;
+}
+
+std::string BdbHelper::EncodedCfNameUpperBound(const std::string& cf_name) {
+  return std::string(CF_ID_LEN, GetCfId(cf_name) + 1);
+};
+
+char BdbHelper::GetCfId(const std::string& cf_name) {
+  auto it = cf_name_to_id.find(cf_name);
+  if (BAIDU_UNLIKELY(it == cf_name_to_id.end())) {
+    DINGO_LOG(FATAL) << fmt::format("[bdb] invalid cf name: {}.", cf_name);
+  }
+  return it->second;
+}
+
+std::string BdbHelper::GetCfName(char cf_id) {
+  auto it = cf_id_to_name.find(cf_id);
+  if (BAIDU_UNLIKELY(it == cf_id_to_name.end())) {
+    DINGO_LOG(FATAL) << fmt::format("[bdb] invalid cf id: {}.", cf_id);
+  }
+  return it->second;
+}
 
 // Iterator
-Iterator::Iterator(const std::string& cf_name, /*bool snapshot_mode,*/ IteratorOptions options, Dbc* cursorp,
+Iterator::Iterator(const std::string& cf_name, IteratorOptions options, Dbc* cursorp,
                    std::shared_ptr<bdb::BdbSnapshot> bdb_snapshot)
-    : /*snapshot_mode_(snapshot_mode),*/ options_(options), /*cf_name_(cf_name), */ cursorp_(cursorp), valid_(false) {
-  encoded_cf_name_ = BdbHelper::EncodeCfName(cf_name);
-  encoded_cf_name_upper_bound_ = BdbHelper::GetEncodedCfNameUpperBound(cf_name);
+    : options_(options), cursorp_(cursorp), valid_(false) {
+  cf_id_ = BdbHelper::GetCfId(cf_name);
+  cf_upper_bound_ = BdbHelper::EncodedCfNameUpperBound(cf_name);
   // TODO: use DB_DBT_MALLOC may cause memory leak, need to fix in the furture.
   // bdb_value_.set_flags(DB_DBT_MALLOC);
   snapshot_ = bdb_snapshot;
@@ -148,14 +196,14 @@ bool Iterator::Valid() const {
   }
 
   // cf_name check
-  if (!BdbHelper::IsBdbKeyPrefixWith(bdb_key_, encoded_cf_name_)) {
+  if (!BdbHelper::IsBdbKeyMatchCfId(bdb_key_, cf_id_)) {
     return false;
   }
 
   if (!options_.upper_bound.empty()) {
     Dbt upper_key;
-    std::string upper = encoded_cf_name_ + options_.upper_bound;
-    BdbHelper::BinaryToDbt(upper, upper_key);
+    std::string upper = std::string(1, cf_id_) + options_.upper_bound;
+    BdbHelper::StringToDbt(upper, upper_key);
     if (BdbHelper::DbtCompare(upper_key, bdb_key_) <= 0) {
       return false;
     }
@@ -163,8 +211,8 @@ bool Iterator::Valid() const {
 
   if (!options_.lower_bound.empty()) {
     Dbt lower_key;
-    std::string lower = encoded_cf_name_ + options_.lower_bound;
-    BdbHelper::BinaryToDbt(lower, lower_key);
+    std::string lower = std::string(1, cf_id_) + options_.lower_bound;
+    BdbHelper::StringToDbt(lower, lower_key);
     if (BdbHelper::DbtCompare(lower_key, bdb_key_) > 0) {
       return false;
     }
@@ -179,7 +227,7 @@ void Iterator::SeekToLast() {
   valid_ = false;
   status_ = butil::Status();
 
-  BdbHelper::BinaryToDbt(encoded_cf_name_upper_bound_, bdb_key_);
+  BdbHelper::StringToDbt(cf_upper_bound_, bdb_key_);
   try {
     int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
     if (ret == 0) {
@@ -189,8 +237,6 @@ void Iterator::SeekToLast() {
       ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_LAST);
       if (ret == 0) {
         valid_ = true;
-        BdbHelper::DbtToBinary(bdb_key_, key_);
-        BdbHelper::DbtToBinary(bdb_value_, value_);
         return;
       }
     } else {
@@ -214,19 +260,14 @@ void Iterator::Seek(const std::string& target) {
   valid_ = false;
   status_ = butil::Status();
 
-  std::string store_key = encoded_cf_name_ + target;
-  BdbHelper::BinaryToDbt(store_key, bdb_key_);
+  std::string store_key = std::string(1, cf_id_) + target;
+  BdbHelper::StringToDbt(store_key, bdb_key_);
 
   try {
     // find smallest key greater than or equal to the target.
     int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
     if (ret == 0) {
       valid_ = true;
-      BdbHelper::DbtToBinary(bdb_key_, key_);
-      BdbHelper::DbtToBinary(bdb_value_, value_);
-      // if (snapshot_mode_) {
-      //   Next();
-      // }
       return;
     }
 
@@ -251,10 +292,10 @@ void Iterator::SeekForPrev(const std::string& target) {
   valid_ = false;
   status_ = butil::Status();
 
-  std::string store_key = encoded_cf_name_ + target;
+  std::string store_key = std::string(1, cf_id_) + target;
   Dbt bdb_target_key;
-  BdbHelper::BinaryToDbt(store_key, bdb_target_key);
-  BdbHelper::BinaryToDbt(store_key, bdb_key_);
+  BdbHelper::StringToDbt(store_key, bdb_target_key);
+  BdbHelper::StringToDbt(store_key, bdb_key_);
 
   try {
     // find smallest key greater than or equal to the target.
@@ -262,8 +303,6 @@ void Iterator::SeekForPrev(const std::string& target) {
     if (ret == 0) {
       if (BdbHelper::DbtCompare(bdb_target_key, bdb_key_) == 0) {
         valid_ = true;
-        BdbHelper::DbtToBinary(bdb_key_, key_);
-        BdbHelper::DbtToBinary(bdb_value_, value_);
       } else {
         Prev();
       }
@@ -275,8 +314,6 @@ void Iterator::SeekForPrev(const std::string& target) {
       ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_LAST);
       if (ret == 0) {
         valid_ = true;
-        BdbHelper::DbtToBinary(bdb_key_, key_);
-        BdbHelper::DbtToBinary(bdb_value_, value_);
         return;
       }
     }
@@ -305,8 +342,6 @@ void Iterator::Next() {
     int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_NEXT);
     if (ret == 0) {
       valid_ = true;
-      BdbHelper::DbtToBinary(bdb_key_, key_);
-      BdbHelper::DbtToBinary(bdb_value_, value_);
       return;
     }
 
@@ -335,8 +370,6 @@ void Iterator::Prev() {
     int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_PREV);
     if (ret == 0) {
       valid_ = true;
-      BdbHelper::DbtToBinary(bdb_key_, key_);
-      BdbHelper::DbtToBinary(bdb_value_, value_);
       return;
     }
 
@@ -412,7 +445,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
   try {
     std::string store_key = BdbHelper::EncodeKey(cf_name, key);
     Dbt bdb_key;
-    BdbHelper::BinaryToDbt(store_key, bdb_key);
+    BdbHelper::StringToDbt(store_key, bdb_key);
 
     Dbt bdb_value;
     bdb_value.set_flags(DB_DBT_MALLOC);
@@ -430,7 +463,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
     }
 
     if (ret == 0) {
-      BdbHelper::DbtToBinary(bdb_value, value);
+      BdbHelper::DbtToString(bdb_value, value);
       if (bdb_value.get_data() != nullptr) {
         free(bdb_value.get_data());
       }
@@ -512,11 +545,11 @@ butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr sn
 
     std::string store_key = BdbHelper::EncodeKey(cf_name, start_key);
     Dbt bdb_key;
-    BdbHelper::BinaryToDbt(store_key, bdb_key);
+    BdbHelper::StringToDbt(store_key, bdb_key);
 
     std::string store_end_key = BdbHelper::EncodeKey(cf_name, end_key);
     Dbt bdb_end_key;
-    BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+    BdbHelper::StringToDbt(store_end_key, bdb_end_key);
 
     Dbt bdb_value;
     // bdb_value.set_flags(DB_DBT_MALLOC);
@@ -686,11 +719,11 @@ butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* t
 
   std::string store_key = BdbHelper::EncodeKey(cf_name, start_key);
   Dbt bdb_key;
-  BdbHelper::BinaryToDbt(store_key, bdb_key);
+  BdbHelper::StringToDbt(store_key, bdb_key);
 
   std::string store_end_key = BdbHelper::EncodeKey(cf_name, end_key);
   Dbt bdb_end_key;
-  BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+  BdbHelper::StringToDbt(store_end_key, bdb_end_key);
 
   Dbt bdb_value;
   // bdb_value.set_flags(DB_DBT_MALLOC);
@@ -756,12 +789,12 @@ butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, c
 
     std::string store_key = BdbHelper::EncodeKey(cf_name, key);
     Dbt bdb_key;
-    BdbHelper::BinaryToDbt(store_key, bdb_key);
+    BdbHelper::StringToDbt(store_key, bdb_key);
 
     Dbt bdb_value;
     int ret = cursorp->get(&bdb_key, &bdb_value, DB_FIRST);
     if (ret == 0) {
-      BdbHelper::DbtToBinary(bdb_value, value);
+      BdbHelper::DbtToString(bdb_value, value);
       return butil::Status();
     }
 
@@ -811,10 +844,10 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
 
       std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
       Dbt bdb_key;
-      BdbHelper::BinaryToDbt(store_key, bdb_key);
+      BdbHelper::StringToDbt(store_key, bdb_key);
 
       Dbt bdb_value;
-      BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+      BdbHelper::StringToDbt(kv.value(), bdb_value);
 
       ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
       if (ret != 0) {
@@ -916,9 +949,9 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 
         std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
         Dbt bdb_key;
-        BdbHelper::BinaryToDbt(store_key, bdb_key);
+        BdbHelper::StringToDbt(store_key, bdb_key);
         Dbt bdb_value;
-        BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+        BdbHelper::StringToDbt(kv.value(), bdb_value);
         ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
         if (ret != 0) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
@@ -934,7 +967,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 
         std::string store_key = BdbHelper::EncodeKey(cf_name, key);
         Dbt bdb_key;
-        BdbHelper::BinaryToDbt(store_key, bdb_key);
+        BdbHelper::StringToDbt(store_key, bdb_key);
         GetDb()->del(txn, &bdb_key, 0);
         if (ret != 0 && ret != DB_NOTFOUND) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
@@ -1039,9 +1072,9 @@ butil::Status Writer::KvBatchPutAndDelete(
 
           std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
           Dbt bdb_key;
-          BdbHelper::BinaryToDbt(store_key, bdb_key);
+          BdbHelper::StringToDbt(store_key, bdb_key);
           Dbt bdb_value;
-          BdbHelper::BinaryToDbt(kv.value(), bdb_value);
+          BdbHelper::StringToDbt(kv.value(), bdb_value);
           ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
           if (ret != 0) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
@@ -1065,7 +1098,7 @@ butil::Status Writer::KvBatchPutAndDelete(
 
           std::string store_key = BdbHelper::EncodeKey(cf_name, key);
           Dbt bdb_key;
-          BdbHelper::BinaryToDbt(store_key, bdb_key);
+          BdbHelper::StringToDbt(store_key, bdb_key);
           GetDb()->del(txn, &bdb_key, 0);
           if (ret != 0 && ret != DB_NOTFOUND) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
@@ -1160,6 +1193,12 @@ butil::Status Writer::KvBatchDelete(const std::vector<std::string>& keys) {
   keys_to_delete.set_flags(DB_DBT_USERMEM | DB_DBT_BULK);
   keys_to_delete.set_data(keys_buf);
 
+  DEFER(  // FOR_CLANG_FORMAT
+      if (keys_buf != nullptr) {
+        free(keys_buf);
+        keys_buf = nullptr;
+      });
+
   DINGO_LOG(INFO) << "keys.size = " << keys.size() << ", keys_buf_size = " << keys_buf_size
                   << ", real_keys_buf_size = " << real_keys_buf_size;
 
@@ -1182,11 +1221,6 @@ butil::Status Writer::KvBatchDelete(const std::vector<std::string>& keys) {
         txn->abort();
         txn = nullptr;
       };
-
-      if (keys_buf != nullptr) {
-        free(keys_buf);
-        keys_buf = nullptr;
-      }
 
       if (db_multi_data_builder != nullptr) {
         delete db_multi_data_builder;
@@ -1292,7 +1326,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
 
       std::string store_key = BdbHelper::EncodeKey(cf_name, key);
       Dbt bdb_key;
-      BdbHelper::BinaryToDbt(store_key, bdb_key);
+      BdbHelper::StringToDbt(store_key, bdb_key);
 
       ret = GetDb()->del(txn, &bdb_key, 0);
       if (ret != 0 && ret != DB_NOTFOUND) {
@@ -1366,6 +1400,15 @@ butil::Status Writer::KvDeleteRange(const std::string& cf_name, const pb::common
 }
 
 butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
+#ifdef BDB_BUILD_USE_BULK_DELETE
+  return KvBatchDeleteRangeBulk(range_with_cfs);
+#else
+  return KvBatchDeleteRangeNormal(range_with_cfs);
+#endif
+}
+
+butil::Status Writer::KvBatchDeleteRangeNormal(
+    const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
   DbEnv* envp = GetDb()->get_env();
   DbTxn* txn = nullptr;
 
@@ -1454,29 +1497,13 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
   return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
 }
 
-butil::Status Writer::KvBatchDeleteRangeNew(
+butil::Status Writer::KvBatchDeleteRangeBulk(
     const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
-  DbEnv* envp = GetDb()->get_env();
-  DbTxn* txn = nullptr;
-
-  // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        txn = nullptr;
-      });
-
   bool retry = true;
   int32_t retry_count = 0;
 
   while (retry) {
     try {
-      // int ret = envp->txn_begin(nullptr, &txn, 0);
-      // if (ret != 0) {
-      //   DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
-      //   return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
-      // }
-
       for (const auto& [cf_name, ranges] : range_with_cfs) {
         for (const auto& range : ranges) {
           if (range.start_key().empty() || range.end_key().empty()) {
@@ -1486,13 +1513,8 @@ butil::Status Writer::KvBatchDeleteRangeNew(
             return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
           }
 
-          // butil::Status status = DeleteRangeByCursor(cf_name, range, txn);
-          // if (!status.ok()) {
-          //   DINGO_LOG(ERROR) << fmt::format("[bdb] delete range by cursor: {}.", status.error_cstr());
-          //   return status;
-          // }
           std::vector<std::string> keys;
-          auto status = GetKeysInRange(cf_name, range, keys);
+          auto status = GetRawKeysInRange(cf_name, range, keys);
           if (!status.ok()) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] get keys in range: {}.", status.error_cstr());
             return status;
@@ -1508,40 +1530,20 @@ butil::Status Writer::KvBatchDeleteRangeNew(
             return ret;
           } else {
             DINGO_LOG(INFO) << fmt::format("[bdb] delete keys: {}.", keys.size());
-            return ret;
+            continue;
           }
         }
       }
 
-      // // commit
-      // try {
-      //   ret = txn->commit(0);
-      //   if (ret == 0) {
-      //     txn = nullptr;
-      //     return butil::Status();
-      //   }
-      // } catch (DbException& db_exception) {
-      //   DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
-      //   ret = BdbHelper::kCommitException;
-      // }
-
-      // if (BAIDU_UNLIKELY(ret != 0)) {
-      //   DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
-      //   return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
-      // }
+      return butil::Status::OK();
 
     } catch (DbDeadlockException&) {
       // Now we decide if we want to retry the operation.
       // If we have retried less than FLAGS_bdb_max_retries,
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
-        // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          txn = nullptr;
-        };
-        DINGO_LOG(WARNING) << fmt::format(
-            "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
+        DINGO_LOG(WARNING) << fmt::format("[bdb] got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.",
+                                          retry_count);
         retry_count++;
         retry = true;
       } else {
@@ -1560,11 +1562,11 @@ butil::Status Writer::KvBatchDeleteRangeNew(
     }
   }
 
-  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+  return butil::Status::OK();
 }
 
-butil::Status Writer::GetKeysInRange(const std::string& cf_name, const pb::common::Range& range,
-                                     std::vector<std::string>& keys) {
+butil::Status Writer::GetRawKeysInRange(const std::string& cf_name, const pb::common::Range& range,
+                                        std::vector<std::string>& keys) {
   DINGO_LOG(INFO) << fmt::format("[bdb] get keys in range, cf_name: {}, range: {}.", cf_name, range.ShortDebugString());
 
   butil::Status status = Helper::CheckRange(range);
@@ -1590,11 +1592,11 @@ butil::Status Writer::GetKeysInRange(const std::string& cf_name, const pb::commo
 
   std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
   Dbt bdb_key;
-  BdbHelper::BinaryToDbt(store_key, bdb_key);
+  BdbHelper::StringToDbt(store_key, bdb_key);
 
   std::string store_end_key = BdbHelper::EncodeKey(cf_name, range.end_key());
   Dbt bdb_end_key;
-  BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+  BdbHelper::StringToDbt(store_end_key, bdb_end_key);
 
   Dbt bdb_value;
   // bdb_value.set_flags(DB_DBT_MALLOC);
@@ -1606,17 +1608,17 @@ butil::Status Writer::GetKeysInRange(const std::string& cf_name, const pb::commo
     return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
   }
 
-  std::string temp_key = BdbHelper::DbtToBinary(bdb_key);
+  std::string temp_key = BdbHelper::DbtToString(bdb_key);
   keys.push_back(temp_key);
 
-  DINGO_LOG(DEBUG) << fmt::format("[bdb] get key: {}, value: {}", temp_key, BdbHelper::DbtToBinary(bdb_value));
+  DINGO_LOG(DEBUG) << fmt::format("[bdb] get key: {}, value: {}", temp_key, BdbHelper::DbtToString(bdb_value));
 
   int index = 0;
   while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
     if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
-      keys.push_back(BdbHelper::DbtToBinary(bdb_key));
-      DINGO_LOG(DEBUG) << fmt::format("[bdb] get key: {}, value: {}", BdbHelper::DbtToBinary(bdb_key),
-                                      BdbHelper::DbtToBinary(bdb_value));
+      keys.push_back(BdbHelper::DbtToString(bdb_key));
+      DINGO_LOG(DEBUG) << fmt::format("[bdb] get key: {}, value: {}", BdbHelper::DbtToString(bdb_key),
+                                      BdbHelper::DbtToString(bdb_value));
     } else {
       break;
     }
@@ -1652,11 +1654,11 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
 
   std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
   Dbt bdb_key;
-  BdbHelper::BinaryToDbt(store_key, bdb_key);
+  BdbHelper::StringToDbt(store_key, bdb_key);
 
   std::string store_end_key = BdbHelper::EncodeKey(cf_name, range.end_key());
   Dbt bdb_end_key;
-  BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+  BdbHelper::StringToDbt(store_end_key, bdb_end_key);
 
   Dbt bdb_value;
   // bdb_value.set_flags(DB_DBT_MALLOC);
@@ -1988,12 +1990,12 @@ void BdbRawEngine::Flush(const std::string& /*cf_name*/) {
 }
 
 butil::Status BdbRawEngine::Compact(const std::string& cf_name) {
-  std::string encoded_cf_name = bdb::BdbHelper::EncodeCfName(cf_name);
-  std::string encoded_cf_name_upper_bound = bdb::BdbHelper::GetEncodedCfNameUpperBound(cf_name);
+  std::string encoded_cf_prefix_lower_bound = bdb::BdbHelper::EncodeCfName(cf_name);
+  std::string encoded_cf_prefix_upper_bound = bdb::BdbHelper::EncodedCfNameUpperBound(cf_name);
 
   Dbt start, stop;
-  bdb::BdbHelper::BinaryToDbt(encoded_cf_name, start);
-  bdb::BdbHelper::BinaryToDbt(encoded_cf_name_upper_bound, stop);
+  bdb::BdbHelper::StringToDbt(encoded_cf_prefix_lower_bound, start);
+  bdb::BdbHelper::StringToDbt(encoded_cf_prefix_upper_bound, stop);
 
   try {
     DB_COMPACT compact_data;
@@ -2083,10 +2085,10 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
       Dbt bdb_start_key, bdb_end_key;
 
       std::string store_start_key = bdb::BdbHelper::EncodeKey(cf_name, range.start_key());
-      bdb::BdbHelper::BinaryToDbt(store_start_key, bdb_start_key);
+      bdb::BdbHelper::StringToDbt(store_start_key, bdb_start_key);
 
       std::string store_end_key = bdb::BdbHelper::EncodeKey(cf_name, range.end_key());
-      bdb::BdbHelper::BinaryToDbt(store_end_key, bdb_end_key);
+      bdb::BdbHelper::StringToDbt(store_end_key, bdb_end_key);
 
       DB_KEY_RANGE range_start;
       memset(&range_start, 0, sizeof(range_start));

@@ -132,6 +132,82 @@ TEST_F(RawBdbEngineTest, GetSnapshotReleaseSnapshot) {
   EXPECT_NE(snapshot.get(), nullptr);
 }
 
+TEST_F(RawBdbEngineTest, BdbHelper) {
+  char cf_id = 0;
+
+  cf_id = bdb::BdbHelper::GetCfId("default");
+  EXPECT_EQ(cf_id, '0');
+
+  cf_id = bdb::BdbHelper::GetCfId("meta");
+  EXPECT_EQ(cf_id, '1');
+
+  cf_id = bdb::BdbHelper::GetCfId("vector_scalar");
+  EXPECT_EQ(cf_id, '2');
+
+  cf_id = bdb::BdbHelper::GetCfId("vector_table");
+  EXPECT_EQ(cf_id, '3');
+
+  cf_id = bdb::BdbHelper::GetCfId("data");
+  EXPECT_EQ(cf_id, '4');
+
+  cf_id = bdb::BdbHelper::GetCfId("lock");
+  EXPECT_EQ(cf_id, '5');
+
+  cf_id = bdb::BdbHelper::GetCfId("write");
+  EXPECT_EQ(cf_id, '6');
+
+  std::string cf_name;
+
+  cf_name = bdb::BdbHelper::GetCfName('0');
+  EXPECT_EQ(cf_name, "default");
+
+  cf_name = bdb::BdbHelper::GetCfName('1');
+  EXPECT_EQ(cf_name, "meta");
+
+  cf_name = bdb::BdbHelper::GetCfName('2');
+  EXPECT_EQ(cf_name, "vector_scalar");
+
+  cf_name = bdb::BdbHelper::GetCfName('3');
+  EXPECT_EQ(cf_name, "vector_table");
+
+  cf_name = bdb::BdbHelper::GetCfName('4');
+  EXPECT_EQ(cf_name, "data");
+
+  cf_name = bdb::BdbHelper::GetCfName('5');
+  EXPECT_EQ(cf_name, "lock");
+
+  cf_name = bdb::BdbHelper::GetCfName('6');
+  EXPECT_EQ(cf_name, "write");
+}
+
+TEST_F(RawBdbEngineTest, DbtCompare) {
+  Dbt dbt1, dbt2;
+
+  // Test case 1: dbt1 and dbt2 are equal
+  std::string data = "test_data";
+  dbt1.set_data((void *)data.data());
+  dbt1.set_size(data.size());
+  dbt2.set_data((void *)data.data());
+  dbt2.set_size(data.size());
+  EXPECT_EQ(bdb::BdbHelper::DbtCompare(dbt1, dbt2), 0);
+
+  // Test case 2: dbt1 is less than dbt2
+  std::string data1 = "test_data1";
+  std::string data2 = "test_data2";
+  dbt1.set_data((void *)data1.data());
+  dbt1.set_size(data1.size());
+  dbt2.set_data((void *)data2.data());
+  dbt2.set_size(data2.size());
+  EXPECT_LT(bdb::BdbHelper::DbtCompare(dbt1, dbt2), 0);
+
+  // Test case 3: dbt1 is greater than dbt2
+  dbt1.set_data((void *)data2.data());
+  dbt1.set_size(data2.size());
+  dbt2.set_data((void *)data1.data());
+  dbt2.set_size(data1.size());
+  EXPECT_GT(bdb::BdbHelper::DbtCompare(dbt1, dbt2), 0);
+}
+
 TEST_F(RawBdbEngineTest, NewReader) {
   // ok
   {
@@ -1549,6 +1625,47 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
       }
 
       EXPECT_EQ(count, 49);
+    }
+
+    // test iterator value is correct
+    {
+      int count = 0;
+
+      auto snapshot = engine->GetSnapshot();
+
+      std::string start_key = "KvDeleteRange71038";
+      std::string end_key = "KvDeleteRange71040";
+
+      IteratorOptions options;
+      options.upper_bound = "KvDeleteRange71040";
+      auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
+
+      std::vector<std::string> keys;
+      std::vector<std::string> values;
+      for (iter->Seek("KvDeleteRange71038"); iter->Valid(); iter->Next()) {
+        ++count;
+        std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        keys.emplace_back(iter->Key());
+        values.emplace_back(iter->Value());
+      }
+
+      EXPECT_EQ(keys.size(), 2);
+      EXPECT_EQ(values.size(), 2);
+
+      EXPECT_EQ(keys.at(0), "KvDeleteRange71038");
+      EXPECT_EQ(values.at(0), "KvDeleteRange71038");
+
+      EXPECT_EQ(keys.at(1), "KvDeleteRange71039");
+      EXPECT_EQ(values.at(1), "KvDeleteRange71039");
+
+      std::vector<pb::common::KeyValue> kvs;
+      ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+      EXPECT_EQ(kvs.size(), 2);
+      EXPECT_EQ(kvs.at(0).key(), "KvDeleteRange71038");
+      EXPECT_EQ(kvs.at(0).value(), "KvDeleteRange71038");
+      EXPECT_EQ(kvs.at(1).key(), "KvDeleteRange71039");
+      EXPECT_EQ(kvs.at(1).value(), "KvDeleteRange71039");
     }
 
     // std::string start_key = "key";
