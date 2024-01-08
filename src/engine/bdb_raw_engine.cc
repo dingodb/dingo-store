@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -29,6 +31,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "db.h"
+#include "engine/iterator.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "rocksdb/sst_file_reader.h"
@@ -37,7 +40,6 @@
 #include "third-party/build/bdb/db.h"
 #include "third-party/build/bdb/db_cxx.h"
 
-#define BDB_BUILD_USE_SNAPSHOT
 #define BDB_FAST_GET_APROX_SIZE
 #define BDB_BUILD_USE_BULK_DELETE
 
@@ -62,20 +64,16 @@ std::unordered_map<char, std::string> BdbHelper::cf_id_to_name = {
 
 // BdbHelper
 std::string BdbHelper::EncodeKey(const std::string& cf_name, const std::string& key) {
-  return std::string(CF_ID_LEN, GetCfId(cf_name)).append(key);
-  // Buf buf(32);
-
-  // DingoSchema<std::optional<std::shared_ptr<std::string>>> schema;
-  // schema.SetIsKey(true);
-  // schema.SetAllowNull(false);
-  // schema.EncodeKeyPrefix(&buf, std::make_shared<std::string>(cf_name));
-  // return buf.GetString().append(key);
+  return EncodeKey(GetCfId(cf_name), key);
 }
 
-std::string BdbHelper::EncodeCfName(const std::string& cf_name) {
-  return std::string(CF_ID_LEN, GetCfId(cf_name));
-  // return BdbHelper::EncodeKey(cf_name, std::string());
+std::string BdbHelper::EncodeKey(char cf_id, const std::string& key) {
+  return std::string(CF_ID_LEN, cf_id).append(key);
 }
+
+std::string BdbHelper::EncodeCf(char cf_id) { return std::string(CF_ID_LEN, cf_id); }
+
+std::string BdbHelper::EncodeCf(const std::string& cf_name) { return EncodeCf(GetCfId(cf_name)); }
 
 int BdbHelper::DecodeKey(const std::string& /*cf_name*/, const Dbt& bdb_key, std::string& key) {
   CHECK(bdb_key.get_data() != nullptr);
@@ -85,8 +83,8 @@ int BdbHelper::DecodeKey(const std::string& /*cf_name*/, const Dbt& bdb_key, std
   return -1;
 }
 
-void BdbHelper::DbtToString(const Dbt& dbt, std::string& binary) {
-  binary.assign((const char*)dbt.get_data(), dbt.get_size());
+void BdbHelper::DbtToString(const Dbt& dbt, std::string& str) {
+  str.assign((const char*)dbt.get_data(), dbt.get_size());
 }
 
 // This function is only used to decode the key, for the value, the data in dbt is equal the user data.
@@ -106,9 +104,9 @@ uint32_t BdbHelper::GetKeysSize(const std::vector<std::string>& keys) {
   return size;
 }
 
-void BdbHelper::StringToDbt(const std::string& binary, Dbt& dbt) {
-  dbt.set_data((void*)binary.data());
-  dbt.set_size(binary.size());
+void BdbHelper::StringToDbt(const std::string& str, Dbt& dbt) {
+  dbt.set_data((void*)str.data());
+  dbt.set_size(str.size());
 }
 
 int BdbHelper::DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv) {
@@ -123,16 +121,11 @@ int BdbHelper::DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const
 
 int BdbHelper::DbtCompare(const Dbt& dbt1, const Dbt& dbt2) {
   assert(dbt1.get_data() != nullptr && dbt2.get_data() != nullptr);
-  const int32_t min_len = (dbt1.get_size() < dbt2.get_size()) ? dbt1.get_size() : dbt2.get_size();
-  int ret = memcmp(dbt1.get_data(), dbt2.get_data(), min_len);
-  if (ret == 0) {
-    if (dbt1.get_size() < dbt2.get_size()) {
-      ret = -1;
-    } else if (dbt1.get_size() > dbt2.get_size()) {
-      ret = 1;
-    }
-  }
-  return ret;
+
+  std::string_view sv1((const char*)dbt1.get_data(), dbt1.get_size());
+  std::string_view sv2((const char*)dbt2.get_data(), dbt2.get_size());
+
+  return sv1.compare(sv2);
 }
 
 bool BdbHelper::IsBdbKeyMatchCfName(const Dbt& bdb_key, const std::string& cf_name) {
@@ -147,8 +140,10 @@ bool BdbHelper::IsBdbKeyMatchCfId(const Dbt& bdb_key, char cf_id) {
   return *(char*)bdb_key.get_data() == cf_id;
 }
 
-std::string BdbHelper::EncodedCfNameUpperBound(const std::string& cf_name) {
-  return std::string(CF_ID_LEN, GetCfId(cf_name) + 1);
+std::string BdbHelper::EncodedCfUpperBound(char cf_id) { return std::string(CF_ID_LEN, cf_id + 1); };
+
+std::string BdbHelper::EncodedCfUpperBound(const std::string& cf_name) {
+  return EncodedCfUpperBound(GetCfId(cf_name));
 };
 
 char BdbHelper::GetCfId(const std::string& cf_name) {
@@ -168,14 +163,28 @@ std::string BdbHelper::GetCfName(char cf_id) {
 }
 
 // Iterator
-Iterator::Iterator(const std::string& cf_name, IteratorOptions options, Dbc* cursorp,
+Iterator::Iterator(const std::string& cf_name, const IteratorOptions& options, Dbc* cursorp,
                    std::shared_ptr<bdb::BdbSnapshot> bdb_snapshot)
     : options_(options), cursorp_(cursorp), valid_(false) {
   cf_id_ = BdbHelper::GetCfId(cf_name);
-  cf_upper_bound_ = BdbHelper::EncodedCfNameUpperBound(cf_name);
+  cf_upper_bound_ = BdbHelper::EncodedCfUpperBound(cf_id_);
   // TODO: use DB_DBT_MALLOC may cause memory leak, need to fix in the furture.
   // bdb_value_.set_flags(DB_DBT_MALLOC);
   snapshot_ = bdb_snapshot;
+
+  // setup raw_start_key
+  if (!options.lower_bound.empty()) {
+    raw_start_key_ = BdbHelper::EncodeKey(cf_id_, options.lower_bound);
+  } else {
+    raw_start_key_ = BdbHelper::EncodeCf(cf_id_);
+  }
+
+  // setup raw_end_key
+  if (!options.upper_bound.empty()) {
+    raw_end_key_ = BdbHelper::EncodeKey(cf_id_, options.upper_bound);
+  } else {
+    raw_end_key_ = cf_upper_bound_;
+  }
 }
 
 Iterator::~Iterator() {
@@ -195,27 +204,15 @@ bool Iterator::Valid() const {
     return false;
   }
 
-  // cf_name check
-  if (!BdbHelper::IsBdbKeyMatchCfId(bdb_key_, cf_id_)) {
+  // check raw_start_key and raw_end_key
+  std::string_view sv((const char*)bdb_key_.get_data(), bdb_key_.get_size());
+
+  if (raw_start_key_.compare(sv) > 0) {
     return false;
   }
 
-  if (!options_.upper_bound.empty()) {
-    Dbt upper_key;
-    std::string upper = std::string(1, cf_id_) + options_.upper_bound;
-    BdbHelper::StringToDbt(upper, upper_key);
-    if (BdbHelper::DbtCompare(upper_key, bdb_key_) <= 0) {
-      return false;
-    }
-  }
-
-  if (!options_.lower_bound.empty()) {
-    Dbt lower_key;
-    std::string lower = std::string(1, cf_id_) + options_.lower_bound;
-    BdbHelper::StringToDbt(lower, lower_key);
-    if (BdbHelper::DbtCompare(lower_key, bdb_key_) > 0) {
-      return false;
-    }
+  if (raw_end_key_.compare(sv) <= 0) {
+    return false;
   }
 
   return true;
@@ -301,7 +298,7 @@ void Iterator::SeekForPrev(const std::string& target) {
     // find smallest key greater than or equal to the target.
     int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
     if (ret == 0) {
-      if (BdbHelper::DbtCompare(bdb_target_key, bdb_key_) == 0) {
+      if (BdbHelper::DbtCompare(bdb_target_key, bdb_key_) <= 0) {
         valid_ = true;
       } else {
         Prev();
@@ -428,11 +425,7 @@ BdbSnapshot::~BdbSnapshot() {
 
 // Reader
 butil::Status Reader::KvGet(const std::string& cf_name, const std::string& key, std::string& value) {
-#ifdef BDB_BUILD_USE_SNAPSHOT
   return KvGet(cf_name, GetSnapshot(), key, value);
-#else
-  return KvGet(cf_name, nullptr, key, value);
-#endif
 }
 
 butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr snapshot, const std::string& key,
@@ -488,11 +481,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
 
 butil::Status Reader::KvScan(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
                              std::vector<pb::common::KeyValue>& kvs) {
-#ifdef BDB_BUILD_USE_SNAPSHOT
   return KvScan(cf_name, GetSnapshot(), start_key, end_key, kvs);
-#else
-  return KvScan(cf_name, nullptr, start_key, end_key, kvs);
-#endif
 }
 
 butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr snapshot, const std::string& start_key,
@@ -511,106 +500,30 @@ butil::Status Reader::KvScan(const std::string& cf_name, dingodb::SnapshotPtr sn
     return butil::Status();
   }
 
-  // Acquire a cursor
-  Dbc* cursorp = nullptr;
-  // Release the cursor later
-  DEFER(  // FOR_CLANG_FORMAT
-      if (cursorp != nullptr) {
-        try {
-          cursorp->close();
-        } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
-                                      db_exception.what());
-        }
-      });
-
-  try {
-    int ret = 0;
-    if (snapshot != nullptr) {
-      std::shared_ptr<bdb::BdbSnapshot> ss = std::dynamic_pointer_cast<bdb::BdbSnapshot>(snapshot);
-      if (ss == nullptr) {
-        DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
-        return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
-      }
-      ret = GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_TXN_SNAPSHOT);
-    } else {
-      // ret = GetDb()->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
-      ret = GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
-    }
-
-    if (ret != 0) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] create cursor failed ret: {}.", ret);
-      return butil::Status(pb::error::EINTERNAL, "Internal create cursor error.");
-    }
-
-    std::string store_key = BdbHelper::EncodeKey(cf_name, start_key);
-    Dbt bdb_key;
-    BdbHelper::StringToDbt(store_key, bdb_key);
-
-    std::string store_end_key = BdbHelper::EncodeKey(cf_name, end_key);
-    Dbt bdb_end_key;
-    BdbHelper::StringToDbt(store_end_key, bdb_end_key);
-
-    Dbt bdb_value;
-    // bdb_value.set_flags(DB_DBT_MALLOC);
-
-    // find first postion
-    ret = cursorp->get(&bdb_key, &bdb_value, DB_SET_RANGE);
-    if (ret != 0) {
-      if (ret == DB_NOTFOUND) {
-        // can not find data in the range, return OK;
-        return butil::Status();
-      }
-      DINGO_LOG(ERROR) << fmt::format("[bdb] txn get failed ret: {}.", ret);
-      return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
-    }
-
-    pb::common::KeyValue first_kv;
-    if (BdbHelper::DbtPairToKv(cf_name, bdb_key, bdb_value, first_kv) != 0) {
-      DINGO_LOG(WARNING) << fmt::format("[bdb] invalid bdb key, size: {}, data: {}.", bdb_key.get_size(),
-                                        bdb_key.get_data());
-      return butil::Status();
-    }
-
-    DINGO_LOG(INFO) << fmt::format("[bdb] get real start key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
-    kvs.emplace_back(std::move(first_kv));
-
-    int index = 0;
-    while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
-      if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
-        pb::common::KeyValue kv;
-        if (BAIDU_UNLIKELY(BdbHelper::DbtPairToKv(cf_name, bdb_key, bdb_value, kv) != 0)) {
-          DINGO_LOG(WARNING) << fmt::format("[bdb] invalid bdb key, size: {}, data: {}.", bdb_key.get_size(),
-                                            bdb_key.get_data());
-          return butil::Status();
-        }
-        kvs.emplace_back(std::move(kv));
-      }
-    }
-    return butil::Status();
-
-  } catch (DbDeadlockException&) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
-    return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
-  } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db scan failed, exception: {} {}.", db_exception.get_errno(),
-                                    db_exception.what());
-    return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db scan failed, {}.", db_exception.what()));
-  } catch (std::exception& std_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
-    return butil::Status(pb::error::ESTD_EXCEPTION, fmt::format("std exception, {}.", std_exception.what()));
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+  auto iter = NewIterator(cf_name, snapshot, options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] create iterator failed.");
+    return butil::Status(pb::error::EINTERNAL, "Internal create iterator error.");
   }
 
-  return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
+  iter->Seek(start_key);
+  while (iter->Valid()) {
+    pb::common::KeyValue kv;
+    kv.set_key(iter->Key().data(), iter->Key().size());
+    kv.set_value(iter->Value().data(), iter->Value().size());
+    kvs.push_back(std::move(kv));
+    iter->Next();
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status Reader::KvCount(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
                               int64_t& count) {
-#ifdef BDB_BUILD_USE_SNAPSHOT
   return KvCount(cf_name, GetSnapshot(), start_key, end_key, count);
-#else
-  return KvCount(cf_name, nullptr, start_key, end_key, count);
-#endif
 }
 
 butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr snapshot, const std::string& start_key,
@@ -618,7 +531,6 @@ butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr s
   count = 0;
 
   DbTxn* txn = nullptr;
-  int32_t isolation_flag = DB_READ_COMMITTED;
   if (snapshot != nullptr) {
     std::shared_ptr<bdb::BdbSnapshot> ss = std::dynamic_pointer_cast<bdb::BdbSnapshot>(snapshot);
     if (ss == nullptr) {
@@ -626,18 +538,13 @@ butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr s
       return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
     }
     txn = ss->GetDbTxn();
-    isolation_flag = DB_TXN_SNAPSHOT;
   }
 
-  return GetRangeCountByCursor(cf_name, txn, start_key, end_key, isolation_flag, count);
+  return GetRangeCount(cf_name, start_key, end_key, count);
 }
 
 std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, IteratorOptions options) {
-#ifdef BDB_BUILD_USE_SNAPSHOT
   return NewIterator(cf_name, GetSnapshot(), options);
-#else
-  return NewIterator(cf_name, nullptr, options);
-#endif
 }
 
 std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
@@ -678,10 +585,8 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
   return nullptr;
 }
 
-butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* txn, const std::string& start_key,
-                                            const std::string& end_key, const int32_t isolation_flag, int64_t& count) {
-  CHECK(txn != nullptr);
-
+butil::Status Reader::GetRangeCount(const std::string& cf_name, const std::string& start_key,
+                                    const std::string& end_key, int64_t& count) {
   count = 0;
 
   if (BAIDU_UNLIKELY(start_key.empty())) {
@@ -698,54 +603,56 @@ butil::Status Reader::GetRangeCountByCursor(const std::string& cf_name, DbTxn* t
     return butil::Status();
   }
 
-  // Acquire a cursor
-  Dbc* cursorp = nullptr;
-  // Release the cursor later
-  DEFER(  // FOR_CLANG_FORMAT
-      if (cursorp != nullptr) {
-        try {
-          cursorp->close();
-        } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
-                                      db_exception.what());
-        }
-      });
-
-  int ret = GetDb()->cursor(txn, &cursorp, isolation_flag);
-  if (ret != 0) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] create cursor failed ret: {}.", ret);
-    return butil::Status(pb::error::EINTERNAL, "Internal create cursor error.");
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+  auto iter = NewIterator(cf_name, options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] create iterator failed.");
+    return butil::Status(pb::error::EINTERNAL, "Internal create iterator error.");
   }
 
-  std::string store_key = BdbHelper::EncodeKey(cf_name, start_key);
-  Dbt bdb_key;
-  BdbHelper::StringToDbt(store_key, bdb_key);
-
-  std::string store_end_key = BdbHelper::EncodeKey(cf_name, end_key);
-  Dbt bdb_end_key;
-  BdbHelper::StringToDbt(store_end_key, bdb_end_key);
-
-  Dbt bdb_value;
-  // bdb_value.set_flags(DB_DBT_MALLOC);
-
-  // find first postion
-  ret = cursorp->get(&bdb_key, &bdb_value, DB_SET_RANGE);
-  if (ret != 0) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] txn get failed ret: {}.", ret);
-    return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
+  iter->Seek(start_key);
+  while (iter->Valid()) {
+    ++count;
+    iter->Next();
   }
 
-  DINGO_LOG(INFO) << fmt::format("[bdb] get key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
-  ++count;
+  return butil::Status::OK();
+}
 
-  int index = 0;
-  while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
-    if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
-      ++count;
-    }
+butil::Status Reader::GetRangeKeys(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
+                                   std::vector<std::string>& keys) {
+  if (BAIDU_UNLIKELY(start_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty start_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  return butil::Status();
+  if (BAIDU_UNLIKELY(end_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty end_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(start_key >= end_key)) {
+    return butil::Status();
+  }
+
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+  auto iter = NewIterator(cf_name, options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] create iterator failed.");
+    return butil::Status(pb::error::EINTERNAL, "Internal create iterator error.");
+  }
+
+  iter->Seek(start_key);
+  while (iter->Valid()) {
+    keys.emplace_back(iter->Key());
+    iter->Next();
+  }
+
+  return butil::Status::OK();
 }
 
 std::shared_ptr<BdbRawEngine> Reader::GetRawEngine() {
@@ -1170,7 +1077,7 @@ size_t BdbHelper::NextPowerOf1024(size_t n) {
   return power;
 }
 
-butil::Status Writer::KvBatchDelete(const std::vector<std::string>& keys) {
+butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) {
   if (BAIDU_UNLIKELY(keys.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty keys.");
     return butil::Status(pb::error::EKEY_EMPTY, "Keys is empty");
@@ -1181,13 +1088,17 @@ butil::Status Writer::KvBatchDelete(const std::vector<std::string>& keys) {
 
   Dbt keys_to_delete;
   auto keys_size = BdbHelper::GetKeysSize(keys);
-  uint32_t keys_buf_size = sizeof(uint32_t) * keys.size() + keys_size;
+
+  // we will add the cf_id prefix for keys, so we need to add CF_ID_LEN
+  uint32_t keys_buf_size = sizeof(uint32_t) * keys.size() + keys_size + CF_ID_LEN * keys.size();
   uint32_t real_keys_buf_size = BdbHelper::NextPowerOf1024(keys_buf_size);
+
   void* keys_buf = malloc(real_keys_buf_size);
   if (keys_buf == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] malloc failed, size: {}.", keys_size);
     return butil::Status(pb::error::EINTERNAL, "Internal malloc error.");
   }
+
   memset(keys_buf, 0, real_keys_buf_size);
   keys_to_delete.set_ulen(real_keys_buf_size);
   keys_to_delete.set_flags(DB_DBT_USERMEM | DB_DBT_BULK);
@@ -1209,7 +1120,8 @@ butil::Status Writer::KvBatchDelete(const std::vector<std::string>& keys) {
   }
 
   for (const auto& key : keys) {
-    if (!db_multi_data_builder->append((void*)key.data(), key.size())) {
+    std::string raw_key = BdbHelper::EncodeKey(cf_name, key);
+    if (!db_multi_data_builder->append((void*)raw_key.data(), raw_key.size())) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] DbMultipleKeyDataBuilder append failed.");
       return butil::Status(pb::error::EINTERNAL, "Internal DbMultipleKeyDataBuilder append error.");
     }
@@ -1501,6 +1413,7 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
     const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
   bool retry = true;
   int32_t retry_count = 0;
+  auto reader = std::dynamic_pointer_cast<bdb::Reader>(this->GetRawEngine()->Reader());
 
   while (retry) {
     try {
@@ -1514,7 +1427,7 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
           }
 
           std::vector<std::string> keys;
-          auto status = GetRawKeysInRange(cf_name, range, keys);
+          auto status = reader->GetRangeKeys(cf_name, range.start_key(), range.end_key(), keys);
           if (!status.ok()) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] get keys in range: {}.", status.error_cstr());
             return status;
@@ -1524,7 +1437,7 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
             continue;
           }
 
-          auto ret = KvBatchDelete(keys);
+          auto ret = KvBatchDelete(cf_name, keys);
           if (!ret.ok()) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] delete keys: {}.", ret.error_cstr());
             return ret;
@@ -1565,68 +1478,6 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
   return butil::Status::OK();
 }
 
-butil::Status Writer::GetRawKeysInRange(const std::string& cf_name, const pb::common::Range& range,
-                                        std::vector<std::string>& keys) {
-  DINGO_LOG(INFO) << fmt::format("[bdb] get keys in range, cf_name: {}, range: {}.", cf_name, range.ShortDebugString());
-
-  butil::Status status = Helper::CheckRange(range);
-  if (BAIDU_UNLIKELY(!status.ok())) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] check range: {}.", status.error_cstr());
-    return status;
-  }
-
-  // Acquire a cursor
-  Dbc* cursorp = nullptr;
-  // Release the cursor later
-  DEFER(  // FOR_CLANG_FORMAT
-      if (cursorp != nullptr) {
-        try {
-          cursorp->close();
-        } catch (DbException& db_exception) {
-          LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
-                                      db_exception.what());
-        }
-      });
-
-  GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
-
-  std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
-  Dbt bdb_key;
-  BdbHelper::StringToDbt(store_key, bdb_key);
-
-  std::string store_end_key = BdbHelper::EncodeKey(cf_name, range.end_key());
-  Dbt bdb_end_key;
-  BdbHelper::StringToDbt(store_end_key, bdb_end_key);
-
-  Dbt bdb_value;
-  // bdb_value.set_flags(DB_DBT_MALLOC);
-
-  // find first postion
-  int ret = cursorp->get(&bdb_key, &bdb_value, DB_SET_RANGE);
-  if (ret != 0) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] txn get failed ret: {}.", ret);
-    return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
-  }
-
-  std::string temp_key = BdbHelper::DbtToString(bdb_key);
-  keys.push_back(temp_key);
-
-  DINGO_LOG(DEBUG) << fmt::format("[bdb] get key: {}, value: {}", temp_key, BdbHelper::DbtToString(bdb_value));
-
-  int index = 0;
-  while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
-    if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
-      keys.push_back(BdbHelper::DbtToString(bdb_key));
-      DINGO_LOG(DEBUG) << fmt::format("[bdb] get key: {}, value: {}", BdbHelper::DbtToString(bdb_key),
-                                      BdbHelper::DbtToString(bdb_value));
-    } else {
-      break;
-    }
-  }
-
-  return butil::Status::OK();
-}
-
 butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn) {
   CHECK(txn != nullptr);
 
@@ -1650,7 +1501,6 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
       });
 
   GetDb()->cursor(txn, &cursorp, DB_CURSOR_BULK | DB_TXN_SNAPSHOT);
-  // GetDb()->cursor(txn, &cursorp, DB_TXN_SNAPSHOT);
 
   std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
   Dbt bdb_key;
@@ -1990,8 +1840,8 @@ void BdbRawEngine::Flush(const std::string& /*cf_name*/) {
 }
 
 butil::Status BdbRawEngine::Compact(const std::string& cf_name) {
-  std::string encoded_cf_prefix_lower_bound = bdb::BdbHelper::EncodeCfName(cf_name);
-  std::string encoded_cf_prefix_upper_bound = bdb::BdbHelper::EncodedCfNameUpperBound(cf_name);
+  std::string encoded_cf_prefix_lower_bound = bdb::BdbHelper::EncodeCf(cf_name);
+  std::string encoded_cf_prefix_upper_bound = bdb::BdbHelper::EncodedCfUpperBound(cf_name);
 
   Dbt start, stop;
   bdb::BdbHelper::StringToDbt(encoded_cf_prefix_lower_bound, start);
@@ -2039,8 +1889,7 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
 
   for (const auto& range : ranges) {
     int64_t count = 0;
-    butil::Status status = bdb_reader->GetRangeCountByCursor(cf_name, nullptr, range.start_key(), range.end_key(),
-                                                             DB_READ_UNCOMMITTED, count);
+    butil::Status status = bdb_reader->GetRangeCountByCursor(cf_name, range.start_key(), range.end_key(), count);
     if (BAIDU_UNLIKELY(!status.ok())) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] get range by cursor failed, status code: {}, message: {}",
                                       status.error_code(), status.error_str());

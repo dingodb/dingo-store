@@ -39,11 +39,13 @@ namespace bdb {
 class BdbHelper {
  public:
   static std::string EncodeKey(const std::string& cf_name, const std::string& key);
-  static std::string EncodeCfName(const std::string& cf_name);
+  static std::string EncodeKey(char cf_id, const std::string& key);
+  static std::string EncodeCf(const std::string& cf_name);
+  static std::string EncodeCf(char cf_id);
 
   static int DecodeKey(const std::string& cf_name, const Dbt& bdb_key, std::string& key);
 
-  static void DbtToString(const Dbt& dbt, std::string& binary);
+  static void DbtToString(const Dbt& dbt, std::string& str);
   static void DbtToUserKey(const Dbt& dbt, std::string& user_data);
   static std::string DbtToString(const Dbt& dbt);
   static size_t NextPowerOf1024(size_t n);
@@ -51,7 +53,7 @@ class BdbHelper {
   static uint32_t GetKeysSize(const std::vector<std::string>& keys);
 
   // static std::string DbtToBinary(const Dbt& dbt);
-  static void StringToDbt(const std::string& binary, Dbt& dbt);
+  static void StringToDbt(const std::string& str, Dbt& dbt);
 
   static int DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv);
 
@@ -60,7 +62,8 @@ class BdbHelper {
   static bool IsBdbKeyMatchCfName(const Dbt& bdb_key, const std::string& cf_name);
   static bool IsBdbKeyMatchCfId(const Dbt& bdb_key, char cf_id);
 
-  static std::string EncodedCfNameUpperBound(const std::string& cf_name);
+  static std::string EncodedCfUpperBound(const std::string& cf_name);
+  static std::string EncodedCfUpperBound(char cf_id);
 
   static const int kCommitException = -60000;
 
@@ -94,7 +97,7 @@ class BdbSnapshot : public dingodb::Snapshot {
 
 class Iterator : public dingodb::Iterator {
  public:
-  explicit Iterator(const std::string& cf_name, /*bool snapshot_mode,*/ IteratorOptions options, Dbc* cursorp,
+  explicit Iterator(const std::string& cf_name, const IteratorOptions& options, Dbc* cursorp,
                     std::shared_ptr<bdb::BdbSnapshot> bdb_snapshot);
 
   ~Iterator() override;
@@ -126,6 +129,13 @@ class Iterator : public dingodb::Iterator {
 
  private:
   IteratorOptions options_;
+
+  // raw_start_key and raw_end_key is init in contructor
+  // because Dbt does not have memory management, so we need to use std::string to store the raw_start_key and
+  // raw_end_key
+  std::string raw_start_key_;
+  std::string raw_end_key_;
+
   char cf_id_;
   std::string cf_upper_bound_;
 
@@ -163,8 +173,10 @@ class Reader : public RawEngine::Reader {
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
                                    IteratorOptions options) override;
 
-  butil::Status GetRangeCountByCursor(const std::string& cf_name, DbTxn* txn, const std::string& start_key,
-                                      const std::string& end_key, int32_t isolation_flag, int64_t& count);
+  butil::Status GetRangeCount(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
+                              int64_t& count);
+  butil::Status GetRangeKeys(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
+                             std::vector<std::string>& keys);
 
  private:
   std::shared_ptr<BdbRawEngine> GetRawEngine();
@@ -195,10 +207,8 @@ class Writer : public RawEngine::Writer {
   butil::Status KvBatchDeleteRangeBulk(const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs);
 
  private:
-  butil::Status KvBatchDelete(const std::vector<std::string>& keys);
+  butil::Status KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys);
   butil::Status DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn);
-  butil::Status GetRawKeysInRange(const std::string& cf_name, const pb::common::Range& range,
-                                  std::vector<std::string>& keys);
 
   std::shared_ptr<BdbRawEngine> GetRawEngine();
   std::shared_ptr<Db> GetDb();

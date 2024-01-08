@@ -707,6 +707,9 @@ TEST_F(RawBdbEngineTest, KvCount) {
     std::vector<pb::common::KeyValue> kvs;
 
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    for (const auto &kv : kvs) {
+      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+    }
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(count, kvs.size());
   }
