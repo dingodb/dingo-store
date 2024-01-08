@@ -18,12 +18,14 @@ import io.dingodb.sdk.service.ServiceCallCycle.RError;
 import io.dingodb.sdk.service.caller.RpcCaller;
 import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
+import io.dingodb.sdk.service.entity.common.RequestInfo;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +36,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     implements ServiceCallCycle<REQ, RES>, Before<REQ, RES>, After<REQ, RES>,
                OnException<REQ, RES>, OnRetry<REQ, RES>, OnIgnore<REQ, RES>, OnRefresh<REQ, RES>, OnThrow<REQ, RES>,
                OnNonConnection<REQ, RES>, OnErrRes<REQ, RES>, OnFailed<REQ, RES>,
-               RBefore<REQ, RES>, RAfter<REQ, RES>, RError<REQ, RES> {
+               RBefore<REQ, RES>, RAfter<REQ, RES>, RError<REQ, RES>, Caller.CallExecutor<REQ, RES> {
 
     static class DelegateList<T> {
         private final List<T> list = new ArrayList<>();
@@ -52,6 +54,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
         DelegateReference(T defaultRef) {
             this.defaultRef = defaultRef;
+            this.ref = defaultRef;
         }
 
         public synchronized void setHandler(T ref) {
@@ -127,23 +130,39 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Delegate
     private final DelegateReference<ServiceCallCycle.OnErrRes<REQ, RES>> onErrRes = new DelegateReference<>(null);
     @Delegate
-    private final DelegateReference<Caller.CallExecutor> callExecutor = new DelegateReference<>(RpcCaller::call);
+    private final DelegateReference<Caller.CallExecutor<REQ, RES>> callExecutor = new DelegateReference<>(RpcCaller::call);
 
     @EqualsAndHashCode.Include
     public final MethodDescriptor<REQ, RES> method;
 
-    public ServiceCallCycles(MethodDescriptor<REQ, RES> method) {
+    public final Logger logger;
+
+    public ServiceCallCycles(MethodDescriptor<REQ, RES> method, Logger logger) {
         this.method = method;
+        this.logger = logger;
+    }
+
+    @Override
+    public RES call(
+        MethodDescriptor<REQ, RES> method,
+        REQ request,
+        CallOptions options,
+        Channel channel,
+        long trace,
+        ServiceCallCycles<REQ, RES> handlers
+    ) {
+        return callExecutor.ref.call(method, request, options, channel, trace, handlers);
     }
 
     @Override
     public void before(REQ req, CallOptions options, long trace) {
-        if (Before.log.isDebugEnabled()) {
+        if (Before.log.isDebugEnabled() && logger.isDebugEnabled()) {
             Before.log.debug(
                 "Service call [{}] enter on [{}], trace [{}], request: {}, options: {}",
                 method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
             );
         }
+        req.setRequestInfo(RequestInfo.builder().requestId(trace).build());
         for (ServiceCallCycle.Before<REQ, RES> before : before.list) {
             before.before(req, options, trace);
         }
@@ -151,10 +170,10 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void rBefore(REQ req, CallOptions options, String remote, long trace) {
-        if (RBefore.log.isDebugEnabled()) {
+        if (RBefore.log.isDebugEnabled() && logger.isDebugEnabled()) {
             RBefore.log.debug(
                 "RCall [{}:{}] enter on [{}], trace [{}], request: {}, options: {}",
-                req, method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
+                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
             );
         }
         for (ServiceCallCycle.RBefore<REQ, RES> rBefore : rBefore.list) {
@@ -164,7 +183,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void after(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (After.log.isDebugEnabled()) {
+        if (After.log.isDebugEnabled() && logger.isDebugEnabled()) {
             After.log.debug(
                 "Service call [{}:{}] after on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
@@ -177,7 +196,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void rAfter(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (RAfter.log.isDebugEnabled()) {
+        if (RAfter.log.isDebugEnabled() && logger.isDebugEnabled()) {
             RAfter.log.debug(
                 "RCall [{}:{}] after on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
@@ -190,7 +209,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void rError(REQ req, CallOptions options, String remote, long trace, String statusMessage) {
-        if (RError.log.isDebugEnabled()) {
+        if (RError.log.isDebugEnabled() && logger.isDebugEnabled()) {
             RError.log.debug(
                 "RCall [{}:{}] error on {}, message [{}], trace [{}], request: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), statusMessage, trace, req, options
@@ -212,7 +231,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
         String remote,
         long trace
     ) {
-        if (ServiceCallCycles.OnErrRes.log.isDebugEnabled()) {
+        if (ServiceCallCycles.OnErrRes.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnErrRes.log.debug(
                 "Service call [{}:{}] error on [{}], trace [{}], retry: {}, remain: {}, req: {}, res: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, retry, remain, req, res, options
@@ -227,7 +246,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onException(REQ req, Exception ex, CallOptions options, String remote, long trace) {
-        if (OnException.log.isDebugEnabled()) {
+        if (OnException.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnException.log.debug(
                 "Service call [{}:{}] exception on [{}], trace [{}], request: {}, ex: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, ex, options, ex
@@ -240,8 +259,8 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onRetry(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (OnRetry.log.isDebugEnabled()) {
-            OnRefresh.log.debug(
+        if (OnRetry.log.isDebugEnabled() && logger.isDebugEnabled()) {
+            OnRetry.log.debug(
                 "Service call [{}:{}] need retry on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
             );
@@ -253,7 +272,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onFailed(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (OnFailed.log.isDebugEnabled()) {
+        if (OnFailed.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnFailed.log.debug(
                 "Service call [{}:{}] failed on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
@@ -266,7 +285,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onIgnore(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (OnIgnore.log.isDebugEnabled()) {
+        if (OnIgnore.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnIgnore.log.debug(
                 "Service call [{}:{}] ignore error on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
@@ -279,7 +298,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onRefresh(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (OnRefresh.log.isDebugEnabled()) {
+        if (OnRefresh.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnRefresh.log.debug(
                 "Service call [{}:{}] need refresh on [{}], trace [{}], request: {}, response: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
@@ -292,7 +311,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onNonConnection(REQ req, CallOptions options, long trace) {
-        if (OnNonConnection.log.isDebugEnabled()) {
+        if (OnNonConnection.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnNonConnection.log.debug(
                 "Service call [{}] non connection on [{}], trace [{}], request: {}, options: {}",
                 method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
@@ -305,7 +324,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void onThrow(REQ req, ExhaustedRetryException ex, CallOptions options, long trace) {
-        if (ServiceCallCycles.OnThrow.log.isDebugEnabled()) {
+        if (ServiceCallCycles.OnThrow.log.isDebugEnabled() && logger.isDebugEnabled()) {
             ServiceCallCycles.OnThrow.log.debug(
                 "Service call [{}] throw ex on [{}], trace [{}], request: {}, options: {}, message: {}",
                 method.getFullMethodName(), System.currentTimeMillis(), trace, req, options, ex.getMessage()

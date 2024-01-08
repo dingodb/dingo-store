@@ -8,8 +8,8 @@ import io.grpc.MethodDescriptor;
 
 public interface Caller<S> {
 
-    interface CallExecutor {
-        <REQ extends Request, RES extends Response> RES call(
+    interface CallExecutor<REQ extends Request, RES extends Response> {
+        RES call(
             MethodDescriptor<REQ, RES> method,
             REQ request,
             CallOptions options,
@@ -18,11 +18,6 @@ public interface Caller<S> {
             ServiceCallCycles<REQ, RES> handlers
         );
     }
-
-
-    <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request, ServiceCallCycles<REQ, RES> handlers
-    );
 
     <REQ extends Request, RES extends Response> RES call(
         MethodDescriptor<REQ, RES> method, long requestId, REQ request, ServiceCallCycles<REQ, RES> handlers

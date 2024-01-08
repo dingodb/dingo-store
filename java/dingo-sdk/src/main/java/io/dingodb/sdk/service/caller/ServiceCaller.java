@@ -15,18 +15,14 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 
-import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_NOTLEADER_VALUE;
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.errorToStrategy;
 
 @Slf4j
@@ -40,12 +36,6 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
     @Getter
     private final S service;
 
-    private final Set<MethodDescriptor> directCallOnce = new HashSet<>();
-
-    @Setter
-    @Getter
-    private CallExecutor callExecutor = RpcCaller::call;
-
     public ServiceCaller(
         ChannelProvider channelProvider, int retry, CallOptions options, Function<Caller<S>, S> serviceFactory
     ) {
@@ -53,11 +43,6 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
         this.retry = retry;
         this.options = options;
         this.service = serviceFactory.apply(this);
-    }
-
-    public ServiceCaller<S> addExcludeErrorCheck(MethodDescriptor method) {
-        directCallOnce.add(method);
-        return this;
     }
 
     public int retry() {
@@ -80,13 +65,6 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
 
     @Override
     public <REQ extends Request, RES extends Response> RES call(
-        MethodDescriptor<REQ, RES> method, REQ request, ServiceCallCycles<REQ, RES> handlers
-    ) {
-        return call(method, request, handlers);
-    }
-
-    @Override
-    public <REQ extends Request, RES extends Response> RES call(
         MethodDescriptor<REQ, RES> method, long requestId, REQ request, ServiceCallCycles<REQ, RES> handler
     ) {
         handler.before(request, options, requestId);
@@ -98,8 +76,12 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
         REQ lastRequest = null;
         while (retry-- > 0) {
             try {
+                if (channel == null) {
+                    channel = updateChannel(channel, requestId);
+                    continue;
+                }
                 channelProvider.before(request);
-                RES response = callExecutor.call(method, request, options, channel, requestId, handler);
+                RES response = handler.call(method, request, options, channel, requestId, handler);
                 if (response == null) {
                     channel = updateChannel(channel, requestId);
                     continue;
