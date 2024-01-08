@@ -189,7 +189,7 @@ TEST_F(RawBdbEngineTest, DbtCompare) {
   dbt1.set_size(data.size());
   dbt2.set_data((void *)data.data());
   dbt2.set_size(data.size());
-  EXPECT_EQ(bdb::BdbHelper::DbtCompare(dbt1, dbt2), 0);
+  EXPECT_EQ(bdb::BdbHelper::CompareDbt(dbt1, dbt2), 0);
 
   // Test case 2: dbt1 is less than dbt2
   std::string data1 = "test_data1";
@@ -198,14 +198,14 @@ TEST_F(RawBdbEngineTest, DbtCompare) {
   dbt1.set_size(data1.size());
   dbt2.set_data((void *)data2.data());
   dbt2.set_size(data2.size());
-  EXPECT_LT(bdb::BdbHelper::DbtCompare(dbt1, dbt2), 0);
+  EXPECT_LT(bdb::BdbHelper::CompareDbt(dbt1, dbt2), 0);
 
   // Test case 3: dbt1 is greater than dbt2
   dbt1.set_data((void *)data2.data());
   dbt1.set_size(data2.size());
   dbt2.set_data((void *)data1.data());
   dbt2.set_size(data1.size());
-  EXPECT_GT(bdb::BdbHelper::DbtCompare(dbt1, dbt2), 0);
+  EXPECT_GT(bdb::BdbHelper::CompareDbt(dbt1, dbt2), 0);
 }
 
 TEST_F(RawBdbEngineTest, NewReader) {

@@ -35,8 +35,6 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "rocksdb/sst_file_reader.h"
-#include "serial/buf.h"
-#include "serial/schema/string_schema.h"
 #include "third-party/build/bdb/db.h"
 #include "third-party/build/bdb/db_cxx.h"
 
@@ -109,35 +107,13 @@ void BdbHelper::StringToDbt(const std::string& str, Dbt& dbt) {
   dbt.set_size(str.size());
 }
 
-int BdbHelper::DbtPairToKv(const std::string& cf_name, const Dbt& bdb_key, const Dbt& value, pb::common::KeyValue& kv) {
-  if (!IsBdbKeyMatchCfName(bdb_key, cf_name)) {
-    return -1;
-  }
-
-  kv.set_key((const char*)bdb_key.get_data() + CF_ID_LEN, bdb_key.get_size() - CF_ID_LEN);
-  kv.set_value((const char*)value.get_data(), value.get_size());
-  return 0;
-}
-
-int BdbHelper::DbtCompare(const Dbt& dbt1, const Dbt& dbt2) {
+int BdbHelper::CompareDbt(const Dbt& dbt1, const Dbt& dbt2) {
   assert(dbt1.get_data() != nullptr && dbt2.get_data() != nullptr);
 
   std::string_view sv1((const char*)dbt1.get_data(), dbt1.get_size());
   std::string_view sv2((const char*)dbt2.get_data(), dbt2.get_size());
 
   return sv1.compare(sv2);
-}
-
-bool BdbHelper::IsBdbKeyMatchCfName(const Dbt& bdb_key, const std::string& cf_name) {
-  CHECK(bdb_key.get_data() != nullptr);
-  char cf_id = GetCfId(cf_name);
-
-  return *(char*)bdb_key.get_data() == cf_id;
-}
-
-bool BdbHelper::IsBdbKeyMatchCfId(const Dbt& bdb_key, char cf_id) {
-  CHECK(bdb_key.get_data() != nullptr);
-  return *(char*)bdb_key.get_data() == cf_id;
 }
 
 std::string BdbHelper::EncodedCfUpperBound(char cf_id) { return std::string(CF_ID_LEN, cf_id + 1); };
@@ -298,7 +274,7 @@ void Iterator::SeekForPrev(const std::string& target) {
     // find smallest key greater than or equal to the target.
     int ret = cursorp_->get(&bdb_key_, &bdb_value_, DB_SET_RANGE);
     if (ret == 0) {
-      if (BdbHelper::DbtCompare(bdb_target_key, bdb_key_) <= 0) {
+      if (BdbHelper::CompareDbt(bdb_target_key, bdb_key_) <= 0) {
         valid_ = true;
       } else {
         Prev();
@@ -530,65 +506,6 @@ butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr s
                               const std::string& end_key, int64_t& count) {
   count = 0;
 
-  DbTxn* txn = nullptr;
-  if (snapshot != nullptr) {
-    std::shared_ptr<bdb::BdbSnapshot> ss = std::dynamic_pointer_cast<bdb::BdbSnapshot>(snapshot);
-    if (ss == nullptr) {
-      DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
-      return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
-    }
-    txn = ss->GetDbTxn();
-  }
-
-  return GetRangeCount(cf_name, start_key, end_key, count);
-}
-
-std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, IteratorOptions options) {
-  return NewIterator(cf_name, GetSnapshot(), options);
-}
-
-std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
-                                                       IteratorOptions options) {
-  // Acquire a cursor
-  Dbc* cursorp = nullptr;
-  int ret = 0;
-  try {
-    if (snapshot != nullptr) {
-      std::shared_ptr<bdb::BdbSnapshot> ss = std::dynamic_pointer_cast<bdb::BdbSnapshot>(snapshot);
-      if (ss != nullptr) {
-        ret = GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_TXN_SNAPSHOT);
-        // ret = GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
-        if (ret == 0) {
-          return std::make_shared<Iterator>(cf_name, options, cursorp, ss);
-        }
-      } else {
-        DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
-      }
-    } else {
-      // ret = GetDb()->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
-      ret = GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
-      if (ret == 0) {
-        return std::make_shared<Iterator>(cf_name, options, cursorp, nullptr);
-      }
-    }
-
-    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, ret: {}.", ret);
-  } catch (DbDeadlockException&) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
-  } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, exception: {} {}.", db_exception.get_errno(),
-                                    db_exception.what());
-  } catch (std::exception& std_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
-  }
-
-  return nullptr;
-}
-
-butil::Status Reader::GetRangeCount(const std::string& cf_name, const std::string& start_key,
-                                    const std::string& end_key, int64_t& count) {
-  count = 0;
-
   if (BAIDU_UNLIKELY(start_key.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty start_key.");
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
@@ -606,7 +523,7 @@ butil::Status Reader::GetRangeCount(const std::string& cf_name, const std::strin
   IteratorOptions options;
   options.lower_bound = start_key;
   options.upper_bound = end_key;
-  auto iter = NewIterator(cf_name, options);
+  auto iter = NewIterator(cf_name, snapshot, options);
   if (iter == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] create iterator failed.");
     return butil::Status(pb::error::EINTERNAL, "Internal create iterator error.");
@@ -619,6 +536,46 @@ butil::Status Reader::GetRangeCount(const std::string& cf_name, const std::strin
   }
 
   return butil::Status::OK();
+}
+
+std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, IteratorOptions options) {
+  return NewIterator(cf_name, GetSnapshot(), options);
+}
+
+std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
+                                                       IteratorOptions options) {
+  // Acquire a cursor
+  Dbc* cursorp = nullptr;
+  int ret = 0;
+  try {
+    if (snapshot != nullptr) {
+      std::shared_ptr<bdb::BdbSnapshot> ss = std::dynamic_pointer_cast<bdb::BdbSnapshot>(snapshot);
+      if (ss != nullptr) {
+        ret = GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_TXN_SNAPSHOT);
+        if (ret == 0) {
+          return std::make_shared<Iterator>(cf_name, options, cursorp, ss);
+        }
+      } else {
+        DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
+      }
+    } else {
+      ret = GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
+      if (ret == 0) {
+        return std::make_shared<Iterator>(cf_name, options, cursorp, nullptr);
+      }
+    }
+
+    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, ret: {}.", ret);
+  } catch (DbDeadlockException&) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
+  }
+
+  return nullptr;
 }
 
 butil::Status Reader::GetRangeKeys(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
@@ -1525,7 +1482,7 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
 
   int index = 0;
   while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
-    if (BdbHelper::DbtCompare(bdb_key, bdb_end_key) < 0) {
+    if (BdbHelper::CompareDbt(bdb_key, bdb_end_key) < 0) {
       cursorp->del(0);
     } else {
       break;
