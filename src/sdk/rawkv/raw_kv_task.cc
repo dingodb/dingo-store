@@ -76,7 +76,7 @@ bool RawKvTask::NeedRetry() {
 }
 
 void RawKvTask::BackoffAndRetry() {
-  stub.GetExecutor()->Schedule([this] { DoAsync(); }, kRawkvBackoffMs);
+  stub.GetActuator()->Schedule([this] { DoAsync(); }, kRawkvBackoffMs);
 }
 
 void RawKvTask::FireCallback() {

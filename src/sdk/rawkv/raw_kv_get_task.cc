@@ -24,7 +24,6 @@
 #include "sdk/status.h"
 #include "sdk/store/store_rpc.h"
 #include "sdk/utils/async_util.h"
-#include "sdk/utils/executor.h"
 
 namespace dingodb {
 namespace sdk {

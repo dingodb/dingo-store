@@ -44,7 +44,7 @@ const int64_t kCoordinatorInteractionMaxRetry = 3;
 
 const int64_t kTxnOpMaxRetry = 2;
 
-const int64_t kExecutorThreadNum = 8;
+const int64_t kActuatorThreadNum = 8;
 
 const int64_t kRawkvBackoffMs = 200;
 const int64_t kRawkvMaxRetry = 5;

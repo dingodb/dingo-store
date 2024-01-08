@@ -19,7 +19,6 @@ add_library(sdk
   rawkv/raw_kv_batch_compare_and_set_task.cc
   rawkv/raw_kv_delete_range_task.cc
   rawkv/raw_kv_scan_task.cc
-  # rawkv/raw_kv_impl.cc
   rawkv/region_scanner_impl.cc
   rpc/rpc_interaction.cc
   store/store_rpc_controller.cc
@@ -28,7 +27,7 @@ add_library(sdk
   transaction/txn_impl.cc
   transaction/txn_lock_resolver.cc
   transaction/txn_region_scanner_impl.cc
-  utils/thread_pool_executor.cc
+  utils/thread_pool_actuator.cc
   # TODO: use libary
   ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
   ${PROJECT_SOURCE_DIR}/src/common/role.cc
