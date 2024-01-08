@@ -22,7 +22,7 @@
 #include "sdk/status.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 #include "sdk/transaction/txn_region_scanner_impl.h"
-#include "sdk/utils/thread_pool_executor.h"
+#include "sdk/utils/thread_pool_actuator.h"
 
 namespace dingodb {
 
@@ -53,8 +53,8 @@ Status ClientStub::Open(std::string naming_service_url) {
 
   txn_lock_resolver_.reset(new TxnLockResolver(*(this)));
 
-  executor_.reset(new ThreadPoolExecutor());
-  executor_->Start(kExecutorThreadNum);
+  actuator_.reset(new ThreadPoolActuator());
+  actuator_->Start(kActuatorThreadNum);
 
   return Status::OK();
 }

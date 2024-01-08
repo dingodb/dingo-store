@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/utils/thread_pool_executor.h"
+#include "sdk/utils/thread_pool_actuator.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -23,7 +23,7 @@
 
 #include "glog/logging.h"
 #include "sdk/client.h"
-#include "sdk/utils/executor.h"
+#include "sdk/utils/actuator.h"
 
 namespace dingodb {
 namespace sdk {
@@ -33,13 +33,13 @@ Timer::Timer() : thread_(nullptr), running_(false){};
 
 Timer::~Timer() { Stop(); }
 
-bool Timer::Start(Executor* executor) {
+bool Timer::Start(Actuator* actuator) {
   std::lock_guard<std::mutex> lk(mutex_);
   if (running_) {
     return false;
   }
 
-  executor_ = executor;
+  actuator_ = actuator;
   thread_ = std::make_unique<std::thread>(&Timer::Run, this);
   running_ = true;
 
@@ -93,7 +93,7 @@ void Timer::Run() {
     uint64_t now = duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
     if (cur_fn.next_run_time_us <= now) {
       std::function<void()> fn = cur_fn.fn;
-      CHECK(executor_->Execute(std::move(fn)));
+      CHECK(actuator_->Execute(std::move(fn)));
       heap_.pop();
     } else {
       cv_.wait_for(lk, microseconds(cur_fn.next_run_time_us - now));
@@ -101,15 +101,15 @@ void Timer::Run() {
   }
 }
 
-ThreadPoolExecutor::ThreadPoolExecutor() : timer_(nullptr), pool_(nullptr), running_(false), thread_num_(0) {}
+ThreadPoolActuator::ThreadPoolActuator() : timer_(nullptr), pool_(nullptr), running_(false), thread_num_(0) {}
 
-ThreadPoolExecutor::~ThreadPoolExecutor() {
+ThreadPoolActuator::~ThreadPoolActuator() {
   Stop();
   timer_.reset();
   pool_.reset();
 }
 
-bool ThreadPoolExecutor::Start(int thread_num) {
+bool ThreadPoolActuator::Start(int thread_num) {
   pool_ = std::make_unique<ThreadPool>(InternalName(), thread_num);
   timer_ = std::make_unique<Timer>();
   CHECK(timer_->Start(this));
@@ -118,7 +118,7 @@ bool ThreadPoolExecutor::Start(int thread_num) {
   return true;
 }
 
-bool ThreadPoolExecutor::Stop() {
+bool ThreadPoolActuator::Stop() {
   if (running_.load()) {
     CHECK(timer_->Stop());
     running_ = false;
@@ -128,13 +128,13 @@ bool ThreadPoolExecutor::Stop() {
   }
 }
 
-bool ThreadPoolExecutor::Execute(std::function<void()> func) {
+bool ThreadPoolActuator::Execute(std::function<void()> func) {
   CHECK(running_);
   pool_->ExecuteTask([&](void*) { func(); }, nullptr);
   return true;
 }
 
-bool ThreadPoolExecutor::Schedule(std::function<void()> func, int delay_ms) {
+bool ThreadPoolActuator::Schedule(std::function<void()> func, int delay_ms) {
   CHECK(running_);
   timer_->Add(std::move(func), delay_ms);
   return true;

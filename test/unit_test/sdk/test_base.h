@@ -31,8 +31,8 @@
 #include "test_common.h"
 #include "transaction/mock_txn_lock_resolver.h"
 #include "transaction/txn_impl.h"
-#include "utils/executor.h"
-#include "utils/thread_pool_executor.h"
+#include "utils/actuator.h"
+#include "utils/thread_pool_actuator.h"
 
 namespace dingodb {
 namespace sdk {
@@ -70,10 +70,10 @@ class TestBase : public ::testing::Test {
     ON_CALL(*stub, GetTxnLockResolver).WillByDefault(testing::Return(txn_lock_resolver));
     EXPECT_CALL(*stub, GetTxnLockResolver).Times(testing::AnyNumber());
 
-    executor.reset(new ThreadPoolExecutor());
-    executor->Start(kExecutorThreadNum);
-    ON_CALL(*stub, GetExecutor).WillByDefault(testing::Return(executor));
-    EXPECT_CALL(*stub, GetExecutor).Times(testing::AnyNumber());
+    actuator.reset(new ThreadPoolActuator());
+    actuator->Start(kActuatorThreadNum);
+    ON_CALL(*stub, GetActuator).WillByDefault(testing::Return(actuator));
+    EXPECT_CALL(*stub, GetActuator).Times(testing::AnyNumber());
 
     client = new Client();
     client->data_->stub = std::move(tmp);
@@ -100,7 +100,7 @@ class TestBase : public ::testing::Test {
   std::shared_ptr<MockRegionScannerFactory> region_scanner_factory;
   std::shared_ptr<AdminTool> admin_tool;
   std::shared_ptr<MockTxnLockResolver> txn_lock_resolver;
-  std::shared_ptr<Executor> executor;
+  std::shared_ptr<Actuator> actuator;
 
   // client own stub
   MockClientStub* stub;

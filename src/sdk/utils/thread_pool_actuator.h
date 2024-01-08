@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_THREAD_POOL_EXECUTOR_H_
-#define DINGODB_SDK_THREAD_POOL_EXECUTOR_H_
+#ifndef DINGODB_SDK_THREAD_POOL_ACTUATOR_H_
+#define DINGODB_SDK_THREAD_POOL_ACTUATOR_H_
 
 #include <atomic>
 #include <condition_variable>
@@ -26,7 +26,7 @@
 #include <thread>
 
 #include "common/threadpool.h"
-#include "sdk/utils/executor.h"
+#include "sdk/utils/actuator.h"
 
 namespace dingodb {
 namespace sdk {
@@ -36,7 +36,7 @@ class Timer {
   Timer();
   ~Timer();
 
-  bool Start(Executor* executor);
+  bool Start(Actuator* actuator);
 
   bool Stop();
 
@@ -64,7 +64,7 @@ class Timer {
     }
   };
 
-  Executor* executor_;
+  Actuator* actuator_;
   std::mutex mutex_;
   std::condition_variable cv_;
   std::unique_ptr<std::thread> thread_;
@@ -72,11 +72,11 @@ class Timer {
   bool running_;
 };
 
-class ThreadPoolExecutor final : public Executor {
+class ThreadPoolActuator final : public Actuator {
  public:
-  ThreadPoolExecutor();
+  ThreadPoolActuator();
 
-  ~ThreadPoolExecutor() override;
+  ~ThreadPoolActuator() override;
 
   bool Start(int thread_num) override;
 
@@ -92,7 +92,7 @@ class ThreadPoolExecutor final : public Executor {
 
   std::string Name() const override { return InternalName(); }
 
-  static std::string InternalName() { return "ThreadPoolExecutor"; }
+  static std::string InternalName() { return "ThreadPoolActuator"; }
 
  private:
   std::unique_ptr<Timer> timer_;
@@ -104,4 +104,4 @@ class ThreadPoolExecutor final : public Executor {
 }  // namespace sdk
 }  // namespace dingodb
 
-#endif  // DINGODB_SDK_THREAD_POOL_EXECUTOR_H_
+#endif  // DINGODB_SDK_THREAD_POOL_ACTUATOR_H_

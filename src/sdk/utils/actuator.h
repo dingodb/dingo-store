@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_EXECUTOR_H_
-#define DINGODB_SDK_EXECUTOR_H_
+#ifndef DINGODB_SDK_ACTUATOR_H_
+#define DINGODB_SDK_ACTUATOR_H_
 
 #include <functional>
 #include <string>
@@ -21,9 +21,9 @@
 namespace dingodb {
 namespace sdk {
 
-class Executor {
+class Actuator {
  public:
-  virtual ~Executor() = default;
+  virtual ~Actuator() = default;
 
   virtual bool Start(int thread_num) = 0;
 
@@ -41,4 +41,4 @@ class Executor {
 }  // namespace sdk
 }  // namespace dingodb
 
-#endif  // DINGODB_SDK_EXECUTOR_H_
+#endif  // DINGODB_SDK_ACTUATOR_H_

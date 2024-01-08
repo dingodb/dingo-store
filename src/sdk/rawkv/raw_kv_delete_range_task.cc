@@ -144,7 +144,7 @@ void RawKvDeleteRangeTask::KvDeleteRangeRpcCallback(const Status& status, KvDele
     DoAsyncDone(Status::OK());
     return;
   } else {
-    stub.GetExecutor()->Execute([this] { DeleteNextRange(); });
+    stub.GetActuator()->Execute([this] { DeleteNextRange(); });
   }
 }
 

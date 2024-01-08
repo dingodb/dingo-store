@@ -108,7 +108,6 @@ void RawKvScanTask::ScanNext() {
 void RawKvScanTask::ScanNextWithScanner(std::shared_ptr<RegionScanner> scanner) {
   std::shared_ptr<Region> region = scanner->GetRegion();
   if (scanner->HasMore()) {
-    std::vector<KVPair> scan_kvs;
     tmp_scanner_scan_kvs_.clear();
     scanner->AsyncNextBatch(tmp_scanner_scan_kvs_,
                             [this, scanner](auto&& s) { NextBatchCallback(std::forward<decltype(s)>(s), scanner); });

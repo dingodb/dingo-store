@@ -20,57 +20,57 @@
 #include <mutex>
 
 #include "gtest/gtest.h"
-#include "utils/thread_pool_executor.h"
+#include "utils/thread_pool_actuator.h"
 
 namespace dingodb {
 namespace sdk {
 
 static const int kThreadNum = 8;
 
-class ThreadPoolExecutorTest : public testing::Test {
+class ThreadPoolActuatorTest : public testing::Test {
  public:
-  void SetUp() override { executor = std::make_unique<ThreadPoolExecutor>(); }
+  void SetUp() override { actuator = std::make_unique<ThreadPoolActuator>(); }
 
-  void TearDown() override { executor.reset(); }
+  void TearDown() override { actuator.reset(); }
 
-  std::unique_ptr<ThreadPoolExecutor> executor;
+  std::unique_ptr<ThreadPoolActuator> actuator;
 };
 
-TEST_F(ThreadPoolExecutorTest, Start) {
-  bool res = executor->Start(kThreadNum);
+TEST_F(ThreadPoolActuatorTest, Start) {
+  bool res = actuator->Start(kThreadNum);
   EXPECT_TRUE(res);
 }
 
-TEST_F(ThreadPoolExecutorTest, Stop) {
-  bool res = executor->Start(kThreadNum);
+TEST_F(ThreadPoolActuatorTest, Stop) {
+  bool res = actuator->Start(kThreadNum);
   EXPECT_TRUE(res);
-  res = executor->Stop();
+  res = actuator->Stop();
   EXPECT_TRUE(res);
-  res = executor->Stop();
+  res = actuator->Stop();
   EXPECT_FALSE(res);
 }
 
-TEST_F(ThreadPoolExecutorTest, ThreadNum) {
-  bool res = executor->Start(kThreadNum);
-  int num = executor->ThreadNum();
+TEST_F(ThreadPoolActuatorTest, ThreadNum) {
+  bool res = actuator->Start(kThreadNum);
+  int num = actuator->ThreadNum();
   EXPECT_EQ(num, kThreadNum);
 }
 
-TEST_F(ThreadPoolExecutorTest, Execute) {
-  bool res = executor->Start(kThreadNum);
-  int num = executor->ThreadNum();
+TEST_F(ThreadPoolActuatorTest, Execute) {
+  bool res = actuator->Start(kThreadNum);
+  int num = actuator->ThreadNum();
   EXPECT_EQ(num, kThreadNum);
 
   std::mutex mutex;
   std::condition_variable cond;
   std::atomic<int> count(2);
 
-  executor->Execute([&]() {
+  actuator->Execute([&]() {
     EXPECT_EQ(count.fetch_sub(1), 2);
     cond.notify_all();
   });
 
-  executor->Execute([&]() {
+  actuator->Execute([&]() {
     EXPECT_EQ(count.fetch_sub(1), 1);
     cond.notify_all();
   });
@@ -86,21 +86,21 @@ TEST_F(ThreadPoolExecutorTest, Execute) {
   EXPECT_EQ(count.load(), 0);
 }
 
-TEST_F(ThreadPoolExecutorTest, Schedule) {
-  bool res = executor->Start(kThreadNum);
+TEST_F(ThreadPoolActuatorTest, Schedule) {
+  bool res = actuator->Start(kThreadNum);
 
   std::mutex mutex;
   std::condition_variable cond;
   std::atomic<int> count(2);
 
-  executor->Schedule(
+  actuator->Schedule(
       [&]() {
         EXPECT_EQ(count.fetch_sub(1), 2);
         cond.notify_all();
       },
       5);
 
-  executor->Schedule(
+  actuator->Schedule(
       [&]() {
         EXPECT_EQ(count.fetch_sub(1), 1);
         cond.notify_all();

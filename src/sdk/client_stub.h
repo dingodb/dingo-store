@@ -25,7 +25,7 @@
 #include "sdk/region_scanner.h"
 #include "sdk/rpc/rpc_interaction.h"
 #include "sdk/transaction/txn_lock_resolver.h"
-#include "utils/executor.h"
+#include "utils/actuator.h"
 
 namespace dingodb {
 namespace sdk {
@@ -73,9 +73,9 @@ class ClientStub {
     return txn_lock_resolver_;
   }
 
-  virtual std::shared_ptr<Executor> GetExecutor() const {
-    DCHECK_NOTNULL(executor_.get());
-    return executor_;
+  virtual std::shared_ptr<Actuator> GetActuator() const {
+    DCHECK_NOTNULL(actuator_.get());
+    return actuator_;
   }
 
  private:
@@ -86,7 +86,7 @@ class ClientStub {
   std::shared_ptr<RegionScannerFactory> txn_region_scanner_factory_;
   std::shared_ptr<AdminTool> admin_tool_;
   std::shared_ptr<TxnLockResolver> txn_lock_resolver_;
-  std::shared_ptr<Executor> executor_;
+  std::shared_ptr<Actuator> actuator_;
 };
 
 }  // namespace sdk
