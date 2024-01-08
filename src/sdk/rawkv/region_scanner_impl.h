@@ -22,8 +22,10 @@
 
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
+#include "sdk/region.h"
 #include "sdk/region_scanner.h"
 #include "sdk/store/store_rpc.h"
+#include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {
@@ -45,6 +47,8 @@ class RegionScannerImpl : public RegionScanner {
 
   Status NextBatch(std::vector<KVPair>& kvs) override;
 
+  void AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb) override;
+
   bool HasMore() const override;
 
   Status SetBatchSize(int64_t size) override;
@@ -59,6 +63,9 @@ class RegionScannerImpl : public RegionScanner {
   void PrepareScanBegionRpc(KvScanBeginRpc& rpc);
 
   void PrepareScanContinueRpc(KvScanContinueRpc& rpc);
+
+  void KvScanContinueRpcCallback(const Status& status, StoreRpcController* controller, KvScanContinueRpc* rpc,
+                                 std::vector<KVPair>& kvs, StatusCallback cb);
 
   void PrepareScanReleaseRpc(KvScanReleaseRpc& rpc);
 
@@ -77,7 +84,7 @@ class RegionScannerFactoryImpl final : public RegionScannerFactory {
   ~RegionScannerFactoryImpl() override;
 
   Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                          std::unique_ptr<RegionScanner>& scanner) override;
+                          std::shared_ptr<RegionScanner>& scanner) override;
 };
 
 }  // namespace sdk

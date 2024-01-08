@@ -387,7 +387,7 @@ Status Transaction::TxnImpl::Scan(const std::string& start_key, const std::strin
     }
 
     ScannerOptions scan_options(stub_, region, options_, start_ts_);
-    std::unique_ptr<RegionScanner> scanner;
+    std::shared_ptr<RegionScanner> scanner;
     CHECK(stub_.GetTxnRegionScannerFactory()->NewRegionScanner(scan_options, scanner).IsOK());
     ret = scanner->Open();
     CHECK(ret.ok());

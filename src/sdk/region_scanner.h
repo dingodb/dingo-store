@@ -20,8 +20,10 @@
 #include <optional>
 #include <vector>
 
+#include "glog/logging.h"
 #include "sdk/client.h"
 #include "sdk/region.h"
+#include "sdk/utils/callback.h"
 namespace dingodb {
 namespace sdk {
 
@@ -41,11 +43,17 @@ class RegionScanner {
 
   virtual Status NextBatch(std::vector<KVPair>& kvs) = 0;
 
+  virtual void AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb)  = 0;
+
   virtual bool HasMore() const = 0;
 
   virtual Status SetBatchSize(int64_t size) = 0;
 
   virtual int64_t GetBatchSize() const = 0;
+
+  std::shared_ptr<Region> GetRegion() {
+    return region;
+  }
 
  protected:
   const ClientStub& stub;
@@ -76,9 +84,9 @@ class RegionScannerFactory {
   virtual ~RegionScannerFactory() = default;
 
   virtual Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                                  std::unique_ptr<RegionScanner>& scanner) = 0;
+                                  std::shared_ptr<RegionScanner>& scanner) = 0;
 
-  virtual Status NewRegionScanner(const ScannerOptions& options, std::unique_ptr<RegionScanner>& scanner) {
+  virtual Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
     // TODO: check options
     (void)options;
     (void)scanner;

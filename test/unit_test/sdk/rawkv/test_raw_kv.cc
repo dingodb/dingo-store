@@ -28,6 +28,7 @@
 #include "gtest/gtest.h"
 #include "mock_region_scanner.h"
 #include "proto/error.pb.h"
+#include "status.h"
 #include "store/store_rpc.h"
 #include "test_base.h"
 #include "test_common.h"
@@ -977,8 +978,8 @@ TEST_F(RawKVTest, ScanLookUpRegionFail) {
 
 TEST_F(RawKVTest, ScanOpenFail) {
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::Aborted("init fail")));
 
@@ -995,16 +996,20 @@ TEST_F(RawKVTest, ScanOpenFail) {
 
 TEST_F(RawKVTest, ScanNoData) {
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
         // CHECK will call scanner HasMore
         EXPECT_CALL(*mock_scanner, HasMore)
             .WillOnce(testing::Return(true))
-            .WillOnce(testing::Return(false))
-            .WillOnce(testing::Return(false));
-        EXPECT_CALL(*mock_scanner, NextBatch).WillOnce(testing::Return(Status::OK()));
+            .WillOnce(testing::Return(true))
+            .WillRepeatedly(testing::Return(false));
+
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillOnce([&](std::vector<KVPair>& kvs, StatusCallback cb) {
+          (void)kvs;
+          cb(Status::OK());
+        });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
@@ -1023,19 +1028,19 @@ TEST_F(RawKVTest, ScanOneRegion) {
   int iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return iter < fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (iter < fake_datas.size()) {
             kvs.push_back({fake_datas[iter], fake_datas[iter]});
             iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
@@ -1059,19 +1064,19 @@ TEST_F(RawKVTest, ScanOneRegionWithLimit) {
   int a2c_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (a2c_iter < a2c_fake_datas.size()) {
             kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
             a2c_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
@@ -1099,37 +1104,37 @@ TEST_F(RawKVTest, ScanTwoRegion) {
   int c2e_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (a2c_iter < a2c_fake_datas.size()) {
             kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
             a2c_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (c2e_iter < c2e_fake_datas.size()) {
             kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
             c2e_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
@@ -1156,37 +1161,37 @@ TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
   int c2e_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (a2c_iter < a2c_fake_datas.size()) {
             kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
             a2c_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (c2e_iter < c2e_fake_datas.size()) {
             kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
             c2e_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
@@ -1217,55 +1222,55 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
   int l2n_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (a2c_iter < a2c_fake_datas.size()) {
             kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
             a2c_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (c2e_iter < c2e_fake_datas.size()) {
             kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
             c2e_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return l2n_iter < l2n_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (l2n_iter < l2n_fake_datas.size()) {
             kvs.push_back({l2n_fake_datas[l2n_iter], l2n_fake_datas[l2n_iter]});
             l2n_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
@@ -1295,55 +1300,55 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
   int l2n_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (a2c_iter < a2c_fake_datas.size()) {
             kvs.push_back({a2c_fake_datas[a2c_iter], a2c_fake_datas[a2c_iter]});
             a2c_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (c2e_iter < c2e_fake_datas.size()) {
             kvs.push_back({c2e_fake_datas[c2e_iter], c2e_fake_datas[c2e_iter]});
             c2e_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_unique<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return l2n_iter < l2n_fake_datas.size(); });
 
-        EXPECT_CALL(*mock_scanner, NextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs) {
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
           if (l2n_iter < l2n_fake_datas.size()) {
             kvs.push_back({l2n_fake_datas[l2n_iter], l2n_fake_datas[l2n_iter]});
             l2n_iter++;
           }
-          return Status::OK();
+          cb(Status::OK());
         });
 
         scanner = std::move(mock_scanner);

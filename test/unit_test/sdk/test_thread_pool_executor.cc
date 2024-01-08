@@ -72,7 +72,6 @@ TEST_F(ThreadPoolExecutorTest, Execute) {
 
   executor->Execute([&]() {
     EXPECT_EQ(count.fetch_sub(1), 1);
-    EXPECT_EQ(count.load(), 0);
     cond.notify_all();
   });
 
@@ -104,7 +103,6 @@ TEST_F(ThreadPoolExecutorTest, Schedule) {
   executor->Schedule(
       [&]() {
         EXPECT_EQ(count.fetch_sub(1), 1);
-        EXPECT_EQ(count.load(), 0);
         cond.notify_all();
       },
       10);

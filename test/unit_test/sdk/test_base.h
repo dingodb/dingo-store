@@ -28,7 +28,6 @@
 #include "mock_coordinator_proxy.h"
 #include "mock_region_scanner.h"
 #include "mock_rpc_interaction.h"
-#include "rawkv/raw_kv_impl.h"
 #include "test_common.h"
 #include "transaction/mock_txn_lock_resolver.h"
 #include "transaction/txn_impl.h"

@@ -171,7 +171,7 @@ TxnRegionScannerFactoryImpl::TxnRegionScannerFactoryImpl() = default;
 TxnRegionScannerFactoryImpl::~TxnRegionScannerFactoryImpl() = default;
 
 Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                                                     std::unique_ptr<RegionScanner>& scanner) {
+                                                     std::shared_ptr<RegionScanner>& scanner) {
   (void)stub;
   (void)region;
   (void)scanner;
@@ -179,7 +179,7 @@ Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ClientStub& stub, std
 }
 
 Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
-                                                     std::unique_ptr<RegionScanner>& scanner) {
+                                                     std::shared_ptr<RegionScanner>& scanner) {
   if (!options.txn_options) {
     return Status::InvalidArgument("txn options not set");
   }
@@ -188,7 +188,7 @@ Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& optio
     return Status::InvalidArgument("txn start_ts not set");
   }
 
-  std::unique_ptr<RegionScanner> tmp(new TxnRegionScannerImpl(options));
+  std::shared_ptr<RegionScanner> tmp(new TxnRegionScannerImpl(options));
   scanner = std::move(tmp);
 
   return Status::OK();

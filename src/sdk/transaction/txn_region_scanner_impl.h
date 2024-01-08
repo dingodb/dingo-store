@@ -43,6 +43,12 @@ class TxnRegionScannerImpl : public RegionScanner {
 
   Status NextBatch(std::vector<KVPair>& kvs) override;
 
+  void AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb) override {
+    (void)kvs;
+    (void)cb;
+    CHECK(false) << "AsyncNextBatch is not supported";
+  }
+
   bool HasMore() const override;
 
   Status SetBatchSize(int64_t size) override;
@@ -77,9 +83,9 @@ class TxnRegionScannerFactoryImpl final : public RegionScannerFactory {
   ~TxnRegionScannerFactoryImpl() override;
 
   Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                          std::unique_ptr<RegionScanner>& scanner) override;
+                          std::shared_ptr<RegionScanner>& scanner) override;
 
-  Status NewRegionScanner(const ScannerOptions& options, std::unique_ptr<RegionScanner>& scanner) override;
+  Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) override;
 };
 
 }  // namespace sdk
