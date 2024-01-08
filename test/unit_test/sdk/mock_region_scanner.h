@@ -39,6 +39,8 @@ class MockRegionScanner final : public RegionScanner {
 
   MOCK_METHOD(Status, NextBatch, (std::vector<KVPair> & kvs), (override));
 
+  MOCK_METHOD(void, AsyncNextBatch, (std::vector<KVPair>& kvs, StatusCallback cb), (override));
+
   MOCK_METHOD(bool, HasMore, (), (const, override));
 
   MOCK_METHOD(Status, SetBatchSize, (int64_t size), (override));
@@ -53,7 +55,7 @@ class MockRegionScannerFactory : public RegionScannerFactory {
   ~MockRegionScannerFactory() override = default;
 
   MOCK_METHOD(Status, NewRegionScanner,
-              (const ClientStub& stub, std::shared_ptr<Region> region, std::unique_ptr<RegionScanner>& scanner),
+              (const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner),
               (override));
 };
 

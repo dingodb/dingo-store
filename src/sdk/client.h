@@ -131,10 +131,10 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
   friend class Client;
 
   // own
-  class RawKVImpl;
-  std::unique_ptr<RawKVImpl> impl_;
+  class Data;
+  std::unique_ptr<Data> data_;
 
-  explicit RawKV(RawKVImpl* impl);
+  explicit RawKV(Data* data);
 };
 
 enum TransactionKind : uint8_t { kOptimistic, kPessimistic };

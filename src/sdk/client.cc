@@ -31,7 +31,19 @@
 #include "sdk/client_internal_data.h"
 #include "sdk/client_stub.h"
 #include "sdk/common/param_config.h"
-#include "sdk/rawkv/raw_kv_impl.h"
+#include "sdk/rawkv/raw_kv_batch_compare_and_set_task.h"
+#include "sdk/rawkv/raw_kv_batch_delete_task.h"
+#include "sdk/rawkv/raw_kv_batch_get_task.h"
+#include "sdk/rawkv/raw_kv_batch_put_if_absent_task.h"
+#include "sdk/rawkv/raw_kv_batch_put_task.h"
+#include "sdk/rawkv/raw_kv_compare_and_set_task.h"
+#include "sdk/rawkv/raw_kv_delete_range_task.h"
+#include "sdk/rawkv/raw_kv_delete_task.h"
+#include "sdk/rawkv/raw_kv_get_task.h"
+#include "sdk/rawkv/raw_kv_internal_data.h"
+#include "sdk/rawkv/raw_kv_put_if_absent_task.h"
+#include "sdk/rawkv/raw_kv_put_task.h"
+#include "sdk/rawkv/raw_kv_scan_task.h"
 #include "sdk/region_creator_internal_data.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_impl.h"
@@ -84,7 +96,7 @@ Status Client::Init(std::string naming_service_url) {
 }
 
 Status Client::NewRawKV(std::shared_ptr<RawKV>& raw_kv) {
-  std::shared_ptr<RawKV> tmp(new RawKV(new RawKV::RawKVImpl(*data_->stub)));
+  std::shared_ptr<RawKV> tmp(new RawKV(new RawKV::Data(*data_->stub)));
   raw_kv = std::move(tmp);
   return Status::OK();
 }
@@ -142,53 +154,105 @@ Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_p
 
 Status Client::DropRegion(int64_t region_id) { return data_->stub->GetAdminTool()->DropRegion(region_id); }
 
-RawKV::RawKV(RawKVImpl* impl) : impl_(impl) {}
+RawKV::RawKV(Data* data) : data_(data) {}
 
-RawKV::~RawKV() { impl_.reset(nullptr); }
+RawKV::~RawKV() { data_.reset(nullptr); }
 
-Status RawKV::Get(const std::string& key, std::string& value) { return impl_->Get(key, value); }
-
-Status RawKV::BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& kvs) {
-  return impl_->BatchGet(keys, kvs);
+Status RawKV::Get(const std::string& key, std::string& out_value) {
+  RawKvGetTask task(data_->stub, key, out_value);
+  return task.Run();
 }
 
-Status RawKV::Put(const std::string& key, const std::string& value) { return impl_->Put(key, value); }
-
-Status RawKV::BatchPut(const std::vector<KVPair>& kvs) { return impl_->BatchPut(kvs); }
-
-Status RawKV::PutIfAbsent(const std::string& key, const std::string& value, bool& state) {
-  return impl_->PutIfAbsent(key, value, state);
+Status RawKV::BatchGet(const std::vector<std::string>& keys, std::vector<KVPair>& out_kvs) {
+  RawKvBatchGetTask task(data_->stub, keys, out_kvs);
+  return task.Run();
 }
 
-Status RawKV::BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& states) {
-  return impl_->BatchPutIfAbsent(kvs, states);
+Status RawKV::Put(const std::string& key, const std::string& value) {
+  RawKvPutTask task(data_->stub, key, value);
+  return task.Run();
 }
 
-Status RawKV::Delete(const std::string& key) { return impl_->Delete(key); }
+Status RawKV::BatchPut(const std::vector<KVPair>& kvs) {
+  RawKvBatchPutTask task(data_->stub, kvs);
+  return task.Run();
+}
 
-Status RawKV::BatchDelete(const std::vector<std::string>& keys) { return impl_->BatchDelete(keys); }
+Status RawKV::PutIfAbsent(const std::string& key, const std::string& value, bool& out_state) {
+  RawKvPutIfAbsentTask task(data_->stub, key, value, out_state);
+  return task.Run();
+}
+
+Status RawKV::BatchPutIfAbsent(const std::vector<KVPair>& kvs, std::vector<KeyOpState>& out_states) {
+  RawKvBatchPutIfAbsentTask task(data_->stub, kvs, out_states);
+  return task.Run();
+}
+
+Status RawKV::Delete(const std::string& key) {
+  RawKvDeleteTask task(data_->stub, key);
+  return task.Run();
+}
+
+Status RawKV::BatchDelete(const std::vector<std::string>& keys) {
+  RawKvBatchDeleteTask task(data_->stub, keys);
+  return task.Run();
+}
 
 Status RawKV::DeleteRangeNonContinuous(const std::string& start_key, const std::string& end_key,
-                                       int64_t& delete_count) {
-  return impl_->DeleteRange(start_key, end_key, false, delete_count);
+                                       int64_t& out_delete_count) {
+  if (start_key.empty() || end_key.empty()) {
+    return Status::InvalidArgument("start_key and end_key must not empty, check params");
+  }
+
+  if (start_key >= end_key) {
+    return Status::InvalidArgument("end_key must greater than start_key, check params");
+  }
+
+  RawKvDeleteRangeTask task(data_->stub, start_key, end_key, false, out_delete_count);
+  return task.Run();
 }
 
-Status RawKV::DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& delete_count) {
-  return impl_->DeleteRange(start_key, end_key, true, delete_count);
+Status RawKV::DeleteRange(const std::string& start_key, const std::string& end_key, int64_t& out_delete_count) {
+  if (start_key.empty() || end_key.empty()) {
+    return Status::InvalidArgument("start_key and end_key must not empty, check params");
+  }
+
+  if (start_key >= end_key) {
+    return Status::InvalidArgument("end_key must greater than start_key, check params");
+  }
+
+  RawKvDeleteRangeTask task(data_->stub, start_key, end_key, true, out_delete_count);
+  return task.Run();
 }
 
 Status RawKV::CompareAndSet(const std::string& key, const std::string& value, const std::string& expected_value,
-                            bool& state) {
-  return impl_->CompareAndSet(key, value, expected_value, state);
+                            bool& out_state) {
+  RawKvCompareAndSetTask task(data_->stub, key, value, expected_value, out_state);
+  return task.Run();
 }
 
 Status RawKV::BatchCompareAndSet(const std::vector<KVPair>& kvs, const std::vector<std::string>& expected_values,
-                                 std::vector<KeyOpState>& states) {
-  return impl_->BatchCompareAndSet(kvs, expected_values, states);
+                                 std::vector<KeyOpState>& out_states) {
+  if (kvs.size() != expected_values.size()) {
+    return Status::InvalidArgument(
+        fmt::format("kvs size:{} must equal expected_values size:{}", kvs.size(), expected_values.size()));
+  }
+
+  RawKvBatchCompareAndSetTask task(data_->stub, kvs, expected_values, out_states);
+  return task.Run();
 }
 
 Status RawKV::Scan(const std::string& start_key, const std::string& end_key, uint64_t limit, std::vector<KVPair>& kvs) {
-  return impl_->Scan(start_key, end_key, limit, kvs);
+  if (start_key.empty() || end_key.empty()) {
+    return Status::InvalidArgument("start_key and end_key must not empty, check params");
+  }
+
+  if (start_key >= end_key) {
+    return Status::InvalidArgument("end_key must greater than start_key, check params");
+  }
+
+  RawKvScanTask task(data_->stub, start_key, end_key, limit, kvs);
+  return task.Run();
 }
 
 Transaction::Transaction(TxnImpl* impl) : impl_(impl) {}

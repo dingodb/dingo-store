@@ -18,6 +18,7 @@
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
 #include "sdk/store/store_rpc_controller.h"
+#include "sdk/utils/async_util.h"
 
 namespace dingodb {
 namespace sdk {
@@ -103,6 +104,57 @@ void RegionScannerImpl::PrepareScanContinueRpc(KvScanContinueRpc& rpc) {
   request->set_max_fetch_cnt(batch_size_);
 }
 
+void RegionScannerImpl::AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb) {
+  CHECK(opened_);
+  CHECK(!scan_id_.empty());
+  auto rpc = std::make_unique<KvScanContinueRpc>();
+  PrepareScanContinueRpc(*rpc);
+
+  auto controller = std::make_unique<StoreRpcController>(stub, *rpc, region);
+  controller->AsyncCall([this, c = controller.release(), r = rpc.release(), &kvs, cb](auto&& s) {
+    KvScanContinueRpcCallback(std::forward<decltype(s)>(s), c, r, kvs, cb);
+  });
+}
+
+void RegionScannerImpl::KvScanContinueRpcCallback(const Status& status, StoreRpcController* controller,
+                                                  KvScanContinueRpc* rpc, std::vector<KVPair>& kvs, StatusCallback cb) {
+  if (status.ok()) {
+    const auto* response = rpc->Response();
+    std::vector<KVPair> tmp_kvs;
+    if (response->kvs_size() == 0) {
+      // scan to region end_key
+      has_more_ = false;
+    } else {
+      for (const auto& kv : response->kvs()) {
+        if (kv.key() < end_key_) {
+          tmp_kvs.push_back({kv.key(), kv.value()});
+        } else {
+          has_more_ = false;
+        }
+      }
+    }
+
+    kvs = std::move(tmp_kvs);
+  } else {
+    DINGO_LOG(WARNING) << "scanner_id:" << scan_id_ << " scan continue fail region:" << region->RegionId()
+                       << ", fail:" << status.ToString();
+  }
+
+  delete controller;
+  delete rpc;
+
+  cb(status);
+}
+
+Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
+  Synchronizer sync;
+  Status status;
+  AsyncNextBatch(kvs, sync.AsStatusCallBack(status));
+  sync.Wait();
+  return status;
+}
+
+/*
 Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
   CHECK(opened_);
   CHECK(!scan_id_.empty());
@@ -135,6 +187,7 @@ Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
 
   return ret;
 }
+*/
 
 Status RegionScannerImpl::SetBatchSize(int64_t size) {
   uint64_t to_size = size;
@@ -155,8 +208,8 @@ RegionScannerFactoryImpl::RegionScannerFactoryImpl() = default;
 RegionScannerFactoryImpl::~RegionScannerFactoryImpl() = default;
 
 Status RegionScannerFactoryImpl::NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                                                  std::unique_ptr<RegionScanner>& scanner) {
-  std::unique_ptr<RegionScanner> tmp(new RegionScannerImpl(stub, std::move(region)));
+                                                  std::shared_ptr<RegionScanner>& scanner) {
+  std::shared_ptr<RegionScanner> tmp(new RegionScannerImpl(stub, std::move(region)));
   scanner = std::move(tmp);
 
   return Status::OK();
