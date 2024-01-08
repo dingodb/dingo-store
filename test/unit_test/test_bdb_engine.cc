@@ -27,6 +27,7 @@
 #include <numeric>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "butil/status.h"
@@ -35,6 +36,7 @@
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "engine/bdb_raw_engine.h"
+#include "engine/snapshot.h"
 #include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
 #include "server/server.h"
@@ -1685,6 +1687,195 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
     // for (const auto &kv : kvs) {
     //   std::cout << kv.key() << ":" << kv.value() << '\n';
     // }
+  }
+}
+
+TEST_F(RawBdbEngineTest, KvDeleteRange8) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
+  auto reader = RawBdbEngineTest::engine->Reader();
+
+  // write data
+  {
+    std::vector<pb::common::KeyValue> kv_puts;
+    std::vector<std::string> key_deletes;
+
+    for (int i = 0; i < 100; i++) {
+      pb::common::KeyValue kv;
+
+      if (i < 50) {
+        kv.set_key("KvDeleteRange8AA" + std::to_string(1000 + i));
+      } else {
+        kv.set_key("KvDeleteRange8BB" + std::to_string(1000 + i));
+      }
+      kv.set_value(kv.key());
+      kv_puts.emplace_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange8", "KvDeleteRange9", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 100);
+
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange8AA1048", "KvDeleteRange8BB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 2);
+  }
+
+  // test snapshot isolation
+  // we do a special snapshot operation in our bdb engine implementation, which use a cursor do a pre-seek
+  // to make sure the snapshot isolation is activated.
+  // this is a limitation of bdb, if we do not do this, the snapshot isolation will not be activated, and will perform
+  // as read committed isolation.
+  {
+    pb::common::Range range;
+    range.set_start_key("KvDeleteRange8AA1048");
+    range.set_end_key("KvDeleteRange8BB");
+
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange8AA1048", "KvDeleteRange8BB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 0);
+
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRange8AA1047", "KvDeleteRange8BB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 1);
+  }
+}
+
+// Test KvDeleteRange bigger than 64KB
+TEST_F(RawBdbEngineTest, KvDeleteRangeA) {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
+  auto reader = RawBdbEngineTest::engine->Reader();
+
+  // write data
+  uint64_t keys_count = 64 * 1024;
+  {
+    std::vector<pb::common::KeyValue> kv_puts;
+    std::vector<std::string> key_deletes;
+
+    for (int i = 0; i < keys_count; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KvDeleteRangeA" + std::to_string(1000 + i));
+      kv.set_value(kv.key());
+      kv_puts.emplace_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRangeA", "KvDeleteRangeB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, keys_count);
+  }
+
+  {
+    pb::common::Range range;
+    range.set_start_key("KvDeleteRangeA");
+    range.set_end_key("KvDeleteRangeB");
+
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRangeA", "KvDeleteRangeB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 0);
+  }
+
+  // write data
+  keys_count = 128 * 1024;
+  {
+    std::vector<pb::common::KeyValue> kv_puts;
+    std::vector<std::string> key_deletes;
+
+    for (int i = 0; i < keys_count; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KvDeleteRangeA" + std::to_string(1000 + i));
+      kv.set_value(kv.key());
+      kv_puts.emplace_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRangeA", "KvDeleteRangeB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, keys_count);
+  }
+
+  {
+    pb::common::Range range;
+    range.set_start_key("KvDeleteRangeA");
+    range.set_end_key("KvDeleteRangeB");
+
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRangeA", "KvDeleteRangeB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, 0);
+  }
+
+  // write data
+  keys_count = 128 * 1024;
+  {
+    std::vector<pb::common::KeyValue> kv_puts;
+    std::vector<std::string> key_deletes;
+
+    for (int i = 0; i < keys_count; i++) {
+      pb::common::KeyValue kv;
+      kv.set_key("KvDeleteRangeA" + std::to_string(1000 + i));
+      kv.set_value(kv.key());
+      kv_puts.emplace_back(kv);
+    }
+
+    butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, "KvDeleteRangeA", "KvDeleteRangeB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, keys_count);
+  }
+
+  {
+    pb::common::Range range;
+    range.set_start_key("KvDeleteRangeA");
+    range.set_end_key("KvDeleteRangeB");
+
+    dingodb::SnapshotPtr snapshot = nullptr;
+
+    std::thread([&]() { snapshot = engine->GetSnapshot(); }).join();
+
+    std::thread([&]() {
+      int64_t count = 0;
+      auto ok = reader->KvCount(kDefaultCf, snapshot, "KvDeleteRangeA", "KvDeleteRangeB", count);
+      EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+      EXPECT_EQ(count, keys_count);
+    }).join();
+
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    int64_t count = 0;
+    ok = reader->KvCount(kDefaultCf, snapshot, "KvDeleteRangeA", "KvDeleteRangeB", count);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(count, keys_count);
   }
 }
 

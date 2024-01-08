@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -45,11 +46,16 @@ namespace dingodb {
 
 DEFINE_int32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
 DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
-DEFINE_int32(bdb_txn_max, 10240, "bdb txn max");
-DEFINE_int32(bdb_max_retries, 20, "bdb max retry on a deadlock");
+DEFINE_int32(bdb_txn_max, 40960, "bdb txn max");
+DEFINE_int32(bdb_lk_max_lockers, 20480, "bdb max lockers");
+DEFINE_int32(bdb_lk_max_locks, 20480, "bdb max locks");
+DEFINE_int32(bdb_lk_max_objects, 20480, "bdb max objects");
+DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 
 namespace bdb {
+
+#define DB_MAXIMUM_PAGESIZE (64 * 1024) /* Maximum database page size */
 
 // we use visable char as prefix, so we can use it as a range upper bound and better for debug.
 std::unordered_map<std::string, char> BdbHelper::cf_name_to_id = {
@@ -381,10 +387,11 @@ BdbSnapshot::~BdbSnapshot() {
     int ret = 0;
     // commit
     try {
-      ret = txn_->commit(0);
+      ret = txn_->abort();
       if (ret == 0) {
         txn_ = nullptr;
       }
+      DINGO_LOG(DEBUG) << fmt::format("[bdb] txn abort in snapshot destruction, ret: {}.", ret);
     } catch (DbException& db_exception) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
@@ -438,7 +445,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
       }
       return butil::Status();
     } else if (ret == DB_NOTFOUND) {
-      DINGO_LOG(WARNING) << "[bdb] key not found.";
+      DINGO_LOG(DEBUG) << "[bdb] key not found.";
       return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key.");
     }
 
@@ -559,7 +566,7 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
         DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
       }
     } else {
-      ret = GetDb()->cursor(nullptr, &cursorp, DB_TXN_SNAPSHOT);
+      ret = GetDb()->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
       if (ret == 0) {
         return std::make_shared<Iterator>(cf_name, options, cursorp, nullptr);
       }
@@ -700,7 +707,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
+      int ret = envp->txn_begin(nullptr, &txn, 0);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -799,7 +806,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
+      int ret = envp->txn_begin(nullptr, &txn, 0);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -915,7 +922,7 @@ butil::Status Writer::KvBatchPutAndDelete(
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
+      int ret = envp->txn_begin(nullptr, &txn, 0);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1023,41 +1030,56 @@ butil::Status Writer::KvBatchPutAndDelete(
   return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
 }
 
-size_t BdbHelper::NextPowerOf1024(size_t n) {
-  if (n <= 1) {
-    return 1;
-  }
-  size_t power = 1;
-  while (power < n) {
-    power *= 1024;
-  }
-  return power;
-}
-
 butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vector<std::string>& keys) {
   if (BAIDU_UNLIKELY(keys.empty())) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty keys.");
     return butil::Status(pb::error::EKEY_EMPTY, "Keys is empty");
   }
 
+  std::vector<std::string> raw_keys;
+  raw_keys.reserve(keys.size());
+  for (const auto& key : keys) {
+    raw_keys.emplace_back(BdbHelper::EncodeKey(cf_name, key));
+    DINGO_LOG(DEBUG) << fmt::format("[bdb] delete raw key: {} {}.", Helper::StringToHex(key),
+                                    Helper::StringToHex(BdbHelper::EncodeKey(cf_name, key)));
+  }
+
+  DINGO_LOG(INFO) << " raw_keys.size: " << raw_keys.size() << ", keys.size: " << keys.size() << ".";
+
   DbEnv* envp = GetDb()->get_env();
   DbTxn* txn = nullptr;
 
   Dbt keys_to_delete;
-  auto keys_size = BdbHelper::GetKeysSize(keys);
+  auto keys_size = 0;  // BdbHelper::GetKeysSize(raw_keys);
 
-  // we will add the cf_id prefix for keys, so we need to add CF_ID_LEN
-  uint32_t keys_buf_size = sizeof(uint32_t) * keys.size() + keys_size + CF_ID_LEN * keys.size();
-  uint32_t real_keys_buf_size = BdbHelper::NextPowerOf1024(keys_buf_size);
+  for (const auto& key : raw_keys) {
+    keys_size += sizeof(uint32_t) + key.size();
+  }
 
-  void* keys_buf = malloc(real_keys_buf_size);
+  uint64_t keys_buf_size = sizeof(uint32_t) * raw_keys.size() + keys_size + sizeof(uint32_t);
+  keys_buf_size += 1024 - (keys_buf_size % 1024);
+
+  /*
+   * In order to use a bulk DBT for get() calls, it must be at least as
+   * large as the database's pages. Make sure that it as least 64KB, the
+   * maximum database page size.
+   */
+  if (keys_buf_size < DB_MAXIMUM_PAGESIZE) {
+    keys_buf_size = DB_MAXIMUM_PAGESIZE;
+  }
+
+  if (BAIDU_UNLIKELY(keys_buf_size > UINT32_MAX)) {
+    DINGO_LOG(FATAL) << fmt::format("[bdb] keys_buf_size: {} > UINT32_MAX.", keys_buf_size);
+  }
+
+  void* keys_buf = malloc(keys_buf_size);
   if (keys_buf == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] malloc failed, size: {}.", keys_size);
     return butil::Status(pb::error::EINTERNAL, "Internal malloc error.");
   }
 
-  memset(keys_buf, 0, real_keys_buf_size);
-  keys_to_delete.set_ulen(real_keys_buf_size);
+  memset(keys_buf, 0, keys_buf_size);
+  keys_to_delete.set_ulen(keys_buf_size);
   keys_to_delete.set_flags(DB_DBT_USERMEM | DB_DBT_BULK);
   keys_to_delete.set_data(keys_buf);
 
@@ -1067,8 +1089,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
         keys_buf = nullptr;
       });
 
-  DINGO_LOG(INFO) << "keys.size = " << keys.size() << ", keys_buf_size = " << keys_buf_size
-                  << ", real_keys_buf_size = " << real_keys_buf_size;
+  DINGO_LOG(INFO) << "raw_keys.size = " << raw_keys.size() << ", keys_buf_size = " << keys_buf_size;
 
   DbMultipleDataBuilder* db_multi_data_builder = new DbMultipleDataBuilder(keys_to_delete);
   if (db_multi_data_builder == nullptr) {
@@ -1076,8 +1097,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
     return butil::Status(pb::error::EINTERNAL, "Internal DbMultipleKeyDataBuilder error.");
   }
 
-  for (const auto& key : keys) {
-    std::string raw_key = BdbHelper::EncodeKey(cf_name, key);
+  for (const auto& raw_key : raw_keys) {
     if (!db_multi_data_builder->append((void*)raw_key.data(), raw_key.size())) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] DbMultipleKeyDataBuilder append failed.");
       return butil::Status(pb::error::EINTERNAL, "Internal DbMultipleKeyDataBuilder append error.");
@@ -1101,7 +1121,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
+      int ret = envp->txn_begin(nullptr, &txn, 0);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1187,7 +1207,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
+      int ret = envp->txn_begin(nullptr, &txn, 0);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1293,7 +1313,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
 
   while (retry) {
     try {
-      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK);
+      int ret = envp->txn_begin(nullptr, &txn, 0);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1477,10 +1497,17 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
     return butil::Status(pb::error::EINTERNAL, "Internal txn get error.");
   }
 
-  DINGO_LOG(INFO) << fmt::format("[bdb] get key: {}, value: {}", bdb_key.get_data(), bdb_value.get_data());
-  cursorp->del(0);
+  DINGO_LOG(INFO) << fmt::format(
+      "[bdb] get key: {}, value: {}",
+      Helper::StringToHex(std::string_view((const char*)bdb_key.get_data(), bdb_key.get_size())),
+      Helper::StringToHex(std::string_view((const char*)bdb_value.get_data(), bdb_value.get_size())));
 
-  int index = 0;
+  if (BdbHelper::CompareDbt(bdb_key, bdb_end_key) < 0) {
+    cursorp->del(0);
+  } else {
+    return butil::Status();
+  }
+
   while (cursorp->get(&bdb_key, &bdb_value, DB_NEXT) == 0) {
     if (BdbHelper::CompareDbt(bdb_key, bdb_end_key) < 0) {
       cursorp->del(0);
@@ -1583,8 +1610,9 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
                                           // also turns on logging.
                        DB_INIT_MPOOL |    // Initialize the memory pool (in-memory cache)
                        DB_MULTIVERSION |  // Multiversion concurrency control
-                       DB_TXN_SNAPSHOT |  // Snapshot isolation
-                       DB_THREAD;         // Cause the environment to be free-threaded
+                       DB_PRIVATE |  // Region files are not backed by the filesystem, but instead are backed by heap
+                                     // memory. This flag is required for the in-memory cache.
+                       DB_THREAD;    // Cause the environment to be free-threaded
   try {
     // Create and open the environment
     envp = new DbEnv((uint32_t)0);
@@ -1594,6 +1622,10 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // the fewest number of write locks will receive the
     // deadlock notification in the event of a deadlock.
     envp->set_lk_detect(DB_LOCK_MINWRITE);
+    envp->set_lk_max_lockers(FLAGS_bdb_lk_max_lockers);
+    envp->set_lk_max_locks(FLAGS_bdb_lk_max_locks);
+    envp->set_lk_max_objects(FLAGS_bdb_lk_max_objects);
+
     envp->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
 
     // set error call back
@@ -1608,6 +1640,9 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     envp->set_tx_max(FLAGS_bdb_txn_max);
     envp->get_tx_max(&txn_max);
 
+    // set lock timeout to 5s, the first parameter is microsecond
+    envp->set_timeout(5 * 1000 * 1000, DB_SET_LOCK_TIMEOUT);
+
     DINGO_LOG(INFO) << fmt::format("[bdb] set txn_max to: {}.", txn_max);
 
     envp->open((const char*)bdb_path.c_str(), env_flags, 0);
@@ -1617,6 +1652,8 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // here.
 
     // Open the database
+    // TODO: when set DB_REVSPLITOFF flag, store process will meet txn_begin cannot allocate memory erro in the second
+    // round sdk integration test.
     int ret = OpenDb(&db, file_name, envp, 0);
     if (ret < 0) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
@@ -1667,41 +1704,54 @@ std::string BdbRawEngine::GetName() { return pb::common::RawEngine_Name(pb::comm
 pb::common::RawEngine BdbRawEngine::GetRawEngineType() { return pb::common::RAW_ENG_BDB; }
 
 dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
-  try {
-    DbEnv* envp = db_->get_env();
-    DbTxn* txn = nullptr;
-    int ret = envp->txn_begin(nullptr, &txn, DB_TXN_BULK | DB_TXN_SNAPSHOT);
-    if (ret != 0) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+  bool retry = true;
+  int32_t retry_count = 0;
+
+  DbEnv* envp = db_->get_env();
+
+  while (retry) {
+    try {
+      DbTxn* txn = nullptr;
+      int ret = envp->txn_begin(nullptr, &txn, DB_TXN_SNAPSHOT);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+        return nullptr;
+      }
+
+      // It seems bdb do a snapshot after a cursor with the txn do its first get.
+      // So we need to init a cursor and do a get to make sure the snapshot is valid.
+      // Acquire a cursor
+      Dbc* cursorp = nullptr;
+      ret = GetDb()->cursor(txn, &cursorp, DB_TXN_SNAPSHOT);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] cursor failed ret: {}.", ret);
+        return nullptr;
+      }
+
+      Dbt bdb_key, bdb_value;
+      ret = cursorp->get(&bdb_key, &bdb_value, DB_FIRST);
+      if (ret != 0 && ret != DB_NOTFOUND) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn cursort get DB_NEXT failed ret: {}.", ret);
+        return nullptr;
+      }
+
+      cursorp->close();
+      cursorp = nullptr;
+
+      return std::make_shared<bdb::BdbSnapshot>(db_, txn, cursorp);
+
+    } catch (DbDeadlockException&) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[bdb] get snapshot got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
+      retry_count++;
+      retry = true;
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db txn_begin failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
       return nullptr;
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(FATAL) << fmt::format("[bdb] std exception, {}.", std_exception.what());
     }
-
-    // It seems bdb do a snapshot after a cursor with the txn do its first get.
-    // So we need to init a cursor and do a get to make sure the snapshot is valid.
-    // Acquire a cursor
-    Dbc* cursorp = nullptr;
-    ret = GetDb()->cursor(txn, &cursorp, DB_TXN_SNAPSHOT);
-    if (ret != 0) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] cursor failed ret: {}.", ret);
-      return nullptr;
-    }
-
-    Dbt bdb_key, bdb_value;
-    ret = cursorp->get(&bdb_key, &bdb_value, DB_NEXT);
-    if (ret != 0 && ret != DB_NOTFOUND) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] txn cursort get DB_NEXT failed ret: {}.", ret);
-      return nullptr;
-    }
-
-    return std::make_shared<bdb::BdbSnapshot>(db_, txn, cursorp);
-
-  } catch (DbDeadlockException&) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
-  } catch (DbException& db_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {} {}.", db_exception.get_errno(),
-                                    db_exception.what());
-  } catch (std::exception& std_exception) {
-    DINGO_LOG(ERROR) << fmt::format("[bdb] std exception, {}.", std_exception.what());
   }
 
   DINGO_LOG(ERROR) << "unknown error.";
