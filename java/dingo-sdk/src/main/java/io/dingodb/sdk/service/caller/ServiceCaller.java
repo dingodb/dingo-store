@@ -102,6 +102,8 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
                             handler.onRetry(request, response, options, channel.authority(), requestId);
                             if (errCode == Errno.ERAFT_NOTLEADER.number) {
                                 channel = updateChannel(channel, requestId);
+                            } else {
+                                waitRetry();
                             }
                             continue;
                         case FAILED:
