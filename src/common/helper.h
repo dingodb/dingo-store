@@ -53,6 +53,8 @@ class Helper {
   static bool IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location);
   static bool IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
                                 const std::vector<pb::common::Peer>& other_peers);
+  static bool IsDifferencePeers(const pb::common::RegionDefinition& src_definition,
+                                const pb::common::RegionDefinition& dst_definition);
 
   static void SortPeers(std::vector<pb::common::Peer>& peers);
   static std::vector<pb::common::Location> ExtractLocations(

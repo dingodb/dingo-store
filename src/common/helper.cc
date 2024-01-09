@@ -177,6 +177,28 @@ bool Helper::IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
   return false;
 }
 
+bool Helper::IsDifferencePeers(const pb::common::RegionDefinition& src_definition,
+                               const pb::common::RegionDefinition& dst_definition) {
+  if (src_definition.peers_size() != dst_definition.peers_size()) {
+    return true;
+  }
+
+  for (const auto& src_peer : src_definition.peers()) {
+    bool is_exist = false;
+    for (const auto& dst_peer : dst_definition.peers()) {
+      if (src_peer.store_id() == dst_peer.store_id()) {
+        is_exist = true;
+        break;
+      }
+    }
+    if (!is_exist) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 std::vector<pb::common::Location> Helper::ExtractLocations(
     const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;

@@ -581,6 +581,11 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::EREGION_NOT_NEIGHBOR, "Not neighbor region");
   }
 
+  // Check region peers
+  if (Helper::IsDifferencePeers(source_region->Definition(), target_region->Definition())) {
+    return butil::Status(pb::error::EMERGE_PEER_NOT_MATCH, "Peers is differencce.");
+  }
+
   // Check source region follower commit log progress.
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {

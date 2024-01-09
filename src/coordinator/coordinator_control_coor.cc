@@ -2580,33 +2580,9 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
                          "MergeRegion merge_from_region_id == merge_to_region_id");
   }
 
-  // validate merge_from_region and merge_to_region has same peers
-  if (merge_from_region.definition().peers_size() != merge_to_region.definition().peers_size()) {
-    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and "
-                        "merge_to_region has different peers size";
-    return butil::Status(pb::error::Errno::EMERGE_PEER_NOT_MATCH,
-                         "MergeRegion merge_from_region and "
-                         "merge_to_region has different peers size");
-  }
-
-  std::vector<int64_t> merge_from_region_peers;
-  std::vector<int64_t> merge_to_region_peers;
-  merge_from_region_peers.reserve(merge_from_region.definition().peers_size());
-  for (int i = 0; i < merge_from_region.definition().peers_size(); i++) {
-    merge_from_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
-  }
-  merge_to_region_peers.reserve(merge_to_region.definition().peers_size());
-  for (int i = 0; i < merge_to_region.definition().peers_size(); i++) {
-    merge_to_region_peers.push_back(merge_to_region.definition().peers(i).store_id());
-  }
-  std::sort(merge_from_region_peers.begin(), merge_from_region_peers.end());
-  std::sort(merge_to_region_peers.begin(), merge_to_region_peers.end());
-  if (merge_from_region_peers != merge_to_region_peers) {
-    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and "
-                        "merge_to_region has different peers";
-    return butil::Status(pb::error::Errno::EMERGE_PEER_NOT_MATCH,
-                         "MergeRegion merge_from_region and "
-                         "merge_to_region has different peers");
+  // validate region peers
+  if (Helper::IsDifferencePeers(merge_from_region.definition(), merge_to_region.definition())) {
+    return butil::Status(pb::error::EMERGE_PEER_NOT_MATCH, "Peers is differencce.");
   }
 
   // validate merge_from_region and merge_to_region status
