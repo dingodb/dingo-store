@@ -150,7 +150,7 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common
   std::string prev_key;
   std::string split_key;
   bool is_split = false;
-  uint32_t split_pos = split_size_ * split_ratio_;
+  int64_t split_pos = split_size_ * split_ratio_;
   for (; iter.Valid(); iter.Next()) {
     size += iter.KeyValueSize();
     if (split_key.empty() && size >= split_pos) {
@@ -401,12 +401,12 @@ void SplitCheckWorkers::DeleteRegionChecking(int64_t region_id) {
 static std::shared_ptr<SplitChecker> BuildSplitChecker(std::shared_ptr<RawEngine> raw_engine) {
   std::string policy = ConfigHelper::GetSplitPolicy();
   if (policy == "HALF") {
-    uint32_t split_threshold_size = ConfigHelper::GetRegionMaxSize();
+    int64_t split_threshold_size = ConfigHelper::GetRegionMaxSize();
     uint32_t split_chunk_size = ConfigHelper::GetSplitChunkSize();
     return std::make_shared<HalfSplitChecker>(raw_engine, split_threshold_size, split_chunk_size);
 
   } else if (policy == "SIZE") {
-    uint32_t split_threshold_size = ConfigHelper::GetRegionMaxSize();
+    int64_t split_threshold_size = ConfigHelper::GetRegionMaxSize();
     float split_ratio = ConfigHelper::GetSplitSizeRatio();
     return std::make_shared<SizeSplitChecker>(raw_engine, split_threshold_size, split_ratio);
 
@@ -432,7 +432,7 @@ void PreSplitCheckTask::PreSplitCheck() {
 
   auto metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto regions = GET_STORE_REGION_META->GetAllAliveRegion();
-  uint32_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
+  int64_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
   for (auto& region : regions) {
     auto region_metric = metrics->GetMetrics(region->Id());
     bool need_scan_check = true;

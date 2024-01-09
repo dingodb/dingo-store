@@ -96,7 +96,7 @@ class SplitChecker {
 // Split region based half.
 class HalfSplitChecker : public SplitChecker {
  public:
-  HalfSplitChecker(std::shared_ptr<RawEngine> raw_engine, uint32_t split_threshold_size, uint32_t split_chunk_size)
+  HalfSplitChecker(std::shared_ptr<RawEngine> raw_engine, int64_t split_threshold_size, uint32_t split_chunk_size)
       : SplitChecker(SplitChecker::Policy::kHalf),
         raw_engine_(raw_engine),
         split_threshold_size_(split_threshold_size),
@@ -109,7 +109,7 @@ class HalfSplitChecker : public SplitChecker {
 
  private:
   // Split region when exceed the split_threshold_size.
-  uint32_t split_threshold_size_;
+  int64_t split_threshold_size_;
   // Sampling chunk size.
   uint32_t split_chunk_size_;
   std::shared_ptr<RawEngine> raw_engine_;
@@ -118,7 +118,7 @@ class HalfSplitChecker : public SplitChecker {
 // Split region based size.
 class SizeSplitChecker : public SplitChecker {
  public:
-  SizeSplitChecker(std::shared_ptr<RawEngine> raw_engine, uint32_t split_size, float split_ratio)
+  SizeSplitChecker(std::shared_ptr<RawEngine> raw_engine, int64_t split_size, float split_ratio)
       : SplitChecker(SplitChecker::Policy::kSize),
         raw_engine_(raw_engine),
         split_size_(split_size),
@@ -131,7 +131,7 @@ class SizeSplitChecker : public SplitChecker {
 
  private:
   // Split when region exceed the split_size.
-  uint32_t split_size_;
+  int64_t split_size_;
   // Split key position.
   float split_ratio_;
   std::shared_ptr<RawEngine> raw_engine_;
