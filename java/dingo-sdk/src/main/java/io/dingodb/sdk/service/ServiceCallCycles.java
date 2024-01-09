@@ -2,6 +2,7 @@ package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.DingoClientException.ExhaustedRetryException;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
+import io.dingodb.sdk.service.Caller.CallExecutor;
 import io.dingodb.sdk.service.ServiceCallCycle.After;
 import io.dingodb.sdk.service.ServiceCallCycle.Before;
 import io.dingodb.sdk.service.ServiceCallCycle.OnErrRes;
@@ -36,7 +37,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     implements ServiceCallCycle<REQ, RES>, Before<REQ, RES>, After<REQ, RES>,
                OnException<REQ, RES>, OnRetry<REQ, RES>, OnIgnore<REQ, RES>, OnRefresh<REQ, RES>, OnThrow<REQ, RES>,
                OnNonConnection<REQ, RES>, OnErrRes<REQ, RES>, OnFailed<REQ, RES>,
-               RBefore<REQ, RES>, RAfter<REQ, RES>, RError<REQ, RES>, Caller.CallExecutor<REQ, RES> {
+               RBefore<REQ, RES>, RAfter<REQ, RES>, RError<REQ, RES>, CallExecutor<REQ, RES> {
 
     static class DelegateList<T> {
         private final List<T> list = new ArrayList<>();
@@ -58,6 +59,9 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
         }
 
         public synchronized void setHandler(T ref) {
+            if (ref == null) {
+                ref = defaultRef;
+            }
             this.ref = ref;
         }
     }
@@ -130,7 +134,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Delegate
     private final DelegateReference<ServiceCallCycle.OnErrRes<REQ, RES>> onErrRes = new DelegateReference<>(null);
     @Delegate
-    private final DelegateReference<Caller.CallExecutor<REQ, RES>> callExecutor = new DelegateReference<>(RpcCaller::call);
+    private final DelegateReference<CallExecutor<REQ, RES>> callExecutor = new DelegateReference<>(RpcCaller::call);
 
     @EqualsAndHashCode.Include
     public final MethodDescriptor<REQ, RES> method;
@@ -237,9 +241,16 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, retry, remain, req, res, options
             );
         }
+        ErrorCodeUtils.Strategy before = strategy;
         ServiceCallCycle.OnErrRes<REQ, RES> onErrRes = this.onErrRes.ref;
         if (onErrRes != null) {
             strategy = onErrRes.onErrStrategy(strategy, retry, remain, req, res, options, remote, trace);
+        }
+        if (before != strategy && ServiceCallCycles.OnErrRes.log.isDebugEnabled() && logger.isDebugEnabled()) {
+            OnErrRes.log.debug(
+                "Service call [{}:{}] error on [{}], trace [{}], before strategy [{}], change to [{}]",
+                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, before, strategy
+            );
         }
         return strategy;
     }
