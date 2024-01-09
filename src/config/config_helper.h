@@ -25,8 +25,8 @@ class ConfigHelper {
  public:
   static pb::raft::SplitStrategy GetSplitStrategy();
 
-  static uint32_t GetRegionMaxSize();
-  static uint32_t GetSplitCheckApproximateSize();
+  static int64_t GetRegionMaxSize();
+  static int64_t GetSplitCheckApproximateSize();
   static std::string GetSplitPolicy();
   static uint32_t GetSplitChunkSize();
   static float GetSplitSizeRatio();

@@ -14,6 +14,7 @@
 
 #include "config/config_helper.h"
 
+#include <cstdint>
 #include <string>
 
 #include "common/constant.h"
@@ -33,12 +34,12 @@ pb::raft::SplitStrategy ConfigHelper::GetSplitStrategy() {
                                                 : pb::raft::SplitStrategy::PRE_CREATE_REGION;
 }
 
-uint32_t ConfigHelper::GetRegionMaxSize() {
+int64_t ConfigHelper::GetRegionMaxSize() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kRegionMaxSizeDefaultValue;
   }
-  int region_max_size = config->GetInt("region.region_max_size");
+  int64_t region_max_size = config->GetInt64("region.region_max_size");
   if (region_max_size < Constant::kRegionMaxSizeDefaultValue) {
     region_max_size = Constant::kRegionMaxSizeDefaultValue;
     DINGO_LOG(WARNING) << fmt::format("[config] region_max_size is too small, set default value({})",
@@ -47,9 +48,9 @@ uint32_t ConfigHelper::GetRegionMaxSize() {
   return region_max_size;
 }
 
-uint32_t ConfigHelper::GetSplitCheckApproximateSize() {
-  int region_max_size = GetRegionMaxSize();
-  return static_cast<uint32_t>(static_cast<double>(region_max_size) * Constant::kDefaultSplitCheckApproximateSizeRatio);
+int64_t ConfigHelper::GetSplitCheckApproximateSize() {
+  int64_t region_max_size = GetRegionMaxSize();
+  return static_cast<int64_t>(static_cast<double>(Constant::kDefaultSplitCheckApproximateSizeRatio) * region_max_size);
 }
 
 std::string ConfigHelper::GetSplitPolicy() {

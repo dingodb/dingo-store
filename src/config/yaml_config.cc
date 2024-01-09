@@ -63,7 +63,7 @@ int64_t YamlConfig::GetInt64(const std::string& key) {
   try {
     return GetScalar<int64_t>(key);
   } catch (std::exception& e) {
-    DINGO_LOG(FATAL) << "[config] Config GetInt failed: " << key << " exception: " << e.what();
+    DINGO_LOG(FATAL) << "[config] Config GetInt64 failed: " << key << " exception: " << e.what();
   }
   return -1;
 }
