@@ -152,7 +152,10 @@ Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_p
   return data_->stub->GetAdminTool()->IsCreateRegionInProgress(region_id, out_create_in_progress);
 }
 
-Status Client::DropRegion(int64_t region_id) { return data_->stub->GetAdminTool()->DropRegion(region_id); }
+Status Client::DropRegion(int64_t region_id) {
+  data_->stub->GetMetaCache()->RemoveRegion(region_id);
+  return data_->stub->GetAdminTool()->DropRegion(region_id);
+}
 
 RawKV::RawKV(Data* data) : data_(data) {}
 
@@ -307,6 +310,11 @@ RegionCreator& RegionCreator::SetRange(const std::string& lower_bound, const std
   return *this;
 }
 
+RegionCreator& RegionCreator::SetEngineType(EngineType engine_type) {
+  data_->engine_type = engine_type;
+  return *this;
+}
+
 RegionCreator& RegionCreator::SetReplicaNum(int64_t num) {
   data_->replica_num = num;
   return *this;
@@ -315,6 +323,19 @@ RegionCreator& RegionCreator::SetReplicaNum(int64_t num) {
 RegionCreator& RegionCreator::Wait(bool wait) {
   data_->wait = wait;
   return *this;
+}
+
+static pb::common::RawEngine EngineType2RawEngine(EngineType engine_type) {
+  switch (engine_type) {
+    case kLSM:
+      return pb::common::RawEngine::RAW_ENG_ROCKSDB;
+    case kBTree:
+      return pb::common::RawEngine::RAW_ENG_BDB;
+    case kXDPROCKS:
+      return pb::common::RawEngine::RAW_ENG_XDPROCKS;
+    default:
+      CHECK(false) << "unknow engine_type:" << engine_type;
+  }
 }
 
 Status RegionCreator::Create(int64_t& out_region_id) {
@@ -334,6 +355,8 @@ Status RegionCreator::Create(int64_t& out_region_id) {
   req.mutable_range()->set_start_key(data_->lower_bound);
   req.mutable_range()->set_end_key(data_->upper_bound);
 
+  req.set_raw_engine(EngineType2RawEngine(data_->engine_type));
+
   pb::coordinator::CreateRegionResponse resp;
   DINGO_RETURN_NOT_OK(data_->stub.GetCoordinatorProxy()->CreateRegion(req, resp));
   CHECK(resp.region_id() > 0) << "create region internal error, req:" << req.DebugString()
@@ -348,14 +371,14 @@ Status RegionCreator::Create(int64_t& out_region_id) {
 
       if (creating) {
         retry++;
-        sleep(3);
+        usleep(kCoordinatorInteractionDelayMs * 1000);
       } else {
         return Status::OK();
       }
     }
 
-    std::string msg = fmt::format("Fail query region:{} state retry:{} exceed limit:{}", out_region_id, retry,
-                                  kCoordinatorInteractionMaxRetry);
+    std::string msg = fmt::format("Fail query region:{} state retry:{} exceed limit:{}, delay ms:{}", out_region_id,
+                                  retry, kCoordinatorInteractionMaxRetry, kCoordinatorInteractionDelayMs);
     DINGO_LOG(INFO) << msg;
     return Status::Incomplete(msg);
   }

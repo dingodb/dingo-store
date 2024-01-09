@@ -58,6 +58,10 @@ class MetaCache {
 
   void ClearRange(const std::shared_ptr<Region>& region);
 
+  void RemoveRegion(int64_t region_id);
+
+  void ClearCache();
+
   // be sure new_region will not destroy when call this func
   void MaybeAddRegion(const std::shared_ptr<Region>& new_region);
 
@@ -86,9 +90,9 @@ class MetaCache {
   static void ProcessScanRegionInfo(const pb::coordinator::ScanRegionInfo& scan_region_info,
                                     std::shared_ptr<Region>& new_region);
 
-  void RemoveRegionIfPresentUnlocked(int64_t region_id);
-
   void MaybeAddRegionUnlocked(const std::shared_ptr<Region>& new_region);
+
+  void RemoveRegionIfPresentUnlocked(int64_t region_id);
 
   // NOTE: be sure region is exist
   void RemoveRegionUnlocked(int64_t region_id);

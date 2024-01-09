@@ -197,6 +197,8 @@ class Transaction : public std::enable_shared_from_this<Transaction> {
   explicit Transaction(TxnImpl* impl);
 };
 
+enum EngineType : uint8_t { kLSM, kBTree, kXDPROCKS};
+
 class RegionCreator {
  public:
   ~RegionCreator();
@@ -206,6 +208,9 @@ class RegionCreator {
 
   // required
   RegionCreator& SetRange(const std::string& lower_bound, const std::string& upper_bound);
+
+  /// optional, if not called, defaults is kLSM
+  RegionCreator& SetEngineType(EngineType engine_type);
 
   /// optional, if not called, defaults is 1
   RegionCreator& SetReplicaNum(int64_t num);

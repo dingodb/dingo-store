@@ -28,6 +28,7 @@
 #include "gtest/gtest.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "sdk/client.h"
 
 namespace dingodb {
 
@@ -55,7 +56,7 @@ class Helper {
   }
 
   static int64_t CreateRawRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
-                                 int replicas = 3) {
+                                 sdk::EngineType engine_type = sdk::kLSM, int replicas = 3) {
     CHECK(!name.empty()) << "name should not empty";
     CHECK(!start_key.empty()) << "start_key should not empty";
     CHECK(!end_key.empty()) << "end_key should not empty";
@@ -69,6 +70,7 @@ class Helper {
     CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
     int64_t region_id;
     status = creator->SetRegionName(name)
+                 .SetEngineType(engine_type)
                  .SetReplicaNum(replicas)
                  .SetRange(EncodeRawKey(start_key), EncodeRawKey(end_key))
                  .Create(region_id);

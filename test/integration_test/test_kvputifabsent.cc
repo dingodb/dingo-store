@@ -36,27 +36,26 @@ namespace dingodb {
 
 namespace integration_test {
 
-const std::string kRegionName = "Region_for_KvPutIfAbsentTest";
+const std::string kRegionNamePrefix = "Region_for_KvPutIfAbsentTest_";
 const std::string kKeyPrefix = "KVPUTIFABSENT000";
 
-class KvPutIfAbsentTest : public testing::Test {
+class KvPutIfAbsentTest : public testing::TestWithParam<sdk::EngineType> {
  protected:
-  void SetUp() override {}
-  void TearDown() override {}
-
-  static void SetUpTestSuite() {
-    region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix));
+  void SetUp() override {
+    const testing::TestInfo* const test_info = testing::UnitTest::GetInstance()->current_test_info();
+    region_id = Helper::CreateRawRegion(kRegionNamePrefix + test_info->name(), kKeyPrefix,
+                                        Helper::PrefixNext(kKeyPrefix), GetParam());
   }
 
-  static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }
+  void TearDown() override { Helper::DropRawRegion(region_id); }
 
  public:
-  static int64_t region_id;
+  int64_t region_id = 0;
 };
 
-int64_t KvPutIfAbsentTest::region_id = 0;
+INSTANTIATE_TEST_SUITE_P(KvPutIfAbsentTestGroup, KvPutIfAbsentTest, ::testing::Values(sdk::kLSM, sdk::kBTree));
 
-TEST_F(KvPutIfAbsentTest, Absent) {
+TEST_P(KvPutIfAbsentTest, Absent) {
   RecordProperty("description", "Test key absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -81,7 +80,7 @@ TEST_F(KvPutIfAbsentTest, Absent) {
   }
 }
 
-TEST_F(KvPutIfAbsentTest, NotAbsent) {
+TEST_P(KvPutIfAbsentTest, NotAbsent) {
   RecordProperty("description", "Test key not absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -109,7 +108,7 @@ TEST_F(KvPutIfAbsentTest, NotAbsent) {
   }
 }
 
-TEST_F(KvPutIfAbsentTest, BatchAbsent) {
+TEST_P(KvPutIfAbsentTest, BatchAbsent) {
   RecordProperty("description", "Test batch absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -155,7 +154,7 @@ TEST_F(KvPutIfAbsentTest, BatchAbsent) {
   }
 }
 
-TEST_F(KvPutIfAbsentTest, BatchNotAbsent) {
+TEST_P(KvPutIfAbsentTest, BatchNotAbsent) {
   RecordProperty("description", "Test batch not absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -205,7 +204,7 @@ TEST_F(KvPutIfAbsentTest, BatchNotAbsent) {
   }
 }
 
-TEST_F(KvPutIfAbsentTest, BatchPartialNotAbsent) {
+TEST_P(KvPutIfAbsentTest, BatchPartialNotAbsent) {
   RecordProperty("description", "Test batch partial not absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;

@@ -154,41 +154,6 @@ Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
   return status;
 }
 
-/*
-Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
-  CHECK(opened_);
-  CHECK(!scan_id_.empty());
-  KvScanContinueRpc rpc;
-  PrepareScanContinueRpc(rpc);
-
-  StoreRpcController controller(stub, rpc, region);
-  Status ret = controller.Call();
-  if (ret.IsOK()) {
-    const auto* response = rpc.Response();
-    std::vector<KVPair> tmp_kvs;
-    if (response->kvs_size() == 0) {
-      // scan to region end_key
-      has_more_ = false;
-    } else {
-      for (const auto& kv : response->kvs()) {
-        if (kv.key() < end_key_) {
-          tmp_kvs.push_back({kv.key(), kv.value()});
-        } else {
-          has_more_ = false;
-        }
-      }
-    }
-
-    kvs = std::move(tmp_kvs);
-  } else {
-    DINGO_LOG(WARNING) << "scanner_id:" << scan_id_ << " scan continue fail region:" << region->RegionId()
-                       << ", fail:" << ret.ToString();
-  }
-
-  return ret;
-}
-*/
-
 Status RegionScannerImpl::SetBatchSize(int64_t size) {
   uint64_t to_size = size;
   if (size <= kMinScanBatchSize) {
