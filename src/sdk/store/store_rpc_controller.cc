@@ -250,8 +250,10 @@ bool StoreRpcController::PickNextLeader(butil::EndPoint& leader) {
 
 void StoreRpcController::ResetRegion(std::shared_ptr<Region> region) {
   if (region_) {
-    CHECK(EpochCompare(region_->Epoch(), region->Epoch()) > 0)
-        << "reset region:" << region->ToString() << " expect newer than old region: " << region_->ToString();
+    if (!(EpochCompare(region_->Epoch(), region->Epoch()) > 0)) {
+      DINGO_LOG(WARNING) << "reset region:" << region->ToString()
+                         << " expect newer than old region: " << region_->ToString();
+    }
   }
   region_.reset();
   region_ = std::move(region);

@@ -38,27 +38,25 @@ namespace dingodb {
 
 namespace integration_test {
 
-const std::string kRegionName = "Region_for_KvGet";
+const std::string kRegionNamePrefix = "Region_for_KvGet_";
 const std::string kKeyPrefix = "KVGET000";
 
-class KvGetTest : public testing::Test {
+class KvGetTest : public testing::TestWithParam<sdk::EngineType> {
  protected:
-  void SetUp() override {}
-  void TearDown() override {}
-
-  static void SetUpTestSuite() {
-    region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix));
+  void SetUp() override {
+    const testing::TestInfo* const test_info = testing::UnitTest::GetInstance()->current_test_info();
+    region_id = Helper::CreateRawRegion(kRegionNamePrefix + test_info->name(), kKeyPrefix,
+                                        Helper::PrefixNext(kKeyPrefix), GetParam());
   }
 
-  static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }
+  void TearDown() override { Helper::DropRawRegion(region_id); }
 
- public:
-  static int64_t region_id;
+  int64_t region_id = 0;
 };
 
-int64_t KvGetTest::region_id = 0;
+INSTANTIATE_TEST_SUITE_P(KvGetTestGroup, KvGetTest, ::testing::Values(sdk::kLSM, sdk::kBTree));
 
-TEST_F(KvGetTest, BlankGet) {
+TEST_P(KvGetTest, BlankGet) {
   RecordProperty("description", "Test blank key case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -82,7 +80,7 @@ TEST_F(KvGetTest, BlankGet) {
   }
 }
 
-TEST_F(KvGetTest, NormalGet) {
+TEST_P(KvGetTest, NormalGet) {
   RecordProperty("description", "Test normal case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -108,7 +106,7 @@ TEST_F(KvGetTest, NormalGet) {
   }
 }
 
-TEST_F(KvGetTest, BatchGet) {
+TEST_P(KvGetTest, BatchGet) {
   RecordProperty("description", "Test batch case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;

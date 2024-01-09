@@ -122,6 +122,26 @@ void MetaCache::ClearRange(const std::shared_ptr<Region>& region) {
   }
 }
 
+void MetaCache::RemoveRegion(int64_t region_id) {
+  std::unique_lock<std::shared_mutex> w(rw_lock_);
+  RemoveRegionIfPresentUnlocked(region_id);
+}
+
+void MetaCache::RemoveRegionIfPresentUnlocked(int64_t region_id) {
+  if (region_by_id_.find(region_id) != region_by_id_.end()) {
+    RemoveRegionUnlocked(region_id);
+  }
+}
+
+void MetaCache::ClearCache() {
+  std::unique_lock<std::shared_mutex> w(rw_lock_);
+  for (const auto& [region_id, region] : region_by_id_) {
+    region->MarkStale();
+  }
+  region_by_key_.clear();
+  region_by_id_.clear();
+}
+
 void MetaCache::MaybeAddRegion(const std::shared_ptr<Region>& new_region) {
   std::unique_lock<std::shared_mutex> w(rw_lock_);
   MaybeAddRegionUnlocked(new_region);
@@ -284,12 +304,6 @@ bool MetaCache::NeedUpdateRegion(const std::shared_ptr<Region>& old_region, cons
   return EpochCompare(old_region->Epoch(), new_region->Epoch()) > 0;
 }
 
-void MetaCache::RemoveRegionIfPresentUnlocked(int64_t region_id) {
-  if (region_by_id_.find(region_id) != region_by_id_.end()) {
-    RemoveRegionUnlocked(region_id);
-  }
-}
-
 void MetaCache::RemoveRegionUnlocked(int64_t region_id) {
   auto iter = region_by_id_.find(region_id);
   CHECK(iter != region_by_id_.end());
@@ -300,7 +314,7 @@ void MetaCache::RemoveRegionUnlocked(int64_t region_id) {
 
   CHECK(region_by_key_.erase(region->Range().start_key()) == 1);
 
-  DINGO_LOG(WARNING) << "remove region and mark stale, region_id:" << region_id << ", region: " << region->ToString();
+  DINGO_LOG(DEBUG) << "remove region and mark stale, region_id:" << region_id << ", region: " << region->ToString();
 }
 
 void MetaCache::AddRangeToCacheUnlocked(const std::shared_ptr<Region>& region) {

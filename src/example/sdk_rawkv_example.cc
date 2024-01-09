@@ -44,7 +44,8 @@ static std::shared_ptr<dingodb::sdk::Client> g_client;
 
 static std::vector<int64_t> g_region_ids;
 
-void CreateRegion(std::string name, std::string start_key, std::string end_key, int replicas = 3) {
+void CreateRegion(std::string name, std::string start_key, std::string end_key, int replicas = 3,
+                  dingodb::sdk::EngineType engine_type = dingodb::sdk::kLSM) {
   CHECK(!name.empty()) << "name should not empty";
   CHECK(!start_key.empty()) << "start_key should not empty";
   CHECK(!end_key.empty()) << "end_key should not empty";
@@ -57,8 +58,12 @@ void CreateRegion(std::string name, std::string start_key, std::string end_key, 
   CHECK_NOTNULL(creator.get());
 
   int64_t region_id = -1;
-  Status tmp =
-      creator->SetRegionName(name).SetRange(start_key, end_key).SetReplicaNum(replicas).Wait(true).Create(region_id);
+  Status tmp = creator->SetRegionName(name)
+                   .SetRange(start_key, end_key)
+                   .SetEngineType(engine_type)
+                   .SetReplicaNum(replicas)
+                   .Wait(true)
+                   .Create(region_id);
   DINGO_LOG(INFO) << "Create region status: " << tmp.ToString() << ", region_id:" << region_id;
 
   if (tmp.ok()) {
@@ -78,6 +83,7 @@ void PostClean() {
     tmp = g_client->IsCreateRegionInProgress(region_id, inprogress);
     DINGO_LOG(INFO) << "query region status: " << tmp.ToString() << ", region_id:" << region_id;
   }
+  g_region_ids.clear();
 }
 
 void MetaCacheExample() {
@@ -516,15 +522,29 @@ int main(int argc, char* argv[]) {
   CHECK_NOTNULL(client.get());
   g_client = std::move(client);
 
-  CreateRegion("skd_example01", "wa00000000", "wc00000000", 3);
-  CreateRegion("skd_example02", "wc00000000", "we00000000", 3);
-  CreateRegion("skd_example03", "we00000000", "wg00000000", 3);
+  {
+    CreateRegion("skd_example01", "wa00000000", "wc00000000", 3);
+    CreateRegion("skd_example02", "wc00000000", "we00000000", 3);
+    CreateRegion("skd_example03", "we00000000", "wg00000000", 3);
 
-  CreateRegion("skd_example04", "wl00000000", "wn00000000", 3);
+    CreateRegion("skd_example04", "wl00000000", "wn00000000", 3);
 
-  MetaCacheExample();
+    MetaCacheExample();
 
-  RawKVExample();
+    RawKVExample();
+    PostClean();
+  }
 
-  PostClean();
+  {
+    CreateRegion("skd_example01", "wa00000000", "wc00000000", 3, dingodb::sdk::kBTree);
+    CreateRegion("skd_example02", "wc00000000", "we00000000", 3, dingodb::sdk::kBTree);
+    CreateRegion("skd_example03", "we00000000", "wg00000000", 3, dingodb::sdk::kBTree);
+
+    CreateRegion("skd_example04", "wl00000000", "wn00000000", 3, dingodb::sdk::kBTree);
+
+    MetaCacheExample();
+
+    RawKVExample();
+    PostClean();
+  }
 }

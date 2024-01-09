@@ -27,7 +27,8 @@ class RegionCreator::Data {
   Data(const Data&) = delete;
   const Data& operator=(const Data&) = delete;
 
-  explicit Data(const ClientStub& stub) : stub(stub), replica_num(1), wait(true) {}
+  explicit Data(const ClientStub& stub) : stub(stub), replica_num(1), wait(true), engine_type(kLSM) {}
+
   ~Data() = default;
 
   const ClientStub& stub;
@@ -36,6 +37,8 @@ class RegionCreator::Data {
 
   std::string lower_bound;
   std::string upper_bound;
+
+  EngineType engine_type;
 
   int64_t replica_num;
 
