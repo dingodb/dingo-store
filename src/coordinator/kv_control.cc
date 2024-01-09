@@ -61,8 +61,7 @@ KvControl::KvControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<Me
   kv_rev_meta_ = new MetaDiskMap<pb::coordinator_internal::KvRevInternal>(kPrefixKvRev, raw_engine_of_meta_);
 
   // init SafeMap
-  id_epoch_map_.Init(100);            // id_epoch_map_ is a small map
-  id_epoch_map_safe_temp_.Init(100);  // id_epoch_map_temp_ is a small map
+  id_epoch_map_.Init(100);  // id_epoch_map_ is a small map
   // version kv
   kv_lease_map_.Init(10000);
 }
@@ -239,7 +238,7 @@ int64_t KvControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
   int64_t next_id = 0;
-  id_epoch_map_safe_temp_.GetNextId(key, next_id);
+  id_epoch_map_.GetNextId(key, next_id);
 
   if (next_id == INT64_MAX || next_id < 0) {
     DINGO_LOG(FATAL) << "GetNextId next_id=" << next_id << " key=" << key << ", FATAL id is used up";
@@ -259,7 +258,7 @@ int64_t KvControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
 
 int64_t KvControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
   int64_t value = 0;
-  id_epoch_map_safe_temp_.GetPresentId(key, value);
+  id_epoch_map_.GetPresentId(key, value);
 
   return value;
 }
@@ -267,7 +266,7 @@ int64_t KvControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key
 int64_t KvControl::UpdatePresentId(const pb::coordinator_internal::IdEpochType& key, int64_t new_id,
                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
-  id_epoch_map_safe_temp_.UpdatePresentId(key, new_id);
+  id_epoch_map_.UpdatePresentId(key, new_id);
 
   // generate meta_increment
   auto* idepoch = meta_increment.add_idepochs();
@@ -283,8 +282,8 @@ int64_t KvControl::UpdatePresentId(const pb::coordinator_internal::IdEpochType& 
 
 void KvControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_info) {
   // compute size
-  memory_info.set_id_epoch_safe_map_temp_count(id_epoch_map_safe_temp_.Size());
-  memory_info.set_id_epoch_safe_map_temp_size(id_epoch_map_safe_temp_.MemorySize());
+  memory_info.set_id_epoch_safe_map_temp_count(id_epoch_map_.Size());
+  memory_info.set_id_epoch_safe_map_temp_size(id_epoch_map_.MemorySize());
 
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);

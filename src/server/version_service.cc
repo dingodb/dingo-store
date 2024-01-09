@@ -511,14 +511,10 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   pb::version::Kv prev_kv;
-  int64_t main_revision =
-      kv_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
-  int64_t sub_revision = 1;
   int64_t lease_grant_id = 0;
 
-  auto ret =
-      kv_control->KvPut(request->key_value(), request->lease(), request->need_prev_kv(), request->ignore_value(),
-                        request->ignore_lease(), main_revision, sub_revision, prev_kv, lease_grant_id, meta_increment);
+  auto ret = kv_control->KvPut(request->key_value(), request->lease(), request->need_prev_kv(), request->ignore_value(),
+                               request->ignore_lease(), prev_kv, lease_grant_id, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -534,8 +530,7 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "KvPut failed: key_valuee=" << request->key_value().ShortDebugString()
-                     << ", lease_grant_id=" << lease_grant_id << ", revision=" << main_revision << "." << sub_revision
-                     << ", error=" << ret2.error_str();
+                     << ", lease_grant_id=" << lease_grant_id << ", error=" << ret2.error_str();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     return;
   }
@@ -543,10 +538,9 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
   if (request->need_prev_kv()) {
     *(response->mutable_prev_kv()) = prev_kv;
   }
-  response->mutable_header()->set_revision(main_revision);
 
   DINGO_LOG(INFO) << "KvPut success: key_value=" << request->key_value().ShortDebugString()
-                  << ", lease_grant_id=" << lease_grant_id << ", revision=" << main_revision << "." << sub_revision;
+                  << ", lease_grant_id=" << lease_grant_id << ", revision=" << response->header().revision();
 }
 
 void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::version::DeleteRangeRequest* request,
@@ -573,13 +567,10 @@ void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   std::vector<pb::version::Kv> prev_kvs;
-  int64_t main_revision =
-      kv_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
-  int64_t sub_revision = 1;
-
   int64_t deleted_count = 0;
-  auto ret = kv_control->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(), main_revision,
-                                       sub_revision, true, deleted_count, prev_kvs, meta_increment);
+
+  auto ret = kv_control->KvDeleteRange(request->key(), request->range_end(), request->need_prev_kv(), true,
+                                       deleted_count, prev_kvs, meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -595,7 +586,7 @@ void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "DeleteRange failed: key=" << request->key() << ", end_key=" << request->range_end()
-                     << ", revision=" << main_revision << "." << sub_revision << ", error=" << ret2.error_str();
+                     << ", error=" << ret2.error_str();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     return;
   }
@@ -606,11 +597,11 @@ void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::
       *resp_kv = kv;
     }
   }
-  response->mutable_header()->set_revision(main_revision);
+
   response->set_deleted(deleted_count);
 
   DINGO_LOG(INFO) << "DeleteRange success: key=" << request->key() << ", end_key=" << request->range_end()
-                  << ", revision=" << main_revision << "." << sub_revision;
+                  << ", revision=" << response->header().revision();
 }
 
 void DoKvCompaction(google::protobuf::RpcController* /*controller*/, const pb::version::CompactionRequest* request,

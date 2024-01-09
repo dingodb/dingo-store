@@ -177,18 +177,14 @@ butil::Status KvControl::LeaseRevoke(int64_t lease_id, pb::coordinator_internal:
     DINGO_LOG(WARNING) << "lease id " << lease_id << " not found from lease_to_key_map_temp_";
   } else {
     lease_with_keys = std::move(keys_iter->second);
-    int64_t main_revision = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, meta_increment);
-    int64_t sub_revision = 1;
+
     for (const auto &key : lease_with_keys.keys) {
       std::vector<pb::version::Kv> prev_kvs;
       int64_t deleted_count = 0;
-      auto ret_status = KvDeleteRange(key, std::string(), false, main_revision, sub_revision, false, deleted_count,
-                                      prev_kvs, meta_increment);
+      auto ret_status = KvDeleteRange(key, std::string(), false, false, deleted_count, prev_kvs, meta_increment);
       if (!ret_status.ok()) {
         DINGO_LOG(ERROR) << "DeleteRawKv failed, key: " << key;
       }
-
-      sub_revision++;
     }
 
     // delete lease from map
