@@ -281,27 +281,23 @@ class KvControl : public MetaControl {
   // in:  prev_kv
   // in:  igore_value
   // in:  ignore_lease
-  // in:  main_revision
-  // in and out:  sub_revision
   // out:  prev_kv
   // return: errno
   butil::Status KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv, bool ignore_value,
-                      bool ignore_lease, int64_t main_revision, int64_t &sub_revision, pb::version::Kv &prev_kv,
-                      int64_t &lease_grant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+                      bool ignore_lease, pb::version::Kv &prev_kv, int64_t &lease_grant_id,
+                      pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // KvDeleteRange is the delete function
   // in:  key
   // in:  range_end
   // in:  prev_key
-  // in:  main_revision
-  // in and out:  sub_revision
   // in:  need_lease_remove_keys
   // out:  deleted_count
   // out:  prev_kvs
   // return: errno
   butil::Status KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
-                              int64_t main_revision, int64_t &sub_revision, bool need_lease_remove_keys,
-                              int64_t &deleted_count, std::vector<pb::version::Kv> &prev_kvs,
+                              bool need_lease_remove_keys, int64_t &deleted_count,
+                              std::vector<pb::version::Kv> &prev_kvs,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // KvPutApply is the apply function for put
@@ -339,8 +335,9 @@ class KvControl : public MetaControl {
                                 pb::version::Kv &new_kv, pb::version::Kv &prev_kv);
 
  private:
+  // deprecated, will removed in the future
   // ids_epochs_temp (out of state machine, only for leader use)
-  DingoSafeIdEpochMap id_epoch_map_safe_temp_;
+  // DingoSafeIdEpochMap id_epoch_map_safe_temp_;
 
   // 0.ids_epochs
   // TableInternal is combination of Table & TableDefinition

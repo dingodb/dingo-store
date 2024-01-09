@@ -1011,13 +1011,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   raft_apply_index.set_id(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
   raft_apply_index.set_value(index);
 
-  // update applied term & index after all fsm apply is fininshed
-  DEFER(id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
-        id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
-
-        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
-        meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index)););
-
   // 0.id & epoch
   {
     // BAIDU_SCOPED_LOCK(id_epoch_map_mutex_);
@@ -1026,31 +1019,35 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
         int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
         if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch CREATE, success [id=" << idepoch.id() << "]"
+          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch CREATE, success [id="
+                          << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]"
                           << " value=" << idepoch.idepoch().value();
           meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch CREATE, but UpdatePresentId failed, [id=" << idepoch.id()
-                             << "]"
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch CREATE, but UpdatePresentId failed, [id="
+                             << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]"
                              << " value=" << idepoch.idepoch().value();
         }
       } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
         int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
         if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch UPDATE, success [id=" << idepoch.id() << "]"
+          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch UPDATE, success [id="
+                          << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]"
                           << " value=" << idepoch.idepoch().value();
           meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()));
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch UPDATE, but UpdatePresentId failed, [id=" << idepoch.id()
-                             << "]"
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch UPDATE, but UpdatePresentId failed, [id="
+                             << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]"
                              << " value=" << idepoch.idepoch().value();
         }
       } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         int ret = id_epoch_map_.Erase(idepoch.id());
         if (ret > 0) {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch DELETE, success [id=" << idepoch.id() << "]";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch DELETE, success [id="
+                          << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]";
         } else {
-          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch DELETE, but Erase failed, [id=" << idepoch.id() << "]";
+          DINGO_LOG(WARNING) << "ApplyMetaIncrement idepoch DELETE, but Erase failed, [id="
+                             << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]";
         }
         meta_delete_to_kv.push_back(id_epoch_meta_->TransformToKvValue(idepoch.idepoch()).key());
       }
@@ -2197,6 +2194,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
       }
     }
   }
+
+  // update applied term & index after all fsm apply is fininshed
+  id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, term);
+  id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, index);
+
+  meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_term));
+  meta_write_to_kv.push_back(id_epoch_meta_->TransformToKvValue(raft_apply_index));
 
   // write update to local engine, begin
   if ((!meta_write_to_kv.empty()) || (!meta_delete_to_kv.empty())) {

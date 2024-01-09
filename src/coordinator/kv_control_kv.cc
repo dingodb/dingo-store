@@ -316,13 +316,10 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
 // in:  need_prev_kv
 // in:  igore_value
 // in:  ignore_lease
-// in:  main_revision
-// in and out:  sub_revision
 // out:  prev_kv
 // return: errno
 butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv,
-                               bool ignore_value, bool ignore_lease, int64_t main_revision, int64_t &sub_revision,
-                               pb::version::Kv &prev_kv, int64_t &lease_grant_id,
+                               bool ignore_value, bool ignore_lease, pb::version::Kv &prev_kv, int64_t &lease_grant_id,
                                pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
                   << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << ignore_value
@@ -437,8 +434,6 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   kv_index_meta_increment->set_id(key_value_in.key());
   kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
   kv_index_meta_increment->set_event_type(pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_PUT);
-  kv_index_meta_increment->mutable_op_revision()->set_main(main_revision);
-  kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
   kv_index_meta_increment->set_ignore_lease(ignore_lease);
   kv_index_meta_increment->set_lease_id(lease_grant_id);
   if (!ignore_value) {
@@ -449,8 +444,6 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
     kv_index_meta_increment->set_ignore_lease(ignore_lease);
   }
 
-  sub_revision++;
-
   return butil::Status::OK();
 }
 
@@ -458,14 +451,12 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
 // in:  key
 // in:  range_end
 // in:  need_prev
-// in:  main_revision
-// in and out:  sub_revision
 // out: deleted_count
 // out:  prev_kvs
 // return: errno
 butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string &range_end, bool need_prev_kv,
-                                       int64_t main_revision, int64_t &sub_revision, bool need_lease_remove_keys,
-                                       int64_t &deleted_count, std::vector<pb::version::Kv> &prev_kvs,
+                                       bool need_lease_remove_keys, int64_t &deleted_count,
+                                       std::vector<pb::version::Kv> &prev_kvs,
                                        pb::coordinator_internal::MetaIncrement &meta_increment) {
   DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", need_prev: " << need_prev_kv;
 
@@ -494,10 +485,6 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
     kv_index_meta_increment->set_id(kv_to_delete.kv().key());
     kv_index_meta_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
     kv_index_meta_increment->set_event_type(pb::coordinator_internal::KvIndexEventType::KV_INDEX_EVENT_TYPE_DELETE);
-    kv_index_meta_increment->mutable_op_revision()->set_main(main_revision);
-    kv_index_meta_increment->mutable_op_revision()->set_sub(sub_revision);
-
-    ++sub_revision;
 
     if (kv_to_delete.lease() == 0) {
       continue;
