@@ -481,11 +481,29 @@ void VectorIndexScrubTask::ScrubVectorIndex() {
   }
 }
 
-bool Heartbeat::Init() { return worker_->Init(); }
+bool Heartbeat::Init() {
+  auto worker = Worker::New();
+  if (!worker->Init()) {
+    return false;
+  }
+  worker_ = worker;
 
-void Heartbeat::Destroy() { worker_->Destroy(); }
+  return true;
+}
 
-bool Heartbeat::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
+void Heartbeat::Destroy() {
+  if (worker_) {
+    worker_->Destroy();
+  }
+}
+
+bool Heartbeat::Execute(TaskRunnablePtr task) {
+  if (worker_ == nullptr) {
+    DINGO_LOG(ERROR) << "Heartbeat worker is nullptr.";
+    return false;
+  }
+  return worker_->Execute(task);
+}
 
 void Heartbeat::TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   // Free at ExecuteRoutine()

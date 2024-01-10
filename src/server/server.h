@@ -195,7 +195,7 @@ class Server {
   const Server& operator=(const Server&) = delete;
 
  private:
-  Server() { heartbeat_ = std::make_shared<Heartbeat>(); }
+  Server() = default;
   ~Server() = default;
 
   std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,

@@ -60,7 +60,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_HNSW: {
-      vector_index = NewHnsw(id, index_parameter, epoch, range);
+      vector_index = NewHnsw(id, index_parameter, epoch, range, Server::GetInstance().GetVectorIndexThreadPool());
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_DISKANN: {
@@ -87,7 +87,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
 std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(int64_t id,
                                                          const pb::common::VectorIndexParameter& index_parameter,
                                                          const pb::common::RegionEpoch& epoch,
-                                                         const pb::common::Range& range) {
+                                                         const pb::common::Range& range, ThreadPoolPtr thread_pool) {
   const auto& hnsw_parameter = index_parameter.hnsw_parameter();
 
   if (hnsw_parameter.dimension() == 0) {
@@ -113,7 +113,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(int64_t id,
 
   // create index may throw exeception, so we need to catch it
   try {
-    auto new_hnsw_index = std::make_shared<VectorIndexHnsw>(id, index_parameter, epoch, range);
+    auto new_hnsw_index = std::make_shared<VectorIndexHnsw>(id, index_parameter, epoch, range, thread_pool);
     if (new_hnsw_index == nullptr) {
       DINGO_LOG(ERROR) << "create hnsw index failed of new_hnsw_index is nullptr, id=" << id
                        << ", parameter=" << index_parameter.ShortDebugString();

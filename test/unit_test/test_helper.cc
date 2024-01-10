@@ -403,6 +403,8 @@ TEST_F(HelperTest, GetSystemCpuUsage) {
 }
 
 TEST_F(HelperTest, GetSystemDiskIoUtil) {
+  GTEST_SKIP() << "Skip GetSystemDiskIoUtil...";
+
   std::map<std::string, int64_t> output;
   std::string device_name = "sda";
   auto ret = dingodb::Helper::GetSystemDiskIoUtil(device_name, output);

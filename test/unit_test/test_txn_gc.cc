@@ -280,7 +280,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -345,7 +345,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -509,7 +509,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -587,7 +587,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -883,7 +883,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -975,7 +975,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1028,7 +1028,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1094,7 +1094,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+          // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
           std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1160,7 +1160,7 @@ TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1209,7 +1209,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1275,9 +1275,9 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
           write_info.set_op(::dingodb::pb::store::Op::Put);
         }
 
-        std::cout << fmt::format("key : {} op : {} start_ts ; {} commit_ts : {}", prefix_key,
-                                 ::dingodb::pb::store::Op_Name(write_info.op()), start_ts, commit_ts)
-                  << '\n';
+        // std::cout << fmt::format("key : {} op : {} start_ts ; {} commit_ts : {}", prefix_key,
+        //                ::dingodb::pb::store::Op_Name(write_info.op()), start_ts, commit_ts)
+        // << '\n';
 
         kv_write.set_key(write_key);
         kv_write.set_value(write_info.SerializeAsString());
@@ -1332,7 +1332,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1393,7 +1393,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1475,9 +1475,9 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
           write_info.set_op(::dingodb::pb::store::Op::Put);
         }
 
-        std::cout << fmt::format("key : {} op : {} start_ts ; {} commit_ts : {}", prefix_key,
-                                 ::dingodb::pb::store::Op_Name(write_info.op()), start_ts, commit_ts)
-                  << '\n';
+        // std::cout << fmt::format("key : {} op : {} start_ts ; {} commit_ts : {}", prefix_key,
+        //                          ::dingodb::pb::store::Op_Name(write_info.op()), start_ts, commit_ts)
+        //           << '\n';
 
         kv_write.set_key(write_key);
         kv_write.set_value(write_info.SerializeAsString());
@@ -1533,7 +1533,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1617,7 +1617,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1693,8 +1693,8 @@ TEST_F(TxnGcTest, DoGcDataEmpty) {
                 tso.set_logical(++logical);
                 int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-                std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts)
-                          << '\n';
+                // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts)
+                //           << '\n';
 
                 std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1730,7 +1730,7 @@ TEST_F(TxnGcTest, DoGcDataNormal) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 
@@ -1777,7 +1777,7 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
+        // std::cout << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts) << '\n';
 
         std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
 

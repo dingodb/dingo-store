@@ -23,12 +23,6 @@
 
 #include "common/failpoint.h"
 
-class FailPointManagerTest : public testing::Test {
- protected:
-  void SetUp() override {}
-  void TearDown() override {}
-};
-
 class FailPointTest : public testing::Test {
  protected:
   void SetUp() override {}

@@ -109,9 +109,6 @@ TEST_F(SegmentLogStorageTest, AppendEntries) {
     log_entry->Release();
   }
 
-  DINGO_LOG(INFO) << fmt::format("first_log_id: {} last_log_id: {}", log_stroage->FirstLogIndex(),
-                                 log_stroage->LastLogIndex());
-
   EXPECT_EQ(begin_log_index + k_log_entry_count, log_stroage->LastLogIndex() + 1);
 }
 
@@ -126,8 +123,6 @@ TEST_F(SegmentLogStorageTest, GetEntrys) {
   int64_t begin_index = 60;
   int64_t end_index = 100;
   auto log_entrys = log_stroage->GetEntrys(begin_index, end_index);
-
-  DINGO_LOG(INFO) << fmt::format("log entrys count {}", log_entrys.size());
 
   EXPECT_EQ(end_index - begin_index + 1, log_entrys.size());
 }

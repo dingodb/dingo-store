@@ -79,7 +79,7 @@ TEST_F(VectorIndexHnswTest, Create) {
     epoch.set_conf_version(1);
     epoch.set_version(10);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 
@@ -102,7 +102,7 @@ TEST_F(VectorIndexHnswTest, Create) {
     epoch.set_conf_version(1);
     epoch.set_version(10);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 #endif
@@ -367,7 +367,7 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
     epoch.set_conf_version(1);
     epoch.set_version(10);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 
@@ -389,7 +389,7 @@ TEST_F(VectorIndexHnswTest, CreateCosine) {
     epoch.set_conf_version(1);
     epoch.set_version(10);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 #endif

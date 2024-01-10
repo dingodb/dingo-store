@@ -212,7 +212,7 @@ class VectorIndexScrubTask : public TaskRunnable {
 
 class Heartbeat {
  public:
-  Heartbeat() { worker_ = Worker::New(); }
+  Heartbeat() = default;
   ~Heartbeat() = default;
 
   Heartbeat(const Heartbeat&) = delete;
