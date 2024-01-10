@@ -36,8 +36,10 @@ project(dingo-store C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
-option(BUILD_UNIT_TESTS "Build unit test" ON)
+option(BUILD_UNIT_TESTS "Build unit test" OFF)
 option(BUILD_INTEGRATION_TESTS "Build integration test" OFF)
+option(BUILD_BENCHMARK "Build benchmark" OFF)
+option(BUILD_SDK_EXAMPLE "Build sdk example" OFF)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the dingodb binary" ON)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)
@@ -552,12 +554,23 @@ target_link_libraries(dingodb_client
                       ${DYNAMIC_LIB})
 
 add_subdirectory(src/sdk)
-add_subdirectory(src/example)
+
+if(BUILD_SDK_EXAMPLE)
+    message(STATUS "Build sdk example")
+    add_subdirectory(src/example)
+endif()
 
 if(BUILD_UNIT_TESTS)
+    message(STATUS "Build unit test")
     add_subdirectory(test/unit_test)
 endif()
 
 if(BUILD_INTEGRATION_TESTS)
+    message(STATUS "Build integration test")
     add_subdirectory(test/integration_test)
+endif()
+
+if(BUILD_BENCHMARK)
+    message(STATUS "Build benchmark")
+    add_subdirectory(src/benchmark)
 endif()

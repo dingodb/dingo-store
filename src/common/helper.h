@@ -232,6 +232,8 @@ class Helper {
 
   // nanosecond timestamp
   static int64_t TimestampNs();
+  // microseconds
+  static int64_t TimestampUs();
   // millisecond timestamp
   static int64_t TimestampMs();
   // second timestamp
