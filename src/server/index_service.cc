@@ -1758,11 +1758,15 @@ static butil::Status VectorValidateTxnResolveLockRequest(const pb::store::TxnRes
   }
 
   if (request->start_ts() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0, it's illegal");
   }
 
-  if (request->commit_ts() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts is 0");
+  if (request->commit_ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts < 0, it's illegal");
+  }
+
+  if (request->commit_ts() > 0 && request->commit_ts() < request->start_ts()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts < start_ts, it's illegal");
   }
 
   if (request->keys_size() > 0) {
