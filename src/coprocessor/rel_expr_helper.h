@@ -25,13 +25,14 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "../libexpr/src/expr/operand.h"
 
 namespace dingodb {
 
 #ifndef DINGO_LIBEXPR_MOCK
 #define DINGO_LIBEXPR_MOCK
 #endif
-// #undef DINGO_LIBEXPR_MOCK
+#undef DINGO_LIBEXPR_MOCK
 
 #if defined(DINGO_LIBEXPR_MOCK)
 namespace expr {

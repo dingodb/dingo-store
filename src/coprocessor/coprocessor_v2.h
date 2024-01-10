@@ -30,6 +30,8 @@
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
 
+#include "libexpr/src/rel/rel_runner.h"
+
 namespace dingodb {
 
 class CoprocessorV2 : public RawCoprocessor {
@@ -91,7 +93,7 @@ class CoprocessorV2 : public RawCoprocessor {
   // array index =  result schema member index field ; value = result schema array index
   std::vector<int> result_column_indexes_;  // NOLINT
 
-  std::shared_ptr<expr::RelRunner> rel_runner_;  // NOLINT
+  std::shared_ptr<rel::RelRunner> rel_runner_;  // NOLINT
 };
 
 }  // namespace dingodb

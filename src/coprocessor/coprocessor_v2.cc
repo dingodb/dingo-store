@@ -132,13 +132,13 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
   result_record_encoder_ = std::make_shared<RecordEncoder>(coprocessor_.schema_version(), result_serial_schemas_,
                                                            coprocessor_.result_schema().common_id());
 
-  rel_runner_ = std::make_shared<expr::RelRunner>();
+  rel_runner_ = std::make_shared<rel::RelRunner>();
 
   try {
     rel_runner_->Decode(reinterpret_cast<const expr::Byte*>(coprocessor_.rel_expr().c_str()),
                         coprocessor_.rel_expr().length());
   } catch (const std::exception& my_exception) {
-    std::string error_message = fmt::format("expr::RelRunner Decode failed. exception : {}", my_exception.what());
+    std::string error_message = fmt::format("rel::RelRunner Decode failed. exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   }
@@ -329,7 +329,7 @@ butil::Status CoprocessorV2::DoRelExprCore(const std::vector<std::any>& original
     const expr::Tuple* result_tuple = rel_runner_->Put(raw_operand_ptr);
     result_operand_ptr.reset(const_cast<expr::Tuple*>(result_tuple));
   } catch (const std::exception& my_exception) {
-    std::string error_message = fmt::format("expr::RelRunner Put failed. exception : {}", my_exception.what());
+    std::string error_message = fmt::format("rel::RelRunner Put failed. exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   }
@@ -373,7 +373,7 @@ butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(bool /*key_only*/, size_t 
       const expr::Tuple* result_tuple = rel_runner_->Get();
       result_operand_ptr.reset(const_cast<expr::Tuple*>(result_tuple));
     } catch (const std::exception& my_exception) {
-      std::string error_message = fmt::format("expr::RelRunner Get failed. exception : {}", my_exception.what());
+      std::string error_message = fmt::format("rel::RelRunner Get failed. exception : {}", my_exception.what());
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
     }
