@@ -2554,7 +2554,14 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
-  if (commit_ts <= start_ts) {
+  if (commit_ts < 0) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                     << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                     << ", commit_ts: " << commit_ts;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts < 0");
+  }
+
+  if (commit_ts > 0 && commit_ts <= start_ts) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                      << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
                      << ", commit_ts: " << commit_ts;
