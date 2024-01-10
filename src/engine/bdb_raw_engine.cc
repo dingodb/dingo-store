@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "butil/compiler_specific.h"
+#include "bvar/reducer.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -42,14 +43,17 @@
 #define BDB_FAST_GET_APROX_SIZE
 #define BDB_BUILD_USE_BULK_DELETE
 
+bvar::Adder<uint64_t> bdb_snapshot_alive_count("bdb_snapshot_alive_count");
+bvar::Adder<uint64_t> bdb_transaction_alive_count("bdb_transaction_alive_count");
+
 namespace dingodb {
 
 DEFINE_int32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
 DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
-DEFINE_int32(bdb_txn_max, 40960, "bdb txn max");
-DEFINE_int32(bdb_lk_max_lockers, 20480, "bdb max lockers");
-DEFINE_int32(bdb_lk_max_locks, 20480, "bdb max locks");
-DEFINE_int32(bdb_lk_max_objects, 20480, "bdb max objects");
+DEFINE_int32(bdb_txn_max, 10240, "bdb txn max");
+DEFINE_int32(bdb_lk_max_lockers, 10240, "bdb max lockers");
+DEFINE_int32(bdb_lk_max_locks, 10240, "bdb max locks");
+DEFINE_int32(bdb_lk_max_objects, 10240, "bdb max objects");
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 
@@ -370,6 +374,10 @@ void Iterator::Prev() {
 }
 
 // Snapshot
+BdbSnapshot::BdbSnapshot(std::shared_ptr<Db> db, DbTxn* txn, Dbc* cursorp) : db_(db), txn_(txn), cursorp_(cursorp) {
+  bdb_snapshot_alive_count << 1;
+}
+
 BdbSnapshot::~BdbSnapshot() {
   // close cursor first
   if (cursorp_ != nullptr) {
@@ -388,6 +396,7 @@ BdbSnapshot::~BdbSnapshot() {
     // commit
     try {
       ret = txn_->abort();
+      bdb_transaction_alive_count << -1;
       if (ret == 0) {
         txn_ = nullptr;
       }
@@ -401,9 +410,12 @@ BdbSnapshot::~BdbSnapshot() {
     if (ret != 0) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
       txn_->abort();
+      bdb_transaction_alive_count << -1;
       txn_ = nullptr;
     }
   }
+
+  bdb_snapshot_alive_count << -1;
 }
 
 // Reader
@@ -699,6 +711,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
   DEFER(  // FOR_CLANG_FORMAT
       if (txn != nullptr) {
         txn->abort();
+        bdb_transaction_alive_count << -1;
         txn = nullptr;
       });
 
@@ -708,6 +721,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -729,6 +743,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
       // commit
       try {
         ret = txn->commit(0);
+        bdb_transaction_alive_count << -1;
         if (ret == 0) {
           txn = nullptr;
           return butil::Status();
@@ -755,6 +770,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
         // First thing that we MUST do is abort the transaction.
         if (txn != nullptr) {
           txn->abort();
+          bdb_transaction_alive_count << -1;
           txn = nullptr;
         };
         DINGO_LOG(WARNING) << fmt::format(
@@ -798,6 +814,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
   DEFER(  // FOR_CLANG_FORMAT
       if (txn != nullptr) {
         txn->abort();
+        bdb_transaction_alive_count << -1;
         txn = nullptr;
       });
 
@@ -807,6 +824,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -849,6 +867,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
       // commit
       try {
         ret = txn->commit(0);
+        bdb_transaction_alive_count << -1;
         if (ret == 0) {
           txn = nullptr;
           DINGO_LOG(INFO) << fmt::format(
@@ -875,6 +894,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
         // First thing that we MUST do is abort the transaction.
         if (txn != nullptr) {
           txn->abort();
+          bdb_transaction_alive_count << -1;
           txn = nullptr;
         };
 
@@ -914,6 +934,7 @@ butil::Status Writer::KvBatchPutAndDelete(
   DEFER(  // FOR_CLANG_FORMAT
       if (txn != nullptr) {
         txn->abort();
+        bdb_transaction_alive_count << -1;
         txn = nullptr;
       });
 
@@ -923,6 +944,7 @@ butil::Status Writer::KvBatchPutAndDelete(
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -981,6 +1003,7 @@ butil::Status Writer::KvBatchPutAndDelete(
       // commit
       try {
         ret = txn->commit(0);
+        bdb_transaction_alive_count << -1;
         if (ret == 0) {
           txn = nullptr;
           return butil::Status();
@@ -1004,6 +1027,7 @@ butil::Status Writer::KvBatchPutAndDelete(
         // First thing that we MUST do is abort the transaction.
         if (txn != nullptr) {
           txn->abort();
+          bdb_transaction_alive_count << -1;
           txn = nullptr;
         };
 
@@ -1108,6 +1132,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
   DEFER(  // FOR_CLANG_FORMAT
       if (txn != nullptr) {
         txn->abort();
+        bdb_transaction_alive_count << -1;
         txn = nullptr;
       };
 
@@ -1122,6 +1147,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1136,6 +1162,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
       // commit
       try {
         ret = txn->commit(0);
+        bdb_transaction_alive_count << -1;
         if (ret == 0) {
           txn = nullptr;
           return butil::Status::OK();
@@ -1162,6 +1189,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
         // First thing that we MUST do is abort the transaction.
         if (txn != nullptr) {
           txn->abort();
+          bdb_transaction_alive_count << -1;
           txn = nullptr;
         };
         DINGO_LOG(WARNING) << fmt::format(
@@ -1199,6 +1227,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
   DEFER(  // FOR_CLANG_FORMAT
       if (txn != nullptr) {
         txn->abort();
+        bdb_transaction_alive_count << -1;
         txn = nullptr;
       });
 
@@ -1208,6 +1237,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1226,6 +1256,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
       // commit
       try {
         ret = txn->commit(0);
+        bdb_transaction_alive_count << -1;
         if (ret == 0) {
           txn = nullptr;
           return butil::Status();
@@ -1249,6 +1280,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
         // First thing that we MUST do is abort the transaction.
         if (txn != nullptr) {
           txn->abort();
+          bdb_transaction_alive_count << -1;
           txn = nullptr;
         };
         DINGO_LOG(WARNING) << fmt::format(
@@ -1305,6 +1337,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
   DEFER(  // FOR_CLANG_FORMAT
       if (txn != nullptr) {
         txn->abort();
+        bdb_transaction_alive_count << -1;
         txn = nullptr;
       });
 
@@ -1314,6 +1347,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
@@ -1339,6 +1373,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
       // commit
       try {
         ret = txn->commit(0);
+        bdb_transaction_alive_count << -1;
         if (ret == 0) {
           txn = nullptr;
           return butil::Status();
@@ -1361,6 +1396,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
         // First thing that we MUST do is abort the transaction.
         if (txn != nullptr) {
           txn->abort();
+          bdb_transaction_alive_count << -1;
           txn = nullptr;
         };
         DINGO_LOG(WARNING) << fmt::format(
@@ -1602,17 +1638,18 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   const char* file_name = "dingo.db";
 
   // Env open flags
-  uint32_t env_flags = DB_CREATE |        // Create the environment if it does not exist
-                       DB_RECOVER |       // Run normal recovery.
-                       DB_INIT_LOCK |     // Initialize the locking subsystem
-                       DB_INIT_LOG |      // Initialize the logging subsystem
-                       DB_INIT_TXN |      // Initialize the transactional subsystem. This
-                                          // also turns on logging.
-                       DB_INIT_MPOOL |    // Initialize the memory pool (in-memory cache)
-                       DB_MULTIVERSION |  // Multiversion concurrency control
-                       DB_PRIVATE |  // Region files are not backed by the filesystem, but instead are backed by heap
-                                     // memory. This flag is required for the in-memory cache.
-                       DB_THREAD;    // Cause the environment to be free-threaded
+  uint32_t env_flags =
+      DB_CREATE |        // Create the environment if it does not exist
+      DB_RECOVER |       // Run normal recovery.
+      DB_INIT_LOCK |     // Initialize the locking subsystem
+      DB_INIT_LOG |      // Initialize the logging subsystem
+      DB_INIT_TXN |      // Initialize the transactional subsystem. This
+                         // also turns on logging.
+      DB_INIT_MPOOL |    // Initialize the memory pool (in-memory cache)
+      DB_MULTIVERSION |  // Multiversion concurrency control
+      //  DB_PRIVATE |  // Region files are not backed by the filesystem, but instead are backed by heap
+      //                // memory. This flag is required for the in-memory cache.
+      DB_THREAD;  // Cause the environment to be free-threaded
   try {
     // Create and open the environment
     envp = new DbEnv((uint32_t)0);
@@ -1713,6 +1750,7 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
     try {
       DbTxn* txn = nullptr;
       int ret = envp->txn_begin(nullptr, &txn, DB_TXN_SNAPSHOT);
+      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return nullptr;
@@ -1969,13 +2007,15 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
         count = 0;
       }
 
-      DINGO_LOG(INFO) << fmt::format(
-          "[bdb] cf_name: {}, count: {}, bdb total key count: {}, range_result: {}, "
-          "range_start.less: {}, "
-          "range_end.equal: "
-          "{}, range_end.greater: {}.",
-          cf_name, count, bdb_total_key_count, range_result, range_start.less, range_end.equal, range_end.greater);
-      result_counts.push_back(count);
+      if (count > 0) {
+        DINGO_LOG(INFO) << fmt::format(
+            "[bdb] cf_name: {}, count: {}, bdb total key count: {}, range_result: {}, "
+            "range_start.less: {}, "
+            "range_end.equal: "
+            "{}, range_end.greater: {}.",
+            cf_name, count, bdb_total_key_count, range_result, range_start.less, range_end.equal, range_end.greater);
+        result_counts.push_back(count);
+      }
     }
   } catch (DbException& db_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] error get approximate sizes, exception: {} {}.", db_exception.get_errno(),

@@ -73,7 +73,7 @@ class BdbHelper {
 // Snapshot
 class BdbSnapshot : public dingodb::Snapshot {
  public:
-  explicit BdbSnapshot(std::shared_ptr<Db> db, DbTxn* txn, Dbc* cursorp) : db_(db), txn_(txn), cursorp_(cursorp) {}
+  explicit BdbSnapshot(std::shared_ptr<Db> db, DbTxn* txn, Dbc* cursorp);
   ~BdbSnapshot() override;
   const void* Inner() override { return nullptr; }
 
