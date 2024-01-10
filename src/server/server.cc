@@ -650,15 +650,26 @@ bool Server::Recover() {
   return true;
 }
 
-bool Server::InitHeartbeat() { return heartbeat_->Init(); }
+bool Server::InitHeartbeat() {
+  heartbeat_ = std::make_shared<Heartbeat>();
+  return heartbeat_->Init();
+}
 
 void Server::Destroy() {
-  crontab_manager_->Destroy();
-  heartbeat_->Destroy();
-  region_controller_->Destroy();
-  store_controller_->Destroy();
+  if (crontab_manager_) {
+    crontab_manager_->Destroy();
+  }
+  if (heartbeat_) {
+    heartbeat_->Destroy();
+  }
+  if (region_controller_) {
+    region_controller_->Destroy();
+  }
+  if (store_controller_) {
+    store_controller_->Destroy();
+  }
 
-  if (GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::INDEX && vector_index_manager_) {
     vector_index_manager_->Destroy();
   }
 

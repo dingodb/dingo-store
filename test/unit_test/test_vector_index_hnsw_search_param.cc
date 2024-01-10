@@ -101,7 +101,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_l2 = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw_for_l2 = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw_for_l2.get(), nullptr);
   }
 
@@ -117,7 +117,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_ip = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw_for_ip = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw_for_ip.get(), nullptr);
   }
 
@@ -132,7 +132,7 @@ TEST_F(VectorIndexHnswSearchParamTest, Create) {
     index_parameter.mutable_hnsw_parameter()->set_max_elements(max_elements);
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw_for_cosine = VectorIndexFactory::New(id, index_parameter, epoch, kRange);
+    vector_index_hnsw_for_cosine = VectorIndexFactory::NewHnsw(id, index_parameter, epoch, kRange, nullptr);
     EXPECT_NE(vector_index_hnsw_for_cosine.get(), nullptr);
   }
 }

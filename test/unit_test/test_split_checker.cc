@@ -180,7 +180,7 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   auto writer = SplitCheckerTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
-  for (int i = 0; i < (100 * 1000); ++i) {
+  for (int i = 0; i < 10000; ++i) {
     int pos = i % prefixs.size();
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
@@ -191,8 +191,8 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   }
 
   // Get split key
-  uint32_t split_threshold_size = 64 * 1024 * 1024;
-  uint32_t split_chunk_size = 1 * 1024 * 1024;
+  uint32_t split_threshold_size = 64 * 1024;
+  uint32_t split_chunk_size = 1 * 1024;
   auto split_checker =
       std::make_shared<HalfSplitChecker>(SplitCheckerTest::engine, split_threshold_size, split_chunk_size);
 
@@ -203,7 +203,6 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
   auto split_key = split_checker->SplitKey(region, region->Range(), kAllCFs, count);
-  std::cout << "split_key: " << split_key << '\n';
 
   auto reader = SplitCheckerTest::engine->Reader();
 
@@ -213,24 +212,21 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
   int64_t right_count = 0;
   reader->KvCount(kDefaultCf, split_key, range.end_key(), right_count);
 
-  std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} right_count: {}",
-                           range.start_key(), range.end_key(), split_key, count, left_count, right_count)
-            << '\n';
-  EXPECT_EQ(true, abs(static_cast<int>(left_count - right_count)) < 10000);
+  EXPECT_EQ(true, abs(static_cast<int>(left_count - right_count)) < 1000);
 
   // Clean
   writer->KvDeleteRange(kAllCFs, range);
 }
 
 TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
-  uint32_t split_threshold_size = 64 * 1024 * 1024;
+  uint32_t split_threshold_size = 64 * 1024;
   float split_ratio = 0.5;
   auto split_checker = std::make_shared<SizeSplitChecker>(SplitCheckerTest::engine, split_threshold_size, split_ratio);
 
   auto writer = SplitCheckerTest::engine->Writer();
   const std::vector<std::string> prefixs = {"aa", "bb", "cc", "dd", "ee", "ff", "gg", "hh", "ii", "jj", "mm"};
   dingodb::pb::common::KeyValue kv;
-  for (int i = 0; i < (100 * 1000); ++i) {
+  for (int i = 0; i < 10000; ++i) {
     int pos = i % prefixs.size();
 
     kv.set_key(prefixs[pos] + GenRandomString(30));
@@ -247,7 +243,6 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
   auto split_key = split_checker->SplitKey(region, region->Range(), kAllCFs, count);
-  std::cout << "split_key: " << split_key << '\n';
 
   EXPECT_EQ(false, split_key.empty());
 
@@ -256,10 +251,6 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   int64_t left_count = 0;
   reader->KvCount(kDefaultCf, range.start_key(), split_key, left_count);
 
-  std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {} left_size: {}",
-                           range.start_key(), range.end_key(), split_key, count, left_count,
-                           left_count * single_key_size)
-            << '\n';
   EXPECT_EQ(true, abs(split_threshold_size * split_ratio - left_count * single_key_size) < 1000);
 
   // Clean
@@ -267,7 +258,7 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
 }
 
 TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
-  int total_key_num = 100000;
+  int total_key_num = 10000;
   uint32_t split_key_number = total_key_num;
   float split_key_ratio = 0.5;
   auto split_checker = std::make_shared<KeysSplitChecker>(SplitCheckerTest::engine, split_key_number, split_key_ratio);
@@ -292,16 +283,13 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
   auto split_key = split_checker->SplitKey(region, region->Range(), kAllCFs, count);
-  std::cout << "split_key: " << split_key << '\n';
   EXPECT_EQ(true, !split_key.empty());
 
   auto reader = SplitCheckerTest::engine->Reader();
 
   int64_t left_count = 0;
   reader->KvCount(kDefaultCf, range.start_key(), split_key, left_count);
-  std::cout << fmt::format("region range [{}-{}] split_key: {} count: {} left_count: {}", range.start_key(),
-                           range.end_key(), split_key, count, left_count)
-            << '\n';
+
   EXPECT_EQ(true, abs(left_count - split_key_number * split_key_ratio) < 10);
 
   // Clean

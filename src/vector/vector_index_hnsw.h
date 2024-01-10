@@ -29,6 +29,7 @@
 #include "butil/status.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
+#include "common/threadpool.h"
 #include "hnswlib/hnswlib.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -39,7 +40,8 @@ namespace dingodb {
 class VectorIndexHnsw : public VectorIndex {
  public:
   explicit VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                           const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+                           const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                           ThreadPoolPtr thread_pool);
 
   ~VectorIndexHnsw() override;
 
@@ -114,6 +116,9 @@ class VectorIndexHnsw : public VectorIndex {
 
   // normalize vector
   bool normalize_;
+
+  // vector index thread pool
+  ThreadPoolPtr thread_pool_;
 };
 
 }  // namespace dingodb

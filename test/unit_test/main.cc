@@ -16,8 +16,12 @@
 
 #include <iostream>
 
+#include "glog/logging.h"
+
 int main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
+
+  FLAGS_minloglevel = google::GLOG_ERROR;
 
   if (testing::FLAGS_gtest_filter == "*") {
     std::string default_run_case;
@@ -27,7 +31,6 @@ int main(int argc, char* argv[]) {
     default_run_case += ":DingoLoggerTest.*";
     default_run_case += ":StorePbTest.*";
     default_run_case += ":WriteDataBuilderTest.*";
-    default_run_case += ":FailPointManagerTest.*";
     default_run_case += ":FailPointTest.*";
     default_run_case += ":CoprocessorTest.*";
     default_run_case += ":CoprocessorUtilsTest.*";

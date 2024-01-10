@@ -162,7 +162,7 @@ std::vector<std::string> FailPoint::ParseConfig(const std::string& config) {
   std::vector<std::string> result;
   for (auto i = begin; i != end; ++i) {
     const std::smatch& match = *i;
-    DINGO_LOG(INFO) << "match_results: " << match.size() << " " << match.length() << std::endl;
+    DINGO_LOG(DEBUG) << "match_results: " << match.size() << " " << match.length() << std::endl;
     result.push_back(match.str(2));
     result.push_back(match.str(4));
     result.push_back(match.str(5));

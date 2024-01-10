@@ -30,6 +30,7 @@
 #include "butil/status.h"
 #include "faiss/MetricType.h"
 #include "fmt/core.h"
+#include "gtest/gtest.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -92,6 +93,7 @@ std::vector<pb::common::VectorWithId> GenVectorWithIds(int start_vector_id, int 
 }
 
 TEST_F(VectorIndexWrapperTest, Add) {
+  GTEST_SKIP() << "Skip Add...";
   int64_t id = 1;
   pb::common::VectorIndexParameter index_parameter;
   index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);

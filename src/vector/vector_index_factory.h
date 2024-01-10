@@ -25,6 +25,7 @@
 
 #include "butil/status.h"
 #include "common/logging.h"
+#include "common/threadpool.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index.h"
@@ -44,9 +45,9 @@ class VectorIndexFactory {
   static std::shared_ptr<VectorIndex> New(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
                                           const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
- private:
   static std::shared_ptr<VectorIndex> NewHnsw(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                              ThreadPoolPtr thread_pool);
 
   static std::shared_ptr<VectorIndex> NewFlat(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
                                               const pb::common::RegionEpoch& epoch, const pb::common::Range& range);

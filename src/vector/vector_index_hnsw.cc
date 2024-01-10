@@ -79,38 +79,46 @@ class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
 };
 
 template <class Function>
-inline void ParallelFor(size_t start, size_t end, bool is_priority, Function fn) {
+inline void ParallelFor(ThreadPoolPtr thread_pool, size_t start, size_t end, bool is_priority, Function fn) {
   struct Parameter {
     size_t start_pos;
     size_t end_pos;
   };
 
   int64_t start_time = Helper::TimestampMs();
-  std::vector<ThreadPool::TaskPtr> tasks;
-  for (size_t i = start; i < end; i += FLAGS_hnsw_vector_batch_size_per_task) {
-    Parameter* param = new Parameter();
-    param->start_pos = i;
-    param->end_pos = std::min(i + FLAGS_hnsw_vector_batch_size_per_task, end);
+  // in thread pool run
+  if (thread_pool != nullptr) {
+    std::vector<ThreadPool::TaskPtr> tasks;
+    for (size_t i = start; i < end; i += FLAGS_hnsw_vector_batch_size_per_task) {
+      Parameter* param = new Parameter();
+      param->start_pos = i;
+      param->end_pos = std::min(i + FLAGS_hnsw_vector_batch_size_per_task, end);
 
-    auto task = Server::GetInstance().GetVectorIndexThreadPool()->ExecuteTask(
-        [&](void* arg) {
-          Parameter* param = static_cast<Parameter*>(arg);
-          for (int j = param->start_pos; j < param->end_pos; ++j) {
-            fn(j);
-          }
-        },
-        param, is_priority ? 1 : 0);
+      auto task = thread_pool->ExecuteTask(
+          [&](void* arg) {
+            Parameter* param = static_cast<Parameter*>(arg);
+            for (int j = param->start_pos; j < param->end_pos; ++j) {
+              fn(j);
+            }
+          },
+          param, is_priority ? 1 : 0);
 
-    if (task != nullptr) {
-      tasks.push_back(task);
-    } else {
-      delete param;
+      if (task != nullptr) {
+        tasks.push_back(task);
+      } else {
+        delete param;
+      }
     }
-  }
 
-  for (auto& task : tasks) {
-    task->Join();
-    delete static_cast<Parameter*>(task->arg);
+    for (auto& task : tasks) {
+      task->Join();
+      delete static_cast<Parameter*>(task->arg);
+    }
+  } else {
+    // in-place run
+    for (size_t i = start; i < end; ++i) {
+      fn(i);
+    }
   }
 
   int64_t elapsed_time = Helper::TimestampMs() - start_time;
@@ -119,8 +127,12 @@ inline void ParallelFor(size_t start, size_t end, bool is_priority, Function fn)
 }
 
 VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, epoch, range), hnsw_space_(nullptr), hnsw_index_(nullptr) {
+                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                 ThreadPoolPtr thread_pool)
+    : VectorIndex(id, vector_index_parameter, epoch, range),
+      hnsw_space_(nullptr),
+      hnsw_index_(nullptr),
+      thread_pool_(thread_pool) {
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
     assert(hnsw_parameter.dimension() > 0);
@@ -206,12 +218,12 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     }
 
     if (!normalize_) {
-      ParallelFor(0, vector_with_ids.size(), is_priority, [&](size_t row) {
+      ParallelFor(thread_pool_, 0, vector_with_ids.size(), is_priority, [&](size_t row) {
         this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(),
                                     vector_with_ids[row].id(), false);
       });
     } else {
-      ParallelFor(0, vector_with_ids.size(), is_priority, [&](size_t row) {
+      ParallelFor(thread_pool_, 0, vector_with_ids.size(), is_priority, [&](size_t row) {
         // normalize vector
         std::vector<float> norm_array(dimension_);
         VectorIndexUtils::NormalizeVectorForHnsw((float*)vector_with_ids[row].vector().float_values().data(),
@@ -244,7 +256,8 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids, bo
 
   // Add data to index
   try {
-    ParallelFor(0, delete_ids.size(), is_priority, [&](size_t row) { hnsw_index_->markDelete(delete_ids[row]); });
+    ParallelFor(thread_pool_, 0, delete_ids.size(), is_priority,
+                [&](size_t row) { hnsw_index_->markDelete(delete_ids[row]); });
   } catch (std::runtime_error& e) {
     std::string s = fmt::format("delete vector failed, error: {}", e.what());
     DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
@@ -415,7 +428,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
   }
 
   if (!normalize_) {
-    ParallelFor(0, vector_with_ids.size(), true, [&](size_t row) {
+    ParallelFor(thread_pool_, 0, vector_with_ids.size(), true, [&](size_t row) {
       std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
       try {
@@ -433,7 +446,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
       }
     });
   } else {  // normalize_
-    ParallelFor(0, vector_with_ids.size(), true, [&](size_t row) {
+    ParallelFor(thread_pool_, 0, vector_with_ids.size(), true, [&](size_t row) {
       std::vector<float> norm_array(dimension_);
       VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,  // NOLINT
                                                norm_array.data());

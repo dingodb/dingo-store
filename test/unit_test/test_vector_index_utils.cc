@@ -87,7 +87,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
@@ -102,7 +102,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:op_right_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
@@ -128,7 +128,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceEntry:distances : " << std::endl;
+    // std::cout << "CalcDistanceEntry:distances : " << std::endl;
     {
       size_t i = 0;
       for (const auto& distance : distances) {
@@ -143,7 +143,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op result left
-    std::cout << "CalcDistanceEntry:result_op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:result_op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
@@ -158,7 +158,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op result right
-    std::cout << "CalcDistanceEntry:result_op_right_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:result_op_right_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
@@ -211,7 +211,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
@@ -252,7 +252,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceEntry:distances : " << std::endl;
+    // std::cout << "CalcDistanceEntry:distances : " << std::endl;
     {
       size_t i = 0;
       for (const auto& distance : distances) {
@@ -282,7 +282,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op result right
-    std::cout << "CalcDistanceEntry:result_op_right_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:result_op_right_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
@@ -335,7 +335,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
@@ -376,7 +376,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceEntry:distances : " << std::endl;
+    // std::cout << "CalcDistanceEntry:distances : " << std::endl;
     {
       size_t i = 0;
       for (const auto& distance : distances) {
@@ -391,7 +391,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op result left
-    std::cout << "CalcDistanceEntry:result_op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:result_op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
@@ -459,7 +459,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
@@ -500,7 +500,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceEntry:distances : " << std::endl;
+    // std::cout << "CalcDistanceEntry:distances : " << std::endl;
     {
       size_t i = 0;
       for (const auto& distance : distances) {
@@ -515,7 +515,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op result left
-    std::cout << "CalcDistanceEntry:result_op_left_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:result_op_left_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
@@ -530,7 +530,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op result right
-    std::cout << "CalcDistanceEntry:result_op_right_vectors : " << std::endl;
+    // std::cout << "CalcDistanceEntry:result_op_right_vectors : " << std::endl;
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
