@@ -17,6 +17,7 @@
 #include <gflags/gflags.h>
 #include <sys/types.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -26,6 +27,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "bdb_raw_engine.h"
 #include "butil/compiler_specific.h"
 #include "bvar/reducer.h"
 #include "common/constant.h"
@@ -35,6 +37,7 @@
 #include "db.h"
 #include "engine/iterator.h"
 #include "fmt/core.h"
+#include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "rocksdb/sst_file_reader.h"
 #include "third-party/build/bdb/db.h"
@@ -56,6 +59,11 @@ DEFINE_int32(bdb_lk_max_locks, 40960, "bdb max locks");
 DEFINE_int32(bdb_lk_max_objects, 40960, "bdb max objects");
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
+DEFINE_int32(bdb_checkpoint_time_s, 60, "bdb checkpoint time interval(s)");
+DEFINE_int32(bdb_db_pool_size, 256, "bdb db pool size, must bigger than brpc_worker_thread_num");
+DECLARE_int32(brpc_worker_thread_num);
+
+DEFINE_bool(bdb_use_db_pool, true, "bdb use db pool");
 
 namespace bdb {
 
@@ -146,6 +154,114 @@ std::string BdbHelper::GetCfName(char cf_id) {
     DINGO_LOG(FATAL) << fmt::format("[bdb] invalid cf id: {}.", cf_id);
   }
   return it->second;
+}
+
+int BdbHelper::TxnCommit(DbTxn** txn_ptr) {
+  if (BAIDU_UNLIKELY(*txn_ptr == nullptr)) {
+    return 0;
+  }
+
+  auto ret = (*txn_ptr)->commit(0);
+  if (ret == 0) {
+    *txn_ptr = nullptr;
+  }
+
+  bdb_transaction_alive_count << -1;
+
+  return ret;
+}
+
+int BdbHelper::TxnAbort(DbTxn** txn_ptr) {
+  if (BAIDU_UNLIKELY(*txn_ptr == nullptr)) {
+    return 0;
+  }
+
+  auto ret = (*txn_ptr)->abort();
+  if (ret == 0) {
+    *txn_ptr = nullptr;
+  }
+
+  bdb_transaction_alive_count << -1;
+
+  return ret;
+}
+
+void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
+  CHECK(env != nullptr);
+
+  for (uint64_t i = 0;; i++) {
+    if (is_close.load()) {
+      break;
+    }
+
+    if (i % FLAGS_bdb_checkpoint_time_s == 0) {
+      DINGO_LOG(INFO) << fmt::format("[bdb] checkpoint thread sleep {}s.", FLAGS_bdb_checkpoint_time_s);
+    } else {
+      bthread_usleep(1000L * 1000L);
+      continue;
+    }
+
+    // do checkpoint
+    try {
+      int ret = env->txn_checkpoint(0, 0, 0);
+      if (ret != 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, ret: {}.", ret);
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, exception: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
+    } catch (std::exception& std_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, std exception: {}.", std_exception.what());
+    }
+
+    // use log_archive to remove log files
+    // try {
+    //   char** list;
+    //   int ret = env->log_archive(&list, DB_ARCH_REMOVE);
+    //   if (ret != 0) {
+    //     DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, ret: {}.", ret);
+    //   }
+    // } catch (DbException& db_exception) {
+    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
+    //                                   db_exception.what());
+    // } catch (std::exception& std_exception) {
+    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, std exception: {}.", std_exception.what());
+    // }
+
+    // use log_archive to get log files
+    // int32_t file_num = 0;
+    // try {
+    //   char** list;
+    //   int ret = env->log_archive(&list, DB_ARCH_ABS | DB_ARCH_LOG);  // Get the list of log files we can remove
+    //   if (ret != 0) {
+    //     DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, ret: {}.", ret);
+    //   } else {
+    //     // If the call to log_archive succeeded, list points to an array of log filenames
+    //     for (char** p = list; *p; ++p) {
+    //       std::string filename(*p);
+    //       if (std::remove(filename.c_str()) != 0) {
+    //         DINGO_LOG(ERROR) << fmt::format("[bdb] Failed to remove log file: {}.", filename);
+    //       } else {
+    //         DINGO_LOG(INFO) << fmt::format("[bdb] Successfully removed log file: {}.", filename);
+    //       }
+    //       file_num++;
+    //     }
+    //     // Free the memory allocated by log_archive
+    //     free(list);
+    //   }
+    // } catch (DbException& db_exception) {
+    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
+    //                                   db_exception.what());
+    // } catch (std::exception& std_exception) {
+    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, std exception: {}.", std_exception.what());
+    // }
+
+    // DINGO_LOG(INFO) << fmt::format("[bdb] checkpoint thread sleep {}s. {} files removed.",
+    // FLAGS_bdb_checkpoint_time_s,
+    //                                file_num);
+
+    bthread_usleep(1000L * 1000L);
+  }
 }
 
 // Iterator
@@ -374,7 +490,8 @@ void Iterator::Prev() {
 }
 
 // Snapshot
-BdbSnapshot::BdbSnapshot(std::shared_ptr<Db> db, DbTxn* txn, Dbc* cursorp) : db_(db), txn_(txn), cursorp_(cursorp) {
+BdbSnapshot::BdbSnapshot(Db* db, DbTxn* txn, Dbc* cursorp, ResourcePool<Db*>* db_pool)
+    : db_(db), txn_(txn), cursorp_(cursorp), db_pool_(db_pool) {
   bdb_snapshot_alive_count << 1;
 }
 
@@ -393,26 +510,24 @@ BdbSnapshot::~BdbSnapshot() {
   // commit or abort txn
   if (txn_ != nullptr) {
     int ret = 0;
-    // commit
+    // abort
     try {
-      ret = txn_->abort();
-      bdb_transaction_alive_count << -1;
-      if (ret == 0) {
-        txn_ = nullptr;
-      }
+      ret = BdbHelper::TxnAbort(&txn_);
       DINGO_LOG(DEBUG) << fmt::format("[bdb] txn abort in snapshot destruction, ret: {}.", ret);
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn abort: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       ret = BdbHelper::kCommitException;
     }
 
     if (ret != 0) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
-      txn_->abort();
-      bdb_transaction_alive_count << -1;
-      txn_ = nullptr;
     }
+  }
+
+  // if use db pool, put back db to pool
+  if (FLAGS_bdb_use_db_pool && db_pool_ != nullptr) {
+    db_pool_->Put(db_);
   }
 
   bdb_snapshot_alive_count << -1;
@@ -445,9 +560,11 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
         DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
         return butil::Status(pb::error::EINTERNAL, "snapshot pointer cast error.");
       }
-      ret = GetDb()->get(ss->GetDbTxn(), &bdb_key, &bdb_value, 0);
+      ret = ss->GetDb()->get(ss->GetDbTxn(), &bdb_key, &bdb_value, 0);
     } else {
-      ret = GetDb()->get(nullptr, &bdb_key, &bdb_value, 0);
+      Db* db = GetDb();
+      DEFER(PutDb(db));
+      ret = db->get(nullptr, &bdb_key, &bdb_value, 0);
     }
 
     if (ret == 0) {
@@ -570,7 +687,7 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
     if (snapshot != nullptr) {
       std::shared_ptr<bdb::BdbSnapshot> ss = std::dynamic_pointer_cast<bdb::BdbSnapshot>(snapshot);
       if (ss != nullptr) {
-        ret = GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_TXN_SNAPSHOT);
+        ret = ss->GetDb()->cursor(ss->GetDbTxn(), &cursorp, DB_CURSOR_BULK | DB_TXN_SNAPSHOT);
         if (ret == 0) {
           return std::make_shared<Iterator>(cf_name, options, cursorp, ss);
         }
@@ -578,7 +695,9 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
         DINGO_LOG(ERROR) << "[bdb] snapshot pointer cast error.";
       }
     } else {
-      ret = GetDb()->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
+      Db* db = GetDb();
+      DEFER(PutDb(db));
+      ret = db->cursor(nullptr, &cursorp, DB_READ_COMMITTED);
       if (ret == 0) {
         return std::make_shared<Iterator>(cf_name, options, cursorp, nullptr);
       }
@@ -640,7 +759,8 @@ std::shared_ptr<BdbRawEngine> Reader::GetRawEngine() {
   return raw_engine;
 }
 
-std::shared_ptr<Db> Reader::GetDb() { return GetRawEngine()->GetDb(); }
+Db* Reader::GetDb() { return GetRawEngine()->GetDb(); }
+void Reader::PutDb(Db* db) { return GetRawEngine()->PutDb(db); }
 
 dingodb::SnapshotPtr Reader::GetSnapshot() { return GetRawEngine()->GetSnapshot(); }
 
@@ -705,15 +825,13 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  DbEnv* envp = GetDb()->get_env();
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  DbEnv* envp = db->get_env();
   DbTxn* txn = nullptr;
   // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        bdb_transaction_alive_count << -1;
-        txn = nullptr;
-      });
+  DEFER(BdbHelper::TxnAbort(&txn));
 
   bool retry = true;
   int32_t retry_count = 0;
@@ -721,11 +839,12 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
+
+      bdb_transaction_alive_count << 1;
 
       std::string store_key = BdbHelper::EncodeKey(cf_name, kv.key());
       Dbt bdb_key;
@@ -734,7 +853,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
       Dbt bdb_value;
       BdbHelper::StringToDbt(kv.value(), bdb_value);
 
-      ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+      ret = db->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal put error.");
@@ -742,11 +861,9 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
 
       // commit
       try {
-        ret = txn->commit(0);
-        bdb_transaction_alive_count << -1;
+        ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          txn = nullptr;
-          return butil::Status();
+          return butil::Status::OK();
         } else {
           DINGO_LOG(ERROR) << fmt::format("[bdb] txn commit failed, ret: {}.", ret);
           return butil::Status(pb::error::EINTERNAL, "Internal txn commit error.");
@@ -768,11 +885,8 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
         // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          bdb_transaction_alive_count << -1;
-          txn = nullptr;
-        };
+        BdbHelper::TxnAbort(&txn);
+
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
         retry_count++;
@@ -808,15 +922,13 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
   DINGO_LOG(INFO) << fmt::format("[bdb] batch put and delete, cf_name: {}, put size: {}, delete size: {}.", cf_name,
                                  kvs_to_put.size(), keys_to_delete.size());
 
-  DbEnv* envp = GetDb()->get_env();
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  DbEnv* envp = db->get_env();
   DbTxn* txn = nullptr;
   // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        bdb_transaction_alive_count << -1;
-        txn = nullptr;
-      });
+  DEFER(BdbHelper::TxnAbort(&txn));
 
   bool retry = true;
   int32_t retry_count = 0;
@@ -824,11 +936,12 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
+
+      bdb_transaction_alive_count << 1;
 
       for (const auto& kv : kvs_to_put) {
         if (BAIDU_UNLIKELY(kv.key().empty())) {
@@ -841,7 +954,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
         BdbHelper::StringToDbt(store_key, bdb_key);
         Dbt bdb_value;
         BdbHelper::StringToDbt(kv.value(), bdb_value);
-        ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+        ret = db->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
         if (ret != 0) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
           return butil::Status(pb::error::EINTERNAL, "Internal put error.");
@@ -857,7 +970,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
         std::string store_key = BdbHelper::EncodeKey(cf_name, key);
         Dbt bdb_key;
         BdbHelper::StringToDbt(store_key, bdb_key);
-        GetDb()->del(txn, &bdb_key, 0);
+        db->del(txn, &bdb_key, 0);
         if (ret != 0 && ret != DB_NOTFOUND) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
           return butil::Status(pb::error::EINTERNAL, "Internal put error.");
@@ -866,10 +979,8 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 
       // commit
       try {
-        ret = txn->commit(0);
-        bdb_transaction_alive_count << -1;
+        ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          txn = nullptr;
           DINGO_LOG(INFO) << fmt::format(
               "[bdb] batch put and delete success, cf_name: {}, put size: {}, delete size: {}.", cf_name,
               kvs_to_put.size(), keys_to_delete.size());
@@ -892,11 +1003,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
         // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          bdb_transaction_alive_count << -1;
-          txn = nullptr;
-        };
+        BdbHelper::TxnAbort(&txn);
 
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
@@ -927,16 +1034,14 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 butil::Status Writer::KvBatchPutAndDelete(
     const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
     const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) {
-  DbEnv* envp = GetDb()->get_env();
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  DbEnv* envp = db->get_env();
   DbTxn* txn = nullptr;
 
   // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        bdb_transaction_alive_count << -1;
-        txn = nullptr;
-      });
+  DEFER(BdbHelper::TxnAbort(&txn));
 
   bool retry = true;
   int32_t retry_count = 0;
@@ -944,11 +1049,12 @@ butil::Status Writer::KvBatchPutAndDelete(
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
+
+      bdb_transaction_alive_count << 1;
 
       // put
       for (const auto& [cf_name, kv_puts] : kv_puts_with_cf) {
@@ -968,7 +1074,7 @@ butil::Status Writer::KvBatchPutAndDelete(
           BdbHelper::StringToDbt(store_key, bdb_key);
           Dbt bdb_value;
           BdbHelper::StringToDbt(kv.value(), bdb_value);
-          ret = GetDb()->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
+          ret = db->put(txn, &bdb_key, &bdb_value, DB_OVERWRITE_DUP);
           if (ret != 0) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] put failed, ret: {}.", ret);
             return butil::Status(pb::error::EINTERNAL, "Internal put error.");
@@ -992,7 +1098,7 @@ butil::Status Writer::KvBatchPutAndDelete(
           std::string store_key = BdbHelper::EncodeKey(cf_name, key);
           Dbt bdb_key;
           BdbHelper::StringToDbt(store_key, bdb_key);
-          GetDb()->del(txn, &bdb_key, 0);
+          db->del(txn, &bdb_key, 0);
           if (ret != 0 && ret != DB_NOTFOUND) {
             DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
             return butil::Status(pb::error::EINTERNAL, "Internal put error.");
@@ -1002,11 +1108,9 @@ butil::Status Writer::KvBatchPutAndDelete(
 
       // commit
       try {
-        ret = txn->commit(0);
-        bdb_transaction_alive_count << -1;
+        ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          txn = nullptr;
-          return butil::Status();
+          return butil::Status::OK();
         }
       } catch (DbException& db_exception) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
@@ -1025,11 +1129,7 @@ butil::Status Writer::KvBatchPutAndDelete(
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
         // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          bdb_transaction_alive_count << -1;
-          txn = nullptr;
-        };
+        BdbHelper::TxnAbort(&txn);
 
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
@@ -1070,7 +1170,10 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
 
   DINGO_LOG(INFO) << " raw_keys.size: " << raw_keys.size() << ", keys.size: " << keys.size() << ".";
 
-  DbEnv* envp = GetDb()->get_env();
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  DbEnv* envp = db->get_env();
   DbTxn* txn = nullptr;
 
   Dbt keys_to_delete;
@@ -1130,11 +1233,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
 
   // release txn if commit failed.
   DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        bdb_transaction_alive_count << -1;
-        txn = nullptr;
-      };
+      BdbHelper::TxnAbort(&txn);
 
       if (db_multi_data_builder != nullptr) {
         delete db_multi_data_builder;
@@ -1147,13 +1246,14 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
 
-      ret = GetDb()->del(txn, &keys_to_delete, DB_MULTIPLE);
+      bdb_transaction_alive_count << 1;
+
+      ret = db->del(txn, &keys_to_delete, DB_MULTIPLE);
       if (ret != 0 && ret != DB_NOTFOUND) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal delete error.");
@@ -1161,10 +1261,8 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
 
       // commit
       try {
-        ret = txn->commit(0);
-        bdb_transaction_alive_count << -1;
+        ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          txn = nullptr;
           return butil::Status::OK();
         } else {
           DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
@@ -1187,11 +1285,8 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
         // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          bdb_transaction_alive_count << -1;
-          txn = nullptr;
-        };
+        BdbHelper::TxnAbort(&txn);
+
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
         retry_count++;
@@ -1221,15 +1316,13 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  DbEnv* envp = GetDb()->get_env();
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  DbEnv* envp = db->get_env();
   DbTxn* txn = nullptr;
   // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        bdb_transaction_alive_count << -1;
-        txn = nullptr;
-      });
+  DEFER(BdbHelper::TxnAbort(&txn));
 
   bool retry = true;
   int32_t retry_count = 0;
@@ -1237,17 +1330,18 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
 
+      bdb_transaction_alive_count << 1;
+
       std::string store_key = BdbHelper::EncodeKey(cf_name, key);
       Dbt bdb_key;
       BdbHelper::StringToDbt(store_key, bdb_key);
 
-      ret = GetDb()->del(txn, &bdb_key, 0);
+      ret = db->del(txn, &bdb_key, 0);
       if (ret != 0 && ret != DB_NOTFOUND) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] delete failed, ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal delete error.");
@@ -1255,11 +1349,9 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
 
       // commit
       try {
-        ret = txn->commit(0);
-        bdb_transaction_alive_count << -1;
+        ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          txn = nullptr;
-          return butil::Status();
+          return butil::Status::OK();
         }
       } catch (DbException& db_exception) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
@@ -1278,11 +1370,8 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
         // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          bdb_transaction_alive_count << -1;
-          txn = nullptr;
-        };
+        BdbHelper::TxnAbort(&txn);
+
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
         retry_count++;
@@ -1330,16 +1419,14 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
 
 butil::Status Writer::KvBatchDeleteRangeNormal(
     const std::map<std::string, std::vector<pb::common::Range>>& range_with_cfs) {
-  DbEnv* envp = GetDb()->get_env();
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  DbEnv* envp = db->get_env();
   DbTxn* txn = nullptr;
 
   // release txn if commit failed.
-  DEFER(  // FOR_CLANG_FORMAT
-      if (txn != nullptr) {
-        txn->abort();
-        bdb_transaction_alive_count << -1;
-        txn = nullptr;
-      });
+  DEFER(BdbHelper::TxnAbort(&txn));
 
   bool retry = true;
   int32_t retry_count = 0;
@@ -1347,11 +1434,12 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
   while (retry) {
     try {
       int ret = envp->txn_begin(nullptr, &txn, 0);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return butil::Status(pb::error::EINTERNAL, "Internal txn begin error.");
       }
+
+      bdb_transaction_alive_count << 1;
 
       for (const auto& [cf_name, ranges] : range_with_cfs) {
         for (const auto& range : ranges) {
@@ -1372,11 +1460,9 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
 
       // commit
       try {
-        ret = txn->commit(0);
-        bdb_transaction_alive_count << -1;
+        ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          txn = nullptr;
-          return butil::Status();
+          return butil::Status::OK();
         }
       } catch (DbException& db_exception) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
@@ -1394,11 +1480,8 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
       // increment the retry count and goto retry.
       if (retry_count < FLAGS_bdb_max_retries) {
         // First thing that we MUST do is abort the transaction.
-        if (txn != nullptr) {
-          txn->abort();
-          bdb_transaction_alive_count << -1;
-          txn = nullptr;
-        };
+        BdbHelper::TxnAbort(&txn);
+
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
         retry_count++;
@@ -1513,7 +1596,10 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
         }
       });
 
-  GetDb()->cursor(txn, &cursorp, DB_CURSOR_BULK | DB_TXN_SNAPSHOT);
+  Db* db = GetDb();
+  DEFER(PutDb(db));
+
+  db->cursor(txn, &cursorp, DB_CURSOR_BULK | DB_TXN_SNAPSHOT);
 
   std::string store_key = BdbHelper::EncodeKey(cf_name, range.start_key());
   Dbt bdb_key;
@@ -1564,7 +1650,8 @@ std::shared_ptr<BdbRawEngine> Writer::GetRawEngine() {
   return raw_engine;
 }
 
-std::shared_ptr<Db> Writer::GetDb() { return GetRawEngine()->GetDb(); }
+Db* Writer::GetDb() { return GetRawEngine()->GetDb(); }
+void Writer::PutDb(Db* db) { return GetRawEngine()->PutDb(db); }
 
 }  // namespace bdb
 
@@ -1606,6 +1693,22 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
   return 0;
 }
 
+Db* BdbRawEngine::GetDb() {
+  if (FLAGS_bdb_use_db_pool && !db_handles_.empty()) {
+    Db* db = db_pool_.Get();
+    if (db != nullptr) {
+      return db;
+    }
+  }
+  return db_;
+}
+
+void BdbRawEngine::PutDb(Db* db) {
+  if (FLAGS_bdb_use_db_pool && !db_handles_.empty()) {
+    db_pool_.Put(db);
+  }
+}
+
 void LogBDBError(const DbEnv*, const char* /*errpfx*/, const char* msg) {
   DINGO_LOG(ERROR) << "[bdb] error msg: " << msg;
 }
@@ -1632,9 +1735,14 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     }
   }
 
+  if (FLAGS_bdb_db_pool_size < FLAGS_brpc_worker_thread_num) {
+    DINGO_LOG(WARNING) << fmt::format("[bdb] db pool size: {} < brpc worker thread num: {}, set db pool size to {}.",
+                                      FLAGS_bdb_db_pool_size, FLAGS_brpc_worker_thread_num,
+                                      FLAGS_brpc_worker_thread_num);
+    FLAGS_bdb_db_pool_size = FLAGS_brpc_worker_thread_num;
+  }
+
   // Initialize our handles
-  Db* db = nullptr;
-  DbEnv* envp = nullptr;
   const char* file_name = "dingo.db";
 
   // Env open flags
@@ -1652,37 +1760,37 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
       DB_THREAD;  // Cause the environment to be free-threaded
   try {
     // Create and open the environment
-    envp = new DbEnv((uint32_t)0);
+    envp_ = new DbEnv((uint32_t)0);
 
     // Indicate that we want db to internally perform deadlock
     // detection.  Also indicate that the transaction with
     // the fewest number of write locks will receive the
     // deadlock notification in the event of a deadlock.
-    envp->set_lk_detect(DB_LOCK_MINWRITE);
-    envp->set_lk_max_lockers(FLAGS_bdb_lk_max_lockers);
-    envp->set_lk_max_locks(FLAGS_bdb_lk_max_locks);
-    envp->set_lk_max_objects(FLAGS_bdb_lk_max_objects);
+    envp_->set_lk_detect(DB_LOCK_MINWRITE);
+    envp_->set_lk_max_lockers(FLAGS_bdb_lk_max_lockers);
+    envp_->set_lk_max_locks(FLAGS_bdb_lk_max_locks);
+    envp_->set_lk_max_objects(FLAGS_bdb_lk_max_objects);
 
-    envp->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
+    envp_->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
 
     // set error call back
-    envp->set_errcall(LogBDBError);
+    envp_->set_errcall(LogBDBError);
 
     // print txn_max
     uint32_t txn_max = 0;
-    envp->get_tx_max(&txn_max);
+    envp_->get_tx_max(&txn_max);
 
     DINGO_LOG(INFO) << fmt::format("[bdb] default txn_max: {}.", txn_max);
 
-    envp->set_tx_max(FLAGS_bdb_txn_max);
-    envp->get_tx_max(&txn_max);
+    envp_->set_tx_max(FLAGS_bdb_txn_max);
+    envp_->get_tx_max(&txn_max);
 
     // set lock timeout to 5s, the first parameter is microsecond
-    envp->set_timeout(5 * 1000 * 1000, DB_SET_LOCK_TIMEOUT);
+    envp_->set_timeout(5 * 1000 * 1000, DB_SET_LOCK_TIMEOUT);
 
     DINGO_LOG(INFO) << fmt::format("[bdb] set txn_max to: {}.", txn_max);
 
-    envp->open((const char*)bdb_path.c_str(), env_flags, 0);
+    envp_->open((const char*)bdb_path.c_str(), env_flags, 0);
 
     // If we had utility threads (for running checkpoints or
     // deadlock detection, for example) we would spawn those
@@ -1691,11 +1799,25 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // Open the database
     // TODO: when set DB_REVSPLITOFF flag, store process will meet txn_begin cannot allocate memory erro in the second
     // round sdk integration test.
-    int ret = OpenDb(&db, file_name, envp, 0);
+    int ret = OpenDb(&db_, file_name, envp_, 0);
     if (ret < 0) {
       DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
       return false;
     }
+
+    for (int i = 0; i < FLAGS_bdb_db_pool_size; i++) {
+      Db* db_in_pool = nullptr;
+      ret = OpenDb(&db_in_pool, file_name, envp_, 0);
+      if (ret < 0) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
+        return false;
+      }
+
+      db_pool_.Put(db_in_pool);
+      db_handles_.emplace_back(db_in_pool);
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[bdb] db pool init OK, size: {}.", FLAGS_bdb_db_pool_size);
 
   } catch (DbException& db_exctption) {
     DINGO_LOG(FATAL) << fmt::format("[bdb] error opening database environment: {}, exception: {} {}.", db_path_,
@@ -1704,10 +1826,12 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   }
 
   db_path_ = bdb_path + "/" + file_name;
-  db_.reset(db);
 
   reader_ = std::make_shared<bdb::Reader>(GetSelfPtr());
   writer_ = std::make_shared<bdb::Writer>(GetSelfPtr());
+  DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
+
+  checkpoint_bthread_.Run([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
   return true;
@@ -1715,23 +1839,34 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
 
 void BdbRawEngine::Close() {
   try {
-    DbEnv* envp = db_->get_env();
-
     // Close our database handle if it was opened.
     if (db_ != nullptr) {
       db_->close(0);
     }
+    DINGO_LOG(INFO) << "[bdb] db closed.";
+
+    // Close all db in db_handles_
+    for (auto& db : db_handles_) {
+      if (db != nullptr) {
+        db->close(0);
+      }
+    }
+    DINGO_LOG(INFO) << "[bdb] db handles closed.";
 
     // Close our environment if it was opened.
-    if (envp != nullptr) {
-      envp->close(0);
-      delete envp;
-      envp = nullptr;
+    if (envp_ != nullptr) {
+      envp_->close(0);
+      delete envp_;
+      envp_ = nullptr;
     }
+
   } catch (DbException& db_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] error closing database and environment, exception: {} {}.",
                                     db_exception.get_errno(), db_exception.what());
   }
+
+  is_close_ = true;
+  checkpoint_bthread_.Join();
 
   DINGO_LOG(INFO) << "[bdb] I'm all done.";
 }
@@ -1744,23 +1879,28 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
   bool retry = true;
   int32_t retry_count = 0;
 
-  DbEnv* envp = db_->get_env();
+  Db* db = GetDb();
+  bool db_need_put_back = true;
+  DEFER(if (db_need_put_back) { PutDb(db); });
+
+  DbEnv* envp = db->get_env();
 
   while (retry) {
     try {
       DbTxn* txn = nullptr;
       int ret = envp->txn_begin(nullptr, &txn, DB_TXN_SNAPSHOT);
-      bdb_transaction_alive_count << 1;
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
         return nullptr;
       }
 
+      bdb_transaction_alive_count << 1;
+
       // It seems bdb do a snapshot after a cursor with the txn do its first get.
       // So we need to init a cursor and do a get to make sure the snapshot is valid.
       // Acquire a cursor
       Dbc* cursorp = nullptr;
-      ret = GetDb()->cursor(txn, &cursorp, DB_TXN_SNAPSHOT);
+      ret = db->cursor(txn, &cursorp, DB_CURSOR_BULK | DB_TXN_SNAPSHOT);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] cursor failed ret: {}.", ret);
         return nullptr;
@@ -1776,7 +1916,8 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
       cursorp->close();
       cursorp = nullptr;
 
-      return std::make_shared<bdb::BdbSnapshot>(db_, txn, cursorp);
+      db_need_put_back = false;
+      return std::make_shared<bdb::BdbSnapshot>(db, txn, cursorp, &db_pool_);
 
     } catch (DbDeadlockException&) {
       DINGO_LOG(WARNING) << fmt::format(
@@ -2014,8 +2155,8 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
             "range_end.equal: "
             "{}, range_end.greater: {}.",
             cf_name, count, bdb_total_key_count, range_result, range_start.less, range_end.equal, range_end.greater);
-        result_counts.push_back(count);
       }
+      result_counts.push_back(count);
     }
   } catch (DbException& db_exception) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] error get approximate sizes, exception: {} {}.", db_exception.get_errno(),

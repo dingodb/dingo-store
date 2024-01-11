@@ -2723,7 +2723,8 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
 butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                          std::shared_ptr<Context> ctx, const std::string &primary_lock,
                                          int64_t start_ts, int64_t advise_lock_ttl) {
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(), primary_lock)
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(),
+                                 Helper::StringToHex(primary_lock))
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", start_ts: " << start_ts
                   << ", advise_lock_ttl: " << advise_lock_ttl;
 
@@ -2736,7 +2737,8 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
 
   auto *response = dynamic_cast<pb::store::TxnHeartBeatResponse *>(ctx->Response());
   if (response == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), primary_lock)
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                    Helper::StringToHex(primary_lock))
                      << ", response is nullptr";
     return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
   }
@@ -2746,13 +2748,15 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   pb::store::LockInfo lock_info;
   auto ret = GetLockInfo(raw_engine->Reader(), primary_lock, lock_info);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), primary_lock)
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                    Helper::StringToHex(primary_lock))
                      << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
     return ret;
   }
 
   if (lock_info.primary_lock().empty()) {
-    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), primary_lock)
+    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                      Helper::StringToHex(primary_lock))
                        << ", txn_not_found with lock_info empty, primary_lock: " << Helper::StringToHex(primary_lock)
                        << ", start_ts: " << start_ts;
 
@@ -2762,7 +2766,8 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   }
 
   if (lock_info.lock_ts() != start_ts) {
-    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), primary_lock)
+    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                      Helper::StringToHex(primary_lock))
                        << ", txn_not_found with lock_info.lock_ts not equal to start_ts, primary_lock: "
                        << Helper::StringToHex(primary_lock) << ", start_ts: " << start_ts
                        << ", lock_info: " << lock_info.ShortDebugString();
