@@ -108,7 +108,10 @@ butil::Status TxnIterator::Seek(const std::string &key) {
 
   while (value_.empty()) {
     ret = InnerNext();
-    if (!ret.ok()) {
+    if (ret.error_code() == pb::error::Errno::ETXN_SCAN_FINISH) {
+      DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      return butil::Status::OK();
+    } else if (!ret.ok()) {
       DINGO_LOG(ERROR) << "[txn]InnerNext failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return ret;
     }
@@ -180,7 +183,10 @@ butil::Status TxnIterator::Next() {
 
   while (ret.ok()) {
     ret = InnerNext();
-    if (!ret.ok()) {
+    if (ret.error_code() == pb::error::Errno::ETXN_SCAN_FINISH) {
+      DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      return butil::Status::OK();
+    } else if (!ret.ok()) {
       DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return ret;
     }
@@ -199,7 +205,8 @@ butil::Status TxnIterator::Next() {
 
 butil::Status TxnIterator::InnerNext() {
   if (key_.empty()) {
-    DINGO_LOG(ERROR) << "[txn]Scan Next key_ is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
+    DINGO_LOG(ERROR) << "[txn]Scan Next key_ is empty, scan is finished, start_ts: " << start_ts_
+                     << ", seek_ts: " << seek_ts_;
     return butil::Status(pb::error::Errno::ETXN_SCAN_FINISH, "key_ is empty");
   }
 
@@ -259,6 +266,14 @@ butil::Status TxnIterator::InnerNext() {
   if (last_lock_key_.empty() && last_write_key_.empty()) {
     DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
                     << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
+
+    if (!lock_iter_->Valid() && !write_iter_->Valid()) {
+      DINGO_LOG(INFO) << "[txn]Scan lock_iter_ and write_iter_ are invalid, the iterator is finished, start_ts: "
+                      << start_ts_ << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
+      key_.clear();
+      return butil::Status::OK();
+    }
+
     return butil::Status::OK();
   }
 

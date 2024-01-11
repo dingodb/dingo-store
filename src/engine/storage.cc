@@ -614,7 +614,8 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
   DINGO_LOG(INFO) << "TxnScan region_id: " << ctx->RegionId() << " range: " << range.ShortDebugString()
                   << " limit: " << limit << " start_ts: " << start_ts << " key_only: " << key_only
                   << " is_reverse: " << is_reverse << " txn_result_info: " << txn_result_info.ShortDebugString()
-                  << " kvs size: " << kvs.size() << " has_more: " << has_more << " end_key: " << end_key;
+                  << " kvs size: " << kvs.size() << " has_more: " << has_more
+                  << " end_key: " << Helper::StringToHex(end_key);
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
