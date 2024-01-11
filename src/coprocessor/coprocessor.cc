@@ -26,13 +26,12 @@
 #include "coprocessor/raw_coprocessor.h"
 #include "coprocessor/utils.h"
 #include "fmt/core.h"
+#include "libexpr/src/expr/runner.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
+#include "rel_expr_helper.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
-
-#include "libexpr/src/expr/runner.h"
-#include "rel_expr_helper.h"
 
 namespace dingodb {
 
@@ -205,7 +204,7 @@ butil::Status Coprocessor::Open(const std::any& coprocessor) {
 }
 
 butil::Status Coprocessor::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                                   std::vector<pb::common::KeyValue>* kvs) {
+                                   std::vector<pb::common::KeyValue>* kvs, bool& /*has_more*/) {
   DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Execute Enter");
   ScanFilter scan_filter = ScanFilter(key_only, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;

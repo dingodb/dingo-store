@@ -84,7 +84,7 @@ class ScanContext {
  private:
   void Close();
   static std::chrono::milliseconds GetCurrentTime();
-  butil::Status GetKeyValue(std::vector<pb::common::KeyValue>& kvs);  // NOLINT
+  butil::Status GetKeyValue(std::vector<pb::common::KeyValue>& kvs, bool& has_more);  // NOLINT
 #if defined(ENABLE_SCAN_OPTIMIZATION)
   butil::Status AsyncWork();
   void WaitForReady();
@@ -142,8 +142,6 @@ class ScanContext {
   int64_t max_fetch_cnt_by_server_;
 };
 
-
-
 class ScanHandler {
  public:
   ScanHandler() = delete;
@@ -160,7 +158,7 @@ class ScanHandler {
                                  const CoprocessorPbWrapper& coprocessor, std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
-                                    int64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs);
+                                    int64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs, bool& has_more);
 
   static butil::Status ScanRelease(std::shared_ptr<ScanContext> context, [[maybe_unused]] const std::string& scan_id);
 };

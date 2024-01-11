@@ -122,7 +122,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
 
   std::ofstream outfile;
   const std::string &file_path = "./test_vector_index_raw_ivf_pq_boundary.txt";
-  outfile.open(file_path);  // 打开文件
+  outfile.open(file_path);  // open file
   if (!outfile) {
     std::cout << "open file failed " << file_path << std::endl;
     exit(1);

@@ -16,6 +16,7 @@
 
 #include <fmt/core.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -124,11 +125,11 @@ std::chrono::milliseconds ScanContext::GetCurrentTime() {
   return millisec;
 }
 
-butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
+butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs, bool& has_more) {
   if (!disable_coprocessor_) {
     butil::Status status;
     status = coprocessor_->Execute(iter_, key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_,
-                                   &kvs);
+                                   &kvs, has_more);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Coprocessor::Execute failed");
     }
@@ -137,6 +138,7 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
 
   ScanFilter scan_filter = ScanFilter(key_only_, std::min(max_fetch_cnt_, max_fetch_cnt_by_server_), max_bytes_rpc_);
 
+  has_more = false;
   while (iter_->Valid()) {
     pb::common::KeyValue kv;
     *kv.mutable_key() = iter_->Key();
@@ -146,6 +148,7 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs) {
 
     kvs.emplace_back(kv);
     if (scan_filter.UptoLimit(kv)) {
+      has_more = true;
       iter_->Next();
       break;
     }
@@ -415,7 +418,8 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
   context->iter_->Seek(context->range_.start_key());
 
   if (context->max_fetch_cnt_ > 0) {
-    butil::Status s = context->GetKeyValue(*kvs);
+    bool has_more = false;
+    butil::Status s = context->GetKeyValue(*kvs, has_more);
     if (!s.ok()) {
       context->state_ = ScanState::kError;
       DINGO_LOG(ERROR) << fmt::format("ScanContext::GetKeyValue failed");
@@ -444,7 +448,7 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
 }
 
 butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, const std::string& scan_id,
-                                        int64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs) {
+                                        int64_t max_fetch_cnt, std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
   if (BAIDU_UNLIKELY(scan_id.empty() || scan_id != context->scan_id_)) {
     DINGO_LOG(ERROR) << fmt::format("scan_id empty or unequal not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
@@ -482,7 +486,7 @@ butil::Status ScanHandler::ScanContinue(std::shared_ptr<ScanContext> context, co
 
   context->state_ = ScanState::kContinuing;
 
-  s = context->GetKeyValue(*kvs);
+  s = context->GetKeyValue(*kvs, has_more);
   if (!s.ok()) {
     context->state_ = ScanState::kError;
     DINGO_LOG(ERROR) << fmt::format("ScanContext::GetKeyValue failed");

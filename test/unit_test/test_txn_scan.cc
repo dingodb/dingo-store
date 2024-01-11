@@ -22,25 +22,29 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <exception>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <random>
 #include <string>
-#include <thread>
+#include <string_view>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/helper.h"
+#include "config/config.h"
 #include "config/yaml_config.h"
+#include "coordinator/tso_control.h"
+#include "coprocessor/coprocessor_scalar.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
+#include "engine/txn_engine_helper.h"
 #include "proto/common.pb.h"
-#include "scan/scan.h"
-#include "scan/scan_manager.h"
+#include "proto/error.pb.h"
+#include "proto/store_internal.pb.h"
 #include "serial/record_encoder.h"
-#include "serial/schema/base_schema.h"
 #include "serial/schema/boolean_schema.h"
-#include "serial/schema/double_schema.h"
 #include "serial/schema/float_schema.h"
 #include "serial/schema/integer_schema.h"
 #include "serial/schema/long_schema.h"
@@ -48,9 +52,13 @@
 
 namespace dingodb {
 
-static const std::string &kDefaultCf = "default";  // NOLINT
+static const std::string kDefaultCf = "default";
 
-static const std::vector<std::string> kAllCFs = {Constant::kStoreDataCF};
+static const std::vector<std::string> kAllCFs = {Constant::kTxnWriteCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
+                                                 kDefaultCf};
+
+const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+                          's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
 const std::string kRootPath = "./unit_test";
 const std::string kLogPath = kRootPath + "/log";
@@ -71,13 +79,7 @@ const std::string kYamlConfigContent =
     "\n"
     "store:\n"
     "  path: " +
-    kStorePath +
-    "\n"
-    "  scan_v2:\n"
-    "    scan_interval_s: 30\n"
-    "    timeout_s: 1800\n"
-    "    max_bytes_rpc: 4194304\n"
-    "    max_fetch_cnt_by_server: 1000\n";
+    kStorePath + "\n";
 
 static std::string StrToHex(std::string str, std::string separator = "") {
   const std::string hex = "0123456789ABCDEF";
@@ -88,34 +90,25 @@ static std::string StrToHex(std::string str, std::string separator = "") {
   return ss.str();
 }
 
-class ScanWithCoprocessorV2 : public testing::Test {
- public:
-  static std::shared_ptr<Config> GetConfig() { return config_; }
+// rand string
+static std::string GenRandomString(int len) {
+  std::string result;
+  int alphabet_len = sizeof(kAlphabet);
 
-  static std::shared_ptr<RocksRawEngine> GetRawRocksEngine() { return engine; }
-  static ScanManager &GetManager() { return ScanManager::GetInstance(); }
-
-  static std::shared_ptr<ScanContext> GetScan(int64_t *scan_id) {
-    if (!scan_) {
-      scan_ = ScanManagerV2::GetInstance().CreateScan(*scan_id);
-      scan_id_ = *scan_id;
-    } else {
-      *scan_id = scan_id_;
-    }
-    return scan_;
+  std::mt19937 rng;
+  rng.seed(std::random_device()());
+  std::uniform_int_distribution<std::mt19937::result_type> distrib(1, 1000000000);
+  for (int i = 0; i < len; ++i) {
+    result.append(1, kAlphabet[distrib(rng) % alphabet_len]);
   }
 
-  static void DeleteScan() {
-    if (scan_) {
-      ScanManagerV2::GetInstance().DeleteScan(scan_id_);
-    }
-    scan_.reset();
-    scan_id_ = std::numeric_limits<int64_t>::max();
-  }
+  return result;
+}
 
+class TxnScanTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    //DingoLogger::InitLogger("./", "ScanWithCoprocessorV2", dingodb::pb::node::LogLevel::DEBUG);
+    // DingoLogger::InitLogger("./", "TxnScanTest", dingodb::pb::node::LogLevel::DEBUG);
     DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
 
     // Set whether log messages go to stderr in addition to logfiles.
@@ -123,44 +116,115 @@ class ScanWithCoprocessorV2 : public testing::Test {
 
     // If set this flag to true, the log will show in the terminal
     FLAGS_logtostderr = true;
-    Helper::CreateDirectories(kStorePath);
+    dingodb::Helper::CreateDirectories(kStorePath);
+    std::srand(std::time(nullptr));
 
-    config_ = std::make_shared<YamlConfig>();
-    if (config_->Load(kYamlConfigContent) != 0) {
+    std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
+    if (config->Load(kYamlConfigContent) != 0) {
       std::cout << "Load config failed" << '\n';
       return;
     }
 
     engine = std::make_shared<RocksRawEngine>();
-    if (!engine->Init(config_, kAllCFs)) {
+    if (!engine->Init(config, kAllCFs)) {
       std::cout << "RocksRawEngine init failed" << '\n';
     }
-
-    ScanManagerV2::GetInstance().Init(config_);
   }
 
   static void TearDownTestSuite() {
-    coprocessor.reset();
     engine->Close();
     engine->Destroy();
-    Helper::RemoveAllFileOrDirectory(kRootPath);
+    dingodb::Helper::RemoveAllFileOrDirectory(kRootPath);
   }
 
   void SetUp() override {}
+
   void TearDown() override {}
 
- private:
-  inline static std::shared_ptr<Config> config_;     // NOLINT
-  inline static std::shared_ptr<ScanContext> scan_;  // NOLINT
-  inline static std::int64_t scan_id_;               // NOLINT
+  static void DeleteRange();
 
- public:
-  inline static std::shared_ptr<RocksRawEngine> engine;
-  inline static std::shared_ptr<CoprocessorV2> coprocessor;
+  static inline std::shared_ptr<RocksRawEngine> engine;
+  static inline pb::common::CoprocessorV2 pb_coprocessor;
+  static inline int64_t start_ts = 0;
+  static inline int64_t end_ts = 0;
   static inline std::vector<std::string> keys;
 };
 
-TEST_F(ScanWithCoprocessorV2, Prepare) {
+static int64_t Tso2Timestamp(pb::meta::TsoTimestamp tso) {
+  return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
+}
+
+void TxnScanTest::DeleteRange() {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = engine->Writer();
+
+  pb::common::Range range;
+
+  // std::sort(keys.begin(), keys.end());
+
+  // std::string my_min_key(keys.front());
+  // std::string my_max_key(Helper::PrefixNext(keys.back()));
+
+  std::string my_min_key(Helper::GenMinStartKey());
+  std::string my_max_key(Helper::GenMaxStartKey());
+
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+
+  range.set_start_key(my_min_key);
+  range.set_end_key(Helper::PrefixNext(my_max_key));
+
+  // ok
+  {
+    butil::Status ok = writer->KvDeleteRange(Constant::kTxnWriteCF, range);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    const std::string &start_key = my_min_key;
+    std::string end_key = Helper::PrefixNext(my_max_key);
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    auto reader = engine->Reader();
+
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << '\n';
+    }
+  }
+
+  // ok
+  {
+    butil::Status ok = writer->KvDeleteRange(Constant::kTxnDataCF, range);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    const std::string &start_key = my_min_key;
+    std::string end_key = Helper::PrefixNext(my_max_key);
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    auto reader = engine->Reader();
+
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << '\n';
+    }
+  }
+}
+
+TEST_F(TxnScanTest, KvDeleteRangeBefore) { DeleteRange(); }
+
+TEST_F(TxnScanTest, Prepare) {
   int schema_version = 1;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
   long common_id = 1;  // NOLINT
@@ -213,6 +277,45 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
   RecordEncoder record_encoder(schema_version, schemas, common_id);
 
+  int64_t physical = 1702966356362 /*Helper::TimestampMs()*/;
+  int64_t logical = 0;
+
+  auto lambda_txn_set_kv_function = [&](const pb::common::KeyValue &key_value) {
+    pb::common::KeyValue kv_write;
+    pb::meta::TsoTimestamp tso;
+    tso.set_physical(physical);
+    tso.set_logical(logical);
+    int64_t start_ts = Tso2Timestamp(tso);
+    tso.set_logical(++logical);
+    int64_t commit_ts = Tso2Timestamp(tso);
+
+    if (0 == this->start_ts) {
+      this->start_ts = start_ts;
+    }
+
+    end_ts = commit_ts;
+
+    std::string write_key = Helper::EncodeTxnKey(std::string(key_value.key()), commit_ts);
+
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Put);
+    // write_info.set_short_value(key_value.value());
+
+    kv_write.set_key(write_key);
+    kv_write.set_value(write_info.SerializeAsString());
+
+    engine->Writer()->KvPut(Constant::kTxnWriteCF, kv_write);
+
+    pb::common::KeyValue kv_data;
+    std::string data_key = Helper::EncodeTxnKey(std::string(key_value.key()), start_ts);
+    kv_data.set_key(data_key);
+    kv_data.set_value(key_value.value());
+
+    butil::Status ok = engine->Writer()->KvPut(Constant::kTxnDataCF, kv_data);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  };
+
   // 1
   {
     pb::common::KeyValue key_value;
@@ -240,9 +343,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-
+    lambda_txn_set_kv_function(key_value);
     std::string key = key_value.key();
     std::string value = key_value.value();
 
@@ -278,9 +379,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
-
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -317,8 +416,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -355,8 +453,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -393,8 +490,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -431,8 +527,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -469,8 +564,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -507,8 +601,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    lambda_txn_set_kv_function(key_value);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
@@ -519,46 +612,10 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
   }
 }
 
-TEST_F(ScanWithCoprocessorV2, scan) {
-  auto raw_rocks_engine = this->GetRawRocksEngine();
-  int64_t scan_id = 1;
-
+TEST_F(TxnScanTest, Open) {
   butil::Status ok;
 
-  // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
-
-  auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
-
-  EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
-  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-  EXPECT_NE(scan.get(), nullptr);
-
-  int64_t region_id = 1;
-  pb::common::Range range;
-
-  int64_t max_fetch_cnt = 0;
-  bool key_only = false;
-  bool disable_auto_release = false;
-  std::vector<pb::common::KeyValue> kvs;
-
-  std::sort(keys.begin(), keys.end());
-
-  std::string my_min_key(keys.front());
-  std::string my_max_key(keys.back());
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  range.set_start_key(my_min_key);
-  range.set_end_key(Helper::PrefixNext(my_max_key));
-
-  pb::common::CoprocessorV2 pb_coprocessor;
+  //
   {
     pb_coprocessor.set_schema_version(1);
 
@@ -688,90 +745,48 @@ TEST_F(ScanWithCoprocessorV2, scan) {
       }
     }
   }
+}
 
-  // ok
-  ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, false,
-                              pb_coprocessor, &kvs);
-  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+TEST_F(TxnScanTest, Scan) {
+  butil::Status ok;
 
-  for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
-  }
+  std::sort(keys.begin(), keys.end());
 
-  EXPECT_EQ(kvs.size(), 0);
+  std::string my_min_key(keys.front());
+  std::string my_max_key(Helper::PrefixNext(keys.back()));
 
-  max_fetch_cnt = 1;
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
 
-  int cnt = 0;
-  while (true) {
-    bool has_more = false;
-    ok = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, &kvs, has_more);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    for (const auto &kv : kvs) {
-      std::cout << StrToHex(kv.key(), " ") << ":" << StrToHex(kv.value(), " ") << '\n';
-    }
+  pb::common::Range range;
+  // range.set_start_key(my_min_key);
+  range.set_start_key(my_min_key);
+  range.set_end_key(my_max_key);
 
-    cnt += kvs.size();
+  bool key_only = false;
+  size_t limit = 10;
+  std::vector<pb::common::KeyValue> kvs;
+  bool is_reverse = false;
+  pb::store::TxnResultInfo txn_result_info;
+  std::string end_key;
+  bool has_more = false;
+  std::set<int64_t> resolved_locks = {};
+  size_t cnt = 0;
 
-    if (!has_more) {
-      break;
-    }
-    kvs.clear();
-  }
+  ok =
+      TxnEngineHelper::Scan(engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit, key_only,
+                            is_reverse, resolved_locks, false, pb_coprocessor, txn_result_info, kvs, has_more, end_key);
 
-  std::cout << "cnt : " << cnt << '\n';
+  cnt = kvs.size();
 
+  std::cout << "ExecuteTxn key_values cnt : " << cnt << '\n';
   EXPECT_EQ(cnt, keys.size());
-
-  ok = ScanHandler::ScanRelease(scan, std::to_string(scan_id));
-  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-  this->DeleteScan();
+  EXPECT_FALSE(has_more);
 }
 
-TEST_F(ScanWithCoprocessorV2, KvDeleteRange) {
-  auto raw_rocks_engine = this->GetRawRocksEngine();
-  const std::string &cf_name = kDefaultCf;
-  auto writer = raw_rocks_engine->Writer();
-
-  // ok
-  {
-    pb::common::Range range;
-
-    std::sort(keys.begin(), keys.end());
-
-    std::string my_min_key(keys.front());
-    std::string my_max_key(keys.back());
-
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-    range.set_start_key(my_min_key);
-    range.set_end_key(Helper::PrefixNext(my_max_key));
-
-    butil::Status ok = writer->KvDeleteRange(cf_name, range);
-
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    std::string start_key = my_min_key;
-    std::string end_key = Helper::PrefixNext(my_max_key);
-    std::vector<dingodb::pb::common::KeyValue> kvs;
-
-    auto reader = raw_rocks_engine->Reader();
-
-    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
-    for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
-    }
-  }
-}
+TEST_F(TxnScanTest, KvDeleteRange) { DeleteRange(); }
 
 }  // namespace dingodb

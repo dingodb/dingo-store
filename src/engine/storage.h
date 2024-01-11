@@ -53,7 +53,7 @@ class Storage {
                             std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status KvScanContinue(std::shared_ptr<Context> ctx, const std::string& scan_id, int64_t max_fetch_cnt,
-                                      std::vector<pb::common::KeyValue>* kvs);
+                                      std::vector<pb::common::KeyValue>* kvs, bool& has_more);
 
   static butil::Status KvScanRelease(std::shared_ptr<Context> ctx, const std::string& scan_id);
 
@@ -64,7 +64,7 @@ class Storage {
                               std::vector<pb::common::KeyValue>* kvs);
 
   static butil::Status KvScanContinueV2(std::shared_ptr<Context> ctx, int64_t scan_id, int64_t max_fetch_cnt,
-                                        std::vector<pb::common::KeyValue>* kvs);
+                                        std::vector<pb::common::KeyValue>* kvs, bool& has_more);
 
   static butil::Status KvScanReleaseV2(std::shared_ptr<Context> ctx, int64_t scan_id);
 

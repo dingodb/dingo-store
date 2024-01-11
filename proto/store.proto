@@ -376,6 +376,9 @@ message KvScanContinueResponseV2 {
 
   // return key value pair. if kvs.size == 0 means no data
   repeated dingodb.pb.common.KeyValue kvs = 3;
+
+  // if scan is not finished, has_more is true, otherwise false
+  bool has_more = 4;
 }
 
 message KvScanReleaseRequestV2 {

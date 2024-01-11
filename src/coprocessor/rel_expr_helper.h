@@ -18,82 +18,63 @@
 #include <serial/schema/base_schema.h>
 
 #include <any>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
-#include "butil/status.h"
 #include "../libexpr/src/expr/operand.h"
+#include "butil/status.h"
 
 namespace dingodb {
 
-#ifndef DINGO_LIBEXPR_MOCK
-#define DINGO_LIBEXPR_MOCK
+#ifndef TEST_COPROCESSOR_V2_MOCK
+#define TEST_COPROCESSOR_V2_MOCK
 #endif
-#undef DINGO_LIBEXPR_MOCK
 
-#if defined(DINGO_LIBEXPR_MOCK)
-namespace expr {
-class Operand {
- public:
-  template <typename T>
-  Operand(T v) : m_data_(v) {}
+#undef TEST_COPROCESSOR_V2_MOCK
 
-  Operand([[maybe_unused]] std::nullptr_t v) {}
-
-  Operand() = default;
-
-  bool operator!=(const Operand& v) const { return true; }  // NOLINT
-
-  bool operator!=([[maybe_unused]] std::nullptr_t v) const { return true; }
-
-  template <typename T>
-  inline T GetValue() const {
-    return std::get<T>(m_data_);
-  }
-
- private:
-  std::variant<std::monostate, int32_t, int64_t, bool, float, double, std::shared_ptr<std::string>> m_data_;
-};
-
-using Tuple = std::vector<Operand>;
-
-namespace any_optional_data_adaptor {
-template <typename T>
-Operand ToOperand(const std::any& v) {
-  const std::optional<T> opt = std::any_cast<const std::optional<T>>(v);
-  if (opt.has_value()) {
-    return opt.value();
-  }
-  return nullptr;
-}
-
-template <typename T>
-std::any FromOperand(const Operand& v) {
-  auto opt = (v != nullptr ? std::optional<T>(v.GetValue<T>()) : std::optional<T>());
-  return std::make_any<std::optional<T>>(opt);
-}
-}  // namespace any_optional_data_adaptor
-
-using Byte = unsigned char;
+#if defined(TEST_COPROCESSOR_V2_MOCK)
+namespace rel::mock {
 
 class RelRunner {
  public:
   RelRunner() = default;
-  virtual ~RelRunner() {}  // NOLINT
+  virtual ~RelRunner() = default;
 
-  const expr::Byte* Decode(const expr::Byte* /*code*/, size_t /*len*/) { return nullptr; }  // NOLINT
+  const expr::Byte* Decode(const expr::Byte* /*code*/, size_t /*len*/) { return nullptr; }
 
-  const expr::Tuple* Put(const expr::Tuple* /*tuple*/) const { return nullptr; }  // NOLINT
+  const expr::Tuple* Put(const expr::Tuple* tuple) {
+    if (index_ % 2 == 0) {
+      index_++;
+      return tuple;
+    } else {
+      tuples_.emplace_back(const_cast<expr::Tuple*>(tuple));
+      index_++;
+      return nullptr;
+    }
+  }
 
-  const expr::Tuple* Get() const { return nullptr; }  // NOLINT
+  const expr::Tuple* Get() {
+    const expr::Tuple* tuple = nullptr;
+    if (!tuples_.empty()) {
+      tuple = tuples_.back();
+      tuples_.pop_back();
+    }
+
+    return tuple;
+  }
+
+ private:
+  std::deque<expr::Tuple*> tuples_;
+  size_t index_ = 0;
 };
 
-}  // namespace expr
+}  // namespace rel::mock
 
-#endif  // DINGO_LIBEXPR_MOCK
+#endif  // #if defined(TEST_COPROCESSOR_V2_MOCK)
 
 class RelExprHelper {
  public:
@@ -120,7 +101,7 @@ class RelExprHelper {
   static butil::Status TransFromOperandWrapper(
       const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas,
-      const std::vector<int>& result_column_indexes, std::vector<std::any> result_record);
+      const std::vector<int>& result_column_indexes, std::vector<std::any>& result_record);
 };
 
 }  // namespace dingodb

@@ -27,14 +27,19 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
+#include "coordinator/tso_control.h"
+#include "coprocessor/coprocessor_scalar.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
+#include "engine/txn_engine_helper.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
@@ -49,7 +54,8 @@ namespace dingodb {
 
 static const std::string kDefaultCf = "default";
 
-static const std::vector<std::string> kAllCFs = {kDefaultCf};
+static const std::vector<std::string> kAllCFs = {Constant::kTxnWriteCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
+                                                 Constant::kStoreDataCF};
 
 const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
                           's', 't', 'o', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
@@ -102,7 +108,7 @@ static std::string GenRandomString(int len) {
 class CoprocessorTestV2 : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    DingoLogger::InitLogger("./", "CoprocessorTestV2", dingodb::pb::node::LogLevel::DEBUG);
+    //DingoLogger::InitLogger("./", "CoprocessorTestV2", dingodb::pb::node::LogLevel::DEBUG);
     DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
 
     // Set whether log messages go to stderr in addition to logfiles.
@@ -125,6 +131,7 @@ class CoprocessorTestV2 : public testing::Test {
     }
 
     coprocessor = std::make_shared<CoprocessorV2>();
+    coprocessor_scalar = std::make_shared<CoprocessorScalar>();
   }
 
   static void TearDownTestSuite() {
@@ -137,40 +144,137 @@ class CoprocessorTestV2 : public testing::Test {
 
   void TearDown() override {}
 
-  static std::shared_ptr<RocksRawEngine> engine;
-  static std::shared_ptr<CoprocessorV2> coprocessor;
+  static void DeleteRange();
 
-  static std::string max_key;
-  static std::string min_key;
+  static inline std::shared_ptr<RocksRawEngine> engine;
+  static inline std::shared_ptr<CoprocessorV2> coprocessor;
+  static inline std::shared_ptr<CoprocessorScalar> coprocessor_scalar;
+  static inline int64_t start_ts = 0;
+  static inline int64_t end_ts = 0;
 
-  static size_t max_min_size;
-  static size_t min_min_size;
+  static inline std::vector<std::string> keys;
 };
 
-std::shared_ptr<RocksRawEngine> CoprocessorTestV2::engine = nullptr;
+static int64_t Tso2Timestamp(pb::meta::TsoTimestamp tso) {
+  return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
+}
 
-std::shared_ptr<CoprocessorV2> CoprocessorTestV2::coprocessor = nullptr;
+void CoprocessorTestV2::DeleteRange() {
+  const std::string &cf_name = kDefaultCf;
+  auto writer = engine->Writer();
 
-std::string CoprocessorTestV2::max_key;
-std::string CoprocessorTestV2::min_key;
+  pb::common::Range range;
 
-size_t CoprocessorTestV2::max_min_size = 0;
-size_t CoprocessorTestV2::min_min_size = 0;
+  // std::sort(keys.begin(), keys.end());
+
+  // std::string my_min_key(keys.front());
+  // std::string my_max_key(Helper::PrefixNext(keys.back()));
+
+  std::string my_min_key(Helper::GenMinStartKey());
+  std::string my_max_key(Helper::GenMaxStartKey());
+
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+
+  range.set_start_key(my_min_key);
+  range.set_end_key(Helper::PrefixNext(my_max_key));
+
+  // ok
+  {
+    butil::Status ok = writer->KvDeleteRange(cf_name, range);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    const std::string &start_key = my_min_key;
+    std::string end_key = Helper::PrefixNext(my_max_key);
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    auto reader = engine->Reader();
+
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << '\n';
+    }
+  }
+
+  // ok
+  {
+    butil::Status ok = writer->KvDeleteRange(Constant::kTxnWriteCF, range);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    const std::string &start_key = my_min_key;
+    std::string end_key = Helper::PrefixNext(my_max_key);
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    auto reader = engine->Reader();
+
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << '\n';
+    }
+  }
+
+  // ok
+  {
+    butil::Status ok = writer->KvDeleteRange(Constant::kTxnDataCF, range);
+
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    const std::string &start_key = my_min_key;
+    std::string end_key = Helper::PrefixNext(my_max_key);
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+
+    auto reader = engine->Reader();
+
+    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+
+    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    for (const auto &kv : kvs) {
+      std::cout << kv.key() << ":" << kv.value() << '\n';
+    }
+  }
+}
+
+TEST_F(CoprocessorTestV2, KvDeleteRangeBefore) { DeleteRange(); }
 
 TEST_F(CoprocessorTestV2, Open) {
   butil::Status ok;
 
-  // original_schema  empty
+  // wrong  Coprocessor
+  {
+    pb::store::Coprocessor pb_coprocessor;
+
+    pb_coprocessor.set_schema_version(1);
+
+    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // expr empty
   {
     pb::common::CoprocessorV2 pb_coprocessor;
 
     pb_coprocessor.set_schema_version(1);
 
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
-  // selection empty failed
+  // selection
   {
     pb::common::CoprocessorV2 pb_coprocessor;
 
@@ -185,6 +289,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema1->set_is_key(true);
       schema1->set_is_nullable(true);
       schema1->set_index(0);
+      schema1->set_name("name_bool");
     }
 
     auto *schema2 = original_schema->add_schema();
@@ -193,6 +298,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema2->set_is_key(false);
       schema2->set_is_nullable(true);
       schema2->set_index(1);
+      schema2->set_name("name_int");
     }
 
     auto *schema3 = original_schema->add_schema();
@@ -201,6 +307,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema3->set_is_key(false);
       schema3->set_is_nullable(true);
       schema3->set_index(2);
+      schema3->set_name("name_float");
     }
 
     auto *schema4 = original_schema->add_schema();
@@ -209,6 +316,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema4->set_is_key(false);
       schema4->set_is_nullable(true);
       schema4->set_index(3);
+      schema4->set_name("name_int64");
     }
 
     auto *schema5 = original_schema->add_schema();
@@ -217,6 +325,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema5->set_is_key(true);
       schema5->set_is_nullable(true);
       schema5->set_index(4);
+      schema5->set_name("name_double");
     }
 
     auto *schema6 = original_schema->add_schema();
@@ -225,13 +334,18 @@ TEST_F(CoprocessorTestV2, Open) {
       schema6->set_is_key(true);
       schema6->set_is_nullable(true);
       schema6->set_index(5);
+      schema6->set_name("name_string");
     }
 
+    pb_coprocessor.set_rel_expr(Helper::StringToHex(std::string_view("7134021442480000930400")));
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    ok = coprocessor_scalar->Open(CoprocessorPbWrapper{pb_coprocessor});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
-  // result empty failed
+  // result
   {
     pb::common::CoprocessorV2 pb_coprocessor;
 
@@ -246,6 +360,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema1->set_is_key(true);
       schema1->set_is_nullable(true);
       schema1->set_index(0);
+      schema1->set_name("name_bool");
     }
 
     auto *schema2 = original_schema->add_schema();
@@ -254,6 +369,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema2->set_is_key(false);
       schema2->set_is_nullable(true);
       schema2->set_index(1);
+      schema2->set_name("name_int");
     }
 
     auto *schema3 = original_schema->add_schema();
@@ -262,6 +378,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema3->set_is_key(false);
       schema3->set_is_nullable(true);
       schema3->set_index(2);
+      schema3->set_name("name_float");
     }
 
     auto *schema4 = original_schema->add_schema();
@@ -270,6 +387,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema4->set_is_key(false);
       schema4->set_is_nullable(true);
       schema4->set_index(3);
+      schema4->set_name("name_int64");
     }
 
     auto *schema5 = original_schema->add_schema();
@@ -278,6 +396,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema5->set_is_key(true);
       schema5->set_is_nullable(true);
       schema5->set_index(4);
+      schema5->set_name("name_double");
     }
 
     auto *schema6 = original_schema->add_schema();
@@ -286,6 +405,7 @@ TEST_F(CoprocessorTestV2, Open) {
       schema6->set_is_key(true);
       schema6->set_is_nullable(true);
       schema6->set_index(5);
+      schema6->set_name("name_string");
     }
 
     auto *selection_columns = pb_coprocessor.mutable_selection_columns();
@@ -295,414 +415,73 @@ TEST_F(CoprocessorTestV2, Open) {
     selection_columns->Add(3);
     selection_columns->Add(4);
     selection_columns->Add(5);
-    selection_columns->Add(0);
-    selection_columns->Add(1);
-    selection_columns->Add(2);
-    selection_columns->Add(3);
-    selection_columns->Add(4);
-    selection_columns->Add(5);
+
+    pb_coprocessor.set_rel_expr(Helper::StringToHex(std::string_view("7134021442480000930400")));
+
+    auto *result_schema = pb_coprocessor.mutable_result_schema();
+    result_schema->set_common_id(1);
+
+    {
+      auto *schema1 = result_schema->add_schema();
+      {
+        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+        schema1->set_is_key(true);
+        schema1->set_is_nullable(true);
+        schema1->set_index(0);
+        schema1->set_name("name_bool");
+      }
+
+      auto *schema2 = result_schema->add_schema();
+      {
+        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+        schema2->set_is_key(false);
+        schema2->set_is_nullable(true);
+        schema2->set_index(1);
+        schema2->set_name("name_int");
+      }
+
+      auto *schema3 = result_schema->add_schema();
+      {
+        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+        schema3->set_is_key(false);
+        schema3->set_is_nullable(true);
+        schema3->set_index(2);
+        schema3->set_name("name_float");
+      }
+
+      auto *schema4 = result_schema->add_schema();
+      {
+        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+        schema4->set_is_key(false);
+        schema4->set_is_nullable(true);
+        schema4->set_index(3);
+        schema4->set_name("name_int64");
+      }
+
+      auto *schema5 = result_schema->add_schema();
+      {
+        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
+        schema5->set_is_key(true);
+        schema5->set_is_nullable(true);
+        schema5->set_index(4);
+        schema5->set_name("name_double");
+      }
+
+      auto *schema6 = result_schema->add_schema();
+      {
+        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
+        schema6->set_is_key(true);
+        schema6->set_is_nullable(true);
+        schema6->set_index(5);
+        schema6->set_name("name_string");
+      }
+    }
 
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  }
 
-  // ok but not exist aggregation
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
-
-    pb_coprocessor.set_schema_version(1);
-
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
-
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
-
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    // auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(2);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(3);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(4);
-      }
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(5);
-      }
-
-      // auto *schema7 = result_schema->add_schema();
-      // {
-      //   schema7->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      //   schema7->set_is_key(true);
-      //   schema7->set_is_nullable(true);
-      //   schema7->set_index(6);
-      // }
-
-      // auto *schema8 = result_schema->add_schema();
-      // {
-      //   schema8->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      //   schema8->set_is_key(false);
-      //   schema8->set_is_nullable(true);
-      //   schema8->set_index(7);
-      // }
-
-      // auto *schema9 = result_schema->add_schema();
-      // {
-      //   schema9->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      //   schema9->set_is_key(false);
-      //   schema9->set_is_nullable(true);
-      //   schema9->set_index(8);
-      // }
-
-      // auto *schema10 = result_schema->add_schema();
-      // {
-      //   schema10->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      //   schema10->set_is_key(false);
-      //   schema10->set_is_nullable(true);
-      //   schema10->set_index(9);
-      // }
-
-      // auto *schema11 = result_schema->add_schema();
-      // {
-      //   schema11->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      //   schema11->set_is_key(true);
-      //   schema11->set_is_nullable(true);
-      //   schema11->set_index(10);
-      // }
-
-      // auto *schema12 = result_schema->add_schema();
-      // {
-      //   schema12->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      //   schema12->set_is_key(true);
-      //   schema12->set_is_nullable(true);
-      //   schema12->set_index(11);
-      // }
-    }
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-
-  // ok has aggregation
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
-
-    pb_coprocessor.set_schema_version(1);
-
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
-
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
-
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    selection_columns->Add(0);
-    selection_columns->Add(1);
-    selection_columns->Add(2);
-    selection_columns->Add(3);
-    selection_columns->Add(4);
-    selection_columns->Add(5);
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(2);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(3);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(4);
-      }
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(5);
-      }
-
-      auto *schema7 = result_schema->add_schema();
-      {
-        schema7->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema7->set_is_key(true);
-        schema7->set_is_nullable(true);
-        schema7->set_index(6);
-      }
-
-      auto *schema8 = result_schema->add_schema();
-      {
-        schema8->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema8->set_is_key(false);
-        schema8->set_is_nullable(true);
-        schema8->set_index(7);
-      }
-
-      auto *schema9 = result_schema->add_schema();
-      {
-        schema9->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema9->set_is_key(false);
-        schema9->set_is_nullable(true);
-        schema9->set_index(8);
-      }
-
-      auto *schema10 = result_schema->add_schema();
-      {
-        schema10->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema10->set_is_key(false);
-        schema10->set_is_nullable(true);
-        schema10->set_index(9);
-      }
-
-      auto *schema11 = result_schema->add_schema();
-      {
-        schema11->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema11->set_is_key(true);
-        schema11->set_is_nullable(true);
-        schema11->set_index(10);
-      }
-
-      auto *schema12 = result_schema->add_schema();
-      {
-        schema12->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema12->set_is_key(true);
-        schema12->set_is_nullable(true);
-        schema12->set_index(11);
-      }
-    }
-
-    // aggression
-    // pb_coprocessor.add_group_by_columns(0);
-    // pb_coprocessor.add_group_by_columns(1);
-    // pb_coprocessor.add_group_by_columns(2);
-    // pb_coprocessor.add_group_by_columns(3);
-    // pb_coprocessor.add_group_by_columns(4);
-    // pb_coprocessor.add_group_by_columns(5);
-
-    // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
-    //   aggregation_operator1->set_index_of_column(0);
-    // }
-
-    // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    //   aggregation_operator2->set_index_of_column(1);
-    // }
-
-    // auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    //   aggregation_operator3->set_index_of_column(88);
-    // }
-
-    // auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-    //   aggregation_operator4->set_index_of_column(3);
-    // }
-
-    // auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
-    //   aggregation_operator5->set_index_of_column(4);
-    // }
-
-    // auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    //   aggregation_operator6->set_index_of_column(-1);
-    // }
-
-    coprocessor.reset();
-    coprocessor = std::make_shared<CoprocessorV2>();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = coprocessor_scalar->Open(CoprocessorPbWrapper{pb_coprocessor});
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
@@ -759,8 +538,43 @@ TEST_F(CoprocessorTestV2, Prepare) {
 
   RecordEncoder record_encoder(schema_version, schemas, common_id);
 
-  // std::string min_key;
-  // std::string max_key;
+  int64_t physical = 1702966356362 /*Helper::TimestampMs()*/;
+  int64_t logical = 0;
+
+  auto lambda_txn_set_kv_function = [&](const pb::common::KeyValue &key_value) {
+    pb::common::KeyValue kv_write;
+    pb::meta::TsoTimestamp tso;
+    tso.set_physical(physical);
+    tso.set_logical(logical);
+    int64_t start_ts = Tso2Timestamp(tso);
+    tso.set_logical(++logical);
+    int64_t commit_ts = Tso2Timestamp(tso);
+
+    if (0 == this->start_ts) {
+      this->start_ts = start_ts;
+    }
+
+    end_ts = commit_ts;
+
+    std::string write_key = Helper::EncodeTxnKey(std::string(key_value.key()), commit_ts);
+
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Put);
+    // write_info.set_short_value(key_value.value());
+
+    kv_write.set_key(write_key);
+    kv_write.set_value(write_info.SerializeAsString());
+
+    engine->Writer()->KvPut(Constant::kTxnWriteCF, kv_write);
+
+    pb::common::KeyValue kv_data;
+    std::string data_key = Helper::EncodeTxnKey(std::string(key_value.key()), start_ts);
+    kv_data.set_key(data_key);
+    kv_data.set_value(key_value.value());
+
+    engine->Writer()->KvPut(Constant::kTxnDataCF, kv_data);
+  };
 
   // 1
   {
@@ -789,33 +603,14 @@ TEST_F(CoprocessorTestV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
 
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -829,52 +624,31 @@ TEST_F(CoprocessorTestV2, Prepare) {
     std::any any_bool = std::optional<bool>(false);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(1);
+    std::any any_int = std::optional<int32_t>(2);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(1.23);
+    std::any any_float = std::optional<float>(2.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(100);
+    std::any any_long = std::optional<int64_t>(200);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(23.4545);
+    std::any any_double = std::optional<double>(2.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("fdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_22222"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
-
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -888,52 +662,32 @@ TEST_F(CoprocessorTestV2, Prepare) {
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(2);
+    std::any any_int = std::optional<int32_t>(3);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(2.23);
+    std::any any_float = std::optional<float>(3.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(200);
+    std::any any_long = std::optional<int64_t>(300);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(3443.5656);
+    std::any any_double = std::optional<double>(3.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("sssfdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_33333"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -944,55 +698,35 @@ TEST_F(CoprocessorTestV2, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(3);
+    std::any any_bool = std::optional<bool>(4);
     record.emplace_back(std::move(any_bool));
 
     std::any any_int = std::optional<int32_t>(std::nullopt);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(3.23);
+    std::any any_float = std::optional<float>(4.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(232545);
+    std::any any_long = std::optional<int64_t>(400);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(3434343443.56565);
+    std::any any_double = std::optional<double>(4.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("cccfdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_44444"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -1006,10 +740,10 @@ TEST_F(CoprocessorTestV2, Prepare) {
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(4);
+    std::any any_int = std::optional<int32_t>(5);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(4.23);
+    std::any any_float = std::optional<float>(5.23);
     record.emplace_back(std::move(any_float));
 
     std::any any_long = std::optional<int64_t>(std::nullopt);
@@ -1018,40 +752,20 @@ TEST_F(CoprocessorTestV2, Prepare) {
     std::any any_double = std::optional<double>(std::nullopt);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("errerfdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_55555"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -1062,19 +776,19 @@ TEST_F(CoprocessorTestV2, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(5);
+    std::any any_bool = std::optional<bool>(6);
     record.emplace_back(std::move(any_bool));
 
     std::any any_int = std::optional<int32_t>(std::nullopt);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(5.23);
+    std::any any_float = std::optional<float>(6.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(123455666);
+    std::any any_long = std::optional<int64_t>(600);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(99888343434);
+    std::any any_double = std::optional<double>(6.4545);
     record.emplace_back(std::move(any_double));
 
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
@@ -1084,21 +798,13 @@ TEST_F(CoprocessorTestV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    size_t min_size = std::min(key.size(), min_key.size());
-    if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0 || min_key.empty()) {
-      min_key = key;
-    }
-
-    min_size = std::min(key.size(), max_key.size());
-    if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0 || max_key.empty()) {
-      max_key = key;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -1112,52 +818,32 @@ TEST_F(CoprocessorTestV2, Prepare) {
     std::any any_bool = std::optional<bool>(false);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(6);
+    std::any any_int = std::optional<int32_t>(7);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(6.23);
+    std::any any_float = std::optional<float>(7.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(11111111);
+    std::any any_long = std::optional<int64_t>(700);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(0.123232323);
+    std::any any_double = std::optional<double>(7.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("dfaerj56j"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_77777"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -1171,16 +857,16 @@ TEST_F(CoprocessorTestV2, Prepare) {
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(7);
+    std::any any_int = std::optional<int32_t>(8);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(7.23);
+    std::any any_float = std::optional<float>(8.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(1111111111111);
+    std::any any_long = std::optional<int64_t>(800);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(454.343434);
+    std::any any_double = std::optional<double>(8.4545);
     record.emplace_back(std::move(any_double));
 
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
@@ -1190,33 +876,13 @@ TEST_F(CoprocessorTestV2, Prepare) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -1225,12 +891,114 @@ TEST_F(CoprocessorTestV2, Prepare) {
 
 TEST_F(CoprocessorTestV2, Execute) {
   butil::Status ok;
+
+  std::sort(keys.begin(), keys.end());
+
+  std::string my_min_key(keys.front());
+  std::string my_max_key(keys.back());
+
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  bool key_only = false;
+  size_t max_fetch_cnt = 5;
+  int64_t max_bytes_rpc = 1000000000000000;
+  std::vector<pb::common::KeyValue> kvs;
+
+  iter->Seek(my_min_key);
+
+  size_t cnt = 0;
+
+  while (true) {
+    bool has_more = false;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    cnt += kvs.size();
+    if (!has_more) {
+      break;
+    }
+    kvs.clear();
+  }
+
+  std::cout << "Execute key_values cnt : " << cnt << '\n';
+
+  EXPECT_EQ(cnt, keys.size());
+}
+
+TEST_F(CoprocessorTestV2, ExecuteTxn) {
+  butil::Status ok;
+
+  std::sort(keys.begin(), keys.end());
+
+  std::string my_min_key(keys.front());
+  std::string my_max_key(Helper::PrefixNext(keys.back()));
+
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+
+  pb::common::Range range;
+  // range.set_start_key(my_min_key);
+  range.set_start_key(my_min_key);
+  range.set_end_key(my_max_key);
+
+  std::set<int64_t> resolved_locks = {};
+
+  std::shared_ptr<TxnIterator> txn_iter = std::make_shared<TxnIterator>(
+      engine, range, ++end_ts, pb::store::IsolationLevel::SnapshotIsolation, resolved_locks);
+
+  bool key_only = false;
+  size_t limit = 5;
+  std::vector<pb::common::KeyValue> kvs;
+  bool is_reverse = false;
+  pb::store::TxnResultInfo txn_result_info;
+  std::string end_key;
+
+  auto ret = txn_iter->Init();
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "[txn]Scan init txn_iter failed, start_ts: " << start_ts
+                     << ", range: " << range.ShortDebugString() << ", status: " << ret.error_str();
+    return;
+  }
+
+  int64_t response_memory_size = 0;
+  txn_iter->Seek(range.start_key());
+
+  size_t cnt = 0;
+
+  while (true) {
+    bool has_more = false;
+    ok = coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    cnt += kvs.size();
+    if (!has_more) {
+      break;
+    }
+    kvs.clear();
+  }
+
+  std::cout << "ExecuteTxn key_values cnt : " << cnt << '\n';
+  EXPECT_EQ(cnt, keys.size());
+}
+
+TEST_F(CoprocessorTestV2, FilterKV) {
+  butil::Status ok;
   // std::string my_min_key;
   // char my_max_key_char[] = {static_cast<char>(0xEF), static_cast<char>(0xEF), static_cast<char>(0xEF)};
   // std::string my_max_key(my_max_key_char, sizeof(my_max_key_char));
 
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
+  std::sort(keys.begin(), keys.end());
+
+  std::string my_min_key(keys.front());
+  std::string my_max_key(Helper::PrefixNext(keys.back()));
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
   std::cout << "my_min_key_s : " << my_min_key_s << '\n';
@@ -1241,1393 +1009,347 @@ TEST_F(CoprocessorTestV2, Execute) {
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
   auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
 
   iter->Seek(my_min_key);
 
-  size_t cnt = 0;
+  bool is_reserved = false;
 
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values aggregation cnt : " << cnt << '\n';
+  std::string key = std::string(iter->Key());
+  std::string value = std::string(iter->Value());
+
+  ok = coprocessor->Filter(key, value, is_reserved);
+  EXPECT_EQ(ok.error_code(), pb::error::OK);
+
+  key = iter->Key();
+  value = iter->Value();
+
+  ok = coprocessor->Filter(key, value, is_reserved);
+  EXPECT_EQ(ok.error_code(), pb::error::OK);
 }
 
-// without Aggregation only selection
-TEST_F(CoprocessorTestV2, OpenSelection) {
+TEST_F(CoprocessorTestV2, FilterScalar) {
   butil::Status ok;
 
-  // ok no aggregation
+  bool is_reserved = false;
+
+  // field empty
   {
-    pb::common::CoprocessorV2 pb_coprocessor;
+    pb::common::VectorScalardata scalar_data;
 
-    pb_coprocessor.set_schema_version(1);
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    pb::common::ScalarField sf;
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    // auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(2);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(3);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(4);
-      }
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(5);
-      }
-
-      // auto *schema7 = result_schema->add_schema();
-      // {
-      //   schema7->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      //   schema7->set_is_key(true);
-      //   schema7->set_is_nullable(true);
-      //   schema7->set_index(6);
-      // }
-
-      // auto *schema8 = result_schema->add_schema();
-      // {
-      //   schema8->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      //   schema8->set_is_key(false);
-      //   schema8->set_is_nullable(true);
-      //   schema8->set_index(7);
-      // }
-
-      // auto *schema9 = result_schema->add_schema();
-      // {
-      //   schema9->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      //   schema9->set_is_key(false);
-      //   schema9->set_is_nullable(true);
-      //   schema9->set_index(8);
-      // }
-
-      // auto *schema10 = result_schema->add_schema();
-      // {
-      //   schema10->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      //   schema10->set_is_key(false);
-      //   schema10->set_is_nullable(true);
-      //   schema10->set_index(9);
-      // }
-
-      // auto *schema11 = result_schema->add_schema();
-      // {
-      //   schema11->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      //   schema11->set_is_key(true);
-      //   schema11->set_is_nullable(true);
-      //   schema11->set_index(10);
-      // }
-
-      // auto *schema12 = result_schema->add_schema();
-      // {
-      //   schema12->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      //   schema12->set_is_key(true);
-      //   schema12->set_is_nullable(true);
-      //   schema12->set_index(11);
-      // }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
-}
 
-TEST_F(CoprocessorTestV2, ExecuteSelection) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values selection cnt : " << cnt << '\n';
-}
-
-// without Aggregation Key
-TEST_F(CoprocessorTestV2, OpenNoAggregationKey) {
-  butil::Status ok;
-
-  // ok has aggregation bu no  aggregation key
+  // field type not match
   {
-    pb::common::CoprocessorV2 pb_coprocessor;
+    pb::common::VectorScalardata scalar_data;
 
-    pb_coprocessor.set_schema_version(1);
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::INT16);
+    pb::common::ScalarField sf;
+    sf.set_int_data(true);
+    auto *field = scalar_value1.add_fields();
+    field->set_int_data(10);
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    // auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema7 = result_schema->add_schema();
-      {
-        schema7->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema7->set_is_key(true);
-        schema7->set_is_nullable(true);
-        schema7->set_index(0);
-      }
-
-      auto *schema8 = result_schema->add_schema();
-      {
-        schema8->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema8->set_is_key(false);
-        schema8->set_is_nullable(true);
-        schema8->set_index(1);
-      }
-
-      auto *schema9 = result_schema->add_schema();
-      {
-        schema9->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema9->set_is_key(false);
-        schema9->set_is_nullable(true);
-        schema9->set_index(2);
-      }
-
-      auto *schema10 = result_schema->add_schema();
-      {
-        schema10->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema10->set_is_key(false);
-        schema10->set_is_nullable(true);
-        schema10->set_index(3);
-      }
-
-      auto *schema11 = result_schema->add_schema();
-      {
-        schema11->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema11->set_is_key(true);
-        schema11->set_is_nullable(true);
-        schema11->set_index(4);
-      }
-
-      auto *schema12 = result_schema->add_schema();
-      {
-        schema12->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema12->set_is_key(true);
-        schema12->set_is_nullable(true);
-        schema12->set_index(5);
-      }
-    }
-
-    // aggression
-    // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::SUM);
-    //   aggregation_operator1->set_index_of_column(0);
-    // }
-
-    // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    //   aggregation_operator2->set_index_of_column(1);
-    // }
-
-    // auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    //   aggregation_operator3->set_index_of_column(88);
-    // }
-
-    // auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-    //   aggregation_operator4->set_index_of_column(3);
-    // }
-
-    // auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::MIN);
-    //   aggregation_operator5->set_index_of_column(4);
-    // }
-
-    // auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    //   aggregation_operator6->set_index_of_column(-1);
-    // }
-    coprocessor->Close();
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
-}
 
-TEST_F(CoprocessorTestV2, ExecuteNoAggregationKey) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values no aggregation key cnt : " << cnt << '\n';
-}
-
-// without Aggregation Value
-TEST_F(CoprocessorTestV2, OpenNoAggregationValue) {
-  butil::Status ok;
-
+  // field type not match
   {
-    pb::common::CoprocessorV2 pb_coprocessor;
+    pb::common::VectorScalardata scalar_data;
 
-    pb_coprocessor.set_schema_version(1);
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    pb::common::ScalarField sf;
+    sf.set_int_data(true);
+    auto *field = scalar_value1.add_fields();
+    field->set_int_data(10);
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    selection_columns->Add(0);
-    selection_columns->Add(1);
-    selection_columns->Add(2);
-    selection_columns->Add(3);
-    selection_columns->Add(4);
-    selection_columns->Add(5);
-    // selection_columns->Add(0);
-    // selection_columns->Add(1);
-    // selection_columns->Add(2);
-    // selection_columns->Add(3);
-    // selection_columns->Add(4);
-    // selection_columns->Add(5);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(2);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(3);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(4);
-      }
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(5);
-      }
-    }
-
-    // aggression
-    // pb_coprocessor.add_group_by_columns(0);
-    // pb_coprocessor.add_group_by_columns(1);
-    // pb_coprocessor.add_group_by_columns(2);
-    // pb_coprocessor.add_group_by_columns(3);
-    // pb_coprocessor.add_group_by_columns(4);
-    // pb_coprocessor.add_group_by_columns(5);
-
-    coprocessor->Close();
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
-}
 
-TEST_F(CoprocessorTestV2, ExecuteNoAggregationValue) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values no aggregation value cnt : " << cnt << '\n';
-}
-
-// without Aggregation only selection one
-TEST_F(CoprocessorTestV2, OpenSelectionOne) {
-  butil::Status ok;
-
-  // ok no aggregation
+  // only one
   {
-    pb::common::CoprocessorV2 pb_coprocessor;
+    pb::common::VectorScalardata scalar_data;
 
-    pb_coprocessor.set_schema_version(1);
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    pb::common::ScalarField sf;
+    sf.set_bool_data(true);
+    auto *field = scalar_value1.add_fields();
+    field->set_bool_data(true);
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    // auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-
-    // selection_columns->Add(3);
-    // selection_columns->Add(3);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(2);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(3);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(4);
-      }
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(5);
-      }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
-}
-
-TEST_F(CoprocessorTestV2, ExecuteSelectionOne) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values selection one  cnt : " << cnt << '\n';
-}
-
-// without Aggregation Key
-TEST_F(CoprocessorTestV2, OpenNoAggregationKeyOne) {
-  butil::Status ok;
-
-  // ok has aggregation bu no  aggregation key
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
-
-    pb_coprocessor.set_schema_version(1);
-
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
-
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
-
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    selection_columns->Add(3);
-    // selection_columns->Add(3);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema1->set_is_key(false);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-    }
-
-    // auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    //   aggregation_operator1->set_index_of_column(1);
-    // }
-
-    // auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    // {
-    //   aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    //   aggregation_operator2->set_index_of_column(88);
-    // }
-
-    coprocessor->Close();
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-}
-
-TEST_F(CoprocessorTestV2, ExecuteNoAggregationKeyOne) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values no aggregation key cnt : " << cnt << '\n';
-}
-
-// without Aggregation Value one
-TEST_F(CoprocessorTestV2, OpenNoAggregationValueOne) {
-  butil::Status ok;
-
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
-
-    pb_coprocessor.set_schema_version(1);
-
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
-
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
-
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    // auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    // selection_columns->Add(3);
-    // selection_columns->Add(3);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(false);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-    }
-
-    // aggression
-    // pb_coprocessor.add_group_by_columns(0);
-    // pb_coprocessor.add_group_by_columns(1);
-
-    coprocessor->Close();
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-}
-
-TEST_F(CoprocessorTestV2, ExecuteNoAggregationValueOne) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values no aggregation value cnt : " << cnt << '\n';
-}
-
-// without Aggregation Value one test empty
-TEST_F(CoprocessorTestV2, OpenNoAggregationValueEmpty) {
-  butil::Status ok;
-
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
-
-    pb_coprocessor.set_schema_version(1);
-
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
-
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
-
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    // auto *selection_columns = pb_coprocessor.mutable_selection_columns();
-    // selection_columns->Add(3);
-    // selection_columns->Add(3);
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(false);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-    }
-
-    // aggression
-    // pb_coprocessor.add_group_by_columns(0);
-    // pb_coprocessor.add_group_by_columns(1);
-
-    coprocessor->Close();
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-}
-
-TEST_F(CoprocessorTestV2, ExecuteNoAggregationValueOneEmpty) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    cnt += kvs.size();
-    if (kvs.empty()) {
-      break;
-    }
-    kvs.clear();
-  }
-  std::cout << "key_values empty value cnt : " << cnt << '\n';
-}
-
-// without Aggregation only selection bad
-TEST_F(CoprocessorTestV2, OpenBadSelection) {
-  butil::Status ok;
-
-  // ok no aggregation
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
-
-    pb_coprocessor.set_schema_version(1);
-
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
-
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
-
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(2);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(3);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(5);
-    }
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(0);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(1);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(2);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(3);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(4);
-      }
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(5);
-      }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-}
-
-TEST_F(CoprocessorTestV2, ExecuteBadSelection) {
-  butil::Status ok;
-
-  std::string my_min_key(min_key.c_str(), 8);
-  std::string my_max_key(max_key.c_str(), 8);
-
-  std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-  std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-  IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-  bool key_only = false;
-  size_t max_fetch_cnt = 2;
-  int64_t max_bytes_rpc = 1000000000000000;
-  std::vector<pb::common::KeyValue> kvs;
-
-  iter->Seek(my_min_key);
-
-  size_t cnt = 0;
-
-  while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-    break;
-  }
-  std::cout << "key_values selection cnt : " << cnt << '\n';
-}
-
-TEST_F(CoprocessorTestV2, KvDeleteRange) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = engine->Writer();
 
   // ok
   {
-    pb::common::Range range;
+    pb::common::VectorScalardata scalar_data;
 
-    std::string my_min_key(min_key.c_str(), 8);
-    std::string my_max_key(max_key.c_str(), 8);
+    // bool
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+      pb::common::ScalarField sf;
+      // sf.set_bool_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_bool_data(true);
 
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-    range.set_start_key(my_min_key);
-    range.set_end_key(Helper::PrefixNext(my_max_key));
-
-    butil::Status ok = writer->KvDeleteRange(cf_name, range);
-
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    std::string start_key = my_min_key;
-    std::string end_key = Helper::PrefixNext(my_max_key);
-    std::vector<dingodb::pb::common::KeyValue> kvs;
-
-    auto reader = engine->Reader();
-
-    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
-    for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value});
     }
+
+    // int
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+      pb::common::ScalarField sf;
+      // sf.set_int_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_int_data(10);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_int"), scalar_value});
+    }
+
+    // float
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+      pb::common::ScalarField sf;
+      // sf.set_float_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_float_data(10.23f);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_float"), scalar_value});
+    }
+
+    // long
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+      pb::common::ScalarField sf;
+      // sf.set_long_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_long_data(10233555666);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_int64"), scalar_value});
+    }
+
+    // double
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+      pb::common::ScalarField sf;
+      // sf.set_double_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_double_data(10.23232332);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_double"), scalar_value});
+    }
+
+    // string
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      pb::common::ScalarField sf;
+      // sf.set_string_data(true);
+      // sf.set_string_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_string_data("vvvvvvvvvvvvvv");
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_string"), scalar_value});
+    }
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 }
 
-TEST_F(CoprocessorTestV2, PrepareForDisorder) {
+TEST_F(CoprocessorTestV2, KvDeleteRange) { DeleteRange(); }
+
+///////////////////////////////Disorder////////////////////////////////////////
+
+// disorder
+TEST_F(CoprocessorTestV2, OpenDisorder) {
+  butil::Status ok;
+
+  // ok
+  {
+    pb::common::CoprocessorV2 pb_coprocessor;
+
+    pb_coprocessor.set_schema_version(1);
+
+    auto *original_schema = pb_coprocessor.mutable_original_schema();
+    original_schema->set_common_id(1);
+
+    auto *schema6 = original_schema->add_schema();
+    {
+      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
+      schema6->set_is_key(true);
+      schema6->set_is_nullable(true);
+      schema6->set_index(0);
+      schema6->set_name("name_string");
+    }
+
+    auto *schema5 = original_schema->add_schema();
+    {
+      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
+      schema5->set_is_key(true);
+      schema5->set_is_nullable(true);
+      schema5->set_index(1);
+      schema5->set_name("name_double");
+    }
+
+    auto *schema1 = original_schema->add_schema();
+    {
+      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+      schema1->set_is_key(false);
+      schema1->set_is_nullable(true);
+      schema1->set_index(5);
+      schema1->set_name("name_bool");
+    }
+
+    auto *schema2 = original_schema->add_schema();
+    {
+      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+      schema2->set_is_key(false);
+      schema2->set_is_nullable(true);
+      schema2->set_index(4);
+      schema2->set_name("name_int");
+    }
+
+    auto *schema3 = original_schema->add_schema();
+    {
+      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+      schema3->set_is_key(false);
+      schema3->set_is_nullable(true);
+      schema3->set_index(3);
+      schema3->set_name("name_float");
+    }
+
+    auto *schema4 = original_schema->add_schema();
+    {
+      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+      schema4->set_is_key(false);
+      schema4->set_is_nullable(true);
+      schema4->set_index(2);
+      schema4->set_name("name_int64");
+    }
+
+    auto *selection_columns = pb_coprocessor.mutable_selection_columns();
+
+    selection_columns->Add(5);
+    selection_columns->Add(4);
+    selection_columns->Add(3);
+    selection_columns->Add(2);
+    selection_columns->Add(1);
+    selection_columns->Add(0);
+
+    pb_coprocessor.set_rel_expr(Helper::StringToHex(std::string_view("7134021442480000930400")));
+
+    auto *result_schema = pb_coprocessor.mutable_result_schema();
+    result_schema->set_common_id(1);
+
+    {
+      auto *schema1 = result_schema->add_schema();
+      {
+        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+        schema1->set_is_key(true);
+        schema1->set_is_nullable(true);
+        schema1->set_index(0);
+        schema1->set_name("name_bool");
+      }
+
+      auto *schema2 = result_schema->add_schema();
+      {
+        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+        schema2->set_is_key(false);
+        schema2->set_is_nullable(true);
+        schema2->set_index(1);
+        schema2->set_name("name_int");
+      }
+
+      auto *schema3 = result_schema->add_schema();
+      {
+        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+        schema3->set_is_key(false);
+        schema3->set_is_nullable(true);
+        schema3->set_index(2);
+        schema3->set_name("name_float");
+      }
+
+      auto *schema4 = result_schema->add_schema();
+      {
+        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+        schema4->set_is_key(false);
+        schema4->set_is_nullable(true);
+        schema4->set_index(3);
+        schema4->set_name("name_int64");
+      }
+
+      auto *schema5 = result_schema->add_schema();
+      {
+        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
+        schema5->set_is_key(true);
+        schema5->set_is_nullable(true);
+        schema5->set_index(4);
+        schema5->set_name("name_double");
+      }
+
+      auto *schema6 = result_schema->add_schema();
+      {
+        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
+        schema6->set_is_key(true);
+        schema6->set_is_nullable(true);
+        schema6->set_index(5);
+        schema6->set_name("name_string");
+      }
+    }
+
+    start_ts = 0;
+    end_ts = 0;
+    keys.clear();
+
+    coprocessor->Close();
+    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+    coprocessor_scalar->Close();
+    ok = coprocessor_scalar->Open(CoprocessorPbWrapper{pb_coprocessor});
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+}
+
+TEST_F(CoprocessorTestV2, PrepareDisorder) {
   int schema_version = 1;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
   long common_id = 1;  // NOLINT
@@ -2641,6 +1363,7 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
   string_schema->SetIsKey(true);
   string_schema->SetAllowNull(true);
   string_schema->SetIndex(0);
+  string_schema->SetName("name_string");
   schemas->emplace_back(std::move(string_schema));
 
   std::shared_ptr<DingoSchema<std::optional<double>>> double_schema =
@@ -2648,26 +1371,22 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
   double_schema->SetIsKey(true);
   double_schema->SetAllowNull(true);
   double_schema->SetIndex(1);
+  double_schema->SetName("name_double");
   schemas->emplace_back(std::move(double_schema));
 
   std::shared_ptr<DingoSchema<std::optional<bool>>> bool_schema = std::make_shared<DingoSchema<std::optional<bool>>>();
   bool_schema->SetIsKey(false);
   bool_schema->SetAllowNull(true);
   bool_schema->SetIndex(5);
+  bool_schema->SetName("name_bool");
   schemas->emplace_back(std::move(bool_schema));
-
-  std::shared_ptr<DingoSchema<std::optional<int64_t>>> long_schema =
-      std::make_shared<DingoSchema<std::optional<int64_t>>>();
-  long_schema->SetIsKey(false);
-  long_schema->SetAllowNull(true);
-  long_schema->SetIndex(2);
-  schemas->emplace_back(std::move(long_schema));
 
   std::shared_ptr<DingoSchema<std::optional<int32_t>>> int_schema =
       std::make_shared<DingoSchema<std::optional<int32_t>>>();
   int_schema->SetIsKey(false);
   int_schema->SetAllowNull(true);
   int_schema->SetIndex(4);
+  int_schema->SetName("name_int");
   schemas->emplace_back(std::move(int_schema));
 
   std::shared_ptr<DingoSchema<std::optional<float>>> float_schema =
@@ -2675,12 +1394,56 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
   float_schema->SetIsKey(false);
   float_schema->SetAllowNull(true);
   float_schema->SetIndex(3);
+  float_schema->SetName("name_float");
   schemas->emplace_back(std::move(float_schema));
+
+  std::shared_ptr<DingoSchema<std::optional<int64_t>>> long_schema =
+      std::make_shared<DingoSchema<std::optional<int64_t>>>();
+  long_schema->SetIsKey(false);
+  long_schema->SetAllowNull(true);
+  long_schema->SetIndex(2);
+  long_schema->SetName("name_int64");
+  schemas->emplace_back(std::move(long_schema));
 
   RecordEncoder record_encoder(schema_version, schemas, common_id);
 
-  // std::string min_key;
-  // std::string max_key;
+  int64_t physical = 1702966356362 /*Helper::TimestampMs()*/;
+  int64_t logical = 0;
+
+  auto lambda_txn_set_kv_function = [&](const pb::common::KeyValue &key_value) {
+    pb::common::KeyValue kv_write;
+    pb::meta::TsoTimestamp tso;
+    tso.set_physical(physical);
+    tso.set_logical(logical);
+    int64_t start_ts = Tso2Timestamp(tso);
+    tso.set_logical(++logical);
+    int64_t commit_ts = Tso2Timestamp(tso);
+
+    if (0 == this->start_ts) {
+      this->start_ts = start_ts;
+    }
+
+    end_ts = commit_ts;
+
+    std::string write_key = Helper::EncodeTxnKey(std::string(key_value.key()), commit_ts);
+
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Put);
+    // write_info.set_short_value(key_value.value());
+
+    kv_write.set_key(write_key);
+    kv_write.set_value(write_info.SerializeAsString());
+
+    engine->Writer()->KvPut(Constant::kTxnWriteCF, kv_write);
+
+    pb::common::KeyValue kv_data;
+    std::string data_key = Helper::EncodeTxnKey(std::string(key_value.key()), start_ts);
+    kv_data.set_key(data_key);
+    kv_data.set_value(key_value.value());
+
+    engine->Writer()->KvPut(Constant::kTxnDataCF, kv_data);
+  };
 
   // 1
   {
@@ -2688,62 +1451,36 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::vector<std::any> record;
     record.reserve(6);
 
-    // std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
-    std::shared_ptr sp = std::make_shared<std::string>("cccc");
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(sp);
-    record.emplace_back(any_string);
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
+    record.emplace_back(std::move(any_string));
 
-    // std::any any_double = std::optional<double>(std::nullopt);
-    std::any any_double = std::optional<double>(0.0);
-    record.emplace_back(any_double);
+    std::any any_double = std::optional<double>(std::nullopt);
+    record.emplace_back(std::move(any_double));
 
-    // std::any any_long = std::optional<int64_t>(std::nullopt);
-    std::any any_long = std::optional<int64_t>(0);
-    record.emplace_back(any_long);
+    std::any any_long = std::optional<int64_t>(std::nullopt);
+    record.emplace_back(std::move(any_long));
 
-    // std::any any_float = std::optional<float>(std::nullopt);
-    std::any any_float = std::optional<float>(0.0f);
-    record.emplace_back(any_float);
+    std::any any_float = std::optional<float>(std::nullopt);
+    record.emplace_back(std::move(any_float));
 
-    // std::any any_int = std::optional<int32_t>(std::nullopt);
-    std::any any_int = std::optional<int32_t>(0);
-    record.emplace_back(any_int);
+    std::any any_int = std::optional<int32_t>(std::nullopt);
+    record.emplace_back(std::move(any_int));
 
-    // std::any any_bool = std::optional<bool>(std::nullopt);
-    std::any any_bool = std::optional<bool>(false);
-    record.emplace_back(any_bool);
+    std::any any_bool = std::optional<bool>(std::nullopt);
+    record.emplace_back(std::move(any_bool));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
 
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -2755,70 +1492,10 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::vector<std::any> record;
     record.reserve(6);
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("fdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_22222"));
     record.emplace_back(std::move(any_string));
 
-    std::any any_double = std::optional<double>(23.4545);
-    record.emplace_back(std::move(any_double));
-
-    std::any any_long = std::optional<int64_t>(100);
-    record.emplace_back(std::move(any_long));
-
-    std::any any_float = std::optional<float>(1.23);
-    record.emplace_back(std::move(any_float));
-
-    std::any any_int = std::optional<int32_t>(1);
-    record.emplace_back(std::move(any_int));
-
-    std::any any_bool = std::optional<bool>(false);
-    record.emplace_back(std::move(any_bool));
-
-    int ret = record_encoder.Encode(record, key_value);
-
-    EXPECT_EQ(ret, 0);
-
-    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-
-    std::string key = key_value.key();
-    std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
-
-    std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
-  }
-
-  // 3
-  {
-    pb::common::KeyValue key_value;
-    std::vector<std::any> record;
-    record.reserve(6);
-
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("sssfdf45nrthn"));
-    record.emplace_back(std::move(any_string));
-
-    std::any any_double = std::optional<double>(3443.5656);
+    std::any any_double = std::optional<double>(2.4545);
     record.emplace_back(std::move(any_double));
 
     std::any any_long = std::optional<int64_t>(200);
@@ -2830,6 +1507,45 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::any any_int = std::optional<int32_t>(2);
     record.emplace_back(std::move(any_int));
 
+    std::any any_bool = std::optional<bool>(false);
+    record.emplace_back(std::move(any_bool));
+
+    int ret = record_encoder.Encode(record, key_value);
+
+    EXPECT_EQ(ret, 0);
+    lambda_txn_set_kv_function(key_value);
+    butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+
+    std::string key = key_value.key();
+    std::string value = key_value.value();
+    keys.push_back(key);
+
+    std::string s = StrToHex(key, " ");
+    std::cout << "s : " << s << '\n';
+  }
+
+  // 3
+  {
+    pb::common::KeyValue key_value;
+    std::vector<std::any> record;
+    record.reserve(6);
+
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_33333"));
+    record.emplace_back(std::move(any_string));
+
+    std::any any_double = std::optional<double>(3.4545);
+    record.emplace_back(std::move(any_double));
+
+    std::any any_long = std::optional<int64_t>(300);
+    record.emplace_back(std::move(any_long));
+
+    std::any any_float = std::optional<float>(3.23);
+    record.emplace_back(std::move(any_float));
+
+    std::any any_int = std::optional<int32_t>(3);
+    record.emplace_back(std::move(any_int));
+
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
@@ -2837,33 +1553,13 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -2875,55 +1571,35 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::vector<std::any> record;
     record.reserve(6);
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("cccfdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_44444"));
     record.emplace_back(std::move(any_string));
 
-    std::any any_double = std::optional<double>(3434343443.56565);
+    std::any any_double = std::optional<double>(4.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_long = std::optional<int64_t>(232545);
+    std::any any_long = std::optional<int64_t>(400);
     record.emplace_back(std::move(any_long));
 
-    std::any any_float = std::optional<float>(3.23);
+    std::any any_float = std::optional<float>(4.23);
     record.emplace_back(std::move(any_float));
 
     std::any any_int = std::optional<int32_t>(std::nullopt);
     record.emplace_back(std::move(any_int));
 
-    std::any any_bool = std::optional<bool>(3);
+    std::any any_bool = std::optional<bool>(4);
     record.emplace_back(std::move(any_bool));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -2935,7 +1611,7 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::vector<std::any> record;
     record.reserve(6);
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("errerfdf45nrthn"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_55555"));
     record.emplace_back(std::move(any_string));
 
     std::any any_double = std::optional<double>(std::nullopt);
@@ -2944,10 +1620,10 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::any any_long = std::optional<int64_t>(std::nullopt);
     record.emplace_back(std::move(any_long));
 
-    std::any any_float = std::optional<float>(4.23);
+    std::any any_float = std::optional<float>(5.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_int = std::optional<int32_t>(4);
+    std::any any_int = std::optional<int32_t>(5);
     record.emplace_back(std::move(any_int));
 
     std::any any_bool = std::optional<bool>(true);
@@ -2957,33 +1633,13 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -2998,40 +1654,32 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    std::any any_double = std::optional<double>(99888343434);
+    std::any any_double = std::optional<double>(6.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_long = std::optional<int64_t>(123455666);
+    std::any any_long = std::optional<int64_t>(600);
     record.emplace_back(std::move(any_long));
 
-    std::any any_float = std::optional<float>(5.23);
+    std::any any_float = std::optional<float>(6.23);
     record.emplace_back(std::move(any_float));
 
     std::any any_int = std::optional<int32_t>(std::nullopt);
     record.emplace_back(std::move(any_int));
 
-    std::any any_bool = std::optional<bool>(5);
+    std::any any_bool = std::optional<bool>(6);
     record.emplace_back(std::move(any_bool));
 
     int ret = record_encoder.Encode(record, key_value);
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    size_t min_size = std::min(key.size(), min_key.size());
-    if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0 || min_key.empty()) {
-      min_key = key;
-    }
-
-    min_size = std::min(key.size(), max_key.size());
-    if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0 || max_key.empty()) {
-      max_key = key;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -3043,19 +1691,19 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::vector<std::any> record;
     record.reserve(6);
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("dfaerj56j"));
+    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_77777"));
     record.emplace_back(std::move(any_string));
 
-    std::any any_double = std::optional<double>(0.123232323);
+    std::any any_double = std::optional<double>(7.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_long = std::optional<int64_t>(11111111);
+    std::any any_long = std::optional<int64_t>(700);
     record.emplace_back(std::move(any_long));
 
-    std::any any_float = std::optional<float>(6.23);
+    std::any any_float = std::optional<float>(7.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_int = std::optional<int32_t>(6);
+    std::any any_int = std::optional<int32_t>(7);
     record.emplace_back(std::move(any_int));
 
     std::any any_bool = std::optional<bool>(false);
@@ -3065,33 +1713,13 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
@@ -3106,16 +1734,16 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    std::any any_double = std::optional<double>(454.343434);
+    std::any any_double = std::optional<double>(8.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_long = std::optional<int64_t>(1111111111111);
+    std::any any_long = std::optional<int64_t>(800);
     record.emplace_back(std::move(any_long));
 
-    std::any any_float = std::optional<float>(7.23);
+    std::any any_float = std::optional<float>(8.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_int = std::optional<int32_t>(7);
+    std::any any_int = std::optional<int32_t>(8);
     record.emplace_back(std::move(any_int));
 
     std::any any_bool = std::optional<bool>(true);
@@ -3125,769 +1753,320 @@ TEST_F(CoprocessorTestV2, PrepareForDisorder) {
 
     EXPECT_EQ(ret, 0);
 
+    lambda_txn_set_kv_function(key_value);
     butil::Status ok = engine->Writer()->KvPut(kDefaultCf, key_value);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
     std::string key = key_value.key();
     std::string value = key_value.value();
-
-    if (min_key.empty()) {
-      min_min_size = key.size();
-      min_key = key;
-    } else {
-      size_t min_size = std::min(key.size(), min_min_size);
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) < 0) {
-        min_key = key;
-      }
-      min_min_size = min_size;
-    }
-
-    if (max_key.empty()) {
-      max_key = key;
-      max_min_size = key.size();
-    } else {
-      size_t min_size = std::min(key.size(), max_key.size());
-      if (memcmp(key.c_str(), min_key.c_str(), min_size) > 0) {
-        max_key = key;
-      }
-      max_min_size = min_size;
-    }
+    keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
     std::cout << "s : " << s << '\n';
   }
 }
 
-// only has expr disorder ok
-TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderExpr) {
+TEST_F(CoprocessorTestV2, ExecuteDisorder) {
   butil::Status ok;
 
-  // open ok no aggregation and group by key
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
+  std::sort(keys.begin(), keys.end());
 
-    pb_coprocessor.set_schema_version(1);
+  std::string my_min_key(keys.front());
+  std::string my_max_key(keys.back());
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(5);
-    }
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema2->set_is_key(false);
-      schema2->set_is_nullable(true);
-      schema2->set_index(4);
-    }
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  bool key_only = false;
+  size_t max_fetch_cnt = 5;
+  int64_t max_bytes_rpc = 1000000000000000;
+  std::vector<pb::common::KeyValue> kvs;
 
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(3);
-    }
+  iter->Seek(my_min_key);
 
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(2);
-    }
+  size_t cnt = 0;
 
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema5->set_is_key(true);
-      schema5->set_is_nullable(true);
-      schema5->set_index(1);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema6->set_is_key(true);
-      schema6->set_is_nullable(true);
-      schema6->set_index(0);
-    }
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(0);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(1);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(2);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(3);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(4);
-      }
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(5);
-      }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
+  while (true) {
+    bool has_more = false;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-
-  // exection
-  {
-    std::string my_min_key(min_key.c_str(), 8);
-    std::string my_max_key(max_key.c_str(), 8);
-
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-    IteratorOptions options;
-    options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-    bool key_only = false;
-    size_t max_fetch_cnt = 2;
-    int64_t max_bytes_rpc = 1000000000000000;
-    std::vector<pb::common::KeyValue> kvs;
-
-    iter->Seek(my_min_key);
-
-    size_t cnt = 0;
-
-    while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-      EXPECT_EQ(ok.error_code(), pb::error::OK);
+    cnt += kvs.size();
+    if (!has_more) {
       break;
     }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    kvs.clear();
   }
+
+  std::cout << "Execute key_values cnt : " << cnt << '\n';
+  EXPECT_EQ(cnt, keys.size());
 }
 
-// group by key disorder ok
-TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderGroupByKey) {
+TEST_F(CoprocessorTestV2, ExecuteTxnDisorder) {
   butil::Status ok;
 
-  // open ok no aggregation and group by key
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
+  std::sort(keys.begin(), keys.end());
 
-    pb_coprocessor.set_schema_version(1);
+  std::string my_min_key(keys.front());
+  std::string my_max_key(Helper::PrefixNext(keys.back()));
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema2->set_is_key(true);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
+  pb::common::Range range;
+  // range.set_start_key(my_min_key);
+  range.set_start_key(my_min_key);
+  range.set_end_key(my_max_key);
 
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(5);
-    }
+  std::set<int64_t> resolved_locks = {};
 
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(2);
-    }
+  std::shared_ptr<TxnIterator> txn_iter = std::make_shared<TxnIterator>(
+      engine, range, ++end_ts, pb::store::IsolationLevel::SnapshotIsolation, resolved_locks);
 
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema5->set_is_key(false);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
+  bool key_only = false;
+  size_t limit = 5;
+  std::vector<pb::common::KeyValue> kvs;
+  bool is_reverse = false;
+  pb::store::TxnResultInfo txn_result_info;
+  std::string end_key;
 
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema6->set_is_key(false);
-      schema6->set_is_nullable(true);
-      schema6->set_index(3);
-    }
-
-    // {
-    //   // group by key 0 = string 1 = double
-    //   pb_coprocessor.add_group_by_columns(0);
-    //   pb_coprocessor.add_group_by_columns(1);
-    // }
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(0);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(1);
-      }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  auto ret = txn_iter->Init();
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "[txn]Scan init txn_iter failed, start_ts: " << start_ts
+                     << ", range: " << range.ShortDebugString() << ", status: " << ret.error_str();
+    return;
   }
 
-  // execution
-  {
-    std::string my_min_key(min_key.c_str(), 8);
-    std::string my_max_key(max_key.c_str(), 8);
+  int64_t response_memory_size = 0;
+  txn_iter->Seek(range.start_key());
 
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  size_t cnt = 0;
 
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-    IteratorOptions options;
-    options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-    bool key_only = false;
-    size_t max_fetch_cnt = 2;
-    int64_t max_bytes_rpc = 1000000000000000;
-    std::vector<pb::common::KeyValue> kvs;
-
-    iter->Seek(my_min_key);
-
-    size_t cnt = 0;
-
-    while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-      EXPECT_EQ(ok.error_code(), pb::error::OK);
+  while (true) {
+    bool has_more = false;
+    ok = coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    cnt += kvs.size();
+    if (!has_more) {
       break;
     }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    kvs.clear();
   }
+
+  std::cout << "ExecuteTxn key_values cnt : " << cnt << '\n';
+  EXPECT_EQ(cnt, keys.size());
 }
 
-// only has aggregation. no group by key ok.
-TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderAggregation) {
+TEST_F(CoprocessorTestV2, FilterKVDisorder) {
   butil::Status ok;
 
-  // open ok no aggregation and group by key
-  {
-    pb::common::CoprocessorV2 pb_coprocessor;
+  std::sort(keys.begin(), keys.end());
 
-    pb_coprocessor.set_schema_version(1);
+  std::string my_min_key(keys.front());
+  std::string my_max_key(Helper::PrefixNext(keys.back()));
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+  std::string my_min_key_s = StrToHex(my_min_key, " ");
+  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+  std::string my_max_key_s = StrToHex(my_max_key, " ");
+  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema2->set_is_key(true);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
+  IteratorOptions options;
+  options.upper_bound = Helper::PrefixNext(my_max_key);
+  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
 
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(5);
-    }
+  iter->Seek(my_min_key);
 
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(2);
-    }
+  bool is_reserved = false;
 
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema5->set_is_key(false);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
+  std::string key = std::string(iter->Key());
+  std::string value = std::string(iter->Value());
 
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema6->set_is_key(false);
-      schema6->set_is_nullable(true);
-      schema6->set_index(3);
-    }
+  ok = coprocessor->Filter(key, value, is_reserved);
+  EXPECT_EQ(ok.error_code(), pb::error::OK);
 
-    // aggregation
-    // {
-    //   auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     // string
-    //     aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    //     aggregation_operator1->set_index_of_column(0);
-    //   }
+  key = iter->Key();
+  value = iter->Value();
 
-    //   auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     // double
-    //     aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::SUM);
-    //     aggregation_operator2->set_index_of_column(1);
-    //   }
-
-    //   auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     // long
-    //     aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    //     aggregation_operator3->set_index_of_column(2);
-    //   }
-
-    //   auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     // float
-    //     aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-    //     aggregation_operator4->set_index_of_column(3);
-    //   }
-
-    //   auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     // int32
-    //     aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::SUM0);
-    //     aggregation_operator5->set_index_of_column(4);
-    //   }
-
-    //   auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     // bool
-    //     aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::MIN);
-    //     aggregation_operator6->set_index_of_column(5);
-    //   }
-    // }
-
-    // result
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(0);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(1);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(2);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(3);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(4);
-      }
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(5);
-      }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
-  }
-
-  // execution
-  {
-    std::string my_min_key(min_key.c_str(), 8);
-    std::string my_max_key(max_key.c_str(), 8);
-
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-    IteratorOptions options;
-    options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
-
-    bool key_only = false;
-    size_t max_fetch_cnt = 2;
-    int64_t max_bytes_rpc = 1000000000000000;
-    std::vector<pb::common::KeyValue> kvs;
-
-    iter->Seek(my_min_key);
-
-    size_t cnt = 0;
-
-    while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-      EXPECT_EQ(ok.error_code(), pb::error::OK);
-      break;
-    }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
-  }
+  ok = coprocessor->Filter(key, value, is_reserved);
+  EXPECT_EQ(ok.error_code(), pb::error::OK);
 }
 
-// only has aggregation and  group by key ok.
-TEST_F(CoprocessorTestV2, OpenAndExecuteDisorderAggregationAndGroupByKey) {
+TEST_F(CoprocessorTestV2, FilterScalarDisorder) {
   butil::Status ok;
 
-  // open ok no aggregation and group by key
+  bool is_reserved = false;
+
+  // field empty
   {
-    pb::common::CoprocessorV2 pb_coprocessor;
+    pb::common::VectorScalardata scalar_data;
 
-    pb_coprocessor.set_schema_version(1);
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    pb::common::ScalarField sf;
 
-    auto *original_schema = pb_coprocessor.mutable_original_schema();
-    original_schema->set_common_id(1);
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
 
-    auto *schema1 = original_schema->add_schema();
-    {
-      schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-      schema1->set_is_key(true);
-      schema1->set_is_nullable(true);
-      schema1->set_index(0);
-    }
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
 
-    auto *schema2 = original_schema->add_schema();
-    {
-      schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-      schema2->set_is_key(true);
-      schema2->set_is_nullable(true);
-      schema2->set_index(1);
-    }
-
-    auto *schema3 = original_schema->add_schema();
-    {
-      schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-      schema3->set_is_key(false);
-      schema3->set_is_nullable(true);
-      schema3->set_index(5);
-    }
-
-    auto *schema4 = original_schema->add_schema();
-    {
-      schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-      schema4->set_is_key(false);
-      schema4->set_is_nullable(true);
-      schema4->set_index(2);
-    }
-
-    auto *schema5 = original_schema->add_schema();
-    {
-      schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-      schema5->set_is_key(false);
-      schema5->set_is_nullable(true);
-      schema5->set_index(4);
-    }
-
-    auto *schema6 = original_schema->add_schema();
-    {
-      schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-      schema6->set_is_key(false);
-      schema6->set_is_nullable(true);
-      schema6->set_index(3);
-    }
-
-    // group by key 0 = string 1 = double
-    // {
-    //   pb_coprocessor.add_group_by_columns(0);
-    //   pb_coprocessor.add_group_by_columns(1);
-    // }
-
-    // aggregation
-    // {
-    //   auto *aggregation_operator1 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     aggregation_operator1->set_oper(::dingodb::pb::store::AggregationType::COUNT);
-    //     aggregation_operator1->set_index_of_column(0);
-    //   }
-
-    //   auto *aggregation_operator2 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     aggregation_operator2->set_oper(::dingodb::pb::store::AggregationType::SUM);
-    //     aggregation_operator2->set_index_of_column(1);
-    //   }
-
-    //   auto *aggregation_operator3 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     aggregation_operator3->set_oper(::dingodb::pb::store::AggregationType::COUNTWITHNULL);
-    //     aggregation_operator3->set_index_of_column(2);
-    //   }
-
-    //   auto *aggregation_operator4 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     aggregation_operator4->set_oper(::dingodb::pb::store::AggregationType::MAX);
-    //     aggregation_operator4->set_index_of_column(3);
-    //   }
-
-    //   auto *aggregation_operator5 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     aggregation_operator5->set_oper(::dingodb::pb::store::AggregationType::SUM0);
-    //     aggregation_operator5->set_index_of_column(4);
-    //   }
-
-    //   auto *aggregation_operator6 = pb_coprocessor.add_aggregation_operators();
-    //   {
-    //     aggregation_operator6->set_oper(::dingodb::pb::store::AggregationType::MIN);
-    //     aggregation_operator6->set_index_of_column(5);
-    //   }
-    // }
-
-    {
-      auto *result_schema = pb_coprocessor.mutable_result_schema();
-      result_schema->set_common_id(1);
-
-      auto *schema8 = result_schema->add_schema();
-      {
-        schema8->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
-        schema8->set_is_key(true);
-        schema8->set_is_nullable(true);
-        schema8->set_index(0);
-      }
-
-      auto *schema7 = result_schema->add_schema();
-      {
-        schema7->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema7->set_is_key(true);
-        schema7->set_is_nullable(true);
-        schema7->set_index(1);
-      }
-
-      ////////////////////////////////// aggregation
-
-      auto *schema6 = result_schema->add_schema();
-      {
-        schema6->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema6->set_is_key(true);
-        schema6->set_is_nullable(true);
-        schema6->set_index(2);
-      }
-
-      auto *schema5 = result_schema->add_schema();
-      {
-        schema5->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
-        schema5->set_is_key(true);
-        schema5->set_is_nullable(true);
-        schema5->set_index(3);
-      }
-
-      auto *schema4 = result_schema->add_schema();
-      {
-        schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
-        schema4->set_is_key(false);
-        schema4->set_is_nullable(true);
-        schema4->set_index(4);
-      }
-
-      auto *schema3 = result_schema->add_schema();
-      {
-        schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
-        schema3->set_is_key(false);
-        schema3->set_is_nullable(true);
-        schema3->set_index(5);
-      }
-
-      auto *schema2 = result_schema->add_schema();
-      {
-        schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
-        schema2->set_is_key(false);
-        schema2->set_is_nullable(true);
-        schema2->set_index(6);
-      }
-
-      auto *schema1 = result_schema->add_schema();
-      {
-        schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
-        schema1->set_is_key(true);
-        schema1->set_is_nullable(true);
-        schema1->set_index(7);
-      }
-    }
-    coprocessor->Close();
-
-    ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
-  // exection
+  // field type not match
   {
-    std::string my_min_key(min_key.c_str(), 8);
-    std::string my_max_key(max_key.c_str(), 8);
+    pb::common::VectorScalardata scalar_data;
 
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::INT16);
+    pb::common::ScalarField sf;
+    sf.set_int_data(true);
+    auto *field = scalar_value1.add_fields();
+    field->set_int_data(10);
 
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
 
-    IteratorOptions options;
-    options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
 
-    bool key_only = false;
-    size_t max_fetch_cnt = 2;
-    int64_t max_bytes_rpc = 1000000000000000;
-    std::vector<pb::common::KeyValue> kvs;
-
-    iter->Seek(my_min_key);
-
-    size_t cnt = 0;
-
-    while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
-      EXPECT_EQ(ok.error_code(), pb::error::OK);
-      break;
-    }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
-}
 
-TEST_F(CoprocessorTestV2, KvDeleteRangeForDisorder) {
-  const std::string &cf_name = kDefaultCf;
-  auto writer = engine->Writer();
+  // field type not match
+  {
+    pb::common::VectorScalardata scalar_data;
+
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    pb::common::ScalarField sf;
+    sf.set_int_data(true);
+    auto *field = scalar_value1.add_fields();
+    field->set_int_data(10);
+
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // only one
+  {
+    pb::common::VectorScalardata scalar_data;
+
+    pb::common::ScalarValue scalar_value1;
+    scalar_value1.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    pb::common::ScalarField sf;
+    sf.set_bool_data(true);
+    auto *field = scalar_value1.add_fields();
+    field->set_bool_data(true);
+
+    scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value1});
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
 
   // ok
   {
-    pb::common::Range range;
+    pb::common::VectorScalardata scalar_data;
 
-    std::string my_min_key(min_key.c_str(), 8);
-    std::string my_max_key(max_key.c_str(), 8);
+    // bool
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+      pb::common::ScalarField sf;
+      // sf.set_bool_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_bool_data(true);
 
-    std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
-
-    std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
-
-    range.set_start_key(my_min_key);
-    range.set_end_key(Helper::PrefixNext(my_max_key));
-
-    butil::Status ok = writer->KvDeleteRange(kDefaultCf, range);
-
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    std::string start_key = my_min_key;
-    std::string end_key = Helper::PrefixNext(my_max_key);
-    std::vector<dingodb::pb::common::KeyValue> kvs;
-
-    auto reader = engine->Reader();
-
-    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
-    for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      scalar_data.mutable_scalar_data()->insert({std::string("name_bool"), scalar_value});
     }
+
+    // int
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+      pb::common::ScalarField sf;
+      // sf.set_int_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_int_data(10);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_int"), scalar_value});
+    }
+
+    // float
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+      pb::common::ScalarField sf;
+      // sf.set_float_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_float_data(10.23f);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_float"), scalar_value});
+    }
+
+    // long
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+      pb::common::ScalarField sf;
+      // sf.set_long_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_long_data(10233555666);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_int64"), scalar_value});
+    }
+
+    // double
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+      pb::common::ScalarField sf;
+      // sf.set_double_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_double_data(10.23232332);
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_double"), scalar_value});
+    }
+
+    // string
+    {
+      pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+      pb::common::ScalarField sf;
+      // sf.set_string_data(true);
+      // sf.set_string_data(true);
+      auto *field = scalar_value.add_fields();
+      field->set_string_data("vvvvvvvvvvvvvv");
+
+      scalar_data.mutable_scalar_data()->insert({std::string("name_string"), scalar_value});
+    }
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+
+    ok = coprocessor_scalar->Filter(scalar_data, is_reserved);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 }
+
+TEST_F(CoprocessorTestV2, KvDeleteRangeDisorder) { DeleteRange(); }
 
 }  // namespace dingodb

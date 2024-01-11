@@ -132,7 +132,11 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
   result_record_encoder_ = std::make_shared<RecordEncoder>(coprocessor_.schema_version(), result_serial_schemas_,
                                                            coprocessor_.result_schema().common_id());
 
+#if defined(TEST_COPROCESSOR_V2_MOCK)
+  rel_runner_ = std::make_shared<rel::mock::RelRunner>();
+#else
   rel_runner_ = std::make_shared<rel::RelRunner>();
+#endif
 
   try {
     rel_runner_->Decode(reinterpret_cast<const expr::Byte*>(coprocessor_.rel_expr().c_str()),
@@ -147,11 +151,11 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
 }
 
 butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                                     std::vector<pb::common::KeyValue>* kvs) {
+                                     std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute IteratorPtr Enter");
   ScanFilter scan_filter = ScanFilter(false, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;
-
+  has_more = false;
   while (iter->Valid()) {
     pb::common::KeyValue kv;
     *kv.mutable_key() = iter->Key();
@@ -174,8 +178,9 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
     }
 
     if (scan_filter.UptoLimit(kv)) {
+      has_more = true;
       DINGO_LOG(WARNING) << fmt::format(
-          "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt ; [} max_bytes_rpc : {} cur_fetch_cnt : {} "
+          "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt : {} max_bytes_rpc : {} cur_fetch_cnt : {} "
           "cur_bytes_rpc : {}",
           key_only, max_fetch_cnt, max_bytes_rpc, scan_filter.GetCurFetchCnt(), scan_filter.GetCurBytesRpc());
       iter->Next();
@@ -228,7 +233,7 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool ke
     if (scan_filter.UptoLimit(kv)) {
       has_more = true;
       DINGO_LOG(WARNING) << fmt::format(
-          "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt ; [} max_bytes_rpc : {} cur_fetch_cnt : {} "
+          "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt : {} max_bytes_rpc : {} cur_fetch_cnt : {} "
           "cur_bytes_rpc : {}",
           key_only, std::min(limit, FLAGS_max_scan_line_limit), std::numeric_limits<int64_t>::max(),
           scan_filter.GetCurFetchCnt(), scan_filter.GetCurBytesRpc());
@@ -254,7 +259,17 @@ butil::Status CoprocessorV2::Filter(const pb::common::VectorScalardata& scalar_d
   return RawCoprocessor::Filter(scalar_data, is_reserved);
 }
 
-void CoprocessorV2::Close() {}
+void CoprocessorV2::Close() {
+  coprocessor_.Clear();
+  original_serial_schemas_.reset();
+  original_column_indexes_.clear();
+  selection_column_indexes_.clear();
+  result_serial_schemas_.reset();
+  result_record_encoder_.reset();
+  original_record_decoder_.reset();
+  result_column_indexes_.clear();
+  rel_runner_.reset();
+}
 
 butil::Status CoprocessorV2::DoExecute(const std::string& key, const std::string& value, bool* has_result_kv,
                                        pb::common::KeyValue* result_kv) {
@@ -314,6 +329,10 @@ butil::Status CoprocessorV2::DoFilter(const std::string& key, const std::string&
 butil::Status CoprocessorV2::DoRelExprCore(const std::vector<std::any>& original_record,
                                            std::unique_ptr<std::vector<expr::Operand>>& result_operand_ptr) {
   butil::Status status;
+
+#if defined(TEST_COPROCESSOR_V2_MOCK)
+  Utils::DebugPrintAnyArray(original_record, "From Decode");
+#endif
 
   std::unique_ptr<std::vector<expr::Operand>> operand_ptr = std::make_unique<std::vector<expr::Operand>>();
   status = RelExprHelper::TransToOperandWrapper(original_serial_schemas_, selection_column_indexes_, original_record,
@@ -410,6 +429,10 @@ butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(bool /*key_only*/, size_t 
 butil::Status CoprocessorV2::GetKvFromExpr(const std::vector<std::any>& record, bool* has_result_kv,
                                            pb::common::KeyValue* result_kv) {
   butil::Status status;
+
+#if defined(TEST_COPROCESSOR_V2_MOCK)
+  Utils::DebugPrintAnyArray(record, "From Expr");
+#endif
 
   pb::common::KeyValue result_key_value;
   int ret = 0;

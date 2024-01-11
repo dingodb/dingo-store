@@ -659,30 +659,31 @@ TEST_F(ScanTest, ScanContinue) {
 
   int64_t max_fetch_cnt = 2;
   std::vector<pb::common::KeyValue> kvs;
+  bool has_more = false;
 
   // scan_id empty failed
-  ok = ScanHandler::ScanContinue(scan, "", max_fetch_cnt, &kvs);
+  ok = ScanHandler::ScanContinue(scan, "", max_fetch_cnt, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   // max_fetch_cnt == 0 failed
-  ok = ScanHandler::ScanContinue(scan, scan_id, 0, &kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, 0, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
     std::cout << kv.key() << ":" << kv.value() << '\n';
   }
 
-  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
     std::cout << kv.key() << ":" << kv.value() << '\n';
   }
 
-  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
+  ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
@@ -766,7 +767,8 @@ TEST_F(ScanTest, scan) {
   max_fetch_cnt = 1;
 
   while (true) {
-    ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
+    bool has_more = false;
+    ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {

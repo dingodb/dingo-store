@@ -26,11 +26,10 @@
 #include "coprocessor/raw_coprocessor.h"
 #include "coprocessor/rel_expr_helper.h"
 #include "engine/iterator.h"
+#include "libexpr/src/rel/rel_runner.h"
 #include "proto/common.pb.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
-
-#include "libexpr/src/rel/rel_runner.h"
 
 namespace dingodb {
 
@@ -48,7 +47,7 @@ class CoprocessorV2 : public RawCoprocessor {
   butil::Status Open(const std::any& coprocessor) override;
 
   butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                        std::vector<pb::common::KeyValue>* kvs) override;
+                        std::vector<pb::common::KeyValue>* kvs, bool& has_more) override;
 
   butil::Status Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
                         pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,  // NOLINT
@@ -93,7 +92,11 @@ class CoprocessorV2 : public RawCoprocessor {
   // array index =  result schema member index field ; value = result schema array index
   std::vector<int> result_column_indexes_;  // NOLINT
 
+#if defined(TEST_COPROCESSOR_V2_MOCK)
+  std::shared_ptr<rel::mock::RelRunner> rel_runner_;  // NOLINT
+#else
   std::shared_ptr<rel::RelRunner> rel_runner_;  // NOLINT
+#endif
 };
 
 }  // namespace dingodb

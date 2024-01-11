@@ -132,6 +132,9 @@ void SendKvDeleteRange(int64_t region_id, const std::string& prefix);
 void SendKvScan(int64_t region_id, const std::string& prefix);
 void SendKvCompareAndSet(int64_t region_id, const std::string& key);
 void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int count);
+void SendKvScanBeginV2(int64_t region_id, int64_t scan_id);
+void SendKvScanContinueV2(int64_t region_id, int64_t scan_id);
+void SendKvScanReleaseV2(int64_t region_id, int64_t scan_id);
 
 // Txn
 std::string OctalToHex(const std::string& str);

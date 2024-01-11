@@ -36,8 +36,8 @@ CoprocessorScalar::~CoprocessorScalar() { Close(); }
 butil::Status CoprocessorScalar::Open(const std::any& coprocessor) { return CoprocessorV2::Open(coprocessor); }
 
 butil::Status CoprocessorScalar::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                                         std::vector<pb::common::KeyValue>* kvs) {
-  return CoprocessorV2::RawCoprocessor::Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, kvs);  // NOLINT
+                                         std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
+  return CoprocessorV2::RawCoprocessor::Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, kvs, has_more);  // NOLINT
 }
 
 butil::Status CoprocessorScalar::Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
@@ -86,7 +86,7 @@ void CoprocessorScalar::Close() { return CoprocessorV2::Close(); }
 butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalardata& scalar_data,
                                                   std::vector<std::any>& original_record) {
   for (int selection_column_index : selection_column_indexes_) {
-    auto original_serial_schema = (*original_serial_schemas_)[selection_column_indexes_[selection_column_index]];
+    auto original_serial_schema = (*original_serial_schemas_)[selection_column_index];
     BaseSchema::Type type = original_serial_schema->GetType();
     const std::string& name = original_serial_schema->GetName();
 
@@ -100,113 +100,83 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
     const auto& scalar_value = iter->second;
     pb::common::ScalarFieldType field_type = scalar_value.field_type();
 
+    auto lambda_check_misc_function = [&name, &type, &field_type, &scalar_value](BaseSchema::Type base_schema_type) {
+      if (base_schema_type != type) {
+        std::string error_message =
+            fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
+                        BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
+        LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << error_message;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+      }
+
+      if (scalar_value.fields().empty()) {
+        std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
+                                                pb::common::ScalarFieldType_Name(field_type));
+        LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << error_message;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+      }
+
+      return butil::Status();
+    };
+
     switch (field_type) {
       case pb::common::BOOL: {
-        if (BaseSchema::Type::kBool != type) {
-          std::string error_message =
-              fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                          BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-        }
-
-        if (scalar_value.fields().empty()) {
-          std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                  pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        auto status = lambda_check_misc_function(BaseSchema::Type::kBool);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
         }
         original_record.emplace_back(std::optional<bool>{scalar_value.fields(0).bool_data()});
         break;
       }
 
       case pb::common::INT32: {
-        if (BaseSchema::Type::kInteger != type) {
-          std::string error_message =
-              fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                          BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        auto status = lambda_check_misc_function(BaseSchema::Type::kInteger);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
         }
 
-        if (scalar_value.fields().empty()) {
-          std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                  pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-        }
         original_record.emplace_back(std::optional<int32_t>{scalar_value.fields(0).int_data()});
         break;
       }
       case pb::common::INT64: {
-        if (BaseSchema::Type::kLong != type) {
-          std::string error_message =
-              fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                          BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        auto status = lambda_check_misc_function(BaseSchema::Type::kLong);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
         }
 
-        if (scalar_value.fields().empty()) {
-          std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                  pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-        }
         original_record.emplace_back(std::optional<int64_t>{scalar_value.fields(0).long_data()});
         break;
       }
       case pb::common::FLOAT32: {
-        if (BaseSchema::Type::kFloat != type) {
-          std::string error_message =
-              fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                          BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        auto status = lambda_check_misc_function(BaseSchema::Type::kFloat);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
         }
 
-        if (scalar_value.fields().empty()) {
-          std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                  pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-        }
         original_record.emplace_back(std::optional<float>{scalar_value.fields(0).float_data()});
         break;
       }
       case pb::common::DOUBLE: {
-        if (BaseSchema::Type::kDouble != type) {
-          std::string error_message =
-              fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                          BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        auto status = lambda_check_misc_function(BaseSchema::Type::kDouble);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
         }
 
-        if (scalar_value.fields().empty()) {
-          std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                  pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-        }
         original_record.emplace_back(std::optional<double>{scalar_value.fields(0).double_data()});
         break;
       }
       case pb::common::STRING: {
-        if (BaseSchema::Type::kString != type) {
-          std::string error_message =
-              fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                          BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        auto status = lambda_check_misc_function(BaseSchema::Type::kString);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
         }
 
-        if (scalar_value.fields().empty()) {
-          std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                  pb::common::ScalarFieldType_Name(field_type));
-          DINGO_LOG(ERROR) << error_message;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-        }
         original_record.emplace_back(std::optional<std::shared_ptr<std::string>>{
             std::make_shared<std::string>(scalar_value.fields(0).string_data())});
         break;
