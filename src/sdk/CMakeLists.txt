@@ -41,19 +41,26 @@ add_library(sdk
   ${SERIAL2_SRCS}
   ${VERSION_SRCS})
 
+# CAUTION: the order of the libraries is important, because of the dependencies between them.
 target_link_libraries(
   sdk
   PRIVATE $<TARGET_OBJECTS:PROTO_OBJS>
-    brpc
-    protobuf
-    glog
-    fmt
-    gflags
-    openssl
-    crypto
-    leveldb
-    snappy
-    zlib
+    ${BRPC_LIBRARIES}
+    ${PROTOBUF_LIBRARIES}
+    ${GFLAGS_LIBRARIES}
+    ${LEVELDB_LIBRARIES}
+    ${SNAPPY_LIBRARIES}
+    ${LZ4_LIBRARIES}
+    ${ZSTD_LIBRARIES}
+    ${FMT_LIBRARIES}
+    ${ZLIB_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
+    ${CRYPTO_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    ${GTEST_LIBRARIES}
+    ${LIBUNWIND_LIBRARIES}
+    ${LIBUNWIND_GENERIC_LIBRARIES}
+    ${LIBUNWIND_ARCH_LIBRARIES}
     dl
     Threads::Threads)
 

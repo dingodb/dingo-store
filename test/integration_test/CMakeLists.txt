@@ -24,10 +24,4 @@ target_link_libraries(${INTEGRATION_TEST_BIN}
                       PRIVATE
                       $<TARGET_OBJECTS:PROTO_OBJS>
                       sdk
-                      ${PROTOBUF_LIBRARY}
-                      ${GFLAGS_LIBRARIES}
-                      ${FMT_LIBRARIES}
-                      ${GLOG_LIBRARIES}
-                      ${GTEST_LIBRARIES}
-                      ${BRPC_LIBRARIES}
                       )
