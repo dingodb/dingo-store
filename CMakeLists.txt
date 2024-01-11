@@ -233,13 +233,14 @@ include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-
+# CAUTION: the order of the libraries is important, please do not change it.
 set(DYNAMIC_LIB
-    ${GFLAGS_LIBRARIES}
-    ${PROTOBUF_LIBRARIES}
-    ${LEVELDB_LIBRARIES}
     ${BRAFT_LIBRARIES}
     ${BRPC_LIBRARIES}
+    ${PROTOBUF_LIBRARIES}
+    ${GFLAGS_LIBRARIES}
+    ${LEVELDB_LIBRARIES}
+    ${ROCKSDB_LIBRARIES}
     ${SNAPPY_LIBRARIES}
     ${LZ4_LIBRARIES}
     ${ZSTD_LIBRARIES}
@@ -254,8 +255,6 @@ set(DYNAMIC_LIB
     ${LIBUNWIND_GENERIC_LIBRARIES}
     ${LIBUNWIND_ARCH_LIBRARIES}
     ${LIBBACKTRACE_LIBRARIES}
-    ${OPENMP_LIBRARY}
-    ${ROCKSDB_LIBRARIES}
     ${BDB_LIBRARIES}
     )
 
@@ -299,22 +298,6 @@ set(DEPEND_LIBS
     bdb
     )
 
-if(LINK_TCMALLOC)
-    add_definitions(-DLINK_TCMALLOC=ON)
-
-    message(STATUS "Build DingoDB with tcmalloc")
-
-    include(gperftools)
-    include_directories(${GPERFTOOLS_INCLUDE_DIR})
-
-    if(BRPC_ENABLE_CPU_PROFILER)
-        set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
-    else()
-        set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_MINIMAL_LIBRARIES})
-    endif()
-    set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
-endif()
-
 if(WITH_MKL)
     if(DEFINED ENV{MKLROOT})
         message(STATUS "MKLROOT is: $ENV{MKLROOT}")
@@ -344,8 +327,8 @@ if(WITH_MKL)
              NAMES ${COR_LIB}
              PATHS ${MKL_ROOT}/lib/intel64)
 
-    set(MKL_LIBRARIES ${MKL_INTERFACE_LIBRARY} ${MKL_SEQUENTIAL_LAYER_LIBRARY} ${MKL_CORE_LIBRARY})
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${MKL_LIBRARIES})
+    set(MKL_LIBRARIES ${MKL_SEQUENTIAL_LAYER_LIBRARY} ${MKL_INTERFACE_LIBRARY} ${MKL_CORE_LIBRARY})
+    set(BLAS_LIBRARIES ${MKL_LIBRARIES})
 
     message(STATUS "MKL_LIBRARIES=${MKL_LIBRARIES}")
 
@@ -365,7 +348,7 @@ else()
     include_directories(${OPENBLAS_INCLUDE_DIR})
 
     set(DEPEND_LIBS ${DEPEND_LIBS} openblas)
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${OPENBLAS_LIBRARIES})
+    set(BLAS_LIBRARIES ${OPENBLAS_LIBRARIES})
 
     add_definitions(-DUSE_OPENBLAS=ON)
 
@@ -373,7 +356,7 @@ else()
 endif()
 
 include_directories(${FAISS_INCLUDE_DIR})
-set(DYNAMIC_LIB ${DYNAMIC_LIB} ${FAISS_LIBRARIES})
+set(VECTOR_LIB ${FAISS_LIBRARIES} ${OPENMP_LIBRARY})
 
 if(WITH_DISKANN)
     if(NOT WITH_MKL)
@@ -393,7 +376,23 @@ if(WITH_DISKANN)
     include(diskann)
     include_directories(${DISKANN_INCLUDE_DIR})
     set(DEPEND_LIBS ${DEPEND_LIBS} diskann)
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${DISKANN_LIBRARIES})
+    set(VECTOR_LIB {VECTOR_LIB} ${DISKANN_LIBRARIES})
+endif()
+
+if(LINK_TCMALLOC)
+    add_definitions(-DLINK_TCMALLOC=ON)
+
+    message(STATUS "Build DingoDB with tcmalloc")
+
+    include(gperftools)
+    include_directories(${GPERFTOOLS_INCLUDE_DIR})
+
+    if(BRPC_ENABLE_CPU_PROFILER)
+        set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+    else()
+        set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_MINIMAL_LIBRARIES})
+    endif()
+    set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
 endif()
 
 # source file
@@ -543,13 +542,14 @@ else ()
 endif()
 
 target_link_libraries(dingodb_server
-                      "-Xlinker \"-(\""
                       ${DYNAMIC_LIB}
+                      ${VECTOR_LIB}
+                      "-Xlinker \"-(\""
+                      ${BLAS_LIBRARIES}
                       "-Xlinker \"-)\"")
+
 target_link_libraries(dingodb_client
-                      "-Xlinker \"-(\""
-                      ${DYNAMIC_LIB}
-                      "-Xlinker \"-)\"")
+                      ${DYNAMIC_LIB})
 
 add_subdirectory(src/sdk)
 add_subdirectory(src/example)

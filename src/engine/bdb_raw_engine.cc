@@ -50,10 +50,10 @@ namespace dingodb {
 
 DEFINE_int32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
 DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
-DEFINE_int32(bdb_txn_max, 10240, "bdb txn max");
-DEFINE_int32(bdb_lk_max_lockers, 10240, "bdb max lockers");
-DEFINE_int32(bdb_lk_max_locks, 10240, "bdb max locks");
-DEFINE_int32(bdb_lk_max_objects, 10240, "bdb max objects");
+DEFINE_int32(bdb_txn_max, 20480, "bdb txn max");
+DEFINE_int32(bdb_lk_max_lockers, 40960, "bdb max lockers");
+DEFINE_int32(bdb_lk_max_locks, 40960, "bdb max locks");
+DEFINE_int32(bdb_lk_max_objects, 40960, "bdb max objects");
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 
