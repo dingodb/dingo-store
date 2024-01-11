@@ -772,7 +772,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
         if (!status.ok()) {
           LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] "
                      << "scalar coprocessor::Filter failed " << status.error_cstr();
-          return is_reverse;
+          return false;
         }
         return is_reverse;
       };
@@ -868,7 +868,7 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
     if (!status.ok()) {
       LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] "
                  << "Scalar coprocessor::Filter failed " << status.error_cstr();
-      return is_reverse;
+      return false;
     }
     return is_reverse;
   };

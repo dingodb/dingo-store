@@ -58,6 +58,7 @@ DECLARE_string(scalar_filter_value2);
 DECLARE_bool(with_vector_ids);
 DECLARE_bool(with_scalar_pre_filter);
 DECLARE_bool(with_scalar_post_filter);
+DECLARE_bool(with_table_pre_filter);
 DECLARE_int32(vector_ids_count);
 DECLARE_bool(key_is_hex);
 DECLARE_int64(ef_search);
@@ -446,6 +447,11 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
 
       vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
     }
+  }
+
+  if (FLAGS_with_table_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::TABLE_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
   }
 
   if (FLAGS_ef_search > 0) {
@@ -2143,9 +2149,22 @@ void SendKvBatchPut(int64_t region_id, const std::string& prefix, int count) {
   dingodb::pb::store::KvBatchPutRequest request;
   dingodb::pb::store::KvBatchPutResponse response;
 
+  std::string internal_prefix = prefix;
+
+  if (internal_prefix.empty()) {
+    dingodb::pb::common::Region region;
+    if (!TxnGetRegion(region_id, region)) {
+      DINGO_LOG(ERROR) << "TxnGetRegion failed";
+      return;
+    }
+
+    dingodb::pb::common::RangeWithOptions range;
+    internal_prefix = region.definition().range().start_key();
+  }
+
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (int i = 0; i < count; ++i) {
-    std::string key = prefix + Helper::GenRandomString(30);
+    std::string key = internal_prefix + Helper::GenRandomString(30);
     auto* kv = request.add_kvs();
     kv->set_key(key);
     kv->set_value(Helper::GenRandomString(256));
@@ -2289,6 +2308,59 @@ void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int 
   request.set_is_atomic(false);
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchCompareAndSet", request, response);
+}
+
+void SendKvScanBeginV2(int64_t region_id, int64_t scan_id) {
+  dingodb::pb::store::KvScanBeginRequestV2 request;
+  dingodb::pb::store::KvScanBeginResponseV2 response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.mutable_request_info()->set_request_id(scan_id);
+
+  request.set_scan_id(scan_id);
+
+  dingodb::pb::common::Region region;
+  if (!TxnGetRegion(region_id, region)) {
+    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    return;
+  }
+
+  request.mutable_range()->mutable_range()->set_start_key(region.definition().range().start_key());
+  request.mutable_range()->mutable_range()->set_end_key(region.definition().range().end_key());
+  request.mutable_range()->set_with_start(true);
+  request.mutable_range()->set_with_end(false);
+
+  request.set_max_fetch_cnt(0);
+
+  request.set_key_only(false);
+
+  request.set_disable_auto_release(false);
+
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvScanBeginV2", request, response);
+  DINGO_LOG(INFO) << "KvScanBeginV2 response: " << response.DebugString();
+}
+void SendKvScanContinueV2(int64_t region_id, int64_t scan_id) {
+  dingodb::pb::store::KvScanContinueRequestV2 request;
+  dingodb::pb::store::KvScanContinueResponseV2 response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.mutable_request_info()->set_request_id(scan_id);
+  request.set_scan_id(scan_id);
+  request.set_max_fetch_cnt(10);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvScanContinueV2", request, response);
+  DINGO_LOG(INFO) << "KvScanContinueV2 response: " << response.DebugString();
+}
+
+void SendKvScanReleaseV2(int64_t region_id, int64_t scan_id) {
+  dingodb::pb::store::KvScanReleaseRequestV2 request;
+  dingodb::pb::store::KvScanReleaseResponseV2 response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.mutable_request_info()->set_request_id(scan_id);
+
+  request.set_scan_id(scan_id);
+  InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvScanReleaseV2", request, response);
+  DINGO_LOG(INFO) << "KvScanReleaseV2 response: " << response.DebugString();
 }
 
 dingodb::pb::common::RegionDefinition BuildRegionDefinition(int64_t region_id, const std::string& raft_group,

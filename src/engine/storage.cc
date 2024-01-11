@@ -214,7 +214,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
 }
 
 butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::string& scan_id, int64_t max_fetch_cnt,
-                                      std::vector<pb::common::KeyValue>* kvs) {
+                                      std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
   ScanManager& manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
@@ -223,7 +223,7 @@ butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::strin
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
-  status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs);
+  status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs, has_more);
   if (!status.ok()) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,
@@ -292,7 +292,7 @@ butil::Status Storage::KvScanBeginV2(std::shared_ptr<Context> ctx, const std::st
 }
 
 butil::Status Storage::KvScanContinueV2(std::shared_ptr<Context> /*ctx*/, int64_t scan_id, int64_t max_fetch_cnt,
-                                        std::vector<pb::common::KeyValue>* kvs) {
+                                        std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
   ScanManagerV2& manager = ScanManagerV2::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
@@ -301,7 +301,7 @@ butil::Status Storage::KvScanContinueV2(std::shared_ptr<Context> /*ctx*/, int64_
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
-  status = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, kvs);
+  status = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, kvs, has_more);
   if (!status.ok()) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,

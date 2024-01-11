@@ -29,7 +29,8 @@ butil::Status RawCoprocessor::Open(const std::any& /*coprocessor*/) {
 }
 
 butil::Status RawCoprocessor::Execute(IteratorPtr /*iter*/, bool /*key_only*/, size_t /*max_fetch_cnt*/,
-                                      int64_t /*max_bytes_rpc*/, std::vector<pb::common::KeyValue>* /*kvs*/) {
+                                      int64_t /*max_bytes_rpc*/, std::vector<pb::common::KeyValue>* /*kvs*/,
+                                      bool& /*has_more*/) {
   butil::Status status(pb::error::ENOT_SUPPORT, "Not Support");
 
   return status;

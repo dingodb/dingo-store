@@ -24,6 +24,12 @@ namespace dingodb {
 
 butil::Status RelExprHelper::TransToOperand(BaseSchema::Type type, const std::any& column,
                                             std::unique_ptr<std::vector<expr::Operand>>& operand_ptr) {
+  if (!operand_ptr) {
+    std::string s = fmt::format("operand_ptr is nullptr. not support");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
   switch (type) {
     case BaseSchema::Type::kBool: {
       try {
@@ -165,6 +171,12 @@ butil::Status RelExprHelper::TransToOperand(BaseSchema::Type type, const std::an
 butil::Status RelExprHelper::TransFromOperand(BaseSchema::Type type,
                                               const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
                                               size_t index, std::vector<std::any>& columns) {
+  if (!operand_ptr) {
+    std::string s = fmt::format("operand_ptr is nullptr. not support");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
   switch (type) {
     case BaseSchema::Type::kBool: {
       try {
@@ -276,7 +288,6 @@ butil::Status RelExprHelper::TransFromOperand(BaseSchema::Type type,
       try {
         columns.emplace_back(
             expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<double>>>((*operand_ptr)[index]));
-        columns.emplace_back(expr::any_optional_data_adaptor::FromOperand<double>((*operand_ptr)[index]));
       } catch (const std::bad_variant_access& bad) {
         std::string s = fmt::format("Trans from operand failed, {}", bad.what());
         DINGO_LOG(ERROR) << s;
@@ -326,17 +337,18 @@ butil::Status RelExprHelper::TransToOperandWrapper(
 butil::Status RelExprHelper::TransFromOperandWrapper(
     const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
     const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas,
-    const std::vector<int>& result_column_indexes, std::vector<std::any> result_record) {
+    const std::vector<int>& result_column_indexes, std::vector<std::any>& result_record) {
   butil::Status status;
 
   size_t i = 0;
   for (const auto& tuple : *operand_ptr) {
-    BaseSchema::Type type = (*result_serial_schemas)[result_column_indexes[i++]]->GetType();
+    BaseSchema::Type type = (*result_serial_schemas)[result_column_indexes[i]]->GetType();
     status = RelExprHelper::TransFromOperand(type, operand_ptr, i, result_record);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
+    i++;
   }
   return butil::Status();
 }

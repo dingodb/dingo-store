@@ -1248,7 +1248,8 @@ TEST_F(CoprocessorTest, Execute) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -1467,7 +1468,8 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -1674,7 +1676,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -1852,7 +1855,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -2014,7 +2018,8 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -2155,7 +2160,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -2287,7 +2293,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -2419,7 +2426,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (kvs.empty()) {
@@ -2576,7 +2584,8 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
   size_t cnt = 0;
 
   while (true) {
-    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+    bool has_more = true;
+    ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     break;
   }
@@ -3299,7 +3308,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
     size_t cnt = 0;
 
     while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+      bool has_more = true;
+      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
@@ -3425,7 +3435,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
     size_t cnt = 0;
 
     while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+      bool has_more = true;
+      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
@@ -3623,7 +3634,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
     size_t cnt = 0;
 
     while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+      bool has_more = true;
+      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
@@ -3838,7 +3850,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
     size_t cnt = 0;
 
     while (true) {
-      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs);
+      bool has_more = true;
+      ok = coprocessor->Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, &kvs, has_more);
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }

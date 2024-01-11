@@ -1208,7 +1208,8 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
-  status = storage->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
+  bool has_more = false;
+  status = storage->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs, has_more);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1391,8 +1392,8 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
-  std::vector<pb::common::KeyValue> kvs;                  // NOLINT
-  int64_t scan_id = std::numeric_limits<int64_t>::max();  // NOLINT
+  std::vector<pb::common::KeyValue> kvs;  // NOLINT
+  int64_t scan_id = request->scan_id();
 
   status = storage->KvScanBeginV2(ctx, Constant::kStoreDataCF, region_id, correction_range, request->max_fetch_cnt(),
                                   request->key_only(), request->disable_auto_release(), !request->has_coprocessor(),
@@ -1479,7 +1480,8 @@ void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* con
   ctx->SetRawEngineType(region->GetRawEngineType());
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
-  status = storage->KvScanContinueV2(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs);
+  bool has_more = false;
+  status = storage->KvScanContinueV2(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs, has_more);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1490,6 +1492,8 @@ void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* con
   if (!kvs.empty()) {
     Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
   }
+
+  response->set_has_more(has_more);
 }
 
 void StoreServiceImpl::KvScanContinueV2(::google::protobuf::RpcController* controller,

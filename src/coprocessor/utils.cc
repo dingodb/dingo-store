@@ -14,6 +14,8 @@
 
 #include "coprocessor/utils.h"
 
+#include <cxxabi.h>
+
 #include <algorithm>
 #include <any>
 #include <cstddef>
@@ -21,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -31,11 +34,14 @@
 #include "proto/store.pb.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
+#include "serial/schema/base_schema.h"
 
 namespace dingodb {
 
 #undef COPROCESSOR_LOG
+#undef COPROCESSOR_LOG_FOR_LAMBDA
 #define COPROCESSOR_LOG DINGO_LOG(DEBUG)
+#define COPROCESSOR_LOG_FOR_LAMBDA VLOG(DINGO_DEBUG) << "[" << __PRETTY_FUNCTION__ << "] "
 
 template <typename PB_SCHEMA, typename CONSTRUCT, typename TYPE>
 void SerialBaseSchemaConstructWrapper(const PB_SCHEMA& pb_schema, const CONSTRUCT& construct,
@@ -1163,6 +1169,7 @@ void Utils::DebugSerialSchema(const std::shared_ptr<std::vector<std::shared_ptr<
       ss << "\tIsKey : " << (schema->IsKey() ? "true" : "false");
       ss << "\tAllowNull : " << (schema->AllowNull() ? "true" : "false");
       ss << "\tIndex : " << (schema->GetIndex());
+      ss << "\tName : " << (schema->GetName());
 
       COPROCESSOR_LOG << ss.str() << "\n";
       i++;
@@ -1513,6 +1520,304 @@ void Utils::DebugCoprocessorV2(const pb::common::CoprocessorV2& coprocessor) {
       << "***************************DebugCoprocessorV2 End*****************************************************";
 }
 
+void Utils::DebugPrintAnyArray(const std::vector<std::any>& records, const std::string& name) {
+  size_t index = 0;
+  COPROCESSOR_LOG << "***************************" << name
+                  << " Start*****************************************************";
+  for (const auto& record : records) {
+    Utils::DebugPrintAny(record, index);
+    index++;
+  }
+  COPROCESSOR_LOG << "***************************" << name
+                  << " End*****************************************************";
+}
+
+void Utils::DebugPrintAny(const std::any& record, size_t index) {
+  auto lambda_get_name_function = [](auto t) {
+    return abi::__cxa_demangle(typeid(decltype(t)).name(), nullptr, nullptr, nullptr);
+  };
+
+  static std::map<const char*, BaseSchema::Type> any_array_map{
+      {lambda_get_name_function(std::optional<bool>()), BaseSchema::Type::kBool},
+      {lambda_get_name_function(std::optional<int>()), BaseSchema::Type::kInteger},
+      {lambda_get_name_function(std::optional<float>()), BaseSchema::Type::kFloat},
+      {lambda_get_name_function(std::optional<int64_t>()), BaseSchema::Type::kLong},
+      {lambda_get_name_function(std::optional<double>()), BaseSchema::Type::kDouble},
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::string>>()), BaseSchema::Type::kString},
+
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::vector<bool>>>()), BaseSchema::Type::kBoolList},
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::vector<int>>>()), BaseSchema::Type::kIntegerList},
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::vector<float>>>()), BaseSchema::Type::kFloatList},
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::vector<int64_t>>>()), BaseSchema::Type::kLongList},
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::vector<double>>>()), BaseSchema::Type::kDoubleList},
+      {lambda_get_name_function(std::optional<std::shared_ptr<std::vector<std::string>>>()),
+       BaseSchema::Type::kStringList},
+
+  };
+
+  const char* type_name = abi::__cxa_demangle(record.type().name(), nullptr, nullptr, nullptr);
+
+  auto lambda_match_function = [&record, index, type_name](
+                                   const std::map<const char*, BaseSchema::Type>& any_array_map,  // NOLINT
+                                   const char* name) {
+    if (0 == strcmp(type_name, name)) {
+      std::string value_string = "no value";
+      if (record.has_value()) {
+        auto iter = any_array_map.find(name);
+        if (iter == any_array_map.end()) {
+          return false;
+        }
+
+        BaseSchema::Type type = iter->second;
+        switch (type) {
+          case BaseSchema::kBool: {
+            try {
+              auto value = std::any_cast<std::optional<bool>>(record);
+              if (value.has_value()) {
+                if (value.value()) {
+                  value_string = "true";
+                } else {
+                  value_string = "false";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+
+            break;
+          }
+          case BaseSchema::kInteger: {
+            try {
+              auto value = std::any_cast<std::optional<int>>(record);
+              if (value.has_value()) {
+                value_string = std::to_string(value.value());
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kFloat: {
+            try {
+              auto value = std::any_cast<std::optional<float>>(record);
+              if (value.has_value()) {
+                value_string = std::to_string(value.value());
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+
+          case BaseSchema::kLong: {
+            try {
+              auto value = std::any_cast<std::optional<int64_t>>(record);
+              if (value.has_value()) {
+                value_string = std::to_string(value.value());
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kDouble: {
+            try {
+              auto value = std::any_cast<std::optional<double>>(record);
+              if (value.has_value()) {
+                value_string = std::to_string(value.value());
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kString: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::string>>>(record);
+              if (value.has_value()) {
+                value_string = *(value.value());
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kBoolList: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(record);
+              if (value.has_value()) {
+                const std::shared_ptr<std::vector<bool>>& internal_value = value.value();
+
+                if (internal_value) {
+                  value_string = "[";
+                  size_t i = 0;
+                  for (const auto& iv_item : *internal_value) {
+                    if (0 != i) {
+                      value_string += ", ";
+                    }
+                    if (iv_item) {
+                      value_string += "true";
+                    } else {
+                      value_string += "false";
+                    }
+                    i++;
+                  }
+                  value_string += "]";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+
+          case BaseSchema::kIntegerList: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::vector<int>>>>(record);
+              if (value.has_value()) {
+                const std::shared_ptr<std::vector<int>>& internal_value = value.value();
+
+                if (internal_value) {
+                  value_string = "[";
+                  size_t i = 0;
+                  for (const auto& iv_item : *internal_value) {
+                    if (0 != i) {
+                      value_string += ", ";
+                    }
+                    value_string += std::to_string(iv_item);
+                    i++;
+                  }
+                  value_string += "]";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kFloatList: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(record);
+              if (value.has_value()) {
+                const std::shared_ptr<std::vector<float>>& internal_value = value.value();
+
+                if (internal_value) {
+                  value_string = "[";
+                  size_t i = 0;
+                  for (const auto& iv_item : *internal_value) {
+                    if (0 != i) {
+                      value_string += ", ";
+                    }
+                    value_string += std::to_string(iv_item);
+                    i++;
+                  }
+                  value_string += "]";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kLongList: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(record);
+              if (value.has_value()) {
+                const std::shared_ptr<std::vector<int64_t>>& internal_value = value.value();
+
+                if (internal_value) {
+                  value_string = "[";
+                  size_t i = 0;
+                  for (const auto& iv_item : *internal_value) {
+                    if (0 != i) {
+                      value_string += ", ";
+                    }
+                    value_string += std::to_string(iv_item);
+                    i++;
+                  }
+                  value_string += "]";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kDoubleList: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(record);
+              if (value.has_value()) {
+                const std::shared_ptr<std::vector<double>>& internal_value = value.value();
+
+                if (internal_value) {
+                  value_string = "[";
+                  size_t i = 0;
+                  for (const auto& iv_item : *internal_value) {
+                    if (0 != i) {
+                      value_string += ", ";
+                    }
+                    value_string += std::to_string(iv_item);
+                    i++;
+                  }
+                  value_string += "]";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          case BaseSchema::kStringList: {
+            try {
+              auto value = std::any_cast<std::optional<std::shared_ptr<std::vector<std::string>>>>(record);
+              if (value.has_value()) {
+                const std::shared_ptr<std::vector<std::string>>& internal_value = value.value();
+
+                if (internal_value) {
+                  value_string = "[";
+                  size_t i = 0;
+                  for (const auto& iv_item : *internal_value) {
+                    if (0 != i) {
+                      value_string += ", ";
+                    }
+                    value_string += iv_item;
+                    i++;
+                  }
+                  value_string += "]";
+                }
+              }
+            } catch (const std::bad_any_cast& cast) {
+              ;  // NOLINT
+            }
+            break;
+          }
+          default: {
+            return false;
+          }
+        }
+      }
+
+      COPROCESSOR_LOG_FOR_LAMBDA << type_name << " "
+                                 << "index : " << index << " value  : " << value_string;
+      return true;
+    }
+    return false;
+  };
+
+  bool is_match = false;
+  for (const auto& [name, _] : any_array_map) {
+    if (lambda_match_function(any_array_map, name)) {
+      is_match = true;
+      break;
+    }
+  }
+  if (!is_match) {
+    COPROCESSOR_LOG << type_name << " "
+                    << "index : " << index << " value  : not match";
+  }
+}
+
 #undef COPROCESSOR_LOG
+#undef COPROCESSOR_LOG_FOR_LAMBDA
 
 }  // namespace dingodb

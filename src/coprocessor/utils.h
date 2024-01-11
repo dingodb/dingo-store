@@ -126,6 +126,12 @@ class Utils {
 
   ///////////////////////////////////////////////CoprocessorV2////////////////////////////////////////////////////////////////////
   static void DebugCoprocessorV2(const pb::common::CoprocessorV2& coprocessor);
+
+  // Not high performance. Do not use in production environment.
+  static void DebugPrintAnyArray(const std::vector<std::any>& records, const std::string &name);
+
+  // Not high performance. Do not use in production environment.
+  static void DebugPrintAny(const std::any& record, size_t index);
 };
 
 }  // namespace dingodb

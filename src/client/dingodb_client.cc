@@ -155,6 +155,7 @@ DEFINE_int32(max_watch_count, 10, "max_watch_count");
 DEFINE_bool(with_vector_ids, false, "Search vector with vector ids list default false");
 DEFINE_bool(with_scalar_pre_filter, false, "Search vector with scalar data pre filter");
 DEFINE_bool(with_scalar_post_filter, false, "Search vector with scalar data post filter");
+DEFINE_bool(with_table_pre_filter, false, "Search vector with table data pre filter");
 DEFINE_int32(vector_ids_count, 100, "vector ids count");
 
 DEFINE_string(lock_name, "", "Request lock_name");
@@ -178,6 +179,7 @@ DEFINE_double(radius, 10.1, "range search radius");
 DEFINE_double(rate, 0.0, "rate");
 
 DEFINE_bool(force_read_only, false, "force read only");
+DEFINE_int64(scan_id, 1, "scan id client supply");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -338,6 +340,12 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendKvCompareAndSet(FLAGS_region_id, FLAGS_key);
     } else if (method == "KvBatchCompareAndSet") {
       client::SendKvBatchCompareAndSet(FLAGS_region_id, FLAGS_prefix, 100);
+    } else if (method == "KvScanBeginV2") {
+      client::SendKvScanBeginV2(FLAGS_region_id, FLAGS_scan_id);
+    } else if (method == "KvScanContinueV2") {
+      client::SendKvScanContinueV2(FLAGS_region_id, FLAGS_scan_id);
+    } else if (method == "KvScanReleaseV2") {
+      client::SendKvScanReleaseV2(FLAGS_region_id, FLAGS_scan_id);
     }
 
     // txn

@@ -18,6 +18,7 @@
 #include <optional>
 
 #include "butil/status.h"
+#include "common/logging.h"
 #include "coprocessor/utils.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
@@ -33,7 +34,16 @@ namespace dingodb {  // NOLINT
 
 class CoprocessorUtilsTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() {
+    // DingoLogger::InitLogger("./", "CoprocessorUtilsTest", dingodb::pb::node::LogLevel::DEBUG);
+    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
+
+    // Set whether log messages go to stderr in addition to logfiles.
+    FLAGS_alsologtostderr = true;
+
+    // If set this flag to true, the log will show in the terminal
+    FLAGS_logtostderr = true;
+  }
 
   static void TearDownTestSuite() {}
 
@@ -1253,7 +1263,7 @@ TEST_F(CoprocessorUtilsTest, CompareSerialSchemaStrict) {
     ok = Utils::JoinSerialSchema(new_serial_schemas1, new_serial_schemas2, &join_serial_schemas_3);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    // 手动比较
+    // compare by hand
     size_t j = 0;
     for (size_t i = 0; i < new_serial_schemas1->size(); i++, j++) {
       EXPECT_EQ((*new_serial_schemas1)[i]->GetType(), (*join_serial_schemas_3)[j]->GetType());
@@ -1942,6 +1952,283 @@ TEST_F(CoprocessorUtilsTest, CoprocessorParamEmpty) {
     bool ret = Utils::CoprocessorParamEmpty(coprocessor);
     EXPECT_TRUE(ret);
   }
+}
+
+TEST_F(CoprocessorUtilsTest, DebugPrintAny) {
+  size_t index = 0;
+
+  // empty
+  {
+    std::any record;
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // bool
+  {
+    std::any record = std::make_any<std::optional<bool>>();
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<std::optional<bool>>(true);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // int
+  {
+    std::any record = std::make_any<std::optional<int>>();
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<std::optional<int>>(12345);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // float
+  {
+    std::any record = std::make_any<std::optional<float>>();
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<std::optional<float>>(12345.23);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // double
+  {
+    std::any record = std::make_any<std::optional<double>>();
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<std::optional<double>>(12345.256);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // int64
+  {
+    std::any record = std::make_any<std::optional<int64_t>>();
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<std::optional<int64_t>>(12345);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // string
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::string>>>();
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<std::optional<std::shared_ptr<std::string>>>(std::make_shared<std::string>("vvvvv"));
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // bool list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<bool>>>>();
+    Utils::DebugPrintAny(record, index);
+
+    std::shared_ptr<std::vector<bool>> value(new std::vector<bool>{true, false, true});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<bool>>>>(value);
+    Utils::DebugPrintAny(record, index);
+
+    value->clear();
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<bool>>>>(value);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // int list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<int>>>>();
+    Utils::DebugPrintAny(record, index);
+
+    std::shared_ptr<std::vector<int>> value(new std::vector<int>{1, 2, 3});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<int>>>>(value);
+    Utils::DebugPrintAny(record, index);
+
+    value->clear();
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<int>>>>(value);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // float list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<float>>>>();
+    Utils::DebugPrintAny(record, index);
+
+    std::shared_ptr<std::vector<float>> value(new std::vector<float>{1.23, 2.23, 3.23});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<float>>>>(value);
+    Utils::DebugPrintAny(record, index);
+
+    value->clear();
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<float>>>>(value);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // int64 list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<int64_t>>>>();
+    Utils::DebugPrintAny(record, index);
+
+    std::shared_ptr<std::vector<int64_t>> value(new std::vector<int64_t>{1000000, 200000000, 3000000});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<int64_t>>>>(value);
+    Utils::DebugPrintAny(record, index);
+
+    value->clear();
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<int64_t>>>>(value);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // double list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<double>>>>();
+    Utils::DebugPrintAny(record, index);
+
+    std::shared_ptr<std::vector<double>> value(new std::vector<double>{1.23, 2.23, 3.23});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<double>>>>(value);
+    Utils::DebugPrintAny(record, index);
+
+    value->clear();
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<double>>>>(value);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // string list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<std::string>>>>();
+    Utils::DebugPrintAny(record, index);
+
+    std::shared_ptr<std::vector<std::string>> value(new std::vector<std::string>{"vvvv", "ccccc", "gggggg"});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<std::string>>>>(value);
+    Utils::DebugPrintAny(record, index);
+
+    value->clear();
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<std::string>>>>(value);
+    Utils::DebugPrintAny(record, index);
+  }
+
+  // not found
+  {
+    std::any record = std::make_any<bool>(false);
+    Utils::DebugPrintAny(record, index);
+
+    record = std::make_any<bool>(true);
+    Utils::DebugPrintAny(record, index);
+  }
+}
+
+TEST_F(CoprocessorUtilsTest, DebugPrintAnyArray) {
+  std::vector<std::any> records;
+
+  // bool
+  {
+    std::any record = std::make_any<std::optional<bool>>();
+    records.push_back(record);
+
+    record = std::make_any<std::optional<bool>>(true);
+    records.push_back(record);
+  }
+
+  // int
+  {
+    std::any record = std::make_any<std::optional<int>>();
+    records.push_back(record);
+
+    record = std::make_any<std::optional<int>>(12345);
+    records.push_back(record);
+  }
+
+  // float
+  {
+    std::any record = std::make_any<std::optional<float>>();
+    records.push_back(record);
+
+    record = std::make_any<std::optional<float>>(12345.23);
+    records.push_back(record);
+  }
+
+  // double
+  {
+    std::any record = std::make_any<std::optional<double>>();
+    records.push_back(record);
+
+    record = std::make_any<std::optional<double>>(12345.256);
+    records.push_back(record);
+  }
+
+  // int64
+  {
+    std::any record = std::make_any<std::optional<int64_t>>();
+    records.push_back(record);
+
+    record = std::make_any<std::optional<int64_t>>(12345);
+    records.push_back(record);
+  }
+
+  // string
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::string>>>();
+    records.push_back(record);
+
+    record = std::make_any<std::optional<std::shared_ptr<std::string>>>(std::make_shared<std::string>("vvvvv"));
+    records.push_back(record);
+  }
+
+  // bool list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<bool>>>>();
+    records.push_back(record);
+
+    std::shared_ptr<std::vector<bool>> value(new std::vector<bool>{true, false, true});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<bool>>>>(value);
+    records.push_back(record);
+  }
+
+  // int list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<int>>>>();
+    records.push_back(record);
+
+    std::shared_ptr<std::vector<int>> value(new std::vector<int>{1, 2, 3});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<int>>>>(value);
+    records.push_back(record);
+  }
+
+  // float list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<float>>>>();
+    records.push_back(record);
+
+    std::shared_ptr<std::vector<float>> value(new std::vector<float>{1.23, 2.23, 3.23});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<float>>>>(value);
+    records.push_back(record);
+  }
+
+  // int64 list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<int64_t>>>>();
+    records.push_back(record);
+
+    std::shared_ptr<std::vector<int64_t>> value(new std::vector<int64_t>{1000000, 200000000, 3000000});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<int64_t>>>>(value);
+    records.push_back(record);
+  }
+
+  // double list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<double>>>>();
+    records.push_back(record);
+
+    std::shared_ptr<std::vector<double>> value(new std::vector<double>{1.23, 2.23, 3.23});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<double>>>>(value);
+    records.push_back(record);
+  }
+
+  // string list
+  {
+    std::any record = std::make_any<std::optional<std::shared_ptr<std::vector<std::string>>>>();
+    records.push_back(record);
+
+    std::shared_ptr<std::vector<std::string>> value(new std::vector<std::string>{"vvvv", "ccccc", "gggggg"});
+    record = std::make_any<std::optional<std::shared_ptr<std::vector<std::string>>>>(value);
+    records.push_back(record);
+  }
+
+  Utils::DebugPrintAnyArray(records, "Dummy");
 }
 
 }  // namespace dingodb

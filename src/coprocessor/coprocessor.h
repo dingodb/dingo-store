@@ -45,7 +45,7 @@ class Coprocessor : public RawCoprocessor {
   butil::Status Open(const std::any& coprocessor) override;
 
   butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                        std::vector<pb::common::KeyValue>* kvs) override;
+                        std::vector<pb::common::KeyValue>* kvs, bool& has_more) override;
 
   butil::Status Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
                         pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,  // NOLINT

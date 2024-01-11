@@ -109,7 +109,7 @@ class ScanWithCoprocessor : public testing::Test {
 
  protected:
   static void SetUpTestSuite() {
-    DingoLogger::InitLogger("./", "ScanWithCoprocessor", dingodb::pb::node::LogLevel::DEBUG);
+    // DingoLogger::InitLogger("./", "ScanWithCoprocessor", dingodb::pb::node::LogLevel::DEBUG);
     DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
 
     // Set whether log messages go to stderr in addition to logfiles.
@@ -940,7 +940,8 @@ TEST_F(ScanWithCoprocessor, scan) {
 
   int cnt = 0;
   while (true) {
-    ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs);
+    bool has_more = false;
+    ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
