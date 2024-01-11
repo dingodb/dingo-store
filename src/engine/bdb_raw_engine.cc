@@ -60,10 +60,10 @@ DEFINE_int32(bdb_lk_max_objects, 40960, "bdb max objects");
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 DEFINE_int32(bdb_checkpoint_time_s, 60, "bdb checkpoint time interval(s)");
-DEFINE_int32(bdb_db_pool_size, 256, "bdb db pool size, must bigger than brpc_worker_thread_num");
+DEFINE_int32(bdb_db_pool_size, 4096, "bdb db pool size, must bigger than brpc_worker_thread_num");
 DECLARE_int32(brpc_worker_thread_num);
 
-DEFINE_bool(bdb_use_db_pool, true, "bdb use db pool");
+DEFINE_bool(bdb_use_db_pool, false, "bdb use db pool");
 
 namespace bdb {
 
@@ -202,17 +202,17 @@ void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
     }
 
     // do checkpoint
-    try {
-      int ret = env->txn_checkpoint(0, 0, 0);
-      if (ret != 0) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, ret: {}.", ret);
-      }
-    } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, exception: {} {}.", db_exception.get_errno(),
-                                      db_exception.what());
-    } catch (std::exception& std_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, std exception: {}.", std_exception.what());
-    }
+    // try {
+    //   int ret = env->txn_checkpoint(0, 0, 0);
+    //   if (ret != 0) {
+    //     DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, ret: {}.", ret);
+    //   }
+    // } catch (DbException& db_exception) {
+    //   DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, exception: {} {}.", db_exception.get_errno(),
+    //                                   db_exception.what());
+    // } catch (std::exception& std_exception) {
+    //   DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, std exception: {}.", std_exception.what());
+    // }
 
     // use log_archive to remove log files
     // try {
@@ -680,6 +680,8 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
 
 std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_name, dingodb::SnapshotPtr snapshot,
                                                        IteratorOptions options) {
+  CHECK(snapshot != nullptr);
+
   // Acquire a cursor
   Dbc* cursorp = nullptr;
   int ret = 0;
@@ -788,7 +790,9 @@ butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, c
 
   try {
     // Get the cursor
-    GetDb()->cursor(txn, &cursorp, DB_READ_COMMITTED);
+    Db* db = GetDb();
+    DEFER(PutDb(db));
+    db->cursor(txn, &cursorp, DB_READ_COMMITTED);
 
     std::string store_key = BdbHelper::EncodeKey(cf_name, key);
     Dbt bdb_key;
@@ -1660,7 +1664,16 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
   int ret;
   uint32_t open_flags;
 
+  DbTxn* txn = nullptr;
   try {
+    int ret = envp->txn_begin(nullptr, &txn, 0);
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] txn begin failed ret: {}.", ret);
+      return -1;
+    }
+
+    bdb_transaction_alive_count << 1;
+
     Db* db = new Db(envp, 0);
 
     // Point to the new'd Db
@@ -1674,19 +1687,39 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
     // Now open the database */
     open_flags = DB_CREATE |        // Allow database creation
                                     //  DB_READ_UNCOMMITTED |  // Allow uncommitted reads
-                 DB_AUTO_COMMIT |   // Allow autocommit
+                                    //  DB_AUTO_COMMIT |   // Allow autocommit
                  DB_MULTIVERSION |  // Multiversion concurrency control
                  DB_THREAD;         // Cause the database to be free-threade1
 
-    db->open(nullptr,     // Txn pointer
+    db->open(txn,         // Txn pointer
              file_name,   // File name
              nullptr,     // Logical db name
              DB_BTREE,    // Database type (using btree)
              open_flags,  // Open flags
              0);          // File mode. Using defaults
 
+    // commit
+    try {
+      ret = bdb::BdbHelper::TxnCommit(&txn);
+      if (ret == 0) {
+        return 0;
+      } else {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] txn commit failed, ret: {}.", ret);
+      }
+    } catch (DbException& db_exception) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
+                                      db_exception.what());
+      ret = -1;
+    }
+
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit, ret: {}.", ret);
+      return -1;
+    }
+
   } catch (DbException& db_exception) {
     DINGO_LOG(ERROR) << fmt::format("OpenDb: db open failed: {} {}.", db_exception.get_errno(), db_exception.what());
+    bdb::BdbHelper::TxnAbort(&txn);
     return -1;
   }
 
@@ -1694,13 +1727,13 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
 }
 
 Db* BdbRawEngine::GetDb() {
+  Db* db = nullptr;
   if (FLAGS_bdb_use_db_pool && !db_handles_.empty()) {
-    Db* db = db_pool_.Get();
-    if (db != nullptr) {
-      return db;
-    }
+    db = db_pool_.Get();
+    return db;
+  } else {
+    return db_;
   }
-  return db_;
 }
 
 void BdbRawEngine::PutDb(Db* db) {
@@ -1805,16 +1838,18 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
       return false;
     }
 
-    for (int i = 0; i < FLAGS_bdb_db_pool_size; i++) {
-      Db* db_in_pool = nullptr;
-      ret = OpenDb(&db_in_pool, file_name, envp_, 0);
-      if (ret < 0) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
-        return false;
-      }
+    if (FLAGS_bdb_use_db_pool) {
+      for (int i = 0; i < FLAGS_bdb_db_pool_size; i++) {
+        Db* db_in_pool = nullptr;
+        ret = OpenDb(&db_in_pool, file_name, envp_, 0);
+        if (ret < 0) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] error opening database: {}/{}, ret: {}.", bdb_path, file_name, ret);
+          return false;
+        }
 
-      db_pool_.Put(db_in_pool);
-      db_handles_.emplace_back(db_in_pool);
+        db_pool_.Put(db_in_pool);
+        db_handles_.emplace_back(db_in_pool);
+      }
     }
 
     DINGO_LOG(INFO) << fmt::format("[bdb] db pool init OK, size: {}.", FLAGS_bdb_db_pool_size);
