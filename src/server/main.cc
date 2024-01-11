@@ -105,6 +105,10 @@ namespace bthread {
 DECLARE_int32(bthread_concurrency);
 }  // namespace bthread
 
+namespace dingodb {
+DECLARE_int32(brpc_worker_thread_num);
+}  // namespace dingodb
+
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
@@ -410,6 +414,8 @@ int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
       DINGO_LOG(ERROR) << "Fail to set bthread_concurrency";
     }
   }
+
+  dingodb::FLAGS_brpc_worker_thread_num = num;
 
   return num;
 }
@@ -803,9 +809,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr coordinator_worker_set =
-        dingodb::WorkerSet::New("CoordinatorService", FLAGS_coordinator_service_worker_num,
-                                FLAGS_coordinator_service_worker_max_pending_num);
+    dingodb::WorkerSetPtr coordinator_worker_set = dingodb::WorkerSet::New(
+        "CoordinatorService", FLAGS_coordinator_service_worker_num, FLAGS_coordinator_service_worker_max_pending_num);
     if (!coordinator_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init CoordinatorService WorkerSet failed!";
       return -1;
@@ -823,8 +828,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr meta_worker_set = dingodb::WorkerSet::New(
-        "MetaService", FLAGS_meta_service_worker_num, FLAGS_meta_service_worker_max_pending_num);
+    dingodb::WorkerSetPtr meta_worker_set = dingodb::WorkerSet::New("MetaService", FLAGS_meta_service_worker_num,
+                                                                    FLAGS_meta_service_worker_max_pending_num);
     if (!meta_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init MetaService WorkerSet failed!";
       return -1;

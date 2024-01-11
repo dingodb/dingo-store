@@ -644,8 +644,9 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnPessimisticLock mutations size : " << mutations.size() << " primary_lock : " << primary_lock
-                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
+  DINGO_LOG(INFO) << "TxnPessimisticLock mutations size : " << mutations.size()
+                  << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
+                  << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -694,9 +695,10 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size() << " primary_lock : " << primary_lock
-                  << " start_ts : " << start_ts << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size
-                  << " try_one_pc : " << try_one_pc << " max_commit_ts : " << max_commit_ts;
+  DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size()
+                  << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
+                  << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size << " try_one_pc : " << try_one_pc
+                  << " max_commit_ts : " << max_commit_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -839,7 +841,7 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnHeartBeat primary_lock : " << primary_lock << " start_ts : " << start_ts
+  DINGO_LOG(INFO) << "TxnHeartBeat primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
                   << " advise_lock_ttl : " << advise_lock_ttl;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());

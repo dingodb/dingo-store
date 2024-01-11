@@ -17,10 +17,13 @@
 
 #include <sys/types.h>
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
+#include "bthread/types.h"
 #include "config/config.h"
 #include "db_cxx.h"
 #include "engine/iterator.h"
@@ -68,25 +71,32 @@ class BdbHelper {
 
   static std::unordered_map<std::string, char> cf_name_to_id;
   static std::unordered_map<char, std::string> cf_id_to_name;
+
+  static int TxnCommit(DbTxn** txn_ptr);
+  static int TxnAbort(DbTxn** txn_ptr);
+
+  static void CheckpointThread(DbEnv* env, std::atomic<bool>& is_close);
 };
 
 // Snapshot
 class BdbSnapshot : public dingodb::Snapshot {
  public:
-  explicit BdbSnapshot(std::shared_ptr<Db> db, DbTxn* txn, Dbc* cursorp);
+  explicit BdbSnapshot(Db* db, DbTxn* txn, Dbc* cursorp, ResourcePool<Db*>* db_pool);
   ~BdbSnapshot() override;
   const void* Inner() override { return nullptr; }
 
   DbTxn* GetDbTxn() { return txn_; };
+  Db* GetDb() { return db_; };
 
  private:
-  std::shared_ptr<Db> db_;
+  Db* db_;
 
   // Note: use DbEnv::txn_begin() to get pointers to a DbTxn,
   // and call DbTxn::abort() or DbTxn::commit rather than
   // delete to release them.
   DbTxn* txn_;
   Dbc* cursorp_;
+  ResourcePool<Db*>* db_pool_;
 };
 
 class Iterator : public dingodb::Iterator {
@@ -172,7 +182,8 @@ class Reader : public RawEngine::Reader {
 
  private:
   std::shared_ptr<BdbRawEngine> GetRawEngine();
-  std::shared_ptr<Db> GetDb();
+  Db* GetDb();
+  void PutDb(Db* db);
   dingodb::SnapshotPtr GetSnapshot();
   butil::Status RetrieveByCursor(const std::string& cf_name, DbTxn* txn, const std::string& key, std::string& value);
 
@@ -203,10 +214,10 @@ class Writer : public RawEngine::Writer {
   butil::Status DeleteRangeByCursor(const std::string& cf_name, const pb::common::Range& range, DbTxn* txn);
 
   std::shared_ptr<BdbRawEngine> GetRawEngine();
-  std::shared_ptr<Db> GetDb();
+  Db* GetDb();
+  void PutDb(Db* db);
 
   std::weak_ptr<BdbRawEngine> raw_engine_;
-  std::shared_ptr<Db> db_;
 };
 
 }  // namespace bdb
@@ -223,7 +234,8 @@ class BdbRawEngine : public RawEngine {
 
   // Open a DB database
   static int32_t OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, u_int32_t extra_flags);
-  std::shared_ptr<Db> GetDb() { return db_; }
+  Db* GetDb();
+  void PutDb(Db* db);
   std::shared_ptr<BdbRawEngine> GetSelfPtr() { return std::dynamic_pointer_cast<BdbRawEngine>(shared_from_this()); }
 
   // override functions
@@ -250,11 +262,18 @@ class BdbRawEngine : public RawEngine {
   std::vector<int64_t> GetApproximateSizes(const std::string& cf_name, std::vector<pb::common::Range>& ranges) override;
 
  private:
+  DbEnv* envp_{nullptr};
   std::string db_path_;
-  std::shared_ptr<Db> db_;
+  Db* db_{nullptr};
+
+  ResourcePool<Db*> db_pool_{"bdb_db_handles"};
+  std::vector<Db*> db_handles_;
 
   RawEngine::ReaderPtr reader_;
   RawEngine::WriterPtr writer_;
+
+  std::atomic<bool> is_close_{false};
+  Bthread checkpoint_bthread_;
 };
 
 }  // namespace dingodb

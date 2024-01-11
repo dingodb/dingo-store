@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_SYNCHRONIZATION_H_
 
 #include <memory>
+#include <queue>
 
 #include "bthread/bthread.h"
 #include "bthread/butex.h"
@@ -142,6 +143,48 @@ class RWLockWriteGuard {
  private:
   RWLock* rw_lock_;
   bool is_release_ = false;
+};
+
+template <typename T>
+class ResourcePool {
+ public:
+  explicit ResourcePool(const std::string& name) {
+    bthread_mutex_init(&mutex_, nullptr);
+    bthread_cond_init(&cond_, nullptr);
+    pool_size_ = new bvar::Adder<int64_t>(name + "_POOL_SIZE");
+  }
+
+  ~ResourcePool() {
+    bthread_mutex_destroy(&mutex_);
+    bthread_cond_destroy(&cond_);
+    delete pool_size_;
+  }
+
+  // Insert a resource into the pool
+  void Put(const T& item) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    pool_.push(item);
+    (*pool_size_) << 1;
+    bthread_cond_signal(&cond_);
+  }
+
+  // Get a resource from the pool
+  T Get() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    while (pool_.empty()) {
+      bthread_cond_wait(&cond_, &mutex_);
+    }
+    T item = pool_.front();
+    pool_.pop();
+    (*pool_size_) << -1;
+    return item;
+  }
+
+ private:
+  bthread_mutex_t mutex_;  // mutex to protect the following fields
+  bthread_cond_t cond_;    // condition variable
+  std::queue<T> pool_;
+  bvar::Adder<int64_t>* pool_size_;
 };
 
 };  // namespace dingodb
