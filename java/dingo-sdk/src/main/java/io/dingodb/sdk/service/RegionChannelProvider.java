@@ -46,8 +46,8 @@ public class RegionChannelProvider implements ChannelProvider {
 
     @Override
     public synchronized void refresh(Channel channel, long trace) {
-        if (channel == null || channel != this.channel) {
-            refresh();
+        if (channel == this.channel) {
+            refresh(trace);
         }
     }
 
@@ -71,12 +71,12 @@ public class RegionChannelProvider implements ChannelProvider {
         return compare(range.getStartKey(), key) <= 0 && compare(key, range.getEndKey()) < 0;
     }
 
-    private void refresh() {
+    private void refresh(long trace) {
         if (idKey == null) {
-            refreshIdKey();
+            refreshIdKey(trace);
         }
         Optional.ofNullable(coordinatorService.scanRegions(
-            ScanRegionsRequest.builder().key(idKey).rangeEnd(nextIdKey).build()
+            trace, ScanRegionsRequest.builder().key(idKey).rangeEnd(nextIdKey).build()
         )).map(ScanRegionsResponse::getRegions)
             .map($ -> $.stream().filter(region -> region.getRegionId() == regionId).findAny().orElse(null))
             .filter($ -> $.getLeader() != null)
@@ -84,15 +84,17 @@ public class RegionChannelProvider implements ChannelProvider {
                 location = $.getLeader();
                 channel = ChannelManager.getChannel(location);
                 regionEpoch = $.getRegionEpoch();
+                range = $.getRange();
             });
     }
 
-    private synchronized void refreshIdKey() {
+    private synchronized void refreshIdKey(long trace) {
         if (idKey != null) {
             return;
         }
-        Optional.ofNullable(coordinatorService.queryRegion(QueryRegionRequest.builder().regionId(regionId).build()))
-            .map(QueryRegionResponse::getRegion)
+        Optional.ofNullable(coordinatorService.queryRegion(
+                trace, QueryRegionRequest.builder().regionId(regionId).build())
+            ).map(QueryRegionResponse::getRegion)
             .map(Region::getDefinition)
             .map(RegionDefinition::getRange)
             .ifPresent(range -> this.range = range)
