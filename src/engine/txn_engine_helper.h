@@ -33,8 +33,12 @@ namespace dingodb {
 class TxnIterator {
  public:
   TxnIterator(RawEnginePtr raw_engine, const pb::common::Range &range, int64_t start_ts,
-              pb::store::IsolationLevel isolation_level)
-      : raw_engine_(raw_engine), range_(range), isolation_level_(isolation_level), start_ts_(start_ts) {
+              pb::store::IsolationLevel isolation_level, const std::set<int64_t> &resolved_locks)
+      : raw_engine_(raw_engine),
+        range_(range),
+        isolation_level_(isolation_level),
+        start_ts_(start_ts),
+        resolved_locks_(resolved_locks) {
     if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
       seek_ts_ = Constant::kMaxVer;
     } else {
@@ -83,12 +87,18 @@ class TxnIterator {
 
   std::string key_{};
   std::string value_{};
+
+  // The resolved locks are used to check the lock conflict.
+  // If the lock is resolved, there will not be a conflict for provided resolved_locks.
+  std::set<int64_t> resolved_locks_;
 };
 
 class TxnEngineHelper {
  public:
   static bool CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
-                                int64_t start_ts, pb::store::TxnResultInfo &txn_result_info);
+                                int64_t start_ts, const std::set<int64_t> &resolved_locks,
+                                pb::store::TxnResultInfo &txn_result_info);
+
   static butil::Status GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key, pb::store::LockInfo &lock_info);
 
   static butil::Status ScanLockInfo(RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
@@ -97,13 +107,14 @@ class TxnEngineHelper {
 
   static butil::Status BatchGet(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
                                 int64_t start_ts, const std::vector<std::string> &keys,
-                                std::vector<pb::common::KeyValue> &kvs, pb::store::TxnResultInfo &txn_result_info);
+                                const std::set<int64_t> &resolved_locks, pb::store::TxnResultInfo &txn_result_info,
+                                std::vector<pb::common::KeyValue> &kvs);
 
   static butil::Status Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                             const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
-                            pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
-                            bool &has_more, std::string &end_key, bool disable_coprocessor,
-                            const pb::common::CoprocessorV2 &coprocessor);
+                            const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
+                            const pb::common::CoprocessorV2 &coprocessor, pb::store::TxnResultInfo &txn_result_info,
+                            std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key);
 
   static butil::Status GetWriteInfo(RawEnginePtr raw_engine, int64_t min_commit_ts, int64_t max_commit_ts,
                                     int64_t start_ts, const std::string &key, bool include_rollback,
@@ -122,6 +133,9 @@ class TxnEngineHelper {
   static butil::Status DoRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                   std::shared_ptr<Context> ctx, std::vector<std::string> &keys_to_rollback_with_data,
                                   std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts);
+
+  static butil::Status DoUpdateLock(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                    const pb::store::LockInfo &lock_info);
 
   static butil::Status PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                        std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,

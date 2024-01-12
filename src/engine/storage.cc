@@ -575,21 +575,24 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
 // txn
 
 butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,
-                                   pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs) {
+                                   const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info,
+                                   std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
   DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << ", start_ts: " << start_ts
-                  << ", kvs size : " << kvs.size() << " txn_result_info : " << txn_result_info.ShortDebugString();
+                  << ", kvs size : " << kvs.size() << ", resolved_locks size: " << resolved_locks.size()
+                  << " txn_result_info : " << txn_result_info.ShortDebugString();
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
   }
-  status = reader->TxnBatchGet(ctx, start_ts, keys, kvs, txn_result_info);
+
+  status = reader->TxnBatchGet(ctx, start_ts, keys, kvs, resolved_locks, txn_result_info);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
@@ -603,9 +606,10 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
 }
 
 butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range,
-                               int64_t limit, bool key_only, bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
-                               std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key,
-                               bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor) {
+                               int64_t limit, bool key_only, bool is_reverse, const std::set<int64_t>& resolved_locks,
+                               pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                               bool& has_more, std::string& end_key, bool disable_coprocessor,
+                               const pb::common::CoprocessorV2& coprocessor) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -613,17 +617,17 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
 
   DINGO_LOG(INFO) << "TxnScan region_id: " << ctx->RegionId() << " range: " << range.ShortDebugString()
                   << " limit: " << limit << " start_ts: " << start_ts << " key_only: " << key_only
-                  << " is_reverse: " << is_reverse << " txn_result_info: " << txn_result_info.ShortDebugString()
-                  << " kvs size: " << kvs.size() << " has_more: " << has_more
-                  << " end_key: " << Helper::StringToHex(end_key);
+                  << " is_reverse: " << is_reverse << ", resolved_locks size: " << resolved_locks.size()
+                  << " txn_result_info: " << txn_result_info.ShortDebugString() << " kvs size: " << kvs.size()
+                  << " has_more: " << has_more << " end_key: " << Helper::StringToHex(end_key);
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
   }
-  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key,
-                           disable_coprocessor, coprocessor);
+  status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, resolved_locks, disable_coprocessor,
+                           coprocessor, txn_result_info, kvs, has_more, end_key);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
