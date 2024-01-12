@@ -20,16 +20,11 @@
 #include <string>
 #include <utility>
 
-#include "bthread/bthread.h"
-#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
-#include "config/config_manager.h"
 #include "engine/iterator.h"
-#include "engine/raw_engine.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 
@@ -548,7 +543,7 @@ DingoFileSystemAdaptor::DingoFileSystemAdaptor(int64_t region_id) : region_id_(r
 
 DingoFileSystemAdaptor::~DingoFileSystemAdaptor() {
   mutil_snapshot_cond_.Wait();
-  DINGO_LOG(WARNING) << "region_id: " << region_id_ << " DingoFileSystemAdaptor released";
+  DINGO_LOG(INFO) << "region_id: " << region_id_ << " DingoFileSystemAdaptor released";
 }
 
 braft::FileAdaptor* DingoFileSystemAdaptor::open(const std::string& path, int oflag,

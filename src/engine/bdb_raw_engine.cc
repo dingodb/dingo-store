@@ -60,6 +60,7 @@ DEFINE_int32(bdb_lk_max_objects, 40960, "bdb max objects");
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 DEFINE_int32(bdb_checkpoint_time_s, 60, "bdb checkpoint time interval(s)");
+DEFINE_int32(bdb_dead_lock_detect_time_s, 1, "bdb dead_lock_detect interval(s)");
 DEFINE_int32(bdb_db_pool_size, 4096, "bdb db pool size, must bigger than brpc_worker_thread_num");
 DECLARE_int32(brpc_worker_thread_num);
 
@@ -186,6 +187,37 @@ int BdbHelper::TxnAbort(DbTxn** txn_ptr) {
   return ret;
 }
 
+void BdbHelper::GetLogFileNames(DbEnv* env, std::set<std::string>& file_names) {
+  // use log_archive to get log files
+  try {
+    char** list;
+    // int ret = env->log_archive(&list, DB_ARCH_ABS | DB_ARCH_LOG);  // Get the list of log files we can remove
+    int ret = env->log_archive(&list, DB_ARCH_ABS);  // Get the list of log files we can remove
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, ret: {}.", ret);
+    } else {
+      // If the call to log_archive succeeded, list points to an array of log filenames
+      if (list == nullptr) {
+        DINGO_LOG(INFO) << fmt::format("[bdb] log archive succeed, list is nullptr.");
+        return;
+      }
+
+      for (char** p = list; *p; ++p) {
+        std::string filename(*p);
+        file_names.insert(filename);
+      }
+
+      // Free the memory allocated by log_archive
+      free(list);
+    }
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, std exception: {}.", std_exception.what());
+  }
+}
+
 void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
   CHECK(env != nullptr);
 
@@ -194,73 +226,79 @@ void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
       break;
     }
 
-    if (i % FLAGS_bdb_checkpoint_time_s == 0) {
-      DINGO_LOG(INFO) << fmt::format("[bdb] checkpoint thread sleep {}s.", FLAGS_bdb_checkpoint_time_s);
-    } else {
-      bthread_usleep(1000L * 1000L);
-      continue;
+    // do lock_detect every 1s
+    if (i % FLAGS_bdb_dead_lock_detect_time_s == 0) {
+      try {
+        int ret = env->lock_detect(0, DB_LOCK_MINWRITE, nullptr);
+        if (ret != 0) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, ret: {}.", ret);
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, exception: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
+      } catch (std::exception& std_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, std exception: {}.", std_exception.what());
+      }
     }
 
-    // do checkpoint
-    // try {
-    //   int ret = env->txn_checkpoint(0, 0, 0);
-    //   if (ret != 0) {
-    //     DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, ret: {}.", ret);
-    //   }
-    // } catch (DbException& db_exception) {
-    //   DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, exception: {} {}.", db_exception.get_errno(),
-    //                                   db_exception.what());
-    // } catch (std::exception& std_exception) {
-    //   DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, std exception: {}.", std_exception.what());
-    // }
+    // do checkpoint every 60s
+    if (i % FLAGS_bdb_checkpoint_time_s == 0) {
+      try {
+        int ret = env->txn_checkpoint(0, 0, 0);
+        if (ret != 0) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, ret: {}.", ret);
+        }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, exception: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
+      } catch (std::exception& std_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, std exception: {}.", std_exception.what());
+      }
 
-    // use log_archive to remove log files
-    // try {
-    //   char** list;
-    //   int ret = env->log_archive(&list, DB_ARCH_REMOVE);
-    //   if (ret != 0) {
-    //     DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, ret: {}.", ret);
-    //   }
-    // } catch (DbException& db_exception) {
-    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
-    //                                   db_exception.what());
-    // } catch (std::exception& std_exception) {
-    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, std exception: {}.", std_exception.what());
-    // }
+      // we need to print the file_names before remove them, so we do not use log_archive to remove log files.
+      // use log_archive to remove log files
+      // try {
+      //   char** list;
+      //   int ret = env->log_archive(&list, DB_ARCH_REMOVE);
+      //   if (ret != 0) {
+      //     DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, ret: {}.", ret);
+      //   }
+      // } catch (DbException& db_exception) {
+      //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
+      //                                   db_exception.what());
+      // } catch (std::exception& std_exception) {
+      //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, std exception: {}.", std_exception.what());
+      // }
 
-    // use log_archive to get log files
-    // int32_t file_num = 0;
-    // try {
-    //   char** list;
-    //   int ret = env->log_archive(&list, DB_ARCH_ABS | DB_ARCH_LOG);  // Get the list of log files we can remove
-    //   if (ret != 0) {
-    //     DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, ret: {}.", ret);
-    //   } else {
-    //     // If the call to log_archive succeeded, list points to an array of log filenames
-    //     for (char** p = list; *p; ++p) {
-    //       std::string filename(*p);
-    //       if (std::remove(filename.c_str()) != 0) {
-    //         DINGO_LOG(ERROR) << fmt::format("[bdb] Failed to remove log file: {}.", filename);
-    //       } else {
-    //         DINGO_LOG(INFO) << fmt::format("[bdb] Successfully removed log file: {}.", filename);
-    //       }
-    //       file_num++;
-    //     }
-    //     // Free the memory allocated by log_archive
-    //     free(list);
-    //   }
-    // } catch (DbException& db_exception) {
-    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
-    //                                   db_exception.what());
-    // } catch (std::exception& std_exception) {
-    //   DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, std exception: {}.", std_exception.what());
-    // }
+      // use log_archive to get log files
+      std::set<std::string> log_file_names_to_remove;
+      GetLogFileNames(env, log_file_names_to_remove);
 
-    // DINGO_LOG(INFO) << fmt::format("[bdb] checkpoint thread sleep {}s. {} files removed.",
-    // FLAGS_bdb_checkpoint_time_s,
-    //                                file_num);
+      if (log_file_names_to_remove.empty()) {
+        DINGO_LOG(INFO) << fmt::format("[bdb] checkpoint thread sleep {}s. no log files to remove.",
+                                       FLAGS_bdb_checkpoint_time_s);
+      } else {
+        // use DINGO_LOG to print all log file names
+        std::string log_file_names;
+        for (const auto& file_name : log_file_names_to_remove) {
+          log_file_names.append("[").append(file_name).append("]");
+        }
 
-    bthread_usleep(1000L * 1000L);
+        DINGO_LOG(INFO) << fmt::format("[bdb] checkpoint thread sleep {}s. will remove log files: {}.",
+                                       FLAGS_bdb_checkpoint_time_s, log_file_names);
+
+        for (const auto& file_name : log_file_names_to_remove) {
+          int ret = std::remove(file_name.c_str());
+          if (ret != 0) {
+            DINGO_LOG(ERROR) << fmt::format("[bdb] remove log file failed, ret: {}, error: {}.", ret,
+                                            std::strerror(errno));
+          }
+        }
+      }
+    }
+
+    // bthread_usleep(1000L * 1000L);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 }
 
@@ -923,8 +961,8 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  DINGO_LOG(INFO) << fmt::format("[bdb] batch put and delete, cf_name: {}, put size: {}, delete size: {}.", cf_name,
-                                 kvs_to_put.size(), keys_to_delete.size());
+  DINGO_LOG(DEBUG) << fmt::format("[bdb] batch put and delete, cf_name: {}, put size: {}, delete size: {}.", cf_name,
+                                  kvs_to_put.size(), keys_to_delete.size());
 
   Db* db = GetDb();
   DEFER(PutDb(db));
@@ -985,7 +1023,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
       try {
         ret = BdbHelper::TxnCommit(&txn);
         if (ret == 0) {
-          DINGO_LOG(INFO) << fmt::format(
+          DINGO_LOG(DEBUG) << fmt::format(
               "[bdb] batch put and delete success, cf_name: {}, put size: {}, delete size: {}.", cf_name,
               kvs_to_put.size(), keys_to_delete.size());
           return butil::Status();
@@ -1172,7 +1210,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
                                     Helper::StringToHex(BdbHelper::EncodeKey(cf_name, key)));
   }
 
-  DINGO_LOG(INFO) << " raw_keys.size: " << raw_keys.size() << ", keys.size: " << keys.size() << ".";
+  DINGO_LOG(DEBUG) << " raw_keys.size: " << raw_keys.size() << ", keys.size: " << keys.size() << ".";
 
   Db* db = GetDb();
   DEFER(PutDb(db));
@@ -1220,7 +1258,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
         keys_buf = nullptr;
       });
 
-  DINGO_LOG(INFO) << "raw_keys.size = " << raw_keys.size() << ", keys_buf_size = " << keys_buf_size;
+  DINGO_LOG(DEBUG) << "raw_keys.size = " << raw_keys.size() << ", keys_buf_size = " << keys_buf_size;
 
   DbMultipleDataBuilder* db_multi_data_builder = new DbMultipleDataBuilder(keys_to_delete);
   if (db_multi_data_builder == nullptr) {
@@ -1542,7 +1580,7 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
             DINGO_LOG(ERROR) << fmt::format("[bdb] delete keys: {}.", ret.error_cstr());
             return ret;
           } else {
-            DINGO_LOG(INFO) << fmt::format("[bdb] delete keys: {}.", keys.size());
+            DINGO_LOG(DEBUG) << fmt::format("[bdb] delete keys: {}.", keys.size());
             continue;
           }
         }
@@ -1866,7 +1904,10 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   writer_ = std::make_shared<bdb::Writer>(GetSelfPtr());
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
-  checkpoint_bthread_.Run([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
+  // checkpoint_bthread_.Run([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
+  std::thread temp_checkpoint_thread([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
+  checkpoint_thread_.swap(temp_checkpoint_thread);
+
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
   return true;
@@ -1901,7 +1942,8 @@ void BdbRawEngine::Close() {
   }
 
   is_close_ = true;
-  checkpoint_bthread_.Join();
+  // checkpoint_bthread_.Join();
+  checkpoint_thread_.join();
 
   DINGO_LOG(INFO) << "[bdb] I'm all done.";
 }
