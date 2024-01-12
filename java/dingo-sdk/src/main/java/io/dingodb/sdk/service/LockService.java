@@ -17,7 +17,6 @@
 package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.DingoClientException;
-import io.dingodb.sdk.service.ServiceCallCycle.RBefore;
 import io.dingodb.sdk.service.entity.common.KeyValue;
 import io.dingodb.sdk.service.entity.meta.TsoOpType;
 import io.dingodb.sdk.service.entity.meta.TsoRequest;
@@ -27,7 +26,6 @@ import io.dingodb.sdk.service.entity.version.EventFilterType;
 import io.dingodb.sdk.service.entity.version.EventType;
 import io.dingodb.sdk.service.entity.version.Kv;
 import io.dingodb.sdk.service.entity.version.LeaseGrantRequest;
-import io.dingodb.sdk.service.entity.version.LeaseGrantResponse;
 import io.dingodb.sdk.service.entity.version.LeaseRenewRequest;
 import io.dingodb.sdk.service.entity.version.PutRequest;
 import io.dingodb.sdk.service.entity.version.PutResponse;
@@ -35,7 +33,6 @@ import io.dingodb.sdk.service.entity.version.RangeRequest;
 import io.dingodb.sdk.service.entity.version.RangeResponse;
 import io.dingodb.sdk.service.entity.version.WatchRequest;
 import io.dingodb.sdk.service.entity.version.WatchRequest.RequestUnionNest.OneTimeRequest;
-import io.grpc.CallOptions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -256,7 +253,7 @@ public class LockService {
                 throw new RuntimeException("Put " + resourceKey + " success, but range is empty.");
             }
             Kv current = rangeResponse.getKvs().stream()
-                .min(Comparator.comparingLong(Kv::getModRevision))
+                .min(Comparator.comparingLong(Kv::getCreateRevision))
                 .get();
             if (current.getModRevision() == revision) {
                 this.revision = revision;
@@ -289,14 +286,14 @@ public class LockService {
                         return;
                     }
                     Kv previous = rangeResponse.getKvs().stream()
-                        .filter(__ -> __.getModRevision() < revision)
-                        .max(Comparator.comparingLong(Kv::getModRevision))
+                        .filter(__ -> __.getCreateRevision() < revision)
+                        .max(Comparator.comparingLong(Kv::getCreateRevision))
                         .orElseThrow(() -> new RuntimeException("Put " + resourceKey + " success, but no previous."));
                     if (log.isDebugEnabled()) {
                         log.debug("Lock {} wait...", resourceKey);
                     }
                     try {
-                        kvService.watch(watchRequest(previous.getKv().getKey(), previous.getModRevision()));
+                        kvService.watch(watchRequest(previous.getKv().getKey(), previous.getCreateRevision()));
                         if (isLockRevision(revision, kvService.kvRange(rangeRequest()))) {
                             break;
                         }
@@ -329,7 +326,7 @@ public class LockService {
                 long revision = response.getHeader().getRevision();
                 Optional<Kv> current = kvService.kvRange(rangeRequest())
                     .getKvs().stream()
-                    .min(Comparator.comparingLong(Kv::getModRevision));
+                    .min(Comparator.comparingLong(Kv::getCreateRevision));
                 if (current.map(Kv::getModRevision).filter(__ -> __ == revision).isPresent()) {
                     locked++;
                     watchLock(current.get());
@@ -354,7 +351,7 @@ public class LockService {
                 while (time-- > 0) {
                     RangeResponse rangeResponse = kvService.kvRange(rangeRequest());
                     Kv current = rangeResponse.getKvs().stream()
-                        .min(Comparator.comparingLong(Kv::getModRevision))
+                        .min(Comparator.comparingLong(Kv::getCreateRevision))
                         .orElseThrow(() -> new RuntimeException("Put " + resourceKey + " success, but range is empty."));
                     if (current.getModRevision() == revision) {
                         if (log.isDebugEnabled()) {
