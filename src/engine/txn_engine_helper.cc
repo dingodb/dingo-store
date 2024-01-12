@@ -456,7 +456,7 @@ butil::Status TxnIterator::GetCurrentValue() {
     }
 
     auto is_lock_conflict =
-        TxnEngineHelper::CheckLockConflict(lock_info, isolation_level_, start_ts_, txn_result_info_);
+        TxnEngineHelper::CheckLockConflict(lock_info, isolation_level_, start_ts_, resolved_locks_, txn_result_info_);
     if (is_lock_conflict) {
       DINGO_LOG(WARNING) << "[txn]Scan CheckLockConflict return conflict, key: " << Helper::StringToHex(lock_info.key())
                          << ", isolation_level: " << isolation_level_ << ", start_ts: " << start_ts_
@@ -522,9 +522,21 @@ std::string TxnIterator::Key() { return key_; }
 std::string TxnIterator::Value() { return value_; }
 
 bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
-                                        int64_t start_ts, pb::store::TxnResultInfo &txn_result_info) {
+                                        int64_t start_ts, const std::set<int64_t> &resolved_locks,
+                                        pb::store::TxnResultInfo &txn_result_info) {
   DINGO_LOG(DEBUG) << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
-                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts;
+                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
+                   << ", resolved_locks size: " << resolved_locks.size();
+
+  // if lock_info is resolved, return false, means the executor has used CheckTxnStatus to check the lock_info and
+  // updated the min_commit_ts of the primary lock.
+  if (!resolved_locks.empty() && resolved_locks.find(lock_info.lock_ts()) != resolved_locks.end()) {
+    DINGO_LOG(INFO) << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
+                    << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
+                    << ", resolved_locks size: " << resolved_locks.size() << ", lock_ts: " << lock_info.lock_ts()
+                    << " is resolved, return false";
+    return false;
+  }
 
   if (lock_info.lock_ts() > 0) {
     if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
@@ -700,8 +712,9 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
 
 butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::IsolationLevel &isolation_level,
                                         int64_t start_ts, const std::vector<std::string> &keys,
-                                        std::vector<pb::common::KeyValue> &kvs,
-                                        pb::store::TxnResultInfo &txn_result_info) {
+                                        const std::set<int64_t> &resolved_locks,
+                                        pb::store::TxnResultInfo &txn_result_info,
+                                        std::vector<pb::common::KeyValue> &kvs) {
   DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
                   << ", start_ts: " << start_ts << ", first_key: " << Helper::StringToHex(keys[0])
                   << ", last_key: " << Helper::StringToHex(keys[keys.size() - 1]);
@@ -751,7 +764,7 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
                        << ", status: " << ret.error_str();
     }
 
-    auto is_lock_conflict = CheckLockConflict(lock_info, isolation_level, start_ts, txn_result_info);
+    auto is_lock_conflict = CheckLockConflict(lock_info, isolation_level, start_ts, resolved_locks, txn_result_info);
     if (is_lock_conflict) {
       DINGO_LOG(WARNING) << "[txn]BatchGet CheckLockConflict return conflict, key: " << Helper::StringToHex(key)
                          << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
@@ -859,12 +872,16 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
 
 butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
                                     int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
-                                    bool is_reverse, pb::store::TxnResultInfo &txn_result_info,
-                                    std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key,
-                                    bool disable_coprocessor, const pb::common::CoprocessorV2 &coprocessor) {
+                                    bool is_reverse, const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
+                                    const pb::common::CoprocessorV2 &coprocessor,
+                                    pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
+                                    bool &has_more, std::string &end_key) {
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts << ", limit: " << limit
                   << ", key_only: " << key_only << ", is_reverse: " << is_reverse
+                  << ", resolved_locks size: " << resolved_locks.size()
+                  << ", disable_coprocessor: " << disable_coprocessor
+                  << ", coprocessor: " << coprocessor.ShortDebugString()
                   << ", txn_result_info: " << txn_result_info.ShortDebugString();
 
   if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_line_limit)) {
@@ -894,7 +911,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_key is not empty");
   }
 
-  std::shared_ptr<TxnIterator> txn_iter = std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level);
+  std::shared_ptr<TxnIterator> txn_iter =
+      std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level, resolved_locks);
   auto ret = txn_iter->Init();
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "[txn]Scan init txn_iter failed, start_ts: " << start_ts
@@ -1173,7 +1191,6 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
           pb::common::KeyValue kv;
           kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
 
-          pb::store::LockInfo lock_info;
           lock_info.set_primary_lock(primary_lock);
           lock_info.set_lock_ts(start_ts);
           lock_info.set_for_update_ts(for_update_ts);
@@ -1302,6 +1319,56 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                            const pb::store::LockInfo &lock_info) {
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock, start_ts: {}", ctx->RegionId(), lock_info.lock_ts())
+                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                  << ", lock_info: " << lock_info.ShortDebugString();
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock", region->Id())
+                    << ", region is not found, region_id: " << ctx->RegionId();
+
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_lock;
+
+  // update lock_info
+  pb::common::KeyValue kv;
+  kv.set_key(Helper::EncodeTxnKey(lock_info.key(), Constant::kLockVer));
+  kv.set_value(lock_info.SerializeAsString());
+
+  kv_puts_lock.push_back(kv);
+
+  if (kv_puts_lock.empty()) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock return empty kv_puts_lock,", region->Id())
+                    << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << lock_info.lock_ts()
+                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                    << ", lock_info: " << lock_info.ShortDebugString();
+
+    return butil::Status::OK();
+  }
+
+  // write lock_info into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  auto *lock_puts = cf_put_delete->add_puts_with_cf();
+  lock_puts->set_cf_name(Constant::kTxnLockCF);
+  for (auto &kv_put : kv_puts_lock) {
+    auto *kv = lock_puts->add_kvs();
+    kv->set_key(kv_put.key());
+    kv->set_value(kv_put.value());
+
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
+                    << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
+                    << ", value: " << Helper::StringToHex(kv_put.value());
+  }
+
+  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+}
+
 butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                                    std::shared_ptr<Context> ctx, int64_t start_ts,
                                                    int64_t for_update_ts, const std::vector<std::string> &keys) {
@@ -1320,7 +1387,7 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
@@ -1972,6 +2039,9 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
         *txn_result->mutable_locked() = lock_info;
         return butil::Status::OK();
       } else {
+        // lock_ts match start_ts, check if lock_type is Put/Delete/PutIfAbsent
+        // If this is a pessimistic lock in Lock phase, return LockInfo
+        // If this is not a Put/Delete/PutIfAbsent, return LockInfo
         if (lock_info.lock_type() == pb::store::Op::Lock) {
           DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
                                           start_ts, commit_ts)
@@ -1986,6 +2056,19 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
                            << ", meet a invalid lock_type, there must BUG in executor, key: "
                            << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
           *txn_result->mutable_locked() = lock_info;
+          return butil::Status::OK();
+        }
+
+        // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should get
+        // a new tso from coordinator, then commit again.
+        if (lock_info.min_commit_ts() > 0 && commit_ts <= lock_info.min_commit_ts()) {
+          // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
+          auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
+          commit_ts_expired->set_start_ts(start_ts);
+          commit_ts_expired->set_attempted_commit_ts(commit_ts);
+          commit_ts_expired->set_key(key);
+          commit_ts_expired->set_min_commit_ts(lock_info.min_commit_ts());
+
           return butil::Status::OK();
         }
       }
@@ -2204,6 +2287,12 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
   // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
   // rollback and return if not expired, return conflict if the lock is not exists, return commited the the lock's
   // ts is matched, but it is not a primary_key, return PrimaryMismatch
+  // In the read-write conflict scenario, we may need to update the min_commit_ts of the primary_lock to reduce the
+  // read-write confict. The executor will receive MinCommitTSPushed in CheckTxnStatus response, and will add the
+  // lock_ts to Get and Scan requests's context, after this, the read-write conflict will be resolved. And the store
+  // will bypass the lock conflict for the lock_ts. And if the executor commit lock in a commit_ts smaller than the new
+  // min_commit_ts, it will received CommitTsExpired in TxnResultInfo. Executor need to get a new tso from coordinator,
+  // then retry the commit.
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -2233,6 +2322,8 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
                      << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
   }
 
+  // if the lock_ts is matched, we will check if we can update the min_commit_ts. The new commit_ts will be the
+  // caller_start_ts.
   if (lock_info.lock_ts() == lock_ts) {
     // the lock is exists, check if it is expired, if not expired, return conflict, if expired, do rollback
     // check if this is a primary key
@@ -2249,35 +2340,72 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     // for pessimistic lock, we just return lock_info, let executor decide to backoff or unlock
     if (lock_info.lock_type() == pb::store::Op::Lock) {
       DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                         << ", pessimistic lock, return locked for executor, primary_key: " << primary_key
+                         << ", pessimistic lock, found locked for executor, primary_key: " << primary_key
                          << ", lock_ts: " << lock_ts << ", lock_info: " << lock_info.ShortDebugString();
       *txn_result->mutable_locked() = lock_info;
-      return butil::Status::OK();
+
+      // if the lock is not expired, try to update the min_commit_ts in the next code block, so we cannot return now.
+
     } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
                lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
                        << ", invalid lock_type, key: " << lock_info.key() << ", caller_start_ts: " << caller_start_ts
                        << ", current_ts: " << current_ts << ", lock_info: " << lock_info.ShortDebugString();
+
       *txn_result->mutable_locked() = lock_info;
+      response->set_action(pb::store::Action::NoAction);
+      response->set_lock_ttl(lock_info.lock_ttl());
+
       return butil::Status::OK();
     }
 
     int64_t current_ms = current_ts >> 18;
 
-    DINGO_LOG(INFO) << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString()
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                    << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString()
                     << ", current_ms: " << current_ms;
 
     if (lock_info.lock_ttl() >= current_ms) {
-      DINGO_LOG(INFO) << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                      << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
                       << ", current_ms: " << current_ms;
 
       response->set_lock_ttl(lock_info.lock_ttl());
       response->set_commit_ts(0);
-      response->set_action(::dingodb::pb::store::Action::NoAction);
+
+      // check if we need to update the min_commit_ts
+      // for valid lock, we can update min_commit_ts to reduce read-write conflict.
+      if (lock_info.min_commit_ts() < caller_start_ts) {
+        lock_info.set_min_commit_ts(caller_start_ts);
+
+        auto ret = DoUpdateLock(raft_engine, ctx, lock_info);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                           << ", update lock failed, primary_key: " << Helper::StringToHex(primary_key)
+                           << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
+          error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+          error->set_errmsg(ret.error_str());
+          return ret;
+        }
+
+        response->set_action(pb::store::Action::MinCommitTSPushed);
+
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                        << ", update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
+                        << ", Action: " << pb::store::Action_Name(pb::store::Action::MinCommitTSPushed);
+      } else {
+        response->set_action(pb::store::Action::NoAction);
+
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                        << ", no need to update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
+                        << ", Action: " << pb::store::Action_Name(pb::store::Action::NoAction);
+      }
+
       return butil::Status::OK();
     }
 
-    DINGO_LOG(INFO) << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                    << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
                     << ", current_ms: " << current_ms;
 
     // lock is expired, do rollback

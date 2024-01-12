@@ -175,12 +175,13 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     TxnReader(std::shared_ptr<RawEngine> engine) : txn_reader_raw_engine_(engine) {}
 
     butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,
-                              std::vector<pb::common::KeyValue>& kvs,
+                              std::vector<pb::common::KeyValue>& kvs, const std::set<int64_t>& resolved_locks,
                               pb::store::TxnResultInfo& txn_result_info) override;
     butil::Status TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range, int64_t limit,
-                          bool key_only, bool is_reverse, pb::store::TxnResultInfo& txn_result_info,
-                          std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key,
-                          bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor) override;
+                          bool key_only, bool is_reverse, const std::set<int64_t>& resolved_locks,
+                          bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor,
+                          pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                          bool& has_more, std::string& end_key) override;
     butil::Status TxnScanLock(std::shared_ptr<Context> ctx, int64_t min_lock_ts, int64_t max_lock_ts,
                               const pb::common::Range& range, int64_t limit,
                               std::vector<pb::store::LockInfo>& lock_infos) override;

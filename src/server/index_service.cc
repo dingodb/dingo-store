@@ -1108,10 +1108,16 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
   std::vector<std::string> keys;
   auto* mut_request = const_cast<pb::store::TxnGetRequest*>(request);
   keys.emplace_back(std::move(*mut_request->release_key()));
+
+  std::set<int64_t> resolved_locks;
+  for (const auto& lock : request->context().resolved_locks()) {
+    resolved_locks.insert(lock);
+  }
+
   pb::store::TxnResultInfo txn_result_info;
 
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnBatchGet(ctx, request->start_ts(), keys, txn_result_info, kvs);
+  status = storage->TxnBatchGet(ctx, request->start_ts(), keys, resolved_locks, txn_result_info, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1222,6 +1228,11 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
 
+  std::set<int64_t> resolved_locks;
+  for (const auto& lock : request->context().resolved_locks()) {
+    resolved_locks.insert(lock);
+  }
+
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::common::KeyValue> kvs;
   bool has_more = false;
@@ -1229,8 +1240,8 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
-                            request->is_reverse(), txn_result_info, kvs, has_more, end_key, !request->has_coprocessor(),
-                            request->coprocessor());
+                            request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
+                            !request->has_coprocessor(), request->coprocessor());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1898,10 +1909,15 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
     keys.emplace_back(key);
   }
 
+  std::set<int64_t> resolved_locks;
+  for (const auto& lock : request->context().resolved_locks()) {
+    resolved_locks.insert(lock);
+  }
+
   pb::store::TxnResultInfo txn_result_info;
 
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnBatchGet(ctx, request->start_ts(), keys, txn_result_info, kvs);
+  status = storage->TxnBatchGet(ctx, request->start_ts(), keys, resolved_locks, txn_result_info, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

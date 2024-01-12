@@ -51,6 +51,7 @@ DECLARE_string(start_key);
 DECLARE_string(end_key);
 DECLARE_int64(vector_id);
 DEFINE_int64(start_ts, 0, "start_ts");
+DEFINE_int64(resolve_locks, 0, "resolve_locks");
 DEFINE_int64(end_ts, 0, "end_ts");
 DEFINE_int64(commit_ts, 0, "start_ts");
 DEFINE_int64(lock_ts, 0, "start_ts");
@@ -534,6 +535,10 @@ void SendTxnGet(int64_t region_id) {
   }
   request.set_start_ts(FLAGS_start_ts);
 
+  if (FLAGS_resolve_locks > 0) {
+    request.mutable_context()->add_resolved_locks(FLAGS_resolve_locks);
+  }
+
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnGet", request, response);
@@ -600,6 +605,10 @@ void SendTxnScan(int64_t region_id) {
 
   request.set_is_reverse(FLAGS_is_reverse);
   request.set_key_only(FLAGS_key_only);
+
+  if (FLAGS_resolve_locks > 0) {
+    request.mutable_context()->add_resolved_locks(FLAGS_resolve_locks);
+  }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
@@ -984,6 +993,10 @@ void SendTxnBatchGet(int64_t region_id) {
     return;
   }
   request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_resolve_locks > 0) {
+    request.mutable_context()->add_resolved_locks(FLAGS_resolve_locks);
+  }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 

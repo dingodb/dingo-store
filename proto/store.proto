@@ -32,6 +32,9 @@ message Context {
   int64 region_id = 1;
   dingodb.pb.common.RegionEpoch region_epoch = 2;
   IsolationLevel isolation_level = 3;
+  // Read requests should ignore locks belonging to these transactions because either
+  // these transactions are rolled back or theirs min_commit_ts > read request's start_ts.
+  repeated uint64 resolved_locks = 4;
 }
 
 message KvGetRequest {
@@ -400,16 +403,17 @@ enum Action {
 }
 
 message LockInfo {
-  bytes primary_lock = 1;   // the primary lock of the transaction
-  bytes key = 2;            // the key of the lock
-  int64 lock_ts = 3;        // the start_ts of the transaction
-  int64 for_update_ts = 4;  // the for_update_ts of the pessimistic lock
-  int64 lock_ttl = 5;       // the lock ttl timestamp in milisecond
-  int64 txn_size = 6;       // the number of keys involved in the transaction
-  Op lock_type = 7;         // the type of the lock, it can be put, delete, lock
-  bytes short_value = 8;    // the short value will persist to lock_info, and do not write data, commit will set it to
-                            // write_info.short_value
-  bytes extra_data = 9;     // the extra_data executor want to store in lock
+  bytes primary_lock = 1;    // the primary lock of the transaction
+  bytes key = 2;             // the key of the lock
+  int64 lock_ts = 3;         // the start_ts of the transaction
+  int64 for_update_ts = 4;   // the for_update_ts of the pessimistic lock
+  int64 lock_ttl = 5;        // the lock ttl timestamp in milisecond
+  int64 txn_size = 6;        // the number of keys involved in the transaction
+  Op lock_type = 7;          // the type of the lock, it can be put, delete, lock
+  bytes short_value = 8;     // the short value will persist to lock_info, and do not write data, commit will set it to
+                             // write_info.short_value
+  bytes extra_data = 9;      // the extra_data executor want to store in lock
+  int64 min_commit_ts = 10;  // the min_commit_ts of the transaction
 }
 
 message WriteInfo {
@@ -488,6 +492,13 @@ message AlreadyExist {
   bytes key = 1;
 }
 
+message CommitTsExpired {
+  int64 start_ts = 1;
+  int64 attempted_commit_ts = 2;
+  bytes key = 3;
+  int64 min_commit_ts = 4;
+}
+
 message TxnResultInfo {
   // Client should backoff or cleanup the lock then retry, this error occurs in get phase.
   LockInfo locked = 1;
@@ -497,6 +508,8 @@ message TxnResultInfo {
   TxnNotFound txn_not_found = 3;
   // CheckTxnStatus is sent to a lock that's not the primary.
   PrimaryMismatch primary_mismatch = 4;
+  // Commit ts is earlier than min commit ts of a transaction.
+  CommitTsExpired commit_ts_expired = 5;
 }
 
 // TxnGet do point-lookup a value for key in the transaction with start_ts
@@ -747,6 +760,9 @@ message TxnCheckTxnStatusRequest {
   // Starting timestamp oracle of the transaction being checked.
   int64 lock_ts = 4;
   // The start timestamp oracle of the transaction which this request is part of.
+  // If the the lock_ts < caller_start_ts and the lock_ttl is not outdated, the transaction is not expired.
+  // In this case, store will try to update the lock's min_commit_ts to caller_start_ts, in order to prevent the
+  // read-write conflict. If the min_commit_ts is updated, the Action of the response will be MinCommitTSPushed.
   int64 caller_start_ts = 5;
   // The client must specify the current time to dingo-store using this timestamp oracle.
   // It is used to check TTL timeouts. It may be inaccurate.
@@ -770,6 +786,7 @@ message TxnCheckTxnStatusResponse {
   // if the transaction of the lock is committed, the commit_ts is returned
   int64 commit_ts = 5;
   // The action performed by dingo-store (and why if the action is to rollback).
+  // If the min_commit_ts of the lock is pushed, the Action of the response will be MinCommitTSPushed.
   Action action = 6;
   LockInfo lock_info = 7;
 }
