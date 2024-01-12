@@ -20,6 +20,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -76,6 +77,7 @@ class BdbHelper {
   static int TxnAbort(DbTxn** txn_ptr);
 
   static void CheckpointThread(DbEnv* env, std::atomic<bool>& is_close);
+  static void GetLogFileNames(DbEnv* env, std::set<std::string>& file_names);
 };
 
 // Snapshot
@@ -273,7 +275,8 @@ class BdbRawEngine : public RawEngine {
   RawEngine::WriterPtr writer_;
 
   std::atomic<bool> is_close_{false};
-  Bthread checkpoint_bthread_;
+  // Bthread checkpoint_bthread_;
+  std::thread checkpoint_thread_;
 };
 
 }  // namespace dingodb
