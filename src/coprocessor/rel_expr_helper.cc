@@ -86,18 +86,72 @@ butil::Status RelExprHelper::TransToOperand(BaseSchema::Type type, const std::an
       }
       break;
     }
-    case BaseSchema::Type::kBoolList:
-      [[fallthrough]];
-    case BaseSchema::Type::kIntegerList:
-      [[fallthrough]];
-    case BaseSchema::Type::kFloatList:
-      [[fallthrough]];
-    case BaseSchema::Type::kLongList:
-      [[fallthrough]];
-    case BaseSchema::Type::kDoubleList:
-      [[fallthrough]];
-    case BaseSchema::Type::kStringList:
-      [[fallthrough]];
+    case BaseSchema::Type::kBoolList: {
+      try {
+        operand_ptr->emplace_back(
+            expr::any_optional_data_adaptor::ToOperand<std::shared_ptr<std::vector<bool>>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format("Trans to Operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kIntegerList: {
+      try {
+        operand_ptr->emplace_back(
+            expr::any_optional_data_adaptor::ToOperand<std::shared_ptr<std::vector<int32_t>>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format("Trans to Operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kFloatList: {
+      try {
+        operand_ptr->emplace_back(
+            expr::any_optional_data_adaptor::ToOperand<std::shared_ptr<std::vector<float>>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format("Trans to Operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kLongList: {
+      try {
+        operand_ptr->emplace_back(
+            expr::any_optional_data_adaptor::ToOperand<std::shared_ptr<std::vector<int64_t>>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format("Trans to Operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kDoubleList: {
+      try {
+        operand_ptr->emplace_back(
+            expr::any_optional_data_adaptor::ToOperand<std::shared_ptr<std::vector<double>>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format("Trans to Operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kStringList: {
+      try {
+        operand_ptr->emplace_back(
+            expr::any_optional_data_adaptor::ToOperand<std::shared_ptr<std::vector<std::string>>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format("Trans to Operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
     default: {
       std::string s = fmt::format("CloneColumn unsupported type  {}", BaseSchema::GetTypeString(type));
       DINGO_LOG(ERROR) << s;
@@ -165,7 +219,6 @@ butil::Status RelExprHelper::TransFromOperand(BaseSchema::Type type,
     }
     case BaseSchema::Type::kString: {
       try {
-        // TODO:
         columns.emplace_back(
             expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::string>>((*operand_ptr)[index]));
       } catch (const std::bad_variant_access& bad) {
@@ -175,18 +228,73 @@ butil::Status RelExprHelper::TransFromOperand(BaseSchema::Type type,
       }
       break;
     }
-    case BaseSchema::Type::kBoolList:
-      [[fallthrough]];
-    case BaseSchema::Type::kIntegerList:
-      [[fallthrough]];
-    case BaseSchema::Type::kFloatList:
-      [[fallthrough]];
-    case BaseSchema::Type::kLongList:
-      [[fallthrough]];
-    case BaseSchema::Type::kDoubleList:
-      [[fallthrough]];
-    case BaseSchema::Type::kStringList:
-      [[fallthrough]];
+    case BaseSchema::Type::kBoolList: {
+      try {
+        columns.emplace_back(
+            expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<bool>>>((*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format("Trans from operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kIntegerList: {
+      try {
+        columns.emplace_back(
+            expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<int32_t>>>((*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format("Trans from operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kFloatList: {
+      try {
+        columns.emplace_back(
+            expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<float>>>((*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format("Trans from operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kLongList: {
+      try {
+        columns.emplace_back(
+            expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<int64_t>>>((*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format("Trans from operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kDoubleList: {
+      try {
+        columns.emplace_back(
+            expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<double>>>((*operand_ptr)[index]));
+        columns.emplace_back(expr::any_optional_data_adaptor::FromOperand<double>((*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format("Trans from operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kStringList: {
+      try {
+        columns.emplace_back(expr::any_optional_data_adaptor::FromOperand<std::shared_ptr<std::vector<std::string>>>(
+            (*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format("Trans from operand failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
     default: {
       std::string s = fmt::format("CloneColumn unsupported type  {}", BaseSchema::GetTypeString(type));
       DINGO_LOG(ERROR) << s;
