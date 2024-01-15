@@ -1953,7 +1953,14 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
                                       const std::vector<std::string> &keys) {
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                  << ", keys_size: " << keys.size();
+                  << ", keys_size: " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
+
+  // print keys and index
+  for (int i = 0; i < keys.size(); i++) {
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
+                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+                    << ", keys[" << i << "]: " << Helper::StringToHex(keys[i]);
+  }
 
   if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_commit_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
@@ -2132,6 +2139,13 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
       auto *txn_not_found = txn_result->mutable_txn_not_found();
       txn_not_found->set_start_ts(start_ts);
       txn_not_found->set_key(key);
+
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                      commit_ts)
+                       << ", no committed and no rollbacked, there may be BUG, key: " << Helper::StringToHex(key)
+                       << ", start_ts: " << start_ts << ", write_info: " << write_info.ShortDebugString();
+
+      return butil::Status::OK();
     }
 
     // now txn is match, prepare to commit

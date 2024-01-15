@@ -727,7 +727,7 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts,
   }
 
   DINGO_LOG(INFO) << "TxnCommit start_ts : " << start_ts << " commit_ts : " << commit_ts
-                  << " keys size : " << keys.size();
+                  << " keys size : " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
