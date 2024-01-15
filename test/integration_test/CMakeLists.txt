@@ -3,6 +3,7 @@ enable_testing()
 SET(INTEGRATION_TEST_BIN "dingodb_integration_test")
 
 set(INTEGRATION_TEST_COMMON_SRCS
+  engine_type.cc
   ${CMAKE_SOURCE_DIR}/src/common/uuid.cc
 )
 

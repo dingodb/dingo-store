@@ -23,6 +23,7 @@
 #include <thread>
 
 #include "common/helper.h"
+#include "engine_type.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
@@ -36,27 +37,28 @@ namespace dingodb {
 
 namespace integration_test {
 
-const std::string kRegionNamePrefix = "Region_for_KvPutIfAbsentTest_";
+const std::string kRegionName = "Region_for_KvPutIfAbsentTest";
 const std::string kKeyPrefix = "KVPUTIFABSENT000";
 
-class KvPutIfAbsentTest : public testing::TestWithParam<sdk::EngineType> {
+template <class T>
+class KvPutIfAbsentTest : public testing::Test {
  protected:
-  void SetUp() override {
-    const testing::TestInfo* const test_info = testing::UnitTest::GetInstance()->current_test_info();
-    region_id = Helper::CreateRawRegion(kRegionNamePrefix + test_info->name(), kKeyPrefix,
-                                        Helper::PrefixNext(kKeyPrefix), GetParam());
+  static void SetUpTestSuite() {
+    region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix), GetEngineType<T>());
   }
+  static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }
 
-  void TearDown() override { Helper::DropRawRegion(region_id); }
-
- public:
-  int64_t region_id = 0;
+  static int64_t region_id;
 };
 
-INSTANTIATE_TEST_SUITE_P(KvPutIfAbsentTestGroup, KvPutIfAbsentTest, ::testing::Values(sdk::kLSM, sdk::kBTree));
+template <class T>
+int64_t KvPutIfAbsentTest<T>::region_id = 0;
 
-TEST_P(KvPutIfAbsentTest, Absent) {
-  RecordProperty("description", "Test key absent case");
+using Implementations = testing::Types<LsmEngine, BtreeEngine>;
+TYPED_TEST_SUITE(KvPutIfAbsentTest, Implementations);
+
+TYPED_TEST(KvPutIfAbsentTest, Absent) {
+  testing::Test::RecordProperty("description", "Test key absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -80,8 +82,8 @@ TEST_P(KvPutIfAbsentTest, Absent) {
   }
 }
 
-TEST_P(KvPutIfAbsentTest, NotAbsent) {
-  RecordProperty("description", "Test key not absent case");
+TYPED_TEST(KvPutIfAbsentTest, NotAbsent) {
+  testing::Test::RecordProperty("description", "Test key not absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -108,8 +110,8 @@ TEST_P(KvPutIfAbsentTest, NotAbsent) {
   }
 }
 
-TEST_P(KvPutIfAbsentTest, BatchAbsent) {
-  RecordProperty("description", "Test batch absent case");
+TYPED_TEST(KvPutIfAbsentTest, BatchAbsent) {
+  testing::Test::RecordProperty("description", "Test batch absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -154,8 +156,8 @@ TEST_P(KvPutIfAbsentTest, BatchAbsent) {
   }
 }
 
-TEST_P(KvPutIfAbsentTest, BatchNotAbsent) {
-  RecordProperty("description", "Test batch not absent case");
+TYPED_TEST(KvPutIfAbsentTest, BatchNotAbsent) {
+  testing::Test::RecordProperty("description", "Test batch not absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -204,8 +206,8 @@ TEST_P(KvPutIfAbsentTest, BatchNotAbsent) {
   }
 }
 
-TEST_P(KvPutIfAbsentTest, BatchPartialNotAbsent) {
-  RecordProperty("description", "Test batch partial not absent case");
+TYPED_TEST(KvPutIfAbsentTest, BatchPartialNotAbsent) {
+  testing::Test::RecordProperty("description", "Test batch partial not absent case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);

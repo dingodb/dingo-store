@@ -23,6 +23,7 @@
 #include <thread>
 
 #include "common/helper.h"
+#include "engine_type.h"
 #include "environment.h"
 #include "fmt/core.h"
 #include "gflags/gflags_declare.h"
@@ -38,26 +39,29 @@ namespace dingodb {
 
 namespace integration_test {
 
-const std::string kRegionNamePrefix = "Region_for_KvGet_";
+const std::string kRegionName = "Region_for_KvGet";
 const std::string kKeyPrefix = "KVGET000";
 
-class KvGetTest : public testing::TestWithParam<sdk::EngineType> {
+
+template <class T>
+class KvGetTest : public testing::Test {
  protected:
-  void SetUp() override {
-    const testing::TestInfo* const test_info = testing::UnitTest::GetInstance()->current_test_info();
-    region_id = Helper::CreateRawRegion(kRegionNamePrefix + test_info->name(), kKeyPrefix,
-                                        Helper::PrefixNext(kKeyPrefix), GetParam());
+  static void SetUpTestSuite() {
+    region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix), GetEngineType<T>());
   }
+  static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }
 
-  void TearDown() override { Helper::DropRawRegion(region_id); }
-
-  int64_t region_id = 0;
+  static int64_t region_id;
 };
 
-INSTANTIATE_TEST_SUITE_P(KvGetTestGroup, KvGetTest, ::testing::Values(sdk::kLSM, sdk::kBTree));
+template <class T>
+int64_t KvGetTest<T>::region_id = 0;
 
-TEST_P(KvGetTest, BlankGet) {
-  RecordProperty("description", "Test blank key case");
+using Implementations = testing::Types<LsmEngine, BtreeEngine>;
+TYPED_TEST_SUITE(KvGetTest, Implementations);
+
+TYPED_TEST(KvGetTest, BlankGet) {
+  testing::Test::RecordProperty("description", "Test blank key case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -80,8 +84,8 @@ TEST_P(KvGetTest, BlankGet) {
   }
 }
 
-TEST_P(KvGetTest, NormalGet) {
-  RecordProperty("description", "Test normal case");
+TYPED_TEST(KvGetTest, NormalGet) {
+  testing::Test::RecordProperty("description", "Test normal case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -106,8 +110,8 @@ TEST_P(KvGetTest, NormalGet) {
   }
 }
 
-TEST_P(KvGetTest, BatchGet) {
-  RecordProperty("description", "Test batch case");
+TYPED_TEST(KvGetTest, BatchGet) {
+  testing::Test::RecordProperty("description", "Test batch case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);

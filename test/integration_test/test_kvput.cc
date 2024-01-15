@@ -23,6 +23,7 @@
 #include <thread>
 
 #include "common/helper.h"
+#include "engine_type.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
@@ -36,26 +37,28 @@ namespace dingodb {
 
 namespace integration_test {
 
-const std::string kRegionNamePrefix = "Region_for_KvPut_";
+const std::string kRegionName = "Region_for_KvPut";
 const std::string kKeyPrefix = "KVPUT000";
 
-class KvPutTest : public testing::TestWithParam<sdk::EngineType> {
+template <class T>
+class KvPutTest : public testing::Test {
  protected:
-  void SetUp() override {
-    const testing::TestInfo* const test_info = testing::UnitTest::GetInstance()->current_test_info();
-    region_id = Helper::CreateRawRegion(kRegionNamePrefix + test_info->name(), kKeyPrefix,
-                                        Helper::PrefixNext(kKeyPrefix), GetParam());
+  static void SetUpTestSuite() {
+    region_id = Helper::CreateRawRegion(kRegionName, kKeyPrefix, Helper::PrefixNext(kKeyPrefix), GetEngineType<T>());
   }
-  void TearDown() override { Helper::DropRawRegion(region_id); }
+  static void TearDownTestSuite() { Helper::DropRawRegion(region_id); }
 
- public:
-  int64_t region_id = 0;
+  static int64_t region_id;
 };
 
-INSTANTIATE_TEST_SUITE_P(KvPutTestGroup, KvPutTest, ::testing::Values(sdk::kLSM, sdk::kBTree));
+template <class T>
+int64_t KvPutTest<T>::region_id = 0;
 
-TEST_P(KvPutTest, NormalPut) {
-  RecordProperty("description", "Test normal case");
+using Implementations = testing::Types<LsmEngine, BtreeEngine>;
+TYPED_TEST_SUITE(KvPutTest, Implementations);
+
+TYPED_TEST(KvPutTest, NormalPut) {
+  testing::Test::RecordProperty("description", "Test normal case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
@@ -77,8 +80,8 @@ TEST_P(KvPutTest, NormalPut) {
   }
 }
 
-TEST_P(KvPutTest, BatchPut) {
-  RecordProperty("description", "Test batch case");
+TYPED_TEST(KvPutTest, BatchPut) {
+  testing::Test::RecordProperty("description", "Test batch case");
 
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
   auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
