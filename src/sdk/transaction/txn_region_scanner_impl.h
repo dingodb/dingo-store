@@ -31,9 +31,9 @@ class TestBase;
 
 class TxnRegionScannerImpl : public RegionScanner {
  public:
-  explicit TxnRegionScannerImpl(const ScannerOptions& options);
-
-  explicit TxnRegionScannerImpl(const ScannerOptions& options, std::string start_key, std::string end_key);
+  explicit TxnRegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region,
+                                const TransactionOptions& txn_options, int64_t txn_start_ts, std::string start_key,
+                                std::string end_key);
 
   ~TxnRegionScannerImpl() override;
 
@@ -81,9 +81,6 @@ class TxnRegionScannerFactoryImpl final : public RegionScannerFactory {
   TxnRegionScannerFactoryImpl();
 
   ~TxnRegionScannerFactoryImpl() override;
-
-  Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                          std::shared_ptr<RegionScanner>& scanner) override;
 
   Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) override;
 };

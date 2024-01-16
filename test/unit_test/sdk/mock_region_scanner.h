@@ -28,8 +28,9 @@ namespace sdk {
 
 class MockRegionScanner final : public RegionScanner {
  public:
-  explicit MockRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region)
-      : RegionScanner(stub, std::move(region)) {}
+  explicit MockRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region, std::string p_start_key,
+                             std::string p_end_key)
+      : RegionScanner(stub, std::move(region)), start_key(std::move(p_start_key)), end_key(std::move(p_end_key)) {}
 
   ~MockRegionScanner() override = default;
 
@@ -39,13 +40,16 @@ class MockRegionScanner final : public RegionScanner {
 
   MOCK_METHOD(Status, NextBatch, (std::vector<KVPair> & kvs), (override));
 
-  MOCK_METHOD(void, AsyncNextBatch, (std::vector<KVPair>& kvs, StatusCallback cb), (override));
+  MOCK_METHOD(void, AsyncNextBatch, (std::vector<KVPair> & kvs, StatusCallback cb), (override));
 
   MOCK_METHOD(bool, HasMore, (), (const, override));
 
   MOCK_METHOD(Status, SetBatchSize, (int64_t size), (override));
 
   MOCK_METHOD(int64_t, GetBatchSize, (), (const, override));
+
+  const std::string start_key;
+  const std::string end_key;
 };
 
 class MockRegionScannerFactory : public RegionScannerFactory {
@@ -54,8 +58,7 @@ class MockRegionScannerFactory : public RegionScannerFactory {
 
   ~MockRegionScannerFactory() override = default;
 
-  MOCK_METHOD(Status, NewRegionScanner,
-              (const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner),
+  MOCK_METHOD(Status, NewRegionScanner, (const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner),
               (override));
 };
 
