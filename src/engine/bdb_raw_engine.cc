@@ -1838,9 +1838,16 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // the fewest number of write locks will receive the
     // deadlock notification in the event of a deadlock.
     envp_->set_lk_detect(DB_LOCK_MINWRITE);
-    envp_->set_lk_max_lockers(FLAGS_bdb_lk_max_lockers);
-    envp_->set_lk_max_locks(FLAGS_bdb_lk_max_locks);
-    envp_->set_lk_max_objects(FLAGS_bdb_lk_max_objects);
+
+    envp_->set_memory_init(DB_MEM_LOCKER, FLAGS_bdb_lk_max_lockers);
+    envp_->set_memory_init(DB_MEM_LOCK, FLAGS_bdb_lk_max_locks);
+    envp_->set_memory_init(DB_MEM_LOCKOBJECT, FLAGS_bdb_lk_max_objects);
+
+    envp_->set_memory_init(DB_MEM_TRANSACTION, FLAGS_bdb_txn_max);
+
+    // envp_->set_lk_max_lockers(FLAGS_bdb_lk_max_lockers);
+    // envp_->set_lk_max_locks(FLAGS_bdb_lk_max_locks);
+    // envp_->set_lk_max_objects(FLAGS_bdb_lk_max_objects);
 
     envp_->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
 
