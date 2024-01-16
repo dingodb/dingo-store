@@ -121,12 +121,13 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
     }
   }
 
+  // Update the present id if input value is larger than the value in map
+  // if the update value is equal the internal value, return 0;
+  // if the update value is larger than the internal value, return 1;
+  // if the update value is less than the internal value, return -1;
   int UpdatePresentId(const int64_t &key, const int64_t &value) {
-    if (safe_map.Modify(InnerUpdatePresentId, key, value) > 0) {
-      return 1;
-    } else {
-      return -1;
-    }
+    int ret = safe_map.Modify(InnerUpdatePresentId, key, value);
+    return ret;
   }
 
  private:
