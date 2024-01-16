@@ -543,7 +543,7 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
     const auto& idepoch = meta_increment.idepochs(i);
     if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
       int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
-      if (ret > 0) {
+      if (ret >= 0) {
         DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch CREATE, success [id="
                         << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]"
                         << " value=" << idepoch.idepoch().value();
@@ -555,7 +555,7 @@ void KvControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrement& meta
       }
     } else if (idepoch.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
       int ret = id_epoch_map_.UpdatePresentId(idepoch.id(), idepoch.idepoch().value());
-      if (ret > 0) {
+      if (ret >= 0) {
         DINGO_LOG(INFO) << "ApplyMetaIncrement idepoch UPDATE, success [id="
                         << pb::coordinator_internal::IdEpochType_Name(idepoch.id()) << "]"
                         << " value=" << idepoch.idepoch().value();
