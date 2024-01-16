@@ -43,7 +43,7 @@ class RegionScanner {
 
   virtual Status NextBatch(std::vector<KVPair>& kvs) = 0;
 
-  virtual void AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb)  = 0;
+  virtual void AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb) = 0;
 
   virtual bool HasMore() const = 0;
 
@@ -51,9 +51,7 @@ class RegionScanner {
 
   virtual int64_t GetBatchSize() const = 0;
 
-  std::shared_ptr<Region> GetRegion() {
-    return region;
-  }
+  std::shared_ptr<Region> GetRegion() { return region; }
 
  protected:
   const ClientStub& stub;
@@ -63,15 +61,23 @@ class RegionScanner {
 struct ScannerOptions {
   const ClientStub& stub;
   std::shared_ptr<Region> region;
+  std::string start_key;
+  std::string end_key;
   std::optional<const TransactionOptions> txn_options;
   std::optional<int64_t> start_ts;
 
-  explicit ScannerOptions(const ClientStub& p_stub, std::shared_ptr<Region> p_region)
-      : stub(p_stub), region(std::move(p_region)) {}
+  explicit ScannerOptions(const ClientStub& p_stub, std::shared_ptr<Region> p_region, std::string p_start_key,
+                          std::string p_end_key)
+      : stub(p_stub), region(std::move(p_region)), start_key(std::move(p_start_key)), end_key(std::move(p_end_key)) {}
 
-  explicit ScannerOptions(const ClientStub& p_stub, std::shared_ptr<Region> p_region,
-                          const TransactionOptions p_txn_options, int64_t p_start_ts)
-      : stub(p_stub), region(std::move(p_region)), txn_options(p_txn_options), start_ts(p_start_ts) {}
+  explicit ScannerOptions(const ClientStub& p_stub, std::shared_ptr<Region> p_region, std::string p_start_key,
+                          std::string p_end_key, const TransactionOptions p_txn_options, int64_t p_start_ts)
+      : stub(p_stub),
+        region(std::move(p_region)),
+        start_key(std::move(p_start_key)),
+        end_key(std::move(p_end_key)),
+        txn_options(p_txn_options),
+        start_ts(p_start_ts) {}
 };
 
 class RegionScannerFactory {
@@ -83,15 +89,7 @@ class RegionScannerFactory {
 
   virtual ~RegionScannerFactory() = default;
 
-  virtual Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                                  std::shared_ptr<RegionScanner>& scanner) = 0;
-
-  virtual Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
-    // TODO: check options
-    (void)options;
-    (void)scanner;
-    return Status::NotSupported("no implement");
-  }
+  virtual Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) = 0;
 };
 
 }  // namespace sdk

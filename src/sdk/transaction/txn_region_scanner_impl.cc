@@ -26,13 +26,12 @@
 
 namespace dingodb {
 namespace sdk {
-TxnRegionScannerImpl::TxnRegionScannerImpl(const ScannerOptions& options)
-    : TxnRegionScannerImpl(options, options.region->Range().start_key(), options.region->Range().end_key()) {}
-
-TxnRegionScannerImpl::TxnRegionScannerImpl(const ScannerOptions& options, std::string start_key, std::string end_key)
-    : RegionScanner(options.stub, options.region),
-      txn_options_(options.txn_options.value()),
-      txn_start_ts_(options.start_ts.value()),
+TxnRegionScannerImpl::TxnRegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region,
+                                           const TransactionOptions& txn_options, int64_t txn_start_ts,
+                                           std::string start_key, std::string end_key)
+    : RegionScanner(stub, region),
+      txn_options_(txn_options),
+      txn_start_ts_(txn_start_ts),
       start_key_(std::move(start_key)),
       end_key_(std::move(end_key)),
       opened_(false),
@@ -170,14 +169,6 @@ TxnRegionScannerFactoryImpl::TxnRegionScannerFactoryImpl() = default;
 
 TxnRegionScannerFactoryImpl::~TxnRegionScannerFactoryImpl() = default;
 
-Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                                                     std::shared_ptr<RegionScanner>& scanner) {
-  (void)stub;
-  (void)region;
-  (void)scanner;
-  return Status::NotSupported("no implement");
-}
-
 Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
                                                      std::shared_ptr<RegionScanner>& scanner) {
   if (!options.txn_options) {
@@ -188,7 +179,16 @@ Status TxnRegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& optio
     return Status::InvalidArgument("txn start_ts not set");
   }
 
-  std::shared_ptr<RegionScanner> tmp(new TxnRegionScannerImpl(options));
+  CHECK(options.start_key < options.end_key);
+  CHECK(options.start_key >= options.region->Range().start_key())
+      << fmt::format("start_key:{} should greater than region range start_key:{}", options.start_key,
+                     options.region->Range().start_key());
+  CHECK(options.end_key <= options.region->Range().end_key()) << fmt::format(
+      "end_key:{} should little than region range end_key:{}", options.end_key, options.region->Range().end_key());
+
+  std::shared_ptr<RegionScanner> tmp(new TxnRegionScannerImpl(options.stub, options.region, options.txn_options.value(),
+                                                              options.start_ts.value(), options.start_key,
+                                                              options.end_key));
   scanner = std::move(tmp);
 
   return Status::OK();

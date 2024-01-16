@@ -15,6 +15,7 @@
 
 #include <memory>
 
+#include "fmt/core.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
 #include "sdk/store/store_rpc_controller.h"
@@ -22,9 +23,6 @@
 
 namespace dingodb {
 namespace sdk {
-
-RegionScannerImpl::RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region)
-    : RegionScannerImpl(stub, std::move(region), region->Range().start_key(), region->Range().end_key()) {}
 
 RegionScannerImpl::RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
                                      std::string end_key)
@@ -172,9 +170,17 @@ RegionScannerFactoryImpl::RegionScannerFactoryImpl() = default;
 
 RegionScannerFactoryImpl::~RegionScannerFactoryImpl() = default;
 
-Status RegionScannerFactoryImpl::NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
+Status RegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
                                                   std::shared_ptr<RegionScanner>& scanner) {
-  std::shared_ptr<RegionScanner> tmp(new RegionScannerImpl(stub, std::move(region)));
+  CHECK(options.start_key < options.end_key);
+  CHECK(options.start_key >= options.region->Range().start_key())
+      << fmt::format("start_key:{} should greater than region range start_key:{}", options.start_key,
+                     options.region->Range().start_key());
+  CHECK(options.end_key <= options.region->Range().end_key()) << fmt::format(
+      "end_key:{} should little than region range end_key:{}", options.end_key, options.region->Range().end_key());
+
+  std::shared_ptr<RegionScanner> tmp(
+      new RegionScannerImpl(options.stub, options.region, options.start_key, options.end_key));
   scanner = std::move(tmp);
 
   return Status::OK();

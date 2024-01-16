@@ -978,8 +978,9 @@ TEST_F(RawKVTest, ScanLookUpRegionFail) {
 
 TEST_F(RawKVTest, ScanOpenFail) {
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::Aborted("init fail")));
 
@@ -996,8 +997,9 @@ TEST_F(RawKVTest, ScanOpenFail) {
 
 TEST_F(RawKVTest, ScanNoData) {
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
         // CHECK will call scanner HasMore
@@ -1028,8 +1030,9 @@ TEST_F(RawKVTest, ScanOneRegion) {
   int iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1059,13 +1062,52 @@ TEST_F(RawKVTest, ScanOneRegion) {
   }
 }
 
+TEST_F(RawKVTest, ScanOneRegionWithStart) {
+  std::vector<std::string> fake_datas = {"a001", "a002", "a003"};
+
+  int iter = 0;
+
+  EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
+
+        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+
+        EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return iter < fake_datas.size(); });
+
+        EXPECT_CALL(*mock_scanner, AsyncNextBatch).WillRepeatedly([&](std::vector<KVPair>& kvs, StatusCallback cb) {
+          if (iter < fake_datas.size()) {
+            kvs.push_back({fake_datas[iter], fake_datas[iter]});
+            iter++;
+          }
+          cb(Status::OK());
+        });
+
+        scanner = std::move(mock_scanner);
+        return Status::OK();
+      });
+
+  std::vector<KVPair> kvs;
+  Status ret = raw_kv->Scan("b", "c", 0, kvs);
+  EXPECT_TRUE(ret.IsOK());
+
+  EXPECT_EQ(kvs.size(), fake_datas.size());
+
+  for (const auto& kv : kvs) {
+    DINGO_LOG(INFO) << "kv key:" << kv.key << " value:" << kv.value;
+    EXPECT_EQ(kv.key, kv.value);
+  }
+}
+
 TEST_F(RawKVTest, ScanOneRegionWithLimit) {
   std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
   int a2c_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1104,8 +1146,9 @@ TEST_F(RawKVTest, ScanTwoRegion) {
   int c2e_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1122,8 +1165,9 @@ TEST_F(RawKVTest, ScanTwoRegion) {
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1161,8 +1205,9 @@ TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
   int c2e_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1179,8 +1224,9 @@ TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1222,8 +1268,9 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
   int l2n_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1240,8 +1287,9 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1258,8 +1306,9 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1300,8 +1349,9 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
   int l2n_iter = 0;
 
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1318,8 +1368,9 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 
@@ -1336,8 +1387,9 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
         scanner = std::move(mock_scanner);
         return Status::OK();
       })
-      .WillOnce([&](const ClientStub& stub, std::shared_ptr<Region> region, std::shared_ptr<RegionScanner>& scanner) {
-        auto mock_scanner = std::make_shared<MockRegionScanner>(stub, std::move(region));
+      .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
+        auto mock_scanner =
+            std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
         EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
 

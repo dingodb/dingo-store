@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "sdk/rawkv/raw_kv_task.h"
+#include "sdk/region_scanner.h"
 
 namespace dingodb {
 namespace sdk {
@@ -87,8 +88,13 @@ void RawKvScanTask::ScanNext() {
     return;
   }
 
+  std::string scanner_start_key =
+      next_start_key_ <= region->Range().start_key() ? region->Range().start_key() : next_start_key_;
+  std::string scanner_end_key = end_key_ <= region->Range().end_key() ? end_key_ : region->Range().end_key();
+  ScannerOptions options(stub, region, scanner_start_key, scanner_end_key);
+
   std::shared_ptr<RegionScanner> scanner;
-  CHECK(stub.GetRegionScannerFactory()->NewRegionScanner(stub, region, scanner).IsOK());
+  CHECK(stub.GetRegionScannerFactory()->NewRegionScanner(options, scanner).IsOK());
 
   status_ = scanner->Open();
   if (!status_.ok()) {

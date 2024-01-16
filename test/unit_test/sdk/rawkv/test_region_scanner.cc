@@ -101,7 +101,7 @@ TEST_F(RegionScannerImplTest, OpenCloseSuccess) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
   Status open = scanner.Open();
   EXPECT_TRUE(open.IsOK());
 
@@ -127,7 +127,7 @@ TEST_F(RegionScannerImplTest, OpenFail) {
     cb();
   });
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
   Status open = scanner.Open();
   EXPECT_FALSE(open.IsOK());
 
@@ -164,7 +164,7 @@ TEST_F(RegionScannerImplTest, OpenSuccessCloseFail) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
   Status open = scanner.Open();
   EXPECT_TRUE(open.IsOK());
 
@@ -180,7 +180,7 @@ TEST_F(RegionScannerImplTest, SetBatchSize) {
   CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
 
   EXPECT_EQ(scanner.GetBatchSize(), kScanBatchSize);
 
@@ -232,7 +232,7 @@ TEST_F(RegionScannerImplTest, NextBatchFail) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
   Status ret = scanner.Open();
   EXPECT_TRUE(ret.IsOK());
 
@@ -280,7 +280,7 @@ TEST_F(RegionScannerImplTest, NextBatchNoData) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
   Status ret = scanner.Open();
   EXPECT_TRUE(ret.IsOK());
 
@@ -349,7 +349,7 @@ TEST_F(RegionScannerImplTest, NextBatchWithData) {
         }
       });
 
-  RegionScannerImpl scanner(*stub, region);
+  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
   Status ret = scanner.Open();
   EXPECT_TRUE(ret.IsOK());
 

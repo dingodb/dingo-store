@@ -34,8 +34,6 @@ class TestBase;
 
 class RegionScannerImpl : public RegionScanner {
  public:
-  explicit RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region);
-
   explicit RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
                              std::string end_key);
 
@@ -83,8 +81,7 @@ class RegionScannerFactoryImpl final : public RegionScannerFactory {
 
   ~RegionScannerFactoryImpl() override;
 
-  Status NewRegionScanner(const ClientStub& stub, std::shared_ptr<Region> region,
-                          std::shared_ptr<RegionScanner>& scanner) override;
+  Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) override;
 };
 
 }  // namespace sdk
