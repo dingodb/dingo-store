@@ -58,18 +58,33 @@ class Stats {
 
   void Report(bool is_cumulative, size_t milliseconds) const {
     double seconds = milliseconds / static_cast<double>(1000);
-    std::cout << (is_cumulative ? "cumulative " : "")
-              << fmt::format(
-                     "epoch: {:>3} req_num: {:>8} errors: {:>4} QPS: {:>6.0f} MB/s: {:>8.2f} latency(us): avg({:>8}) "
-                     "max({:>8}) p50({:>8}) p95({:>8}) p99({:>8})",
-                     epoch_, req_num_, error_count_, (req_num_ / seconds), (write_bytes_ / seconds / 1048576),
-                     latency_recorder_->latency(), latency_recorder_->max_latency(),
-                     latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
-                     latency_recorder_->latency_percentile(0.99))
+
+    if (is_cumulative) {
+      std::cout << "Cumulative:" << std::endl;
+    } else {
+      if (epoch_ == 1) {
+        std::cout << "Interval:" << std::endl;
+      }
+      if (epoch_ % 20 == 1) {
+        std::cout << Header() << std::endl;
+      }
+    }
+
+    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>16}{:>16}{:>16}{:>16}", epoch_, req_num_,
+                             error_count_, (req_num_ / seconds), (write_bytes_ / seconds / 1048576),
+                             latency_recorder_->latency(), latency_recorder_->max_latency(),
+                             latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
+                             latency_recorder_->latency_percentile(0.99))
               << std::endl;
   }
 
  private:
+  static std::string Header() {
+    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>16}{:>16}{:>16}{:>16}", "EPOCH", "REQ_NUM", "ERRORS", "QPS",
+                       "MB/s", "LATENCY_AVG(us)", "LATENCY_MAX(us)", "LATENCY_P50(us)", "LATENCY_P95(us)",
+                       "LATENCY_P99(us)");
+  }
+
   uint32_t epoch_{1};
   size_t req_num_{0};
   size_t write_bytes_{0};
