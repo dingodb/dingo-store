@@ -239,6 +239,9 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
       continue;
     }
 
+    DINGO_LOG(DEBUG) << "KvRange will query kv_rev, revision: " << kv_index_value.mod_revision().ShortDebugString()
+                     << ", key: " << key;
+
     pb::coordinator_internal::KvRevInternal kv_rev;
     auto ret = GetRawKvRev(kv_index_value.mod_revision(), kv_rev);
     if (!ret.ok()) {
@@ -258,7 +261,8 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
       kv_temp.mutable_kv()->set_value(kv_in_rev.value());
     }
 
-    DINGO_LOG(DEBUG) << "KvRange will return kv: " << kv_temp.ShortDebugString();
+    DINGO_LOG(DEBUG) << "KvRange will return kv: " << kv_temp.ShortDebugString()
+                     << ", kv_rev: " << kv_rev.ShortDebugString();
 
     // add to output
     kv.push_back(kv_temp);
@@ -906,13 +910,15 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
   pb::coordinator_internal::KvIndexInternal kv_index;
   auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "KvCompactApply GetRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+    DINGO_LOG(ERROR) << "KvCompactApply GetRawKvIndex failed, key: " << key << ", key_hex: " << Helper::StringToHex(key)
+                     << ", error: " << ret.error_str();
     return ret;
   }
 
   // iterate kv_index generations, find revisions less than compact_revision
   if (kv_index.generations_size() == 0) {
-    DINGO_LOG(INFO) << "KvCompactApply generations_size == 0, no need to compact, key: " << key;
+    DINGO_LOG(INFO) << "KvCompactApply generations_size == 0, no need to compact, key: " << key
+                    << ", key_hex: " << Helper::StringToHex(key);
     return butil::Status::OK();
   }
 
@@ -920,7 +926,7 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
   new_kv_index.clear_generations();
   std::vector<pb::coordinator_internal::RevisionInternal> revisions_to_delete;
 
-  // for history generations, just filter compaction_revision to delete old revsions
+  // for history generations, just filter compaction_revision to delete old revisions
   for (int i = 0; i < kv_index.generations_size() - 1; ++i) {
     pb::coordinator_internal::KvIndexInternal::Generation new_generation;
 
@@ -960,6 +966,7 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
       *(new_kv_index.mutable_generations()->Add()) = latest_generation;
     }
   }
+
   // if this is a put generation, add it to new_kv_index if new_kv_index has more than 1 generation
   // else filter revisions of this generation
   else {
@@ -992,7 +999,8 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
   // if new_kv_index has no generations, delete it
   // else put new_kv_index
   if (new_kv_index.generations_size() == 0) {
-    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has no generations, delete it, key: " << key;
+    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has no generations, delete it, key: " << key
+                    << ", key_hex: " << Helper::StringToHex(key);
     DeleteRawKvIndex(key);
   } else {
     DINGO_LOG(INFO) << "KvCompactApply new_kv_index has generations, put it, key: " << key
