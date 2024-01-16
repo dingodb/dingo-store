@@ -189,8 +189,9 @@ butil::Status KvControl::DeleteRawKvRev(const pb::coordinator_internal::Revision
 butil::Status KvControl::KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
                                  bool count_only, std::vector<pb::version::Kv> &kv, int64_t &return_count,
                                  bool &has_more) {
-  DINGO_LOG(INFO) << "KvRange, key: " << key << ", range_end: " << range_end << ", limit: " << limit
-                  << ", keys_only: " << keys_only << ", count_only: " << count_only;
+  DINGO_LOG(INFO) << "KvRange, key: " << key << "(" << Helper::StringToHex(key) << "), range_end: " << range_end << "("
+                  << Helper::StringToHex(range_end) << "), limit: " << limit << ", keys_only: " << keys_only
+                  << ", count_only: " << count_only;
 
   has_more = false;
   if (limit == 0) {
@@ -210,7 +211,9 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     // scan kv_index for legal keys
     auto ret = RangeRawKvIndex(key, range_end, kv_index_values);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "KvRange kv_index_map_.RangeRawKvIndex failed";
+      DINGO_LOG(ERROR) << "KvRange kv_index_map_.RangeRawKvIndex failed, key: " << key << "("
+                       << Helper::StringToHex(key) << "), range_end: " << range_end << "("
+                       << Helper::StringToHex(range_end) << "), error: " << ret.error_str();
       return ret;
     }
   }
@@ -220,12 +223,12 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
   for (const auto &kv_index_value : kv_index_values) {
     auto generation_count = kv_index_value.generations_size();
     if (generation_count == 0) {
-      DINGO_LOG(INFO) << "KvRange generation_count is 0, key: " << key;
+      DINGO_LOG(INFO) << "KvRange generation_count is 0, key: " << key << "(" << Helper::StringToHex(key) << ")";
       continue;
     }
     const auto &latest_generation = kv_index_value.generations(generation_count - 1);
     if (!latest_generation.has_create_revision() || latest_generation.revisions_size() == 0) {
-      DINGO_LOG(INFO) << "KvRange latest_generation is empty, key: " << key;
+      DINGO_LOG(INFO) << "KvRange latest_generation is empty, key: " << key << "(" << Helper::StringToHex(key) << ")";
       continue;
     }
 
@@ -240,7 +243,7 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     }
 
     DINGO_LOG(DEBUG) << "KvRange will query kv_rev, revision: " << kv_index_value.mod_revision().ShortDebugString()
-                     << ", key: " << key;
+                     << ", key: " << key << "(" << Helper::StringToHex(key) << ")";
 
     pb::coordinator_internal::KvRevInternal kv_rev;
     auto ret = GetRawKvRev(kv_index_value.mod_revision(), kv_rev);
@@ -264,14 +267,24 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
     DINGO_LOG(DEBUG) << "KvRange will return kv: " << kv_temp.ShortDebugString()
                      << ", kv_rev: " << kv_rev.ShortDebugString();
 
+    if (kv_temp.kv().key().empty()) {
+      DINGO_LOG(ERROR) << "KvRange will return null kv: " << kv_temp.ShortDebugString()
+                       << ", kv_rev: " << kv_rev.ShortDebugString()
+                       << ", mod_revision: " << kv_index_value.mod_revision().ShortDebugString()
+                       << ", original key: " << key << "(" << Helper::StringToHex(key)
+                       << "), original range_end : " << range_end << "(" << Helper::StringToHex(range_end)
+                       << "), kv_index_internal: " << kv_index_value.ShortDebugString();
+    }
+
     // add to output
     kv.push_back(kv_temp);
   }
 
   return_count = kv.size();
 
-  DINGO_LOG(INFO) << "KvRange finish, key: " << key << ", range_end: " << range_end << ", limit: " << limit
-                  << ", keys_only: " << keys_only << ", count_only: " << count_only << ", kv size: " << kv.size()
+  DINGO_LOG(INFO) << "KvRange finish, key: " << key << "(" << Helper::StringToHex(key) << "), range_end: " << range_end
+                  << "(" << Helper::StringToHex(range_end) << "), limit" << limit << ", keys_only: " << keys_only
+                  << ", count_only: " << count_only << ", kv size: " << kv.size()
                   << ", total_count_in_range: " << return_count;
 
   return butil::Status::OK();
@@ -291,7 +304,8 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
     pb::coordinator_internal::KvIndexInternal kv_index;
     auto ret = GetRawKvIndex(key, kv_index);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "KvRange GetRawKvIndex not found, key: " << key << ", error: " << ret.error_str();
+      DINGO_LOG(ERROR) << "KvRange GetRawKvIndex not found, key: " << key << "(" << Helper::StringToHex(key)
+                       << "), error: " << ret.error_str();
       return butil::Status::OK();
     }
     keys.push_back(key);
@@ -299,7 +313,9 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
     // scan kv_index for legal keys
     auto ret = RangeRawKvIndex(key, range_end, kv_index_values);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "KvRange kv_index_map_.RangeRawKvIndex failed";
+      DINGO_LOG(ERROR) << "KvRange kv_index_map_.RangeRawKvIndex failed, key: " << key << "("
+                       << Helper::StringToHex(key) << "), range_end: " << range_end << "("
+                       << Helper::StringToHex(range_end) << "), error: " << ret.error_str();
       return ret;
     }
 
@@ -308,8 +324,9 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
     }
   }
 
-  DINGO_LOG(INFO) << "KvRangeRawKeys finish, key: " << key << ", range_end: " << range_end
-                  << ", keys size: " << keys.size();
+  DINGO_LOG(INFO) << "KvRangeRawKeys finish, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), range_end: " << range_end << "(" << Helper::StringToHex(range_end)
+                  << "), keys size: " << keys.size();
 
   return butil::Status::OK();
 }
@@ -325,9 +342,10 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
 butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t lease_id, bool need_prev_kv,
                                bool ignore_value, bool ignore_lease, pb::version::Kv &prev_kv, int64_t &lease_grant_id,
                                pb::coordinator_internal::MetaIncrement &meta_increment) {
-  DINGO_LOG(INFO) << "KvPut, key_value: " << key_value_in.ShortDebugString() << ", lease_id: " << lease_id
-                  << ", need_prev_kv: " << need_prev_kv << ", igore_value: " << ignore_value
-                  << ", ignore_lease: " << ignore_lease;
+  DINGO_LOG(INFO) << "KvPut, key: " << key_value_in.key() << "(" << Helper::StringToHex(key_value_in.key())
+                  << "), value: " << key_value_in.value() << "(" << Helper::StringToHex(key_value_in.value())
+                  << "), lease_id: " << lease_id << ", need_prev_kv: " << need_prev_kv
+                  << ", igore_value: " << ignore_value << ", ignore_lease: " << ignore_lease;
 
   if (kv_index_map_.Size() > FLAGS_version_kv_max_count) {
     DINGO_LOG(ERROR) << "KvPut kv_index_map_ size: " << kv_index_map_.Size() << ", will do compaction";
@@ -343,7 +361,7 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   // check key length
   if (key_value_in.key().size() > FLAGS_max_kv_key_size) {
     DINGO_LOG(ERROR) << "KvPut key is too long, max_kv_key_size: " << FLAGS_max_kv_key_size
-                     << ", key: " << key_value_in.key();
+                     << ", key: " << key_value_in.key() << "(" << Helper::StringToHex(key_value_in.key()) << ")";
     return butil::Status(EINVAL, "KvPut key is too long");
   }
 
@@ -356,7 +374,8 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   // check value length
   if (!ignore_value && key_value_in.value().size() > FLAGS_max_kv_value_size) {
     DINGO_LOG(ERROR) << "KvPut value is too long, max_kv_value_size: " << FLAGS_max_kv_value_size
-                     << ", key: " << key_value_in.key();
+                     << ", key: " << key_value_in.key() << "(" << Helper::StringToHex(key_value_in.key())
+                     << "), value: " << key_value_in.value() << "(" << Helper::StringToHex(key_value_in.value()) << ")";
     return butil::Status(EINVAL, "KvPut value is too long");
   }
 
@@ -386,7 +405,8 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
       // if ignore_lease, get the lease of the key
       lease_grant_id = kvs_temp[0].lease();
     } else {
-      DINGO_LOG(ERROR) << "KvPut ignore_lease, but not found key: " << key_value_in.key();
+      DINGO_LOG(ERROR) << "KvPut ignore_lease, but not found key: " << key_value_in.key() << "("
+                       << Helper::StringToHex(key_value_in.key()) << ")";
       return butil::Status(EINVAL, "KvPut ignore_lease, but not found key");
     }
   } else {
@@ -394,7 +414,8 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
       // if ignore_lease, get the lease of the key
       lease_grant_id = kvs_temp[0].lease();
       if (lease_grant_id != lease_id) {
-        DINGO_LOG(ERROR) << "KvPut lease_id not match, key: " << key_value_in.key() << ", lease_id: " << lease_id
+        DINGO_LOG(ERROR) << "KvPut lease_id not match, key: " << key_value_in.key() << "("
+                         << Helper::StringToHex(key_value_in.key()) << "), lease_id: " << lease_id
                          << ", lease_grant_id: " << lease_grant_id;
         return butil::Status(EINVAL, "KvPut lease_id not match");
       }
@@ -408,11 +429,12 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
     auto ret = LeaseAddKeys(lease_grant_id, keys);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvPut LeaseAddKeys failed, lease_id: " << lease_grant_id << ", key: " << key_value_in.key()
-                       << ", error: " << ret.error_str();
+                       << "(" << Helper::StringToHex(key_value_in.key()) << "), error: " << ret.error_str();
       return ret;
     }
 
-    DINGO_LOG(INFO) << "KvPut LeaseAddKeys success, lease_id: " << lease_grant_id << ", key: " << key_value_in.key();
+    DINGO_LOG(INFO) << "KvPut LeaseAddKeys success, lease_id: " << lease_grant_id << ", key: " << key_value_in.key()
+                    << "(" << Helper::StringToHex(key_value_in.key()) << ")";
   }
 
   // get prev_kvs
@@ -431,7 +453,9 @@ butil::Status KvControl::KvPut(const pb::common::KeyValue &key_value_in, int64_t
   }
 
   // update kv_index
-  DINGO_LOG(INFO) << "KvPut will put key: " << key_value_in.key();
+  DINGO_LOG(INFO) << "KvPut will submit meta_increment, key: " << key_value_in.key() << "("
+                  << Helper::StringToHex(key_value_in.key()) << "), value: " << key_value_in.value() << "("
+                  << Helper::StringToHex(key_value_in.value()) << ")";
 
   // add meta_increment
   auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
@@ -462,7 +486,9 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
                                        bool need_lease_remove_keys, int64_t &deleted_count,
                                        std::vector<pb::version::Kv> &prev_kvs,
                                        pb::coordinator_internal::MetaIncrement &meta_increment) {
-  DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << ", range_end: " << range_end << ", need_prev: " << need_prev_kv;
+  DINGO_LOG(INFO) << "KvDeleteRange, key: " << key << "(" << Helper::StringToHex(key) << "), range_end: " << range_end
+                  << "(" << Helper::StringToHex(range_end) << "), need_prev_kv: " << need_prev_kv
+                  << ", need_lease_remove_keys: " << need_lease_remove_keys;
 
   std::vector<pb::version::Kv> kvs_to_delete;
   int64_t total_count_in_range = 0;
@@ -472,8 +498,9 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
 
   auto ret = KvRange(key, range_end, INT64_MAX, key_only, false, kvs_to_delete, total_count_in_range, has_more);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "KvDeleteRange KvRange failed, key: " << key << ", range_end: " << range_end
-                     << ", error: " << ret.error_str();
+    DINGO_LOG(ERROR) << "KvDeleteRange KvRange failed, key: " << key << "(" << Helper::StringToHex(key)
+                     << "), range_end: " << range_end << "(" << Helper::StringToHex(range_end)
+                     << "), error: " << ret.error_str();
     return ret;
   }
 
@@ -482,7 +509,8 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
   // do kv_delete
   for (const auto &kv_to_delete : kvs_to_delete) {
     // update kv_index
-    DINGO_LOG(INFO) << "KvDelete will delete key: " << kv_to_delete.kv().key();
+    DINGO_LOG(INFO) << "KvDelete will submit meta_increment, key: " << kv_to_delete.kv().key() << "("
+                    << Helper::StringToHex(kv_to_delete.kv().key()) << ")";
 
     // add meta_increment
     auto *kv_index_meta_increment = meta_increment.add_kv_indexes();
@@ -498,6 +526,11 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
     std::set<std::string> keys;
     keys.insert(kv_to_delete.kv().key());
     keys_to_remove_lease.insert_or_assign(kv_to_delete.lease(), keys);
+
+    if (need_lease_remove_keys) {
+      DINGO_LOG(INFO) << "KvDelete will remove lease for key: " << kv_to_delete.kv().key() << "("
+                      << Helper::StringToHex(kv_to_delete.kv().key()) << "), lease_id: " << kv_to_delete.lease();
+    }
   }
 
   // do lease_remove_keys
@@ -524,9 +557,10 @@ butil::Status KvControl::KvDeleteRange(const std::string &key, const std::string
 butil::Status KvControl::KvPutApply(const std::string &key,
                                     const pb::coordinator_internal::RevisionInternal &op_revision, bool ignore_lease,
                                     int64_t lease_id, bool ignore_value, const std::string &value) {
-  DINGO_LOG(INFO) << "KvPutApply, key: " << key << ", op_revision: " << op_revision.ShortDebugString()
-                  << ", ignore_lease: " << ignore_lease << ", lease_id: " << lease_id
-                  << ", ignore_value: " << ignore_value << ", value: " << value;
+  DINGO_LOG(INFO) << "KvPutApply, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), op_revision: " << op_revision.ShortDebugString() << ", ignore_lease: " << ignore_lease
+                  << ", lease_id: " << lease_id << ", ignore_value: " << ignore_value << ", value: " << value << "("
+                  << Helper::StringToHex(value) << ")";
 
   // get kv_index and generate new kv_index
   pb::coordinator_internal::KvIndexInternal kv_index;
@@ -541,7 +575,8 @@ butil::Status KvControl::KvPutApply(const std::string &key,
 
   auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
-    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex not found, will create key: " << key << ", error: " << ret.error_str();
+    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex not found, will create key: " << key << "(" << Helper::StringToHex(key)
+                    << "), error: " << ret.error_str();
     kv_index.set_id(key);
     kv_index.mutable_mod_revision()->set_main(op_revision.main());
     kv_index.mutable_mod_revision()->set_sub(op_revision.sub());
@@ -551,9 +586,11 @@ butil::Status KvControl::KvPutApply(const std::string &key,
     generation->set_verison(1);
     *(generation->add_revisions()) = op_revision;
 
-    DINGO_LOG(INFO) << "KvPutApply kv_index create new kv_index: " << generation->ShortDebugString();
+    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex not found, will create new kv_index: key: " << key << "("
+                    << Helper::StringToHex(key) << "), kv_index generation: " << generation->ShortDebugString();
   } else {
-    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex found, will update key: " << key << ", error: " << ret.error_str();
+    DINGO_LOG(INFO) << "KvPutApply GetRawKvIndex found, will update key: " << key << "(" << Helper::StringToHex(key)
+                    << "), error: " << ret.error_str();
 
     last_mod_revision = kv_index.mod_revision();
 
@@ -563,14 +600,18 @@ butil::Status KvControl::KvPutApply(const std::string &key,
       generation->mutable_create_revision()->set_sub(op_revision.sub());
       generation->set_verison(1);
       *(generation->add_revisions()) = op_revision;
-      DINGO_LOG(INFO) << "KvPutApply kv_index add generation: " << generation->ShortDebugString();
+
+      DINGO_LOG(INFO) << "KvPutApply kv_index add generation: " << generation->ShortDebugString() << ", key: " << key
+                      << "(" << Helper::StringToHex(key) << ")";
     } else {
       // auto &latest_generation = *kv_index.mutable_generations()->rbegin();
       auto *latest_generation = kv_index.mutable_generations(kv_index.generations_size() - 1);
       if (latest_generation->has_create_revision()) {
         *(latest_generation->add_revisions()) = op_revision;
         latest_generation->set_verison(latest_generation->verison() + 1);
-        DINGO_LOG(INFO) << "KvPutApply latest_generation add revsion: " << latest_generation->ShortDebugString();
+
+        DINGO_LOG(INFO) << "KvPutApply latest_generation add revsion: " << latest_generation->ShortDebugString()
+                        << ", key: " << key << "(" << Helper::StringToHex(key) << ")";
 
         // only in this situation, the prev_kv is meaningful
         prev_kv.set_create_revision(latest_generation->create_revision().main());
@@ -581,7 +622,9 @@ butil::Status KvControl::KvPutApply(const std::string &key,
         latest_generation->mutable_create_revision()->set_sub(op_revision.sub());
         latest_generation->set_verison(1);
         *(latest_generation->add_revisions()) = op_revision;
-        DINGO_LOG(INFO) << "KvPutApply latest_generation create revsion: " << latest_generation->ShortDebugString();
+
+        DINGO_LOG(INFO) << "KvPutApply latest_generation create revsion: " << latest_generation->ShortDebugString()
+                        << ", key: " << key << "(" << Helper::StringToHex(key) << ")";
       }
 
       // setup new_create_revision to last create_revision
@@ -631,7 +674,8 @@ butil::Status KvControl::KvPutApply(const std::string &key,
   if (kv->lease() > 0) {
     auto ret1 = kv_lease_map_.Exists(kv->lease());
     if (!ret1) {
-      DINGO_LOG(WARNING) << "KvPutApply kv_lease_map_.Exists failed, lease_id: " << kv->lease();
+      DINGO_LOG(WARNING) << "KvPutApply kv_lease_map_.Exists failed, lease_id: " << kv->lease() << ", key: " << key
+                         << "(" << Helper::StringToHex(key) << ")";
       return butil::Status(EINVAL, "KvPutApply kv_lease_map_.Exists failed");
     }
   }
@@ -641,7 +685,7 @@ butil::Status KvControl::KvPutApply(const std::string &key,
   ret = PutRawKvRev(op_revision, kv_rev);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvPutApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
-                     << ", error: " << ret.error_str();
+                     << ", kv_rev: " << kv_rev.ShortDebugString() << ", error: " << ret.error_str();
     return ret;
   }
   DINGO_LOG(INFO) << "KvPutApply PutRawKvRev success, revision: " << op_revision.ShortDebugString()
@@ -649,14 +693,16 @@ butil::Status KvControl::KvPutApply(const std::string &key,
 
   ret = PutRawKvIndex(key, kv_index);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+    DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << "(" << Helper::StringToHex(key)
+                     << "), kv_index: " << kv_index.ShortDebugString() << ", error: " << ret.error_str();
   }
-  DINGO_LOG(INFO) << "KvPutApply PutRawKvIndex success, key: " << key << ", kv_index: " << kv_index.ShortDebugString();
+  DINGO_LOG(INFO) << "KvPutApply PutRawKvIndex success, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), kv_index: " << kv_index.ShortDebugString();
 
   // trigger watch
   if (!one_time_watch_map_.empty()) {
-    DINGO_LOG(INFO) << "KvPutApply one_time_watch_map_ is not empty, will trigger watch, key: " << key
-                    << ", watch size: " << one_time_watch_map_.size();
+    DINGO_LOG(INFO) << "KvPutApply one_time_watch_map_ is not empty, will trigger watch, key: " << key << "("
+                    << Helper::StringToHex(key) << "), watch size: " << one_time_watch_map_.size();
 
     if (prev_kv.create_revision() > 0) {
       prev_kv.set_lease(kv_rev_last.kv().lease());
@@ -673,8 +719,8 @@ butil::Status KvControl::KvPutApply(const std::string &key,
     TriggerOneWatch(key, pb::version::Event::EventType::Event_EventType_PUT, new_kv, prev_kv);
   }
 
-  DINGO_LOG(INFO) << "KvPutApply success after trigger watch, key: " << key
-                  << ", op_revision: " << op_revision.ShortDebugString() << ", ignore_lease: " << ignore_lease
+  DINGO_LOG(INFO) << "KvPutApply success after trigger watch, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), op_revision: " << op_revision.ShortDebugString() << ", ignore_lease: " << ignore_lease
                   << ", lease_id: " << lease_id << ", ignore_value: " << ignore_value << ", value: " << value;
 
   return butil::Status::OK();
@@ -682,7 +728,8 @@ butil::Status KvControl::KvPutApply(const std::string &key,
 
 butil::Status KvControl::KvDeleteApply(const std::string &key,
                                        const pb::coordinator_internal::RevisionInternal &op_revision) {
-  DINGO_LOG(INFO) << "KvDeleteApply, key: " << key << ", revision: " << op_revision.ShortDebugString();
+  DINGO_LOG(INFO) << "KvDeleteApply, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), revision: " << op_revision.ShortDebugString();
 
   // get kv_index and generate new kv_index
   pb::coordinator_internal::KvIndexInternal kv_index;
@@ -697,18 +744,20 @@ butil::Status KvControl::KvDeleteApply(const std::string &key,
 
   auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
-    DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex not found, no need to delete: " << key
-                    << ", error: " << ret.error_str();
+    DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex not found, no need to delete: " << key << "("
+                    << Helper::StringToHex(key) << "), error: " << ret.error_str();
     return butil::Status::OK();
   } else {
-    DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex found, will delete key: " << key << ", error: " << ret.error_str();
+    DINGO_LOG(INFO) << "KvDeleteApply GetRawKvIndex found, will delete key: " << key << "(" << Helper::StringToHex(key)
+                    << "), error: " << ret.error_str();
 
     last_mod_revision = kv_index.mod_revision();
 
     if (kv_index.generations_size() == 0) {
       // create a null generator means delete
       auto *generation = kv_index.add_generations();
-      DINGO_LOG(INFO) << "KvDeleteApply kv_index add null generation[0]: " << generation->ShortDebugString();
+      DINGO_LOG(INFO) << "KvDeleteApply kv_index add null generation[0]: " << generation->ShortDebugString()
+                      << ", key: " << key << "(" << Helper::StringToHex(key) << ")";
     } else {
       // auto &latest_generation = *kv_index.mutable_generations()->rbegin();
       auto *latest_generation = kv_index.mutable_generations(kv_index.generations_size() - 1);
@@ -719,7 +768,8 @@ butil::Status KvControl::KvDeleteApply(const std::string &key,
 
         // create a null generator means delete
         auto *generation = kv_index.add_generations();
-        DINGO_LOG(INFO) << "KvDeleteApply kv_index add null generation[1]: " << generation->ShortDebugString();
+        DINGO_LOG(INFO) << "KvDeleteApply kv_index add null generation[1]: " << generation->ShortDebugString()
+                        << ", key: " << key << "(" << Helper::StringToHex(key) << ")";
 
         // only in this situation, the prev_kv is meaningful
         prev_kv.set_create_revision(latest_generation->create_revision().main());
@@ -729,7 +779,8 @@ butil::Status KvControl::KvDeleteApply(const std::string &key,
         // a null generation means delete
         // so we do not need to add a new generation
         DINGO_LOG(INFO) << "KvDeleteApply kv_index exist null generation[1], nothing to do: "
-                        << latest_generation->ShortDebugString();
+                        << latest_generation->ShortDebugString() << ", key: " << key << "(" << Helper::StringToHex(key)
+                        << ")";
       }
 
       // setup new_create_revision to last create_revision
@@ -769,22 +820,25 @@ butil::Status KvControl::KvDeleteApply(const std::string &key,
   // CAUTION: When deleting kv, we must do PutRawKvRev before put RawKvIndex
   ret = PutRawKvIndex(key, kv_index);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvIndex failed, key: " << key << ", error: " << ret.error_str();
+    DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvIndex failed, key: " << key << "(" << Helper::StringToHex(key)
+                     << "), kv_index: " << kv_index.ShortDebugString() << ", error: " << ret.error_str();
   }
 
   ret = PutRawKvRev(op_revision, kv_rev);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "KvDeleteApply PutRawKvRev failed, revision: " << op_revision.ShortDebugString()
+                     << "key: " << key << "(" << Helper::StringToHex(key) << "), kv_rev: " << kv_rev.ShortDebugString()
                      << ", error: " << ret.error_str();
     return ret;
   }
 
-  DINGO_LOG(INFO) << "KvDeleteApply success, key: " << key << ", revision: " << op_revision.ShortDebugString();
+  DINGO_LOG(INFO) << "KvDeleteApply success, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), revision: " << op_revision.ShortDebugString();
 
   // trigger watch
   if (!one_time_watch_map_.empty()) {
-    DINGO_LOG(INFO) << "KvDeleteApply one_time_watch_map_ is not empty, will trigger watch, key: " << key
-                    << ", watch size: " << one_time_watch_map_.size();
+    DINGO_LOG(INFO) << "KvDeleteApply one_time_watch_map_ is not empty, will trigger watch, key: " << key << "("
+                    << Helper::StringToHex(key) << "), watch size: " << one_time_watch_map_.size();
 
     if (prev_kv.create_revision() > 0) {
       prev_kv.set_lease(kv_rev_last.kv().lease());
@@ -801,8 +855,8 @@ butil::Status KvControl::KvDeleteApply(const std::string &key,
     TriggerOneWatch(key, pb::version::Event::EventType::Event_EventType_DELETE, new_kv, prev_kv);
   }
 
-  DINGO_LOG(INFO) << "KvDeleteApply success after trigger watch, key: " << key
-                  << ", revision: " << op_revision.ShortDebugString();
+  DINGO_LOG(INFO) << "KvDeleteApply success after trigger watch, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), revision: " << op_revision.ShortDebugString();
 
   return butil::Status::OK();
 }
@@ -847,7 +901,7 @@ void KvControl::CompactionTask() {
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "KvCompact failed, error: " << ret.error_str() << ", keys size: " << keys_to_compact.size();
         for (const auto &key : keys_to_compact) {
-          DINGO_LOG(ERROR) << "KvCompact failed, key: " << key;
+          DINGO_LOG(ERROR) << "KvCompact failed, key: " << key << "(" << Helper::StringToHex(key) << ")";
         }
       }
       keys_to_compact.clear();
@@ -858,7 +912,7 @@ void KvControl::CompactionTask() {
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "KvCompact failed, error: " << ret.error_str() << ", keys size: " << keys_to_compact.size();
       for (const auto &key : keys_to_compact) {
-        DINGO_LOG(ERROR) << "KvCompact failed, key: " << key;
+        DINGO_LOG(ERROR) << "KvCompact failed, key: " << key << "(" << Helper::StringToHex(key) << ")";
       }
     }
   }
@@ -877,7 +931,7 @@ butil::Status KvControl::KvCompact(const std::vector<std::string> &keys,
   }
 
   for (const auto &key : keys) {
-    DINGO_LOG(INFO) << "KvCompact, will compact key: " << key;
+    DINGO_LOG(INFO) << "KvCompact, will compact key: " << key << "(" << Helper::StringToHex(key) << ")";
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -904,21 +958,22 @@ butil::Status KvControl::KvCompact(const std::vector<std::string> &keys,
 
 butil::Status KvControl::KvCompactApply(const std::string &key,
                                         const pb::coordinator_internal::RevisionInternal &compact_revision) {
-  DINGO_LOG(INFO) << "KvCompactApply, key: " << key << ", revision: " << compact_revision.ShortDebugString();
+  DINGO_LOG(INFO) << "KvCompactApply, key: " << key << "(" << Helper::StringToHex(key)
+                  << "), revision: " << compact_revision.ShortDebugString();
 
   // get kv_index
   pb::coordinator_internal::KvIndexInternal kv_index;
   auto ret = GetRawKvIndex(key, kv_index);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "KvCompactApply GetRawKvIndex failed, key: " << key << ", key_hex: " << Helper::StringToHex(key)
-                     << ", error: " << ret.error_str();
+    DINGO_LOG(ERROR) << "KvCompactApply GetRawKvIndex failed, key: " << key << "(" << Helper::StringToHex(key)
+                     << "), key_hex: " << Helper::StringToHex(key) << ", error: " << ret.error_str();
     return ret;
   }
 
   // iterate kv_index generations, find revisions less than compact_revision
   if (kv_index.generations_size() == 0) {
-    DINGO_LOG(INFO) << "KvCompactApply generations_size == 0, no need to compact, key: " << key
-                    << ", key_hex: " << Helper::StringToHex(key);
+    DINGO_LOG(INFO) << "KvCompactApply generations_size == 0, no need to compact, key: " << key << "("
+                    << Helper::StringToHex(key) << ")";
     return butil::Status::OK();
   }
 
@@ -999,12 +1054,12 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
   // if new_kv_index has no generations, delete it
   // else put new_kv_index
   if (new_kv_index.generations_size() == 0) {
-    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has no generations, delete it, key: " << key
-                    << ", key_hex: " << Helper::StringToHex(key);
+    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has no generations, delete it, key: " << key << "("
+                    << Helper::StringToHex(key) << ")";
     DeleteRawKvIndex(key);
   } else {
-    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has generations, put it, key: " << key
-                    << ", new_kv_index: " << new_kv_index.ShortDebugString();
+    DINGO_LOG(INFO) << "KvCompactApply new_kv_index has generations, put it, key: " << key << "("
+                    << Helper::StringToHex(key) << "), new_kv_index: " << new_kv_index.ShortDebugString();
     PutRawKvIndex(key, new_kv_index);
   }
 
@@ -1014,7 +1069,9 @@ butil::Status KvControl::KvCompactApply(const std::string &key,
     kv_rev.set_id(RevisionToString(kv_revision));
 
     DINGO_LOG(INFO) << "KvCompactApply delete kv_rev, kv_revision: " << kv_revision.ShortDebugString()
-                    << ", kv_rev: " << kv_rev.ShortDebugString();
+                    << ", key: " << key << "(" << Helper::StringToHex(key)
+                    << "), kv_rev: " << kv_rev.ShortDebugString();
+
     DeleteRawKvRev(kv_revision);
   }
 
