@@ -48,7 +48,7 @@ void RawKvGetTask::DoAsync() {
   store_rpc_controller_.AsyncCall([this](auto&& s) { KvGetRpcCallback(std::forward<decltype(s)>(s)); });
 }
 
-void RawKvGetTask::KvGetRpcCallback(const Status& status) {
+void RawKvGetTask::KvGetRpcCallback(Status status) {
   if (status.ok()) {
     result_ = rpc_.Response()->value();
   }

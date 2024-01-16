@@ -35,7 +35,7 @@ class RawKvGetTask : public RawKvTask {
  private:
   void DoAsync() override;
 
-  void KvGetRpcCallback(const Status& status);
+  void KvGetRpcCallback(Status status);
 
   void PostProcess() override;
 

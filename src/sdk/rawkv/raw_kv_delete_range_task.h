@@ -38,7 +38,7 @@ class RawKvDeleteRangeTask : public RawKvTask {
   void DoAsync() override;
   void PostProcess() override;
   void DeleteNextRange();
-  void KvDeleteRangeRpcCallback(const Status& status, KvDeleteRangeRpc* rpc, StoreRpcController* controller);
+  void KvDeleteRangeRpcCallback(Status status, KvDeleteRangeRpc* rpc, StoreRpcController* controller);
 
   std::string Name() const override { return "RawKvDeleteRangeTask"; }
   std::string ErrorMsg() const override { return fmt::format("start_key: {}, end_key:{}", start_key_, end_key_); }

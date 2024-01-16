@@ -175,6 +175,71 @@ TYPED_TEST(KvScanTest, KvScanMultiWithStartWithEnd) {
   }
 }
 
+TYPED_TEST(KvScanTest, KvScanMultiThread) {
+  testing::Test::RecordProperty("description", "Test kv scan multi case");
+
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  if (!status.IsOK()) {
+    LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
+  }
+
+  {
+    // Test: Ready data
+    int key_nums = 10;
+    std::vector<std::string> keys;
+    std::vector<sdk::KVPair> expect_kvs;
+    for (int i = 0; i < key_nums; ++i) {
+      sdk::KVPair kv;
+      kv.key = Helper::EncodeRawKey(kKeyPrefix + "multithread" + std::to_string(i));
+      kv.value = "world" + std::to_string(i);
+      expect_kvs.push_back(kv);
+      keys.push_back(kv.key);
+    }
+    auto status = raw_kv->BatchPut(expect_kvs);
+    EXPECT_EQ(true, status.IsOK()) << status.ToString();
+
+    // use 1000 std::thread to do scan
+    int thread_nums = 1000;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < thread_nums; ++i) {
+      threads.emplace_back([this, &keys, &expect_kvs, key_nums, i]() {
+        LOG(INFO) << "Thread " << i << " start";
+
+        std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
+        auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+        if (!status.IsOK()) {
+          LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
+        }
+
+        LOG(INFO) << "Thread " << i << " new raw_kv";
+
+        // Test: run
+        std::vector<sdk::KVPair> actual_kvs;
+        status = raw_kv->Scan(keys[0], keys[key_nums - 1], key_nums, actual_kvs);
+        LOG(INFO) << "Scan start_key: " << keys[0] << ", end_key: " << keys[key_nums - 1] << ", limit: " << key_nums
+                  << ", actual_kvs.size(): " << actual_kvs.size();
+
+        // Test: assert result
+        EXPECT_EQ(true, status.IsOK()) << status.ToString();
+        EXPECT_EQ(expect_kvs.size() - 1, actual_kvs.size());
+        for (int i = 0; i < key_nums - 1; ++i) {
+          EXPECT_EQ(expect_kvs[i].key, actual_kvs[i].key) << "Not match key";
+          EXPECT_EQ(expect_kvs[i].value, actual_kvs[i].value) << "Not match value";
+        }
+
+        LOG(INFO) << "Thread " << i << " end";
+      });
+    }
+
+    // join all thread
+    for (auto& t : threads) {
+      t.join();
+    }
+  }
+}
+
 }  // namespace integration_test
 
 }  // namespace dingodb

@@ -62,7 +62,7 @@ class RegionScannerImpl : public RegionScanner {
 
   void PrepareScanContinueRpc(KvScanContinueRpc& rpc);
 
-  void KvScanContinueRpcCallback(const Status& status, StoreRpcController* controller, KvScanContinueRpc* rpc,
+  void KvScanContinueRpcCallback(Status status, StoreRpcController* controller, KvScanContinueRpc* rpc,
                                  std::vector<KVPair>& kvs, StatusCallback cb);
 
   void PrepareScanReleaseRpc(KvScanReleaseRpc& rpc);

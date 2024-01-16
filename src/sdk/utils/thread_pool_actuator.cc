@@ -130,7 +130,7 @@ bool ThreadPoolActuator::Stop() {
 
 bool ThreadPoolActuator::Execute(std::function<void()> func) {
   CHECK(running_);
-  pool_->ExecuteTask([&](void*) { func(); }, nullptr);
+  pool_->ExecuteTask([=](void*) { func(); }, nullptr);
   return true;
 }
 

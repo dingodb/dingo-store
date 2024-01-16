@@ -114,8 +114,8 @@ void RegionScannerImpl::AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback 
   });
 }
 
-void RegionScannerImpl::KvScanContinueRpcCallback(const Status& status, StoreRpcController* controller,
-                                                  KvScanContinueRpc* rpc, std::vector<KVPair>& kvs, StatusCallback cb) {
+void RegionScannerImpl::KvScanContinueRpcCallback(Status status, StoreRpcController* controller, KvScanContinueRpc* rpc,
+                                                  std::vector<KVPair>& kvs, StatusCallback cb) {
   if (status.ok()) {
     const auto* response = rpc->Response();
     std::vector<KVPair> tmp_kvs;
@@ -141,7 +141,7 @@ void RegionScannerImpl::KvScanContinueRpcCallback(const Status& status, StoreRpc
   delete controller;
   delete rpc;
 
-  cb(status);
+  stub.GetActuator()->Execute([status, cb] { cb(status); });
 }
 
 Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {

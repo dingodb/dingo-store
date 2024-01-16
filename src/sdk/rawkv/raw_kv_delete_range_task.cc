@@ -120,7 +120,7 @@ void RawKvDeleteRangeTask::DeleteNextRange() {
   });
 }
 
-void RawKvDeleteRangeTask::KvDeleteRangeRpcCallback(const Status& status, KvDeleteRangeRpc* rpc,
+void RawKvDeleteRangeTask::KvDeleteRangeRpcCallback(Status status, KvDeleteRangeRpc* rpc,
                                                     StoreRpcController* controller) {
   status_ = status;
 
