@@ -344,7 +344,7 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
   for (const auto& vector : request->vectors()) {
     if (vector.id() == 0 || vector.id() == INT64_MAX || vector.id() < 0) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                           "Param vector id is not allowed to be zero or NINT64_MAX or netative");
+                           "Param vector id is not allowed to be zero or INT64_MAX or negative");
     }
 
     if (vector.vector().float_values().empty()) {
@@ -1338,8 +1338,8 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   }
 }
 
-static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::store::TxnPrewriteRequest* request,
-                                                store::RegionPtr region) {
+static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const pb::store::TxnPrewriteRequest* request,
+                                                     store::RegionPtr region) {
   // check if region_epoch is match
   auto epoch_ret = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!epoch_ret.ok()) {
@@ -1377,6 +1377,7 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
     }
     keys.push_back(mutation.key());
   }
+
   auto status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
     return status;
@@ -1399,6 +1400,11 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
     return status;
   }
 
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
   if (!region->VectorIndexWrapper()->IsReady()) {
     if (region->VectorIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
@@ -1414,12 +1420,24 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
   }
 
+  std::vector<int64_t> vector_ids;
+  auto dimension = vector_index_wrapper->GetDimension();
+
   for (const auto& mutation : request->mutations()) {
+    // check vector_id is correctly encoded in key of mutation
+    int64_t vector_id = VectorCodec::DecodeVectorId(mutation.key());
+    if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error, please check mutation key");
+    }
+
+    vector_ids.push_back(vector_id);
+
+    // check if vector_id is legal
     const auto& vector = mutation.vector();
-    if (mutation.op() == pb::store::Op::Put) {
+    if (mutation.op() == pb::store::Op::Put || mutation.op() == pb::store::PutIfAbsent) {
       if (vector.id() == 0 || vector.id() == INT64_MAX || vector.id() < 0) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector id is not allowed to be zero or UNINT64_MAX");
+                             "Param vector id is not allowed to be zero ,INT64_MAX or NEGATIVE");
       }
 
       if (vector.vector().float_values().empty()) {
@@ -1430,44 +1448,25 @@ static butil::Status ValidateTxnPrewriteRequest(StoragePtr storage, const pb::st
     } else {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param op is error");
     }
-  }
 
-  auto dimension = vector_index_wrapper->GetDimension();
-  for (const auto& mutation : request->mutations()) {
-    if (mutation.op() == pb::store::Op::Put) {
-      const auto& vector = mutation.vector();
-      if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
-        if (vector.vector().float_values().size() != dimension) {
-          return butil::Status(
-              pb::error::EILLEGAL_PARAMTETERS,
-              "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
-        }
-      } else {
-        if (vector.vector().binary_values().size() != dimension) {
-          return butil::Status(
-              pb::error::EILLEGAL_PARAMTETERS,
-              "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
-        }
+    // check vector dimension
+    if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+      if (vector.vector().float_values().size() != dimension) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else {
+      if (vector.vector().binary_values().size() != dimension) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
       }
     }
-  }
-
-  status = ServiceHelper::ValidateClusterReadOnly();
-  if (!status.ok()) {
-    return status;
-  }
-
-  std::vector<int64_t> vector_ids;
-  for (const auto& mutation : request->mutations()) {
-    int64_t vector_id = VectorCodec::DecodeVectorId(mutation.key());
-    if (vector_id == 0) {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
-    }
-    vector_ids.push_back(vector_id);
   }
 
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
@@ -1487,7 +1486,7 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
     return;
   }
 
-  auto status = ValidateTxnPrewriteRequest(storage, request, region);
+  auto status = ValidateIndexTxnPrewriteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
