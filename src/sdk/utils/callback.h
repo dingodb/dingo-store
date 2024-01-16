@@ -23,7 +23,7 @@ namespace dingodb {
 namespace sdk {
 using RpcCallback = std::function<void()>;
 
-using StatusCallback = std::function<void(const Status &)>;
+using StatusCallback = std::function<void(Status)>;
 }  // namespace sdk
 }  // namespace dingodb
 #endif  // DINGODB_SDK_CALL_BACK_H_
