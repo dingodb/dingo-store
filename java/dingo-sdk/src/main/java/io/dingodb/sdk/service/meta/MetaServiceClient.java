@@ -84,7 +84,7 @@ public class MetaServiceClient {
             .setParentEntityId(0)
             .build();
 
-    private static Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]+$");
+    private static Pattern pattern = Pattern.compile("^[A-Z_][A-Z\\d_]*$");
     private static Pattern warnPattern = Pattern.compile(".*[a-z]+.*");
     private static final String ROOT_NAME = "ROOT";
 

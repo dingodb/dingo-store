@@ -37,11 +37,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -252,7 +248,7 @@ public class LockService {
             if (rangeResponse.getKvs().isEmpty()) {
                 throw new RuntimeException("Put " + resourceKey + " success, but range is empty.");
             }
-            Kv current = rangeResponse.getKvs().stream()
+            Kv current = rangeResponse.getKvs().stream().filter(Objects::nonNull)
                 .min(Comparator.comparingLong(Kv::getCreateRevision))
                 .get();
             if (current.getModRevision() == revision) {
@@ -285,7 +281,7 @@ public class LockService {
                     if (isLockRevision(revision, rangeResponse)) {
                         return;
                     }
-                    Kv previous = rangeResponse.getKvs().stream()
+                    Kv previous = rangeResponse.getKvs().stream().filter(Objects::nonNull)
                         .filter(__ -> __.getCreateRevision() < revision)
                         .max(Comparator.comparingLong(Kv::getCreateRevision))
                         .orElseThrow(() -> new RuntimeException("Put " + resourceKey + " success, but no previous."));
@@ -350,7 +346,7 @@ public class LockService {
                 long revision = response.getHeader().getRevision();
                 while (time-- > 0) {
                     RangeResponse rangeResponse = kvService.kvRange(rangeRequest());
-                    Kv current = rangeResponse.getKvs().stream()
+                    Kv current = rangeResponse.getKvs().stream().filter(Objects::nonNull)
                         .min(Comparator.comparingLong(Kv::getCreateRevision))
                         .orElseThrow(() -> new RuntimeException("Put " + resourceKey + " success, but range is empty."));
                     if (current.getModRevision() == revision) {
