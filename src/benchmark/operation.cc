@@ -65,8 +65,7 @@ static OperationBuilderMap support_operations = {
     {"readmissing",
      [](std::shared_ptr<sdk::Client> client, const std::string& prefix) -> OperationPtr {
        return std::make_shared<ReadMissingOperation>(client, prefix);
-     }}
-
+     }},
 };
 
 // rand string

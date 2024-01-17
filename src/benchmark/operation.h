@@ -29,6 +29,7 @@
 namespace dingodb {
 namespace benchmark {
 
+// Abstract interface class
 class Operation {
  public:
   Operation() = default;
@@ -41,8 +42,10 @@ class Operation {
     size_t read_bytes{0};
   };
 
+  // Do some ready work at arrange stage
   virtual bool Arrange() = 0;
 
+  // RPC invoke, return execute result
   virtual Result Execute() = 0;
 };
 using OperationPtr = std::shared_ptr<Operation>;

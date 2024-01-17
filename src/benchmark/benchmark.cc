@@ -44,10 +44,6 @@ DECLARE_uint32(key_size);
 DECLARE_uint32(value_size);
 DECLARE_uint32(batch_size);
 
-DEFINE_uint32(
-    confidence, 5,
-    "Level of confidence for T-test. Possible values: 0 (80%), 1 (90%), 2 (95%), 3 (98%), 4 (99%), 5 (99.5%).");
-
 namespace dingodb {
 namespace benchmark {
 
@@ -144,6 +140,7 @@ void Benchmark::Run() {
 
     size_t start_time = Helper::TimestampMs();
 
+    // Interval report
     IntervalReport();
 
     for (auto& thread_entry : thread_entries_) {

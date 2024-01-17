@@ -21,6 +21,29 @@
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 
+const std::string kVersion = "0.1.0";
+
+static std::string GetUsageMessage() {
+  std::string message;
+
+  message += "\nUsage:";
+  message += "\n  --coordinator_url dingo-store cluster endpoint, default(file://./coor_list)";
+  message += "\n  --benchmark benchmark type, default(fillseq)";
+  message += "\n  --show_version show dingo-store cluster version info, default(false)";
+  message += "\n  --prefix region range prefix, used to distinguish region, default(BENCH)";
+  message += "\n  --region_num region number, default(1)";
+  message += "\n  --concurrency concurrency as thread number, default(1)";
+  message += "\n  --req_num invoke RPC request number, default(10000)";
+  message += "\n  --delay print benchmark metrics interval time, unit(second), default(2)";
+  message += "\n  --timelimit the limit of run time, 0 is no limit, unit(second), default(0)";
+  message += "\n  --key_size key size, default(64)";
+  message += "\n  --value_size value size, default(256)";
+  message += "\n  --batch_size batch put size, default(1)";
+  message += "\n  --arrange_kv_num the number of arrange kv, used by readseq/readrandom/readmissing, default(10000)";
+
+  return message;
+}
+
 static void SignalHandler(int signo) {  // NOLINT
   // std::cerr << "Received signal " << signo << std::endl;
 
@@ -53,6 +76,9 @@ int main(int argc, char* argv[]) {
   FLAGS_logbufsecs = 0;
 
   google::InitGoogleLogging(argv[0]);
+
+  google::SetVersionString(kVersion);
+  google::SetUsageMessage(GetUsageMessage());
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   SetupSignalHandler();
