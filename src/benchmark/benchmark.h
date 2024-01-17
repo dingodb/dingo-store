@@ -23,6 +23,7 @@
 #include <thread>
 #include <vector>
 
+#include "benchmark/color.h"
 #include "benchmark/operation.h"
 #include "bvar/latency_recorder.h"
 #include "fmt/core.h"
@@ -35,55 +36,18 @@ namespace benchmark {
 
 class Stats {
  public:
-  Stats() { latency_recorder_ = std::make_shared<bvar::LatencyRecorder>(); }
+  Stats();
   ~Stats() = default;
 
-  void Add(size_t duration, size_t write_bytes, size_t read_bytes) {
-    ++req_num_;
-    write_bytes_ += write_bytes;
-    read_bytes_ += read_bytes;
-    *latency_recorder_ << duration;
-  }
+  void Add(size_t duration, size_t write_bytes, size_t read_bytes);
+  void AddError();
 
-  void AddError() { ++error_count_; }
+  void Clear();
 
-  void Clear() {
-    ++epoch_;
-    req_num_ = 0;
-    write_bytes_ = 0;
-    read_bytes_ = 0;
-    error_count_ = 0;
-    latency_recorder_ = std::make_shared<bvar::LatencyRecorder>();
-  }
-
-  void Report(bool is_cumulative, size_t milliseconds) const {
-    double seconds = milliseconds / static_cast<double>(1000);
-
-    if (is_cumulative) {
-      std::cout << "Cumulative:" << std::endl;
-    } else {
-      if (epoch_ == 1) {
-        std::cout << "Interval:" << std::endl;
-      }
-      if (epoch_ % 20 == 1) {
-        std::cout << Header() << std::endl;
-      }
-    }
-
-    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>16}{:>16}{:>16}{:>16}", epoch_, req_num_,
-                             error_count_, (req_num_ / seconds), (write_bytes_ / seconds / 1048576),
-                             latency_recorder_->latency(), latency_recorder_->max_latency(),
-                             latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
-                             latency_recorder_->latency_percentile(0.99))
-              << std::endl;
-  }
+  void Report(bool is_cumulative, size_t milliseconds) const;
 
  private:
-  static std::string Header() {
-    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>16}{:>16}{:>16}{:>16}", "EPOCH", "REQ_NUM", "ERRORS", "QPS",
-                       "MB/s", "LATENCY_AVG(us)", "LATENCY_MAX(us)", "LATENCY_P50(us)", "LATENCY_P95(us)",
-                       "LATENCY_P99(us)");
-  }
+  static std::string Header();
 
   uint32_t epoch_{1};
   size_t req_num_{0};
@@ -135,6 +99,7 @@ class Benchmark {
 
   bool IsStop();
 
+  void IntervalReport();
   void Report(bool is_cumulative, size_t milliseconds);
 
   std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
