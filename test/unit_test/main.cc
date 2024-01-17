@@ -23,6 +23,9 @@ int main(int argc, char* argv[]) {
 
   FLAGS_minloglevel = google::GLOG_ERROR;
 
+  google::InitGoogleLogging(argv[0]);
+  google::ParseCommandLineFlags(&argc, &argv, true);
+
   if (testing::FLAGS_gtest_filter == "*") {
     std::string default_run_case;
     default_run_case += "ConfigTest.*";
