@@ -76,8 +76,9 @@ class BdbHelper {
   static int TxnCommit(DbTxn** txn_ptr);
   static int TxnAbort(DbTxn** txn_ptr);
 
-  static void CheckpointThread(DbEnv* env, std::atomic<bool>& is_close);
+  static void CheckpointThread(DbEnv* env, Db* db, std::atomic<bool>& is_close);
   static void GetLogFileNames(DbEnv* env, std::set<std::string>& file_names);
+  static void PrintEnvStat(DbEnv* env);
 };
 
 // Snapshot
@@ -89,6 +90,7 @@ class BdbSnapshot : public dingodb::Snapshot {
 
   DbTxn* GetDbTxn() { return txn_; };
   Db* GetDb() { return db_; };
+  DbEnv* GetEnv() { return db_->get_env(); };
 
  private:
   Db* db_;
@@ -121,6 +123,8 @@ class Iterator : public dingodb::Iterator {
 
   void Next() override;
   void Prev() override;
+
+  DbEnv* GetEnv() { return snapshot_->GetEnv(); }
 
   std::string_view Key() const override {
     // size check is in Valid() function
@@ -238,6 +242,7 @@ class BdbRawEngine : public RawEngine {
   static int32_t OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, u_int32_t extra_flags);
   Db* GetDb();
   void PutDb(Db* db);
+  DbEnv* GetEnv() { return envp_; }
   std::shared_ptr<BdbRawEngine> GetSelfPtr() { return std::dynamic_pointer_cast<BdbRawEngine>(shared_from_this()); }
 
   // override functions
