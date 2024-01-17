@@ -11,6 +11,8 @@ import io.dingodb.sdk.service.entity.error.Error;
 import io.dingodb.sdk.service.entity.store.Context;
 import io.dingodb.sdk.service.entity.store.IsolationLevel;
 
+import java.util.List;
+
 public interface Message {
 
     boolean read(CodedInputStream input);
@@ -60,6 +62,14 @@ public interface Message {
             if (getContext() == null) {
                 setContext(Context.builder().isolationLevel(isolationLevel).build());
             }
+            getContext().setIsolationLevel(isolationLevel);
+        }
+
+        default void setResolveLocks(List<Long> resolvedLocks) {
+            if (getContext() == null) {
+                setContext(Context.builder().resolvedLocks(resolvedLocks).build());
+            }
+            getContext().setResolvedLocks(resolvedLocks);
         }
 
         default IsolationLevel getIsolationLevel() {
