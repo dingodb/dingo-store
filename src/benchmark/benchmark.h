@@ -130,7 +130,7 @@ class Environment {
   ~Environment() = default;
 
   void PrintVersionInfo();
-  void PrintParam();
+  static void PrintParam();
 
   std::vector<BenchmarkPtr> benchmarks_;
 
