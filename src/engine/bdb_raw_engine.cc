@@ -51,20 +51,27 @@ bvar::Adder<uint64_t> bdb_transaction_alive_count("bdb_transaction_alive_count")
 
 namespace dingodb {
 
-DEFINE_int32(bdb_env_cache_size_gb, 4, "bdb env cache size(GB)");
 DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
-DEFINE_int32(bdb_txn_max, 20480, "bdb txn max");
-DEFINE_int32(bdb_lk_max_lockers, 40960, "bdb max lockers");
-DEFINE_int32(bdb_lk_max_locks, 40960, "bdb max locks");
-DEFINE_int32(bdb_lk_max_objects, 40960, "bdb max objects");
+
+DEFINE_int32(bdb_env_cache_size_gb, 8, "bdb env cache size(GB)");
+DEFINE_int32(bdb_env_cache_size_bytes, 0, "bdb env cache size(bytes)");
+DEFINE_int32(bdb_txn_max, 65536, "bdb txn max");
+DEFINE_int32(bdb_txn_memory_max, 262144, "bdb txn memory max");
+DEFINE_int32(bdb_lk_max_lockers, 65536, "bdb max lockers");
+DEFINE_int32(bdb_lk_max_locks, 262144, "bdb max locks");
+DEFINE_int32(bdb_lk_max_objects, 262144, "bdb max objects");
+DEFINE_int32(bdb_mutex_max, 0, "bdb mutex max");
+
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
 DEFINE_int32(bdb_checkpoint_time_s, 60, "bdb checkpoint time interval(s)");
 DEFINE_int32(bdb_dead_lock_detect_time_s, 1, "bdb dead_lock_detect interval(s)");
-DEFINE_int32(bdb_db_pool_size, 4096, "bdb db pool size, must bigger than brpc_worker_thread_num");
-DECLARE_int32(brpc_worker_thread_num);
+DEFINE_int32(bdb_stat_time_s, 60, "bdb stat time interval(s)");
 
 DEFINE_bool(bdb_use_db_pool, false, "bdb use db pool");
+DEFINE_int32(bdb_db_pool_size, 4096, "bdb db pool size, must bigger than brpc_worker_thread_num");
+
+DECLARE_int32(brpc_worker_thread_num);
 
 namespace bdb {
 
@@ -211,6 +218,7 @@ void BdbHelper::GetLogFileNames(DbEnv* env, std::set<std::string>& file_names) {
       free(list);
     }
   } catch (DbException& db_exception) {
+    PrintEnvStat(env);
     DINGO_LOG(ERROR) << fmt::format("[bdb] log archive failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
   } catch (std::exception& std_exception) {
@@ -218,10 +226,32 @@ void BdbHelper::GetLogFileNames(DbEnv* env, std::set<std::string>& file_names) {
   }
 }
 
-void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
+void BdbHelper::PrintEnvStat(DbEnv* env) {
+  if (env == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] env is nullptr.");
+    return;
+  }
+
+  // print db_stat result
+  try {
+    int ret = env->stat_print(DB_STAT_SUBSYSTEM);
+    if (ret != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, ret: {}.", ret);
+    } else {
+      DINGO_LOG(INFO) << fmt::format("[bdb] db_stat ok");
+    }
+  } catch (DbException& db_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, exception: {} {}.", db_exception.get_errno(),
+                                    db_exception.what());
+  } catch (std::exception& std_exception) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, std exception: {}.", std_exception.what());
+  }
+}
+
+void BdbHelper::CheckpointThread(DbEnv* env, Db* /*db*/, std::atomic<bool>& is_close) {
   CHECK(env != nullptr);
 
-  for (uint64_t i = 0;; i++) {
+  for (uint64_t i = 1;; i++) {
     if (is_close.load()) {
       break;
     }
@@ -234,10 +264,42 @@ void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, ret: {}.", ret);
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(env);
         DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, exception: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
       } catch (std::exception& std_exception) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, std exception: {}.", std_exception.what());
+      }
+    }
+
+    if (i % FLAGS_bdb_stat_time_s == 0) {
+      // print db_stat result
+      try {
+        int ret = env->stat_print(DB_STAT_SUBSYSTEM);
+        if (ret != 0) {
+          DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, ret: {}.", ret);
+        } else {
+          DINGO_LOG(INFO) << fmt::format("[bdb] db_stat ok");
+        }
+
+        // ret = env->memp_sync(nullptr);
+        // if (ret != 0) {
+        //   DINGO_LOG(ERROR) << fmt::format("[bdb] memp_sync failed, ret: {}.", ret);
+        // } else {
+        //   DINGO_LOG(INFO) << fmt::format("[bdb] memp_sync ok");
+        // }
+
+        // ret = db->sync(0);
+        // if (ret != 0) {
+        //   DINGO_LOG(ERROR) << fmt::format("[bdb] db sync failed, ret: {}.", ret);
+        // } else {
+        //   DINGO_LOG(ERROR) << fmt::format("[bdb] db sync ok");
+        // }
+      } catch (DbException& db_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, exception: {} {}.", db_exception.get_errno(),
+                                        db_exception.what());
+      } catch (std::exception& std_exception) {
+        DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, std exception: {}.", std_exception.what());
       }
     }
 
@@ -249,6 +311,7 @@ void BdbHelper::CheckpointThread(DbEnv* env, std::atomic<bool>& is_close) {
           DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, ret: {}.", ret);
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(env);
         DINGO_LOG(ERROR) << fmt::format("[bdb] checkpoint failed, exception: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
       } catch (std::exception& std_exception) {
@@ -333,6 +396,7 @@ Iterator::~Iterator() {
       cursorp_->close();
       cursorp_ = nullptr;
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetEnv());
       DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
     }
@@ -384,6 +448,7 @@ void Iterator::SeekToLast() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek failed, {}.", db_exception.what()));
@@ -416,6 +481,7 @@ void Iterator::Seek(const std::string& target) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] db seek failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db seek failed, {}.", db_exception.what()));
@@ -461,6 +527,7 @@ void Iterator::SeekForPrev(const std::string& target) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] db seek for prev failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     status_ =
@@ -490,6 +557,7 @@ void Iterator::Next() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor next failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db cursor next failed, {}.", db_exception.what()));
@@ -518,6 +586,7 @@ void Iterator::Prev() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] writer got DeadLockException, giving up.");
     status_ = butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] db cursor prev failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     status_ = butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db cursor prev failed, {}.", db_exception.what()));
@@ -540,20 +609,24 @@ BdbSnapshot::~BdbSnapshot() {
       cursorp_->close();
       cursorp_ = nullptr;
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetEnv());
       DINGO_LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
     }
   }
 
+  DEFER(BdbHelper::TxnAbort(&txn_));
+
   // commit or abort txn
   if (txn_ != nullptr) {
     int ret = 0;
-    // abort
+    // commit
     try {
-      ret = BdbHelper::TxnAbort(&txn_);
-      DINGO_LOG(DEBUG) << fmt::format("[bdb] txn abort in snapshot destruction, ret: {}.", ret);
+      ret = BdbHelper::TxnCommit(&txn_);
+      DINGO_LOG(DEBUG) << fmt::format("[bdb] txn commit in snapshot destruction, ret: {}.", ret);
     } catch (DbException& db_exception) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn abort: {} {}.", db_exception.get_errno(),
+      BdbHelper::PrintEnvStat(GetEnv());
+      DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       ret = BdbHelper::kCommitException;
     }
@@ -619,6 +692,7 @@ butil::Status Reader::KvGet(const std::string& cf_name, dingodb::SnapshotPtr sna
     DINGO_LOG(ERROR) << fmt::format("[bdb] db get failed, ret: {}.", ret);
     return butil::Status(pb::error::EINTERNAL, "Internal get error.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
     DINGO_LOG(ERROR) << "[bdb] db exception: " << db_exception.get_errno() << " " << db_exception.what();
     return butil::Status(pb::error::EBDB_EXCEPTION, "%s", db_exception.what());
   } catch (std::exception& std_exception) {
@@ -747,6 +821,7 @@ std::shared_ptr<dingodb::Iterator> Reader::NewIterator(const std::string& cf_nam
   } catch (DbDeadlockException&) {
     DINGO_LOG(ERROR) << fmt::format("[bdb] got DeadLockException, giving up.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] cursor create failed, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
   } catch (std::exception& std_exception) {
@@ -821,6 +896,7 @@ butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, c
           cursorp->close();
           cursorp = nullptr;
         } catch (DbException& db_exception) {
+          BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
           LOG(WARNING) << fmt::format("[bdb] cursor close failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
         }
@@ -849,6 +925,7 @@ butil::Status Reader::RetrieveByCursor(const std::string& cf_name, DbTxn* txn, c
     DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got deadlock.");
     return butil::Status(pb::error::EBDB_DEADLOCK, "retrive by cursor, got deadlock.");
   } catch (DbException& db_exception) {
+    BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] retrive by cursor, got db exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("retrive by cursor, failed, {}.", db_exception.what()));
@@ -911,6 +988,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
           return butil::Status(pb::error::EINTERNAL, "Internal txn commit error.");
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
         ret = BdbHelper::kCommitException;
@@ -940,6 +1018,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION,
@@ -1029,6 +1108,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
           return butil::Status();
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
         ret = BdbHelper::kCommitException;
@@ -1058,6 +1138,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
@@ -1155,6 +1236,7 @@ butil::Status Writer::KvBatchPutAndDelete(
           return butil::Status::OK();
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
         ret = BdbHelper::kCommitException;
@@ -1184,6 +1266,7 @@ butil::Status Writer::KvBatchPutAndDelete(
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db put failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db put failed, {}.", db_exception.what()));
@@ -1311,6 +1394,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
           return butil::Status(pb::error::EBDB_COMMIT, "error on txn commit.");
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
         ret = BdbHelper::kCommitException;
@@ -1340,6 +1424,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
@@ -1396,6 +1481,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
           return butil::Status::OK();
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
         ret = BdbHelper::kCommitException;
@@ -1425,6 +1511,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
@@ -1507,6 +1594,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
           return butil::Status::OK();
         }
       } catch (DbException& db_exception) {
+        BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
         DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {}.", db_exception.what());
         ret = BdbHelper::kCommitException;
       }
@@ -1535,6 +1623,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
@@ -1604,6 +1693,7 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
         return butil::Status(pb::error::EBDB_DEADLOCK, "writer got DeadLockException and out of retries. giving up.");
       }
     } catch (DbException& db_exception) {
+      BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db delete failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return butil::Status(pb::error::EBDB_EXCEPTION, fmt::format("db delete failed, {}.", db_exception.what()));
@@ -1633,6 +1723,7 @@ butil::Status Writer::DeleteRangeByCursor(const std::string& cf_name, const pb::
         try {
           cursorp->close();
         } catch (DbException& db_exception) {
+          BdbHelper::PrintEnvStat(GetRawEngine()->GetEnv());
           LOG(WARNING) << fmt::format("cursor close failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
         }
@@ -1745,6 +1836,7 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
         DINGO_LOG(ERROR) << fmt::format("[bdb] txn commit failed, ret: {}.", ret);
       }
     } catch (DbException& db_exception) {
+      bdb::BdbHelper::PrintEnvStat(envp);
       DINGO_LOG(ERROR) << fmt::format("[bdb] error on txn commit: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       ret = -1;
@@ -1756,6 +1848,7 @@ int32_t BdbRawEngine::OpenDb(Db** dbpp, const char* file_name, DbEnv* envp, uint
     }
 
   } catch (DbException& db_exception) {
+    bdb::BdbHelper::PrintEnvStat(envp);
     DINGO_LOG(ERROR) << fmt::format("OpenDb: db open failed: {} {}.", db_exception.get_errno(), db_exception.what());
     bdb::BdbHelper::TxnAbort(&txn);
     return -1;
@@ -1783,6 +1876,8 @@ void BdbRawEngine::PutDb(Db* db) {
 void LogBDBError(const DbEnv*, const char* /*errpfx*/, const char* msg) {
   DINGO_LOG(ERROR) << "[bdb] error msg: " << msg;
 }
+
+void LogBDBMsg(const DbEnv*, const char* msg) { DINGO_LOG(ERROR) << "[bdb] bdb info msg: " << msg; }
 
 // override functions
 bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {
@@ -1839,20 +1934,42 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     // deadlock notification in the event of a deadlock.
     envp_->set_lk_detect(DB_LOCK_MINWRITE);
 
-    envp_->set_memory_init(DB_MEM_LOCKER, FLAGS_bdb_lk_max_lockers);
-    envp_->set_memory_init(DB_MEM_LOCK, FLAGS_bdb_lk_max_locks);
-    envp_->set_memory_init(DB_MEM_LOCKOBJECT, FLAGS_bdb_lk_max_objects);
+    if (FLAGS_bdb_lk_max_lockers > 0) {
+      envp_->set_memory_init(DB_MEM_LOCKER, FLAGS_bdb_lk_max_lockers);
+    }
 
-    envp_->set_memory_init(DB_MEM_TRANSACTION, FLAGS_bdb_txn_max);
+    if (FLAGS_bdb_lk_max_locks > 0) {
+      envp_->set_memory_init(DB_MEM_LOCK, FLAGS_bdb_lk_max_locks);
+    }
+
+    if (FLAGS_bdb_lk_max_objects > 0) {
+      envp_->set_memory_init(DB_MEM_LOCKOBJECT, FLAGS_bdb_lk_max_objects);
+    }
+
+    if (FLAGS_bdb_mutex_max > 0) {
+      envp_->mutex_set_max(FLAGS_bdb_mutex_max);
+    }
+
+    if (FLAGS_bdb_txn_memory_max > 0) {
+      envp_->set_memory_init(DB_MEM_TRANSACTION, FLAGS_bdb_txn_memory_max);
+    }
+
+    if (FLAGS_bdb_env_cache_size_bytes > 0) {
+      envp_->set_memory_max(0, FLAGS_bdb_env_cache_size_bytes);
+    }
 
     // envp_->set_lk_max_lockers(FLAGS_bdb_lk_max_lockers);
     // envp_->set_lk_max_locks(FLAGS_bdb_lk_max_locks);
     // envp_->set_lk_max_objects(FLAGS_bdb_lk_max_objects);
 
-    envp_->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
+    // envp_->set_cachesize(FLAGS_bdb_env_cache_size_gb, 0, 1);
+    if (FLAGS_bdb_env_cache_size_gb > 0 || FLAGS_bdb_env_cache_size_bytes > 0) {
+      envp_->set_cachesize(FLAGS_bdb_env_cache_size_gb, FLAGS_bdb_env_cache_size_bytes, 1);
+    }
 
     // set error call back
     envp_->set_errcall(LogBDBError);
+    envp_->set_msgcall(LogBDBMsg);
 
     // print txn_max
     uint32_t txn_max = 0;
@@ -1860,7 +1977,9 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
 
     DINGO_LOG(INFO) << fmt::format("[bdb] default txn_max: {}.", txn_max);
 
-    envp_->set_tx_max(FLAGS_bdb_txn_max);
+    if (FLAGS_bdb_txn_max > 0) {
+      envp_->set_tx_max(FLAGS_bdb_txn_max);
+    }
     envp_->get_tx_max(&txn_max);
 
     // set lock timeout to 5s, the first parameter is microsecond
@@ -1912,7 +2031,7 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
   // checkpoint_bthread_.Run([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
-  std::thread temp_checkpoint_thread([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
+  std::thread temp_checkpoint_thread([this]() { bdb::BdbHelper::CheckpointThread(envp_, db_, is_close_); });
   checkpoint_thread_.swap(temp_checkpoint_thread);
 
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
@@ -1944,6 +2063,7 @@ void BdbRawEngine::Close() {
     }
 
   } catch (DbException& db_exception) {
+    bdb::BdbHelper::PrintEnvStat(envp_);
     DINGO_LOG(ERROR) << fmt::format("[bdb] error closing database and environment, exception: {} {}.",
                                     db_exception.get_errno(), db_exception.what());
   }
@@ -2009,6 +2129,7 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
       retry_count++;
       retry = true;
     } catch (DbException& db_exception) {
+      bdb::BdbHelper::PrintEnvStat(GetEnv());
       DINGO_LOG(ERROR) << fmt::format("[bdb] db txn_begin failed, exception: {} {}.", db_exception.get_errno(),
                                       db_exception.what());
       return nullptr;
@@ -2103,7 +2224,10 @@ void BdbRawEngine::Flush(const std::string& /*cf_name*/) {
     } else {
       DINGO_LOG(ERROR) << fmt::format("[bdb] flush failed, ret: {}.", ret);
     }
+
+    envp_->stat_print(DB_STAT_SUBSYSTEM);
   } catch (DbException& db_exception) {
+    bdb::BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] error flushing, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
   }
@@ -2137,6 +2261,7 @@ butil::Status BdbRawEngine::Compact(const std::string& cf_name) {
 
     DINGO_LOG(ERROR) << fmt::format("[bdb] compact failed, ret: {}.", ret);
   } catch (DbException& db_exception) {
+    bdb::BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] error compacting, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
   }
@@ -2243,6 +2368,7 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
       result_counts.push_back(count);
     }
   } catch (DbException& db_exception) {
+    bdb::BdbHelper::PrintEnvStat(GetEnv());
     DINGO_LOG(ERROR) << fmt::format("[bdb] error get approximate sizes, exception: {} {}.", db_exception.get_errno(),
                                     db_exception.what());
     return std::vector<int64_t>();

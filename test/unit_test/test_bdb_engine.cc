@@ -16,32 +16,29 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 // #include <filesystem>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
-#include <random>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "butil/status.h"
-#include "common/context.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "engine/bdb_raw_engine.h"
 #include "engine/snapshot.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
-#include "proto/store_internal.pb.h"
-#include "server/server.h"
 
 namespace dingodb {
+
+DEFINE_uint32(bdb_test_max_count, 30000, "bdb_test_max_count");
 
 static const std::string kDefaultCf = "default";
 // static const std::string kDefaultCf = "d";
@@ -1877,6 +1874,106 @@ TEST_F(RawBdbEngineTest, KvDeleteRangeA) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(count, keys_count);
   }
+}
+
+TEST_F(RawBdbEngineTest, MaxTxnNums) {
+  DINGO_LOG(ERROR) << "MaxTxnNums start0";
+
+  const std::string &cf_name = kDefaultCf;
+  auto writer = RawBdbEngineTest::engine->Writer();
+  auto reader = RawBdbEngineTest::engine->Reader();
+
+  {
+    auto iter1 = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, IteratorOptions());
+
+    DINGO_LOG(ERROR) << "MaxTxnNums start1";
+
+    for (int x = 0; x < FLAGS_bdb_test_max_count; x++) {
+      // write data
+      uint64_t keys_count = 2;
+      {
+        std::vector<pb::common::KeyValue> kv_puts;
+        std::vector<std::string> key_deletes;
+
+        for (int i = 0; i < keys_count; i++) {
+          pb::common::KeyValue kv;
+          kv.set_key("MaxTxnNums0" + std::to_string(1000 + i));
+          kv.set_value(kv.key());
+          kv_puts.emplace_back(kv);
+        }
+
+        butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+        ASSERT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+        int64_t count = 0;
+        ok = reader->KvCount(kDefaultCf, "MaxTxnNums0", "MaxTxnNums1", count);
+        ASSERT_EQ(ok.error_code(), pb::error::Errno::OK);
+        ASSERT_EQ(count, keys_count);
+      }
+    }
+  }
+
+  DINGO_LOG(ERROR) << "11111==========================================iter is "
+                      "destroyed=================================================";
+  // bthread_usleep(10000000);
+  // DINGO_LOG(ERROR) << "22222==========================================iter is "
+  //                     "destroyed=================================================";
+
+  // bthread_usleep(10000000);
+
+  // DINGO_LOG(ERROR) << "33333==========================================iter is "
+  //                     "destroyed=================================================";
+
+  {
+    DINGO_LOG(ERROR) << "MaxTxnNums start2";
+
+    for (int x = 0; x < FLAGS_bdb_test_max_count; x++) {
+      // write data
+      uint64_t keys_count = 2;
+      {
+        std::vector<pb::common::KeyValue> kv_puts;
+        std::vector<std::string> key_deletes;
+
+        for (int i = 0; i < keys_count; i++) {
+          pb::common::KeyValue kv;
+          kv.set_key("MaxTxnNums0" + std::to_string(1000 + i));
+          kv.set_value(kv.key());
+          kv_puts.emplace_back(kv);
+        }
+
+        butil::Status ok = writer->KvBatchPutAndDelete(cf_name, kv_puts, key_deletes);
+        ASSERT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+        int64_t count = 0;
+        ok = reader->KvCount(kDefaultCf, "MaxTxnNums0", "MaxTxnNums1", count);
+        ASSERT_EQ(ok.error_code(), pb::error::Errno::OK);
+        ASSERT_EQ(count, keys_count);
+      }
+    }
+  }
+
+  DINGO_LOG(ERROR) << "MaxTxnNums start iter";
+
+  {
+    IteratorOptions options;
+    for (int j = 0; j < 1000; j++) {
+      std::vector<std::shared_ptr<dingodb::Iterator>> iters;
+      for (int i = 0; i < 10; i++) {
+        auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
+        if (iter == nullptr) {
+          DINGO_LOG(ERROR) << "iter is nullptr";
+        }
+        iters.emplace_back(iter);
+        DINGO_LOG(INFO) << "i: " << i << " j: " << j;
+      }
+
+      DINGO_LOG(INFO) << "j: " << j << " iters.size(): " << iters.size();
+
+      // bthread_usleep(2000000);
+    }
+  }
+
+  DINGO_LOG(ERROR) << "MaxTxnNums end";
 }
 
 }  // namespace dingodb
