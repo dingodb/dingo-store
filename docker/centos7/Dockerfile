@@ -4,7 +4,7 @@ ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
 
 RUN yum makecache  \
-    && yum install -y  ntp openjdk-1.8-jdk vim unzip netcat net-tools tzdata wget git gcc gcc-c++ make automake maven centos-release-scl openssl openssl-devel libtool \
+    && yum install -y  ntp openjdk-1.8-jdk vim unzip netcat net-tools tzdata wget git gcc gcc-c++ make automake maven centos-release-scl openssl openssl-devel libtool patch \
     && yum install -y devtoolset-11* \
     && yum install -y  http://opensource.wandisco.com/centos/7/git/x86_64/wandisco-git-release-7-2.noarch.rpm && yum -y install git \
     && yum -y install perl-IPC-Cmd \
@@ -20,4 +20,3 @@ RUN yum makecache  \
 ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk/
 ENV PATH=/opt/rh/devtoolset-11/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
 WORKDIR /opt
-

@@ -16,7 +16,6 @@ RUN apt-get update  \
     && rm -rf /var/lib/apt/lists/* \
     && wget https://cmake.org/files/v3.25/cmake-3.25.2.tar.gz --no-check-certificate && tar -zxvf cmake-3.25.2.tar.gz && rm -f cmake-3.25.2.tar.gz && cd cmake-3.25.2 && ./bootstrap && make -j$(nproc) && make install && cd .. && rm -rf cmake-3.25.2
 
-
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 
@@ -25,4 +24,3 @@ ENV PATH="/opt/intel/oneapi:$PATH"
 ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
 
 WORKDIR /opt
-
