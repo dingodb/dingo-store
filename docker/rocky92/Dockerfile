@@ -14,7 +14,7 @@ RUN echo "gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW
 RUN mv /tmp/oneAPI.repo /etc/yum.repos.d
 
 RUN dnf update -y  \
-    && dnf install -y  java-1.8.0-openjdk-devel vim unzip net-tools tzdata wget git gcc gcc-c++ make automake maven openssl openssl-devel gcc-toolset-12 libtool perl-IPC-Cmd perl-FindBin intel-oneapi-mkl-devel \
+    && dnf install -y  java-1.8.0-openjdk-devel vim unzip net-tools tzdata wget git gcc gcc-c++ make automake maven openssl openssl-devel gcc-toolset-12 libtool perl-IPC-Cmd perl-FindBin intel-oneapi-mkl-devel patch \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
     && unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY \
