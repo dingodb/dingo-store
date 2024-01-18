@@ -795,6 +795,8 @@ class CoordinatorControl : public MetaControl {
   void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckStoreRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
+  static void AddCheckChangePeerResultTask(pb::coordinator::TaskList *task_list, int64_t region_id,
+                                           const pb::common::RegionDefinition &region_definition);
   static void AddCheckMergeResultTask(pb::coordinator::TaskList *task_list, int64_t merge_to_region_id,
                                       const pb::common::Range &range);
   static void AddCheckTombstoneRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
