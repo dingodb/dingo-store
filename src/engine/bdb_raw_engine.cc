@@ -60,7 +60,9 @@ DEFINE_int32(bdb_txn_memory_max, 262144, "bdb txn memory max");
 DEFINE_int32(bdb_lk_max_lockers, 65536, "bdb max lockers");
 DEFINE_int32(bdb_lk_max_locks, 262144, "bdb max locks");
 DEFINE_int32(bdb_lk_max_objects, 262144, "bdb max objects");
-DEFINE_int32(bdb_mutex_max, 0, "bdb mutex max");
+DEFINE_int32(bdb_mutex_increment, 1024, "bdb mutex increment");
+
+DEFINE_int32(bdb_mutex_max, 0, "bdb mutex max, this is deprecated from bdb");
 
 DEFINE_int32(bdb_max_retries, 30, "bdb max retry on a deadlock");
 DEFINE_int32(bdb_ingest_external_file_batch_put_count, 128, "bdb ingest external file batch put cout");
@@ -1948,6 +1950,10 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
 
     if (FLAGS_bdb_mutex_max > 0) {
       envp_->mutex_set_max(FLAGS_bdb_mutex_max);
+    }
+
+    if (FLAGS_bdb_mutex_increment > 0) {
+      envp_->mutex_set_increment(FLAGS_bdb_mutex_increment);
     }
 
     if (FLAGS_bdb_txn_memory_max > 0) {

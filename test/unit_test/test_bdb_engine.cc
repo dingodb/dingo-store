@@ -17,9 +17,7 @@
 #include <unistd.h>
 
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
-// #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -85,7 +83,7 @@ class RawBdbEngineTest : public testing::Test {
   static void SetUpTestSuite() {
     std::srand(std::time(nullptr));
 
-    Helper::CreateDirectories("./bdb_unit_test/bdb");
+    Helper::CreateDirectories("/tmp/bdb_unit_test");
 
     config = std::make_shared<YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
@@ -1883,6 +1881,8 @@ TEST_F(RawBdbEngineTest, MaxTxnNums) {
   auto writer = RawBdbEngineTest::engine->Writer();
   auto reader = RawBdbEngineTest::engine->Reader();
 
+  // when a iterator is alive, the snapshot transaction will keep increasing until the last page in the cache created by
+  // the transaction is evicted from the cache.
   {
     auto iter1 = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, IteratorOptions());
 
@@ -1924,6 +1924,7 @@ TEST_F(RawBdbEngineTest, MaxTxnNums) {
   // DINGO_LOG(ERROR) << "33333==========================================iter is "
   //                     "destroyed=================================================";
 
+  // need to observe the snapshot transaction count in the LogBDBMsg log print.
   {
     DINGO_LOG(ERROR) << "MaxTxnNums start2";
 
