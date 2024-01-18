@@ -120,7 +120,7 @@ butil::Status TxnIterator::Seek(const std::string &key) {
       return butil::Status::OK();
     } else {
       DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
-                      << ", key_: " << key_;
+                      << ", key_: " << Helper::StringToHex(key_);
       continue;
     }
   }
@@ -361,6 +361,12 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
             << "[txn]Scan commit_ts > start_ts, means this value is not accepted, will go to next, start_ts: "
             << start_ts << ", commit_ts: " << commit_ts << ", user_key: " << Helper::StringToHex(user_key);
         write_iter->Next();
+
+        // we need to setup is_value_found to true, so that the caller can go to next user_key
+        // is_value_found means the value is found, not means the value is valid
+        // the user_value is not valid, so we need to go to next user_key
+        is_value_found = true;
+        user_value = std::string();
         continue;
       }
     } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
@@ -389,6 +395,12 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
     } else if (write_info.op() == pb::store::Op::Rollback) {
       // if op is rollback, go to next write
       write_iter->Next();
+
+      // we need to setup is_value_found to true, so that the caller can go to next user_key
+      // is_value_found means the value is found, not means the value is valid
+      // the user_value is not valid, so we need to go to next user_key
+      is_value_found = true;
+      user_value = std::string();
     } else if (write_info.op() == pb::store::Op::Put) {
       // use write_ts to get data from data_cf
       if (!write_info.short_value().empty()) {
@@ -877,9 +889,11 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
                                     bool &has_more, std::string &end_key) {
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
-                  << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts << ", limit: " << limit
-                  << ", key_only: " << key_only << ", is_reverse: " << is_reverse
-                  << ", resolved_locks size: " << resolved_locks.size()
+                  << ", start_key: " << Helper::StringToHex(range.start_key())
+                  << ", end_key: " << Helper::StringToHex(range.end_key())
+                  << ", isolation_level: " << pb::store::IsolationLevel_Name(isolation_level)
+                  << ", start_ts: " << start_ts << ", limit: " << limit << ", key_only: " << key_only
+                  << ", is_reverse: " << is_reverse << ", resolved_locks size: " << resolved_locks.size()
                   << ", disable_coprocessor: " << disable_coprocessor
                   << ", coprocessor: " << coprocessor.ShortDebugString()
                   << ", txn_result_info: " << txn_result_info.ShortDebugString();
