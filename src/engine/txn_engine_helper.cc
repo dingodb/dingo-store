@@ -2307,7 +2307,8 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
 butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                               std::shared_ptr<Context> ctx, const std::string &primary_key,
                                               int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) {
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(), primary_key)
+  DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
+                                 Helper::StringToHex(primary_key))
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
                   << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
 
@@ -2471,7 +2472,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
       // rollback, return rollback
       response->set_lock_ttl(0);
       response->set_commit_ts(0);
-      response->set_action(::dingodb::pb::store::Action::LockNotExistDoNothing);
+      response->set_action(pb::store::Action::LockNotExistRollback);
       return butil::Status::OK();
     }
 
@@ -2502,7 +2503,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     // commit, return committed
     response->set_lock_ttl(0);
     response->set_commit_ts(commit_ts);
-    response->set_action(::dingodb::pb::store::Action::NoAction);
+    response->set_action(pb::store::Action::LockNotExistDoNothing);
     return butil::Status::OK();
   }
 }
