@@ -61,6 +61,7 @@ DEFINE_int32(bdb_lk_max_lockers, 65536, "bdb max lockers");
 DEFINE_int32(bdb_lk_max_locks, 262144, "bdb max locks");
 DEFINE_int32(bdb_lk_max_objects, 262144, "bdb max objects");
 DEFINE_int32(bdb_mutex_increment, 1024, "bdb mutex increment");
+DEFINE_int32(bdb_lk_partitions, 0, "bdb lk partition");
 
 DEFINE_int32(bdb_mutex_max, 0, "bdb mutex max, this is deprecated from bdb");
 
@@ -1954,6 +1955,10 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
 
     if (FLAGS_bdb_mutex_increment > 0) {
       envp_->mutex_set_increment(FLAGS_bdb_mutex_increment);
+    }
+
+    if (FLAGS_bdb_lk_partitions> 0) {
+      envp_->set_lk_partitions(FLAGS_bdb_lk_partitions);
     }
 
     if (FLAGS_bdb_txn_memory_max > 0) {
