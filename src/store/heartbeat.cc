@@ -64,7 +64,6 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   request.set_self_storemap_epoch(store_meta_manager->GetStoreServerMeta()->GetEpoch());
-  // request.set_self_regionmap_epoch(store_meta_manager->GetStoreRegionMeta()->GetEpoch());
 
   // store
   // CAUTION: may coredump here, so we cannot delete self store meta.
@@ -72,16 +71,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
 
   // only partial heartbeat or heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0 will report
   // region_metrics, this is for reduce heartbeat size and cpu usage.
-  bool need_report_region_metrics = false;
-  if (region_ids.empty()) {
-    heartbeat_counter++;
-    if (heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0) {
-      need_report_region_metrics = true;
-    }
-  } else {
-    need_report_region_metrics = true;
-  }
-
+  bool need_report_region_metrics =
+      !region_ids.empty() || (++heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0);
   if (need_report_region_metrics) {
     DINGO_LOG(INFO) << fmt::format("[heartbeat.store] heartbeat_counter: {}", heartbeat_counter);
 
@@ -246,21 +237,18 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   auto remote_stores = response.storemap().stores();
 
   auto new_stores = GetNewStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] new store size: {} / {}", new_stores.size(), local_stores.size());
   for (const auto& store : new_stores) {
     store_server_meta->AddStore(store);
   }
 
   auto changed_stores = GetChangedStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] changed store size: {} / {}", changed_stores.size(),
-                                 local_stores.size());
   for (const auto& store : changed_stores) {
     store_server_meta->UpdateStore(store);
   }
 
   auto deleted_stores = GetDeletedStore(local_stores, remote_stores);
-  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] deleted store size: {} / {}", deleted_stores.size(),
-                                 local_stores.size());
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] store stats new({}) change({}) delete({}) local({})",
+                                 new_stores.size(), changed_stores.size(), deleted_stores.size(), local_stores.size());
   for (const auto& store : deleted_stores) {
     // if deleted store is self, skip, else will coredump in next heartbeat.
     if (store->id() == Server::GetInstance().Id()) {

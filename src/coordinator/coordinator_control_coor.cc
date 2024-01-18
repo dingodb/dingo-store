@@ -2927,6 +2927,8 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     AddDeleteTaskWithCheck(increment_task_list, new_store_ids_diff_less.at(0), region_id, new_region_definition.peers(),
                            meta_increment);
 
+    AddCheckChangePeerResultTask(increment_task_list, region_id, new_region_definition);
+
     // this is purge_region task
     // AddPurgeTask(increment_task_list, new_store_ids_diff_less.at(0),
     // region_id, meta_increment);
@@ -2999,6 +3001,8 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
 
     // this is change peer task
     AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition, meta_increment);
+
+    AddCheckChangePeerResultTask(increment_task_list, region_id, new_region_definition);
 
   } else {
     DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids not match, region_id = " << region_id;
@@ -4769,6 +4773,14 @@ void CoordinatorControl::AddCheckStoreRegionTask(pb::coordinator::TaskList* task
   region_check->set_type(pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
   region_check->mutable_store_region_check()->set_store_id(store_id);
   region_check->mutable_store_region_check()->set_region_id(region_id);
+}
+
+void CoordinatorControl::AddCheckChangePeerResultTask(pb::coordinator::TaskList* task_list, int64_t region_id,
+                                                      const pb::common::RegionDefinition& region_definition) {
+  auto* pre_check = task_list->add_tasks()->mutable_pre_check();
+  pre_check->set_type(pb::coordinator::TaskPreCheckType::REGION_CHECK);
+  pre_check->mutable_region_check()->set_region_id(region_id);
+  *(pre_check->mutable_region_check()->mutable_peers()) = region_definition.peers();
 }
 
 bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& task_pre_check) {
