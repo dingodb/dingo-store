@@ -751,7 +751,7 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnCheckTxnStatus primary_key : " << primary_key << " lock_ts : " << lock_ts
+  DINGO_LOG(INFO) << "TxnCheckTxnStatus primary_key : " << Helper::StringToHex(primary_key) << " lock_ts : " << lock_ts
                   << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
