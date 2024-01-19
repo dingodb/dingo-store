@@ -183,11 +183,16 @@ class Server {
   void SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set);
   void SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set);
 
+  void SetRaftApplyWorkerSet(WorkerSetPtr worker_set);
+  WorkerSetPtr GetRaftApplyWorkerSet();
+
   std::vector<std::vector<std::string>> GetStoreServiceReadWorkerSetTrace();
   std::vector<std::vector<std::string>> GetStoreServiceWriteWorkerSetTrace();
   std::vector<std::vector<std::string>> GetIndexServiceReadWorkerSetTrace();
   std::vector<std::vector<std::string>> GetIndexServiceWriteWorkerSetTrace();
   std::vector<std::vector<std::string>> GetVectorIndexBackgroundWorkerSetTrace();
+
+  std::vector<std::vector<std::string>> GetRaftApplyWorkerSetTrace();
 
   ThreadPoolPtr GetVectorIndexThreadPool();
 
@@ -284,13 +289,16 @@ class Server {
   bool is_read_only_ = false;
 
   // reference worker queue, just for trace
-  WorkerSetPtr store_service_read_worker_set_;
-  WorkerSetPtr store_service_write_worker_set_;
-  WorkerSetPtr index_service_read_worker_set_;
-  WorkerSetPtr index_service_write_worker_set_;
+  WorkerSetPtr store_service_read_worker_set_{nullptr};
+  WorkerSetPtr store_service_write_worker_set_{nullptr};
+  WorkerSetPtr index_service_read_worker_set_{nullptr};
+  WorkerSetPtr index_service_write_worker_set_{nullptr};
 
   // vector index thread pool
   ThreadPoolPtr vector_index_thread_pool_;
+
+  // RaftApply worker queue
+  WorkerSetPtr raft_apply_worker_set_{nullptr};
 };
 
 // Shortcut

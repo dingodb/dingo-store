@@ -885,6 +885,10 @@ void Server::SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set) { index_servi
 
 void Server::SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set) { index_service_write_worker_set_ = worker_set; }
 
+void Server::SetRaftApplyWorkerSet(WorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
+
+WorkerSetPtr Server::GetRaftApplyWorkerSet() { return raft_apply_worker_set_; }
+
 std::vector<std::vector<std::string>> Server::GetStoreServiceReadWorkerSetTrace() {
   if (store_service_read_worker_set_ == nullptr) {
     return {};
@@ -918,6 +922,13 @@ std::vector<std::vector<std::string>> Server::GetVectorIndexBackgroundWorkerSetT
     return {};
   }
   return vector_index_manager_->GetPendingTaskTrace();
+}
+
+std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {
+  if (raft_apply_worker_set_ == nullptr) {
+    return {};
+  }
+  return raft_apply_worker_set_->GetPendingTaskTrace();
 }
 
 ThreadPoolPtr Server::GetVectorIndexThreadPool() { return vector_index_thread_pool_; }
