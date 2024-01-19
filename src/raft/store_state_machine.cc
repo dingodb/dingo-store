@@ -20,12 +20,14 @@
 #include <string>
 
 #include "braft/util.h"
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "handler/raft_snapshot_handler.h"
 #include "meta/meta_writer.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_bvar_metrics.h"
@@ -41,7 +43,8 @@ namespace dingodb {
 
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                                      store::RaftMetaPtr raft_meta, store::RegionMetricsPtr region_metrics,
-                                     std::shared_ptr<EventListenerCollection> listeners)
+                                     std::shared_ptr<EventListenerCollection> listeners,
+                                     WorkerSetPtr raft_apply_worker_set)
     : raw_engine_(engine),
       region_(region),
       str_node_id_(std::to_string(region->Id())),
@@ -50,7 +53,8 @@ StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::R
       listeners_(listeners),
       applied_term_(raft_meta->Term()),
       applied_index_(raft_meta->AppliedId()),
-      last_snapshot_index_(0) {
+      last_snapshot_index_(0),
+      raft_apply_worker_set_(raft_apply_worker_set) {
   bthread_mutex_init(&apply_mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.StoreStateMachine][id({})]", str_node_id_);
 }
@@ -61,6 +65,22 @@ StoreStateMachine::~StoreStateMachine() {
 }
 
 bool StoreStateMachine::Init() { return true; }
+
+void DoDispatchEvent(int64_t region_id, std::shared_ptr<EventListenerCollection> listeners,
+                     dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event, BthreadCondPtr cond) {
+  DEFER(if (BAIDU_LIKELY(cond != nullptr)) { cond->DecreaseSignal(); });
+
+  if (listeners == nullptr) return;
+
+  for (auto& listener : listeners->Get(event_type)) {
+    int ret = listener->OnEvent(event);
+    if (ret != 0) {
+      DINGO_LOG(FATAL) << fmt::format("[raft.sm][region({})] dispatch event({}) failed, ret: {}", region_id,
+                                      static_cast<int>(event_type), ret);
+      return;
+    }
+  }
+}
 
 int StoreStateMachine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
   if (listeners_ == nullptr) return -1;
@@ -151,7 +171,24 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       event->term_id = iter.term();
       event->log_id = iter.index();
 
-      DispatchEvent(EventType::kSmApply, event);
+      if (BAIDU_LIKELY(raft_apply_worker_set_ != nullptr)) {
+        // Run in queue.
+        auto cond = std::make_shared<BthreadCond>();
+
+        auto task = std::make_shared<DispatchEventTask>(
+            [this, event, cond]() { DoDispatchEvent(region_->Id(), listeners_, EventType::kSmApply, event, cond); });
+
+        bool ret = raft_apply_worker_set_->ExecuteRR(task);
+        if (BAIDU_UNLIKELY(!ret)) {
+          DINGO_LOG(FATAL) << fmt::format(
+              "[raft.sm][region({})] execute apply task failed, downgrade to in_place execute", region_->Id());
+          DispatchEvent(EventType::kSmApply, event);
+        } else {
+          cond->IncreaseWait();
+        }
+      } else {
+        DispatchEvent(EventType::kSmApply, event);
+      }
     }
 
     applied_term_ = iter.term();
@@ -226,7 +263,8 @@ int32_t StoreStateMachine::CatchUpApplyLog(const std::vector<pb::raft::LogEntry>
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[raft.sm][region({})] catch up apply log finish, start_applied_id({}), apply_log_count({}/{}) elapsed time({})",
+      "[raft.sm][region({})] catch up apply log finish, start_applied_id({}), apply_log_count({}/{}) elapsed "
+      "time({})",
       region_->Id(), start_applied_id, actual_apply_log_count, entries.size(), Helper::TimestampMs() - start_time);
 
   return actual_apply_log_count;

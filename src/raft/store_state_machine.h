@@ -23,6 +23,7 @@
 #include "braft/raft.h"
 #include "brpc/controller.h"
 #include "common/context.h"
+#include "common/runnable.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
@@ -35,6 +36,20 @@ namespace dingodb {
 
 struct SnapshotContext;
 
+class DispatchEventTask : public TaskRunnable {
+ public:
+  using Handler = std::function<void(void)>;
+  DispatchEventTask(Handler handle) : handle_(handle) {}
+  ~DispatchEventTask() override = default;
+
+  std::string Type() override { return "STATE_MACHINE_TASK"; }
+
+  void Run() override { handle_(); }
+
+ private:
+  Handler handle_;
+};
+
 // Execute order on restart: on_snapshot_load
 //                           on_configuration_committed
 //                           on_leader_start|on_start_following
@@ -42,8 +57,8 @@ struct SnapshotContext;
 class StoreStateMachine : public BaseStateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
-                             store::RegionMetricsPtr region_metrics,
-                             std::shared_ptr<EventListenerCollection> listeners);
+                             store::RegionMetricsPtr region_metrics, std::shared_ptr<EventListenerCollection> listeners,
+                             WorkerSetPtr raft_apply_worker_set);
   ~StoreStateMachine() override;
 
   static bool Init();
@@ -85,6 +100,9 @@ class StoreStateMachine : public BaseStateMachine {
 
   // Protect apply serial
   bthread_mutex_t apply_mutex_;
+
+  // raft_apply_worker_set
+  WorkerSetPtr raft_apply_worker_set_;
 };
 
 }  // namespace dingodb

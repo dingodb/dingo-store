@@ -190,8 +190,9 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
 
   std::shared_ptr<RawEngine> raw_engine = GetRawEngine(region->GetRawEngineType());
   // Build StateMachine
-  auto state_machine = std::make_shared<StoreStateMachine>(raw_engine, region, parameter.raft_meta,
-                                                           parameter.region_metrics, parameter.listeners);
+  auto state_machine =
+      std::make_shared<StoreStateMachine>(raw_engine, region, parameter.raft_meta, parameter.region_metrics,
+                                          parameter.listeners, Server::GetInstance().GetRaftApplyWorkerSet());
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }

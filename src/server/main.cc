@@ -79,6 +79,8 @@ DEFINE_int32(write_worker_num, 10, "write service worker num");
 DEFINE_int64(read_worker_max_pending_num, 0, "read service worker num");
 DEFINE_int64(write_worker_max_pending_num, 0, "write service worker num");
 
+DEFINE_int32(raft_apply_worker_num, 10, "raft apply worker num");
+
 DEFINE_int32(coordinator_service_worker_num, 10, "service worker num");
 DEFINE_int64(coordinator_service_worker_max_pending_num, 0, "service worker num");
 DEFINE_int32(meta_service_worker_num, 10, "service worker num");
@@ -446,8 +448,22 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config) {
   }
   DINGO_LOG(INFO) << "server.write_worker_num is set to " << FLAGS_write_worker_num;
 
-  if (FLAGS_read_worker_num + FLAGS_write_worker_num > GetWorkerThreadNum(config)) {
-    DINGO_LOG(ERROR) << "server.read_worker_num[" << FLAGS_read_worker_num
+  // if raft_apply_worker_num is zero, means do not use raft apply worker
+  int raft_apply_worker_num = config->GetInt("server.raft_apply_worker_num");
+  if (raft_apply_worker_num < 0) {
+    DINGO_LOG(WARNING) << "server.raft_apply_worker_num is not set, use dingodb::FLAGS_raft_apply_worker_num";
+  } else {
+    FLAGS_raft_apply_worker_num = raft_apply_worker_num;
+  }
+  if (FLAGS_raft_apply_worker_num < 0) {
+    DINGO_LOG(ERROR) << "server.raft_apply_worker_num is less than 0";
+    return -1;
+  }
+  DINGO_LOG(INFO) << "server.raft_apply_worker_num is set to " << FLAGS_raft_apply_worker_num;
+
+  if (FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num > GetWorkerThreadNum(config)) {
+    DINGO_LOG(ERROR) << "server.read_worker_num[" << FLAGS_read_worker_num << "] + server.write_worker_num["
+                     << FLAGS_write_worker_num << "] + server.raft_apply_worker_num[" << FLAGS_raft_apply_worker_num
                      << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
     return -1;
   }
@@ -958,6 +974,19 @@ int main(int argc, char *argv[]) {
     store_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetStoreServiceWriteWorkerSet(write_worker_set);
 
+    if (FLAGS_raft_apply_worker_num > 0) {
+      dingodb::WorkerSetPtr raft_apply_worker_set =
+          dingodb::WorkerSet::New("RaftApply", FLAGS_raft_apply_worker_num, 0);
+      if (!raft_apply_worker_set->Init()) {
+        DINGO_LOG(ERROR) << "Init RaftApply WorkerSet failed!";
+        return -1;
+      }
+      dingo_server.SetRaftApplyWorkerSet(raft_apply_worker_set);
+      DINGO_LOG(INFO) << "RaftApply worker num: " << FLAGS_raft_apply_worker_num;
+    } else {
+      DINGO_LOG(INFO) << "RaftApply worker num: 0";
+    }
+
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
@@ -1055,6 +1084,19 @@ int main(int argc, char *argv[]) {
     }
     index_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
+
+    if (FLAGS_raft_apply_worker_num > 0) {
+      dingodb::WorkerSetPtr raft_apply_worker_set =
+          dingodb::WorkerSet::New("RaftApply", FLAGS_raft_apply_worker_num, 0);
+      if (!raft_apply_worker_set->Init()) {
+        DINGO_LOG(ERROR) << "Init RaftApply WorkerSet failed!";
+        return -1;
+      }
+      dingo_server.SetRaftApplyWorkerSet(raft_apply_worker_set);
+      DINGO_LOG(INFO) << "RaftApply worker num: " << FLAGS_raft_apply_worker_num;
+    } else {
+      DINGO_LOG(INFO) << "RaftApply worker num: 0";
+    }
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
