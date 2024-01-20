@@ -186,6 +186,10 @@ class Reader : public RawEngine::Reader {
   butil::Status GetRangeKeys(const std::string& cf_name, const std::string& start_key, const std::string& end_key,
                              std::vector<std::string>& keys);
 
+  // Calculate the size of the key and value in the range within the limit count records
+  butil::Status GetRangeKeyValueSize(const std::string& cf_name, const std::string& start_key,
+                                     const std::string& end_key, int64_t limit, int64_t& key_size, int64_t& value_size);
+
  private:
   std::shared_ptr<BdbRawEngine> GetRawEngine();
   Db* GetDb();
