@@ -15,9 +15,7 @@
 #include "common/version.h"
 
 #include "butil/string_printf.h"
-#include "butil/strings/stringprintf.h"
 #include "common/logging.h"
-#include "gflags/gflags_declare.h"
 
 namespace dingodb {
 

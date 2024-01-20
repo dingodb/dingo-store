@@ -19,7 +19,6 @@
 #include <string_view>
 #include <vector>
 
-#include "braft/errno.pb.h"
 #include "butil/endpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -28,7 +27,6 @@
 #include "handler/raft_snapshot_handler.h"
 #include "handler/raft_vote_handler.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
 #include "store/heartbeat.h"

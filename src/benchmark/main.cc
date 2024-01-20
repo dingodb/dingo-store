@@ -13,12 +13,9 @@
 // limitations under the License.
 
 #include <csignal>
-#include <memory>
-#include <ostream>
 #include <string>
 
 #include "benchmark/benchmark.h"
-#include "fmt/core.h"
 #include "gflags/gflags.h"
 
 const std::string kVersion = "0.1.0";

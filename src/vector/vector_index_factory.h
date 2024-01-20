@@ -15,19 +15,11 @@
 #ifndef DINGODB_VECTOR_INDEX_FACTORY_H_
 #define DINGODB_VECTOR_INDEX_FACTORY_H_
 
-#include <atomic>
-#include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
-#include <string>
-#include <vector>
 
-#include "butil/status.h"
-#include "common/logging.h"
 #include "common/threadpool.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {

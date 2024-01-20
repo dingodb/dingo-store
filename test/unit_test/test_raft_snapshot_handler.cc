@@ -19,15 +19,12 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
 
 #include "braft/raft.pb.h"
 #include "braft/snapshot.h"
-#include "butil/status.h"
-#include "common/context.h"
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
@@ -36,8 +33,6 @@
 #include "handler/raft_snapshot_handler.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
-#include "proto/store_internal.pb.h"
-#include "server/server.h"
 
 const std::string kYamlConfigContent =
     "cluster:\n"
@@ -92,13 +87,13 @@ class RaftSnapshotTest : public testing::Test {
 
     std::shared_ptr<dingodb::Config> config = std::make_shared<dingodb::YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << std::endl;
+      std::cout << "Load config failed" << '\n';
       return;
     }
 
     engine = std::make_shared<dingodb::RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << std::endl;
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
 
     std::filesystem::create_directories(kRaftSnapshotPath);
@@ -140,7 +135,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   delete_range.set_end_key("eeaf");
   writer->KvDeleteRange(kDefaultCf, delete_range);
 
-  std::cout << fmt::format("Rut data used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
+  std::cout << fmt::format("Rut data used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
   start_time = dingodb::Helper::TimestampMs();
 
   // Save snapshot
@@ -161,8 +156,9 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   auto region = dingodb::store::Region::New(definition);
 
   auto* snapshot_writer = snapshot_storage->create();
-  auto gen_snapshot_file_func = std::bind(&dingodb::RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot.get(),
-                                          std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+  auto gen_snapshot_file_func =
+      std::bind(&dingodb::RaftSnapshot::GenSnapshotFileByCheckpoint, raft_snapshot.get(),  // NOLINT
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
   EXPECT_EQ(true, raft_snapshot->SaveSnapshot(snapshot_writer, region, gen_snapshot_file_func, 0, 0, 0));
   braft::SnapshotMeta meta;
   meta.set_last_included_index(dingodb::Helper::TimestampMs());
@@ -170,7 +166,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   snapshot_writer->save_meta(meta);
   snapshot_storage->close(snapshot_writer);
 
-  std::cout << fmt::format("Save snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
+  std::cout << fmt::format("Save snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
   start_time = dingodb::Helper::TimestampMs();
 
   // Count key before load snapshot
@@ -178,7 +174,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   int64_t expect_count = 0;
   reader->KvCount(kDefaultCf, range->start_key(), range->end_key(), expect_count);
 
-  std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
+  std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
   start_time = dingodb::Helper::TimestampMs();
 
   // Load snapshot
@@ -186,15 +182,15 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   EXPECT_EQ(true, raft_snapshot->LoadSnapshot(snapshot_reader, region));
   snapshot_storage->close(snapshot_reader);
 
-  std::cout << fmt::format("Load snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
+  std::cout << fmt::format("Load snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
   start_time = dingodb::Helper::TimestampMs();
 
   // Count key after load snapshot
   int64_t actual_count = 0;
   reader->KvCount(kDefaultCf, range->start_key(), range->end_key(), actual_count);
-  std::cout << fmt::format("Count expect {} actual {}", expect_count, actual_count) << std::endl;
+  std::cout << fmt::format("Count expect {} actual {}", expect_count, actual_count) << '\n';
   EXPECT_EQ(expect_count, actual_count);
 
-  std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << std::endl;
+  std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
   start_time = dingodb::Helper::TimestampMs();
 }

@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/synchronization.h"
 #include "config/config.h"
 #include "db_cxx.h"
 #include "engine/iterator.h"

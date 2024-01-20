@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <memory>
 
-#include "butil/status.h"
 #include "common/context.h"
 #include "engine/raw_engine.h"
 #include "handler/handler.h"

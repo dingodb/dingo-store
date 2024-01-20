@@ -30,6 +30,7 @@
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "rel_expr_helper.h"
+#include "scan/scan_filter.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
 

@@ -24,7 +24,6 @@
 
 #include "butil/status.h"
 #include "coprocessor/raw_coprocessor.h"
-#include "coprocessor/rel_expr_helper.h"
 #include "engine/iterator.h"
 #include "libexpr/src/rel/rel_runner.h"
 #include "proto/common.pb.h"

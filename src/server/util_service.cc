@@ -14,27 +14,16 @@
 
 #include "server/util_service.h"
 
-#include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
-#include "common/constant.h"
-#include "common/context.h"
-#include "common/failpoint.h"
-#include "common/helper.h"
-#include "common/logging.h"
-#include "common/synchronization.h"
-#include "fmt/core.h"
 #include "gflags/gflags.h"
-#include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
-#include "server/server.h"
 #include "server/service_helper.h"
 
 namespace dingodb {

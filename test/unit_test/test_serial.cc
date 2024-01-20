@@ -21,9 +21,7 @@
 
 #include <algorithm>
 #include <bitset>
-#include <functional>
 #include <memory>
-#include <new>
 #include <optional>
 #include <string>
 
@@ -874,7 +872,7 @@ TEST_F(DingoSerialTest, doubleSchemaPosFakeLeBe) {
   b1.SetAllowNull(true);
   b1.SetIsKey(true);
   if (!this->le) {
-    cout << "LE" << endl;
+    cout << "LE" << '\n';
     b1.SetIsLe(true);
   } else {
     b1.SetIsLe(false);
@@ -1567,7 +1565,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
           i++;
-        } 
+        }
         break;
       }
       case BaseSchema::kInteger: {
@@ -1581,7 +1579,7 @@ TEST_F(DingoSerialTest, recordTest) {
             EXPECT_FALSE(r2.has_value());
           }
           i++;
-        } 
+        }
         break;
       }
       case BaseSchema::kLong: {

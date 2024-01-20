@@ -18,19 +18,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "config/yaml_config.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
@@ -115,7 +111,7 @@ class ScanWithCoprocessorV2 : public testing::Test {
 
  protected:
   static void SetUpTestSuite() {
-    //DingoLogger::InitLogger("./", "ScanWithCoprocessorV2", dingodb::pb::node::LogLevel::DEBUG);
+    // DingoLogger::InitLogger("./", "ScanWithCoprocessorV2", dingodb::pb::node::LogLevel::DEBUG);
     DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
 
     // Set whether log messages go to stderr in addition to logfiles.

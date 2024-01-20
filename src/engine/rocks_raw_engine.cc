@@ -16,17 +16,12 @@
 
 #include <elf.h>
 
-#include <algorithm>
-#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <filesystem>
-#include <iomanip>
 #include <map>
 #include <memory>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <tuple>

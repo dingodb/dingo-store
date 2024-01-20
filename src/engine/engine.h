@@ -15,16 +15,13 @@
 #ifndef DINGODB_ENGINE_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ENGINE_H_
 
-#include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/context.h"
-#include "common/logging.h"
 #include "config/config.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
@@ -33,9 +30,7 @@
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "proto/raft.pb.h"
 #include "proto/store.pb.h"
-#include "serial/buf.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {

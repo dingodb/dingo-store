@@ -23,11 +23,9 @@
 #include <vector>
 
 #include "butil/status.h"
-#include "common/context.h"
 #include "config/config.h"
 #include "engine/iterator.h"
 #include "engine/snapshot.h"
-#include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 

@@ -14,10 +14,8 @@
 
 #include "sdk/transaction/txn_buffer.h"
 
-#include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
-#include "proto/store.pb.h"
 #include "sdk/client.h"
 #include "sdk/status.h"
 
@@ -132,7 +130,7 @@ void TxnBuffer::Emplace(const std::string& key, TxnMutation&& mutation) {
     primary_key_ = key;
   }
 
-  CHECK(mutation_map_.insert({key, mutation}).second);
+  CHECK(mutation_map_.insert({key, std::move(mutation)}).second);
 }
 
 }  // namespace sdk

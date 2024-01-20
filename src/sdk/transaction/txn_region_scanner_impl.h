@@ -17,7 +17,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <utility>
 
 #include "sdk/client.h"
 #include "sdk/region_scanner.h"

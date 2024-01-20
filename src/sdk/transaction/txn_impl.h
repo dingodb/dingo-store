@@ -25,7 +25,6 @@
 #include "sdk/region.h"
 #include "sdk/store/store_rpc.h"
 #include "sdk/transaction/txn_buffer.h"
-#include "sdk/transaction/txn_common.h"
 
 namespace dingodb {
 namespace sdk {

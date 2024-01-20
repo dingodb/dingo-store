@@ -21,7 +21,6 @@
 #include "bvar/multi_dimension.h"
 #include "bvar/reducer.h"
 #include "bvar/status.h"
-#include "bvar/variable.h"
 #include "common/helper.h"
 
 namespace dingodb {

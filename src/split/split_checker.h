@@ -20,10 +20,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "bthread/execution_queue.h"
 #include "common/runnable.h"
 #include "engine/raw_engine.h"
 #include "meta/store_meta_manager.h"

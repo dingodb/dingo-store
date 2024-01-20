@@ -22,6 +22,7 @@
 
 #include "butil/status.h"
 #include "engine/iterator.h"
+#include "engine/txn_engine_helper.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {

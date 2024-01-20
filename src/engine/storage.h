@@ -15,7 +15,6 @@
 #ifndef DINGODB_ENGINE_STORAGE_H_
 #define DINGODB_ENGINE_STORAGE_H_
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -26,7 +25,6 @@
 #include "engine/engine.h"
 #include "engine/raft_store_engine.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {

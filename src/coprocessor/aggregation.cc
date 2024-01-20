@@ -15,11 +15,9 @@
 #include "coprocessor/aggregation.h"
 
 #include <cstdint>
-#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
-#include <type_traits>
 
 #include "common/logging.h"
 #include "fmt/core.h"

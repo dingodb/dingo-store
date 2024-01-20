@@ -18,26 +18,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "bthread/bthread.h"
 #include "butil/status.h"
-#include "common/context.h"
-#include "config/config.h"
-#include "config/config_manager.h"
+#include "common/helper.h"
 #include "config/yaml_config.h"
-#include "engine/engine.h"
-#include "engine/rocks_engine.h"
 #include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
-#include "server/server.h"
 
 static const std::string &kDefaultCf = "default";  // NOLINT
 

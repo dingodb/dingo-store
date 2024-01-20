@@ -15,7 +15,6 @@
 #include "server/store_service.h"
 
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>

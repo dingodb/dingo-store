@@ -15,9 +15,6 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
-#include <string>
-
-#include "proto/store.pb.h"
 
 class GoogleSanitizeTest : public testing::Test {
  protected:
@@ -27,7 +24,7 @@ class GoogleSanitizeTest : public testing::Test {
 
 // (heap) use after free
 TEST(GoogleSanitizeTest, HeapUseAfterFree) {
-#if 0
+#if 0  // NOLINT
   int* array = new int[100];
   delete[] array;
   // cppcheck-suppress deallocuse
@@ -37,7 +34,7 @@ TEST(GoogleSanitizeTest, HeapUseAfterFree) {
 
 // heap buffer overflow
 TEST(GoogleSanitizeTest, HeapBufferOverflow) {
-#if 0
+#if 0  // NOLINT
   int* array = new int[100];
   int res = array[100];
   delete[] array;
@@ -48,14 +45,14 @@ TEST(GoogleSanitizeTest, HeapBufferOverflow) {
 
 // stack buffer overflow
 TEST(GoogleSanitizeTest, StackBufferOverflow) {
-#if 0
+#if 0  // NOLINT
   int array[100];
   std::cout << "array[100] : " << array[100] << std::endl;
 #endif
 }
 
 // global buffer overflow
-#if 0
+#if 0  // NOLINT
 int global_buffer_overflow_array[100];
 
 TEST(GoogleSanitizeTest, GlobalBufferOverflow) {
@@ -65,7 +62,7 @@ TEST(GoogleSanitizeTest, GlobalBufferOverflow) {
 
 // bad
 // use after return
-#if 0
+#if 0  // NOLINT
 
 int *ptr = nullptr;
 
@@ -83,7 +80,7 @@ TEST(GoogleSanitizeTest, UseAfterReturn) {
 #endif
 
 // Use After Scope
-#if 0
+#if 0  // NOLINT
 
 TEST(GoogleSanitizeTest, UseAfterScope) {
   volatile int *p = 0;
@@ -101,10 +98,9 @@ TEST(GoogleSanitizeTest, UseAfterScope) {
 }
 #endif
 
-
 // bad
 // AddressSanitizerInitializationOrderFiasco
-#if 0
+#if 0  // NOLINT
 
 int extern_global = 0;
 
@@ -126,8 +122,8 @@ TEST(GoogleSanitizeTest, AddressSanitizerInitializationOrderFiasco) {
 
 // memory leaks
 TEST(GoogleSanitizeTest, MemoryLeaks) {
-#if 10
+#if 10  // NOLINT
   int *array = new int[100];
-  std::cout << array[1] << std::endl;  // BOOM
+  std::cout << array[1] << '\n';  // BOOM
 #endif
 }

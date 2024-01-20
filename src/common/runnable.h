@@ -18,15 +18,12 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
-#include <queue>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "bthread/execution_queue.h"
-#include "common/failpoint.h"
-#include "common/synchronization.h"
 
 namespace dingodb {
 

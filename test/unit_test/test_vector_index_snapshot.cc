@@ -16,10 +16,8 @@
 
 #include <cstdint>
 #include <cstdlib>
-#include <iostream>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "butil/endpoint.h"

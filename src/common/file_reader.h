@@ -25,9 +25,9 @@ namespace dingodb {
 class FileReader {
  protected:
   FileReader() = default;
-  virtual ~FileReader() = default;
 
  public:
+  virtual ~FileReader() = default;
   virtual int ReadFile(butil::IOBuf* out, const std::string& filename, off_t offset, size_t max_count,
                        size_t* read_count, bool* is_eof) const = 0;
   // Get the path of this reader
@@ -38,7 +38,7 @@ class FileReader {
 class LocalDirReader : public FileReader {
  public:
   LocalDirReader(braft::FileSystemAdaptor* fs, const std::string& path)
-      : path_(path), fs_(fs), current_file_(nullptr), is_reading_(false), eof_reached_(true) {}
+      : path_(path), fs_(fs) /*, current_file_(nullptr), is_reading_(false), eof_reached_(true)*/ {}
   ~LocalDirReader() override;
 
   // Open a snapshot for read
@@ -64,10 +64,10 @@ class LocalDirReader : public FileReader {
   mutable braft::raft_mutex_t mutex_;
   std::string path_;
   scoped_refptr<braft::FileSystemAdaptor> fs_;
-  mutable braft::FileAdaptor* current_file_;
+  mutable braft::FileAdaptor* current_file_{nullptr};
   mutable std::string current_filename_;
-  mutable bool is_reading_;
-  mutable bool eof_reached_;
+  mutable bool is_reading_{false};
+  mutable bool eof_reached_{true};
 };
 
 }  // namespace dingodb

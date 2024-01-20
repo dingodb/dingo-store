@@ -16,29 +16,17 @@
 #define DINGODB_VECTOR_INDEX_H_
 
 #include <atomic>
-#include <cassert>
-#include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <map>
 #include <memory>
-#include <optional>
 #include <string>
 #include <unordered_set>
-#include <utility>
 #include <vector>
 
 #include "bthread/types.h"
 #include "butil/status.h"
-#include "common/logging.h"
 #include "common/runnable.h"
-#include "common/synchronization.h"
-#include "faiss/Index.h"
 #include "faiss/MetricType.h"
-#include "faiss/impl/IDSelector.h"
-#include "hnswlib/hnswlib.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_snapshot.h"
 

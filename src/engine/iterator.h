@@ -17,7 +17,6 @@
 
 #include <memory>
 #include <string_view>
-#include <vector>
 
 #include "butil/status.h"
 #include "common/logging.h"

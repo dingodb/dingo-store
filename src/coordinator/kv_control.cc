@@ -16,9 +16,7 @@
 
 #include <sys/types.h>
 
-#include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <memory>
 #include <string>
 #include <utility>
@@ -27,16 +25,13 @@
 #include "braft/configuration.h"
 #include "bthread/mutex.h"
 #include "butil/containers/flat_map.h"
-#include "butil/scoped_lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/safe_map.h"
-#include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_meta_storage.h"
 #include "coordinator/coordinator_prefix.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
-#include "proto/meta.pb.h"
 #include "server/server.h"
 
 namespace dingodb {

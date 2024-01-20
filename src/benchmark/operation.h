@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "sdk/client.h"
-#include "sdk/coordinator_proxy.h"
 #include "sdk/status.h"
 
 namespace dingodb {

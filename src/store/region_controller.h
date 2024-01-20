@@ -15,7 +15,6 @@
 #ifndef DINGODB_STORE_REGION_CONTROL_H_
 #define DINGODB_STORE_REGION_CONTROL_H_
 
-#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>

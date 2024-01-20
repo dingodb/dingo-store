@@ -27,7 +27,6 @@
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/error.pb.h"
-#include "proto/store.pb.h"
 #include "server/server.h"
 
 namespace dingodb {

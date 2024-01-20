@@ -15,24 +15,16 @@
 #ifndef DINGODB_VECTOR_INDEX_HNSW_H_  // NOLINT
 #define DINGODB_VECTOR_INDEX_HNSW_H_
 
-#include <atomic>
-#include <cassert>
-#include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
-#include "bthread/types.h"
 #include "butil/status.h"
-#include "common/logging.h"
 #include "common/synchronization.h"
 #include "common/threadpool.h"
 #include "hnswlib/hnswlib.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {

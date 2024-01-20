@@ -14,21 +14,13 @@
 
 #include "vector/vector_index_bruteforce.h"
 
-#include <atomic>
-#include <cassert>
-#include <cstddef>
 #include <cstdint>
-#include <future>
-#include <map>
+#include <fstream>
 #include <memory>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
 
-#include "bthread/mutex.h"
 #include "butil/status.h"
-#include "common/synchronization.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"

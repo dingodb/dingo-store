@@ -17,10 +17,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "butil/compiler_specific.h"
@@ -28,6 +26,7 @@
 #include "common/constant.h"
 #include "common/failpoint.h"
 #include "common/helper.h"
+#include "config/config_manager.h"
 #include "fmt/core.h"
 #include "google/protobuf/message.h"
 #include "proto/common.pb.h"

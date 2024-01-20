@@ -15,14 +15,13 @@
 #ifndef DINGODB_COMMON_SYNCHRONIZATION_H_
 #define DINGODB_COMMON_SYNCHRONIZATION_H_
 
+#include <functional>
 #include <memory>
 #include <queue>
 
 #include "bthread/bthread.h"
-#include "bthread/butex.h"
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
-#include "common/logging.h"
 
 namespace dingodb {
 

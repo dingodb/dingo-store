@@ -15,10 +15,7 @@
 #ifndef DINGODB_SDK_TRANSACTION_COMMON_H_
 #define DINGODB_SDK_TRANSACTION_COMMON_H_
 
-#include <cstdint>
-
 #include "glog/logging.h"
-#include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 #include "sdk/client.h"
 

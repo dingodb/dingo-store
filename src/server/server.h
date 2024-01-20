@@ -15,16 +15,12 @@
 #ifndef DINGODB_STORE_SERVER_H_
 #define DINGODB_STORE_SERVER_H_
 
-#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <string>
 
-#include "brpc/channel.h"
-#include "common/meta_control.h"
 #include "common/safe_map.h"
 #include "common/threadpool.h"
-#include "config/config_manager.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/coordinator_interaction.h"

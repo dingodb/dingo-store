@@ -15,28 +15,19 @@
 #ifndef DINGODB_VECTOR_INDEX_FLAT_H_  // NOLINT
 #define DINGODB_VECTOR_INDEX_FLAT_H_
 
-#include <array>
-#include <atomic>
-#include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "bthread/mutex.h"
 #include "butil/status.h"
-#include "common/logging.h"
 #include "common/synchronization.h"
 #include "faiss/Index.h"
-#include "faiss/IndexFlat.h"
 #include "faiss/IndexIDMap.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
 #include "faiss/utils/distances.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {

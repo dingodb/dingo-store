@@ -21,12 +21,10 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <shared_mutex>
 #include <string>
 #include <vector>
 
 #include "bthread/types.h"
-#include "butil/containers/flat_map.h"
 #include "butil/status.h"
 #include "common/meta_control.h"
 #include "common/safe_map.h"

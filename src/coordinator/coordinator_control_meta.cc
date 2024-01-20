@@ -17,7 +17,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <memory>
 #include <set>
 #include <string>
 #include <utility>

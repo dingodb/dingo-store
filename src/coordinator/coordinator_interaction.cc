@@ -14,13 +14,12 @@
 
 #include "coordinator/coordinator_interaction.h"
 
-#include <cstddef>
 #include <memory>
 
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "gflags/gflags.h"
+#include "proto/version.pb.h"
 
 namespace dingodb {
 
@@ -86,6 +85,8 @@ const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceD
     case pb::common::CoordinatorServiceType::ServiceTypeVersion: {
       return pb::version::VersionService::descriptor();
     }
+    default:
+      return nullptr;
   }
   return nullptr;
 }

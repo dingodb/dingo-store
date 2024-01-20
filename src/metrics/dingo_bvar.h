@@ -24,6 +24,13 @@
 #include "bvar/mvariable.h"
 #include "bvar/variable.h"
 
+namespace bvar {
+DECLARE_int32(bvar_latency_p1);
+DECLARE_int32(bvar_latency_p2);
+DECLARE_int32(bvar_latency_p3);
+DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
+}  // namespace bvar
+
 namespace dingodb {
 
 constexpr int64_t MAX_MULTI_DIMENSION_STATS_COUNT = 100000;  // NOLINT
@@ -107,10 +114,6 @@ class DingoMultiDimension : public bvar::MVariable {
 
   MetricMapDBD _metric_map;  // NOLINT
 };
-
-DECLARE_int32(bvar_latency_p1);
-DECLARE_int32(bvar_latency_p2);
-DECLARE_int32(bvar_latency_p3);
 
 static const std::string ALLOW_UNUSED METRIC_TYPE_COUNTER = "counter";      // NOLINT
 static const std::string ALLOW_UNUSED METRIC_TYPE_SUMMARY = "summary";      // NOLINT
@@ -346,7 +349,7 @@ inline size_t DingoMultiDimension<bvar::LatencyRecorder>::dump(bvar::Dumper* dum
     }
     // latency_percentiles
     // p1/p2/p3
-    int latency_percentiles[3]{FLAGS_bvar_latency_p1, FLAGS_bvar_latency_p2, FLAGS_bvar_latency_p3};
+    int latency_percentiles[3]{bvar::FLAGS_bvar_latency_p1, bvar::FLAGS_bvar_latency_p2, bvar::FLAGS_bvar_latency_p3};
     for (auto lp : latency_percentiles) {
       std::ostringstream oss_lp_key;
       make_dump_key(oss_lp_key, label_name, "_latency", lp);

@@ -14,16 +14,10 @@
 
 #include "sdk/rawkv/raw_kv_get_task.h"
 
-#include <functional>
-
-#include "fmt/core.h"
-#include "proto/error.pb.h"
 #include "sdk/common/common.h"
-#include "sdk/common/param_config.h"
 #include "sdk/rawkv/raw_kv_task.h"
 #include "sdk/status.h"
 #include "sdk/store/store_rpc.h"
-#include "sdk/utils/async_util.h"
 
 namespace dingodb {
 namespace sdk {

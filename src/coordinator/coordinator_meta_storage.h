@@ -31,9 +31,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
-#include "raft/raft_node.h"
 #include "serial/buf.h"
-#include "serial/schema/dingo_schema.h"
 #include "serial/schema/long_schema.h"
 
 namespace dingodb {

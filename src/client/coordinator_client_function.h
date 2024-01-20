@@ -15,10 +15,7 @@
 #ifndef DINGODB_COORDINATOR_CLIENT_FUNCTION_H_
 #define DINGODB_COORDINATOR_CLIENT_FUNCTION_H_
 
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <memory>
 #include <string>
 

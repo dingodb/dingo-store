@@ -15,21 +15,17 @@
 #ifndef DINGODB_RAFT_STATE_MACHINE_H_
 #define DINGODB_RAFT_STATE_MACHINE_H_
 
-#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include "braft/raft.h"
-#include "brpc/controller.h"
-#include "common/context.h"
 #include "common/runnable.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
 #include "proto/raft.pb.h"
-#include "proto/store_internal.pb.h"
 #include "raft/state_machine.h"
 
 namespace dingodb {

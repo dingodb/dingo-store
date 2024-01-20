@@ -16,8 +16,6 @@
 #define DINGODB_SDK_REGION_H_
 
 #include <cstdint>
-#include <memory>
-#include <mutex>
 #include <shared_mutex>
 
 #include "butil/endpoint.h"

@@ -21,10 +21,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "common/helper.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
-#include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
 #include "fmt/core.h"
 #include "proto/coordinator_internal.pb.h"

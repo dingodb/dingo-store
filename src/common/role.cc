@@ -15,8 +15,9 @@
 #include "common/role.h"
 
 #include <cctype>
-#include <iostream>
 #include <string>
+
+#include "gflags/gflags.h"
 
 DEFINE_string(role, "", "server role [coordinator|store|index]");
 

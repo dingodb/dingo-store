@@ -16,14 +16,7 @@
 #define DINGODB_META_CONTROL_H_
 
 #include <cstdint>
-#include <map>
-#include <string>
-#include <vector>
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
-#include "bthread/types.h"
-#include "butil/scoped_lock.h"
 #include "engine/snapshot.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"

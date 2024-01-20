@@ -22,8 +22,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "butil/status.h"
-#include "fmt/core.h"
 #include "proto/coordinator.pb.h"
 #include "sdk/coordinator_proxy.h"
 #include "sdk/region.h"

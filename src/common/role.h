@@ -15,8 +15,6 @@
 #ifndef DINGODB_COMMON_ROLE_H_
 #define DINGODB_COMMON_ROLE_H_
 
-#include "common/constant.h"
-#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {

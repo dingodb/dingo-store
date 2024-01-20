@@ -15,9 +15,6 @@
 #ifndef DINGODB_PUSH_SERVICE_H_
 #define DINGODB_PUSH_SERVICE_H_
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
-#include "engine/storage.h"
 #include "proto/push.pb.h"
 
 namespace dingodb {

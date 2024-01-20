@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "sdk/status.h"
@@ -197,7 +196,7 @@ class Transaction : public std::enable_shared_from_this<Transaction> {
   explicit Transaction(TxnImpl* impl);
 };
 
-enum EngineType : uint8_t { kLSM, kBTree, kXDPROCKS};
+enum EngineType : uint8_t { kLSM, kBTree, kXDPROCKS };
 
 class RegionCreator {
  public:
@@ -226,7 +225,8 @@ class RegionCreator {
   /// when wait is true, the out_region_id will be set and status maybe ok or not,
   /// so caller should check out_region_id is set or not
   Status Create(int64_t& out_region_id);
-private:
+
+ private:
   friend class Client;
 
   // own

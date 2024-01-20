@@ -15,7 +15,6 @@
 #ifndef DINGODB_SDK_STORE_RPC_CONTROLLER_H_
 #define DINGODB_SDK_STORE_RPC_CONTROLLER_H_
 
-#include <future>
 #include <memory>
 
 #include "butil/endpoint.h"

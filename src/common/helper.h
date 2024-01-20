@@ -16,7 +16,6 @@
 #define DINGODB_COMMON_HELPER_H_
 
 #include <cstdint>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>

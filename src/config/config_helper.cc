@@ -14,11 +14,13 @@
 
 #include "config/config_helper.h"
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 
 #include "common/constant.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 

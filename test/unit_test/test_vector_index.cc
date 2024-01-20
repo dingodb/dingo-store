@@ -14,31 +14,17 @@
 
 #include <gtest/gtest.h>
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
-#include <iterator>
-#include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
-#include "faiss/MetricType.h"
-#include "fmt/core.h"
-#include "gtest/gtest.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_hnsw.h"
-#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 

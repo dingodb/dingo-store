@@ -16,7 +16,6 @@
 #define DINGODB_STORE_TOOL_DUMP_H_
 
 #include "client/store_client_function.h"
-#include "serial/record_decoder.h"
 
 namespace client {
 

@@ -15,17 +15,6 @@
 #ifndef DINGODB_STORE_STORE_CONTROL_H_
 #define DINGODB_STORE_STORE_CONTROL_H_
 
-#include <atomic>
-#include <cstdint>
-#include <memory>
-
-#include "butil/macros.h"
-#include "common/context.h"
-#include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
-#include "proto/error.pb.h"
-#include "store/region_controller.h"
-
 namespace dingodb {
 
 class StoreController {

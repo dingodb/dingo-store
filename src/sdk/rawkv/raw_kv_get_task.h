@@ -21,7 +21,6 @@
 #include "sdk/rawkv/raw_kv_task.h"
 #include "sdk/store/store_rpc.h"
 #include "sdk/store/store_rpc_controller.h"
-#include "sdk/utils/callback.h"
 
 namespace dingodb {
 namespace sdk {

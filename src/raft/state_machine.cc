@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "common/logging.h"
 #include "fmt/core.h"
 
 DEFINE_int64(save_raft_snapshot_log_gap_num, 64, "save raft snapshot log gap");

@@ -14,7 +14,6 @@
 
 #include "server/meta_service.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>

@@ -1095,6 +1095,9 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::S
       case pb::common::Schema_Type_STRINGLIST:
         ss << "Schema_Type_STRINGLIST";
         break;
+      case pb::common::Schema_Type_Schema_Type_INT_MIN_SENTINEL_DO_NOT_USE_:
+      case pb::common::Schema_Type_Schema_Type_INT_MAX_SENTINEL_DO_NOT_USE_:
+        break;
     }
 
     ss << "\tis_key : " << (schema.is_key() ? "true" : "false");
@@ -1219,6 +1222,9 @@ void Utils::DebugGroupByOperators(
         break;
       case pb::store::SUM0:
         ss << "SUM0";
+        break;
+      case pb::store::AggregationType_INT_MIN_SENTINEL_DO_NOT_USE_:
+      case pb::store::AggregationType_INT_MAX_SENTINEL_DO_NOT_USE_:
         break;
     }
 

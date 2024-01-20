@@ -84,7 +84,7 @@ class RegionRouter {
   dingodb::pb::store::Context GenConext(int64_t region_id);
 
  private:
-  bool UpdateRegion(RegionEntryPtr region_entry);
+  static bool UpdateRegion(RegionEntryPtr region_entry);
 
   // key: the start_key of region range
   // value: RegionEntry

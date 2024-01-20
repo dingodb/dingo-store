@@ -21,9 +21,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <thread>
@@ -33,9 +31,7 @@
 #include "common/helper.h"
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "vector/vector_index_factory.h"
 #include "vector/vector_index_raw_ivf_pq.h"
 
 namespace dingodb {
@@ -124,7 +120,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
   const std::string &file_path = "./test_vector_index_raw_ivf_pq_boundary.txt";
   outfile.open(file_path);  // open file
   if (!outfile) {
-    std::cout << "open file failed " << file_path << std::endl;
+    std::cout << "open file failed " << file_path << '\n';
     exit(1);
   }
 
@@ -460,7 +456,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
     }
   }
 
-  outfile << "normal exit!!!" << std::endl;
+  outfile << "normal exit!!!" << '\n';
   outfile.close();
 }
 

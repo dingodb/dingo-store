@@ -15,8 +15,6 @@
 #ifndef DINGODB_INDEX_SERVICE_H_
 #define DINGODB_INDEX_SERVICE_H_
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
 #include "engine/storage.h"
 #include "proto/index.pb.h"
 

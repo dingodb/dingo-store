@@ -14,22 +14,18 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cstdint>
-#include <filesystem>
 #include <iostream>
-#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "braft/configuration.h"
+#include "brpc/server.h"
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 #include "butil/strings/stringprintf.h"
-#include "common/helper.h"
 #include "config/yaml_config.h"
-#include "event/store_state_machine_event.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "raft/raft_node.h"

@@ -15,16 +15,12 @@
 #ifndef DINGODB_VECTOR_INDEX_UTILS_H_
 #define DINGODB_VECTOR_INDEX_UTILS_H_
 
-#include <atomic>
-#include <cassert>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
 #include "butil/status.h"
-#include "common/logging.h"
 #include "faiss/Index.h"
 #include "faiss/impl/AuxIndexStructures.h"
 #include "proto/index.pb.h"

@@ -13,7 +13,6 @@
 #ifndef DINGODB_SDK_STATUS_H_
 #define DINGODB_SDK_STATUS_H_
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -35,7 +34,7 @@
   }                                                                                                             \
   bool Is##NAME() const { return code_ == (CODE); }
 
-static const int32_t kNone =0;
+static const int32_t kNone = 0;
 namespace dingodb {
 namespace sdk {
 
@@ -51,7 +50,7 @@ class Status {
   Status(Status&& rhs) noexcept;
   Status& operator=(Status&& rhs) noexcept;
 
-  bool ok() const { return code_ == kOk; }
+  bool ok() const { return code_ == kOk; }  // NOLINT
   static Status OK() { return Status(); }
 
   DECLARE_ERROR_STATUS(OK, kOk);

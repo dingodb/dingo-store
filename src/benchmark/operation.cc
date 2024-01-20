@@ -20,7 +20,6 @@
 #include <random>
 #include <string>
 
-#include "benchmark/color.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 
@@ -210,7 +209,7 @@ bool ReadOperation::Arrange() {
     }
   }
 
-  std::cout << "\r" << fmt::format("Region({}) put ............ done", prefix) << std::endl;
+  std::cout << "\r" << fmt::format("Region({}) put ............ done", prefix) << '\n';
 
   return true;
 }

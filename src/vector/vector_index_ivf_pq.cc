@@ -15,22 +15,17 @@
 #include "vector/vector_index_ivf_pq.h"
 
 #include <algorithm>
-#include <atomic>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "bthread/types.h"
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
-#include "faiss/Index.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/ProductQuantizer.h"
 #include "faiss/index_io.h"
@@ -39,7 +34,6 @@
 #include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 

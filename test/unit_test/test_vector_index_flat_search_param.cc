@@ -20,9 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
@@ -33,7 +31,6 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_flat.h"
 
 namespace dingodb {
 
@@ -225,19 +222,19 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
     std::vector<int64_t> result_vector_ids;
     {
       size_t i = 0;
-      std::cout << "[" << i << "]" << std::endl;
+      std::cout << "[" << i << "]" << '\n';
       for (const auto &result : results) {
         {
           size_t j = 0;
           for (const auto &vector_with_distances : result.vector_with_distances()) {
-            std::cout << "[" << j << "]" << std::endl;
+            std::cout << "[" << j << "]" << '\n';
             auto id = vector_with_distances.vector_with_id().id();
             auto distance = vector_with_distances.distance();
             auto metric_type = vector_with_distances.metric_type();
 
             result_vector_ids.push_back(id);
 
-            std::cout << vector_with_distances.DebugString() << std::endl;
+            std::cout << vector_with_distances.DebugString() << '\n';
             j++;
           }
         }
@@ -249,21 +246,21 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
     for (auto vector_id = vector_id_start; vector_id < vector_id_end; vector_id++) {
       std::cout << vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     std::sort(vector_ids_for_search.begin(), vector_ids_for_search.end());
     std::cout << "vector_ids_for_search : [";
     for (const auto vector_id : vector_ids_for_search) {
       std::cout << vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     std::sort(result_vector_ids.begin(), result_vector_ids.end());
     std::cout << "result_vector_ids     : [";
     for (const auto result_vector_id : result_vector_ids) {
       std::cout << result_vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     bool is_return_true = !result_vector_ids.empty();
     std::cout << "====================> : ";
@@ -276,14 +273,14 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
         std::cout << *iter << " ";
       }
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 
     if (is_return_true) {
-      std::cout << name << " result_vector_ids all in vector_ids" << std::endl;
+      std::cout << name << " result_vector_ids all in vector_ids" << '\n';
     } else {
-      std::cout << name << " result_vector_ids not all in vector_ids" << std::endl;
+      std::cout << name << " result_vector_ids not all in vector_ids" << '\n';
     }
-    std::cout << "..........................................................................." << std::endl;
+    std::cout << "..........................................................................." << '\n';
   };
 
   // l2 ok
@@ -341,14 +338,14 @@ TEST_F(VectorIndexFlatSearchParamTest, SearchOrder) {
 
     {
       size_t i = 0;
-      std::cout << "[" << i << "]" << std::endl;
+      std::cout << "[" << i << "]" << '\n';
       for (const auto &result : results) {
         {
           size_t j = 0;
           for (const auto &vector_with_distances : result.vector_with_distances()) {
-            std::cout << "[" << j << "]" << std::endl;
+            std::cout << "[" << j << "]" << '\n';
 
-            std::cout << vector_with_distances.DebugString() << std::endl;
+            std::cout << vector_with_distances.DebugString() << '\n';
             j++;
           }
         }
@@ -356,7 +353,7 @@ TEST_F(VectorIndexFlatSearchParamTest, SearchOrder) {
       }
     }
 
-    std::cout << "..........................................................................." << std::endl;
+    std::cout << "..........................................................................." << '\n';
   };
 
   // l2 ok

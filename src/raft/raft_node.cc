@@ -14,8 +14,6 @@
 
 #include "raft/raft_node.h"
 
-#include <cstddef>
-#include <filesystem>
 #include <memory>
 #include <string>
 #include <utility>
@@ -26,16 +24,12 @@
 #include "common/failpoint.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "common/synchronization.h"
-#include "config/config_manager.h"
-#include "engine/raw_engine.h"
 #include "fmt/core.h"
 #include "log/segment_log_storage.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
 #include "raft/dingo_filesystem_adaptor.h"
 #include "raft/store_state_machine.h"
-#include "server/server.h"
 
 DEFINE_int32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
 

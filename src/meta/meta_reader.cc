@@ -14,8 +14,6 @@
 
 #include "meta/meta_reader.h"
 
-#include <cstddef>
-
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"

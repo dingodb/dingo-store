@@ -15,7 +15,6 @@
 #include "engine/storage.h"
 
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <string>
 #include <vector>
@@ -25,12 +24,10 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "engine/iterator.h"
 #include "engine/raft_store_engine.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "fmt/core.h"
-#include "gflags/gflags.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -39,8 +36,6 @@
 #include "proto/store.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
-#include "serial/buf.h"
-#include "server/server.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {

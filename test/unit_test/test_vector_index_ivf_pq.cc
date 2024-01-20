@@ -20,14 +20,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/logging.h"
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"

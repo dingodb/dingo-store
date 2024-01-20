@@ -20,11 +20,11 @@
 #include <memory>
 #include <vector>
 
-#include "braft/remote_file_copier.h"
+#include "brpc/channel.h"
+#include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "butil/iobuf.h"
 #include "butil/status.h"
-#include "proto/common.pb.h"
 #include "proto/file_service.pb.h"
 #include "proto/node.pb.h"
 

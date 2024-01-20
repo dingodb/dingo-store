@@ -14,7 +14,6 @@
 
 #include "common/uuid.h"
 
-#include <climits>
 #include <cstdint>
 #include <iostream>
 #include <random>

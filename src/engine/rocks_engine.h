@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "config/config.h"
 #include "engine/engine.h"

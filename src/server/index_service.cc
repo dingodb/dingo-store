@@ -24,7 +24,6 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
-#include "common/logging.h"
 #include "common/synchronization.h"
 #include "common/version.h"
 #include "engine/storage.h"

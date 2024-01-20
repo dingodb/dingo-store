@@ -20,11 +20,11 @@
 
 #include "brpc/channel.h"
 #include "brpc/controller.h"
+#include "bthread/mutex.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
-#include "gflags/gflags_declare.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {

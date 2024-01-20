@@ -14,12 +14,10 @@
 
 #include "server/node_service.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
@@ -29,8 +27,8 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "fmt/core.h"
+#include "metrics/dingo_bvar.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "server/server.h"
