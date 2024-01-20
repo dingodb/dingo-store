@@ -15,10 +15,10 @@
 #include "crontab/crontab.h"
 
 #include "bthread/bthread.h"
+#include "bthread/unstable.h"
 #include "common/logging.h"
 #include "common/role.h"
 #include "fmt/core.h"
-#include "server/server.h"
 
 namespace dingodb {
 

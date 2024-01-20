@@ -694,10 +694,13 @@ message RegionMetrics {
   RegionDefinition region_definition = 5;     // region definition
   VectorIndexStatus vector_index_status = 6;  // vector index status
 
-  int64 row_count = 11;    // row count of this region
-  bytes min_key = 12;      // the min key of this region now exist
-  bytes max_key = 13;      // the max key of this region now exist
-  int64 region_size = 14;  // the bytes size of this region
+  int64 row_count = 11;                      // row count of this region
+  bytes min_key = 12;                        // the min key of this region now exist
+  bytes max_key = 13;                        // the max key of this region now exist
+  int64 region_size = 14;                    // the bytes size of this region
+  int64 last_update_metrics_log_index = 15;  // last update metrics log index
+  int64 last_update_metrics_version = 16;    // last update metrics version
+  int64 last_update_metrics_timestamp = 17;  // last update metrics timestamp
 
   // bool is_hold_vector_index = 29;                // is hold vector index
   VectorIndexMetrics vector_index_metrics = 20;  // vector index  metrics

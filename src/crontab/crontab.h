@@ -20,11 +20,10 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <shared_mutex>
 #include <string>
 #include <vector>
 
-#include "bthread/unstable.h"
+#include "bthread/types.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -39,35 +38,24 @@ struct CrontabConfig {
 
 class Crontab {
  public:
-  Crontab()
-      : id(0),
-        interval(0),
-        max_times(0),
-        immediately(false),
-        run_count(0),
-        pause(false),
-        timer_id(0),
-        func(nullptr),
-        arg(nullptr) {}
-
-  uint32_t id;
+  uint32_t id{0};
   std::string name;
   // unit ms
-  int64_t interval;
+  int64_t interval{0};
   // 0 is no limit
-  uint32_t max_times;
+  uint32_t max_times{0};
   // Is immediately run
-  bool immediately;
+  bool immediately{false};
   // Already run count
-  int run_count;
+  int run_count{0};
   // Is pause crontab
-  bool pause;
+  bool pause{false};
   // bthread_timer_t handler
-  bthread_timer_t timer_id;
+  bthread_timer_t timer_id{0};
   // For run target function
   std::function<void(void*)> func;
   // Delivery to func_'s argument
-  void* arg;
+  void* arg{nullptr};
 };
 
 // Manage crontab use brpc::bthread_timer_add
