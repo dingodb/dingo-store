@@ -25,12 +25,10 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "butil/status.h"
-#include "common/constant.h"
-#include "config/config_manager.h"
+#include "common/helper.h"
 #include "config/yaml_config.h"
 #include "coprocessor/coprocessor.h"
 #include "engine/rocks_raw_engine.h"

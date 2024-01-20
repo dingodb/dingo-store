@@ -17,31 +17,26 @@
 #include <netinet/in.h>
 
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "braft/raft.h"
 #include "butil/compiler_specific.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
-#include "common/synchronization.h"
 #include "config/config_manager.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
-#include "engine/snapshot.h"
 #include "engine/txn_engine_helper.h"
 #include "engine/write_data.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/raft.pb.h"
@@ -49,7 +44,6 @@
 #include "raft/raft_node.h"
 #include "raft/store_state_machine.h"
 #include "server/server.h"
-#include "vector/codec.h"
 #include "vector/vector_reader.h"
 
 namespace dingodb {

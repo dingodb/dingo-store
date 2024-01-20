@@ -14,21 +14,15 @@
 
 #include <unistd.h>
 
-#include <algorithm>
 #include <cstdint>
-#include <cstdio>
-#include <iterator>
 #include <memory>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "common/logging.h"
-#include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
-#include "sdk/coordinator_proxy.h"
-#include "sdk/meta_cache.h"
 #include "sdk/status.h"
 
 using dingodb::sdk::Status;

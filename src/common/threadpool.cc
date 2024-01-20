@@ -16,7 +16,6 @@
 
 #include <exception>
 
-#include "common/logging.h"
 #include "fmt/core.h"
 
 namespace dingodb {

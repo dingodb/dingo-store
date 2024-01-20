@@ -15,9 +15,7 @@
 #include "store/region_controller.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>

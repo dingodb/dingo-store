@@ -15,9 +15,7 @@
 #ifndef DINGODB_SDK_ASYNC_UTIL_H_
 #define DINGODB_SDK_ASYNC_UTIL_H_
 
-#include <atomic>
 #include <condition_variable>
-#include <functional>
 #include <mutex>
 
 #include "sdk/status.h"
@@ -28,7 +26,7 @@ namespace sdk {
 
 class Synchronizer {
  public:
-  Synchronizer() : fire_(false) {}
+  Synchronizer() = default;
 
   void Wait() {
     std::unique_lock<std::mutex> lk(lock_);
@@ -57,7 +55,7 @@ class Synchronizer {
  private:
   std::mutex lock_;
   std::condition_variable cv_;
-  bool fire_;
+  bool fire_{false};
 };
 
 }  // namespace sdk

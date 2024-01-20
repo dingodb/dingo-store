@@ -32,6 +32,7 @@
 
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "config/yaml_config.h"
 #include "crontab/crontab.h"
 #include "engine/rocks_raw_engine.h"

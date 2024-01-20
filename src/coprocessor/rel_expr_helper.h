@@ -18,11 +18,7 @@
 #include <serial/schema/base_schema.h>
 
 #include <any>
-#include <deque>
 #include <memory>
-#include <optional>
-#include <string>
-#include <variant>
 #include <vector>
 
 #include "../libexpr/src/expr/operand.h"

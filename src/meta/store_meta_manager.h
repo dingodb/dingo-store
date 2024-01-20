@@ -16,13 +16,10 @@
 #define DINGODB_STORE_META_MANAGER_H_
 
 #include <atomic>
-#include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
-#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -33,9 +30,7 @@
 #include "common/constant.h"
 #include "common/latch.h"
 #include "common/safe_map.h"
-#include "engine/engine.h"
 #include "engine/gc_safe_point.h"
-#include "engine/raw_engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "meta/transform_kv_able.h"

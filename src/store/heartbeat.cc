@@ -16,9 +16,7 @@
 
 #include <sys/types.h>
 
-#include <algorithm>
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>

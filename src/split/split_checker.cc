@@ -16,17 +16,14 @@
 
 #include <sys/stat.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <queue>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "common/constant.h"
-#include "common/failpoint.h"
 #include "common/helper.h"
 #include "config/config_helper.h"
 #include "engine/iterator.h"
@@ -37,7 +34,6 @@
 #include "proto/raft.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
-#include "vector/codec.h"
 #include "vector/vector_index_manager.h"
 
 namespace dingodb {

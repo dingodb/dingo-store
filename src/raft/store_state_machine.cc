@@ -14,7 +14,6 @@
 
 #include "raft/store_state_machine.h"
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -27,8 +26,6 @@
 #include "common/synchronization.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
-#include "handler/raft_snapshot_handler.h"
-#include "meta/meta_writer.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"

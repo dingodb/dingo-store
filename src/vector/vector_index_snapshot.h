@@ -15,18 +15,13 @@
 #ifndef DINGODB_VECTOR_INDEX_SNAPSHOT_H_
 #define DINGODB_VECTOR_INDEX_SNAPSHOT_H_
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
-#include <queue>
 #include <string>
 #include <vector>
 
-#include "butil/endpoint.h"
-#include "butil/status.h"
-#include "common/context.h"
+#include "bthread/types.h"
 #include "proto/common.pb.h"
-#include "proto/node.pb.h"
 
 namespace dingodb {
 

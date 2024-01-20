@@ -27,7 +27,6 @@
 #include "coprocessor/raw_coprocessor.h"
 #include "engine/iterator.h"
 #include "proto/store.pb.h"
-#include "scan/scan_filter.h"
 
 namespace dingodb {
 

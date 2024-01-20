@@ -25,7 +25,6 @@
 #include "sdk/status.h"
 #include "sdk/store/store_rpc.h"
 #include "sdk/store/store_rpc_controller.h"
-#include "sdk/transaction/txn_common.h"
 
 namespace dingodb {
 namespace sdk {

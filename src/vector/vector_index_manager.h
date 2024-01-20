@@ -23,12 +23,9 @@
 
 #include "butil/status.h"
 #include "common/helper.h"
-#include "common/safe_map.h"
-#include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "vector/vector_index.h"
-#include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
 

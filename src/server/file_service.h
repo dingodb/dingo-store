@@ -19,11 +19,8 @@
 #include <memory>
 #include <string>
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
 #include "bthread/types.h"
 #include "common/file_reader.h"
-#include "common/synchronization.h"
 #include "proto/file_service.pb.h"
 #include "vector/vector_index_snapshot.h"
 

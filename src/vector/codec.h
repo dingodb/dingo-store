@@ -16,7 +16,6 @@
 #define DINGODB_VECTOR_CODEC_H_
 
 #include <cstdint>
-#include <limits>
 #include <string>
 
 #include "proto/common.pb.h"

@@ -21,14 +21,10 @@
 #include <utility>
 #include <vector>
 
-#include "brpc/closure_guard.h"
-#include "bthread/bthread.h"
-#include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "common/synchronization.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"

@@ -14,10 +14,8 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <iostream>
 #include <memory>
-#include <thread>
 
 #include "store/region_controller.h"
 
@@ -35,7 +33,7 @@ class TestTask : public dingodb::TaskRunnable {
   std::string Type() override { return ""; }
   void Run() override {
     bthread_usleep(1 * 1000 * 1000);
-    std::cout << "TestTask run..." << std::endl;
+    std::cout << "TestTask run..." << '\n';
   }
 };
 
@@ -44,16 +42,16 @@ TEST_F(RegionControlExecutorTest, Stop) {
 
   region_executor->Init();
 
-  std::cout << "here 0001" << std::endl;
+  std::cout << "here 0001" << '\n';
 
   region_executor->Execute(std::make_shared<TestTask>());
 
-  std::cout << "here 0002" << std::endl;
+  std::cout << "here 0002" << '\n';
 
   region_executor->Execute(std::make_shared<TestTask>());
-  std::cout << "here 0003" << std::endl;
+  std::cout << "here 0003" << '\n';
 
   region_executor->Stop();
 
-  std::cout << "here 0004" << std::endl;
+  std::cout << "here 0004" << '\n';
 }

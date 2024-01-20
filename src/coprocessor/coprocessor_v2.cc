@@ -26,10 +26,9 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "coprocessor/rel_expr_helper.h"
 #include "coprocessor/utils.h"
-#include "engine/txn_engine_helper.h"
 #include "fmt/core.h"
-#include "glog/logging.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "scan/scan_filter.h"

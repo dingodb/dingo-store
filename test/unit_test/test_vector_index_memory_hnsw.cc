@@ -19,14 +19,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
-#include <string>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/logging.h"
 #include "faiss/MetricType.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -57,9 +55,9 @@ class VectorIndexMemoryHnswTest : public testing::Test {
 
 TEST_F(VectorIndexMemoryHnswTest, Create) {
   static const pb::common::Range kRange;
-  static pb::common::RegionEpoch kEpoch;
-  kEpoch.set_conf_version(1);
-  kEpoch.set_version(10);
+  static pb::common::RegionEpoch k_epoch;
+  k_epoch.set_conf_version(1);
+  k_epoch.set_version(10);
 
   // valid param L2
   {
@@ -74,7 +72,7 @@ TEST_F(VectorIndexMemoryHnswTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 }

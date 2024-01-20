@@ -110,7 +110,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<bool> v = std::any_cast<std::optional<bool>>((*value)[0]);
-      EXPECT_EQ(true, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_TRUE(v.value());
+      }
       iter->Next();
     }
 
@@ -183,7 +186,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int32_t> v = std::any_cast<std::optional<int32_t>>((*value)[0]);
-      EXPECT_EQ(3, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(3, v.value());
+      }
       iter->Next();
     }
 
@@ -256,7 +262,11 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<float> v = std::any_cast<std::optional<float>>((*value)[0]);
-      EXPECT_FLOAT_EQ(3.46, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_FLOAT_EQ(3.46, v.value());
+      }
+
       iter->Next();
     }
 
@@ -329,7 +339,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int64_t> v = std::any_cast<std::optional<int64_t>>((*value)[0]);
-      EXPECT_EQ(3000000000, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(3000000000, v.value());
+      }
       iter->Next();
     }
 
@@ -402,7 +415,11 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<double> v = std::any_cast<std::optional<double>>((*value)[0]);
-      EXPECT_DOUBLE_EQ(123457.46, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_DOUBLE_EQ(123457.46, v.value());
+      }
+
       iter->Next();
     }
 
@@ -489,8 +506,11 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int64_t> v = std::any_cast<std::optional<int64_t>>((*value)[0]);
-      auto vv = v.value();
-      EXPECT_EQ(2, vv);
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(2, v.value());
+      }
+
       iter->Next();
     }
 
@@ -578,8 +598,11 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int64_t> v = std::any_cast<std::optional<int64_t>>((*value)[0]);
-      auto vv = v.value();
-      EXPECT_EQ(4, vv);
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(4, v.value());
+      }
+
       iter->Next();
     }
 
@@ -653,7 +676,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<bool> v = std::any_cast<std::optional<bool>>((*value)[0]);
-      EXPECT_EQ(true, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(true, v.value());
+      }
       iter->Next();
     }
 
@@ -726,7 +752,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int32_t> v = std::any_cast<std::optional<int32_t>>((*value)[0]);
-      EXPECT_EQ(2, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(2, v.value());
+      }
       iter->Next();
     }
 
@@ -799,7 +828,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<float> v = std::any_cast<std::optional<float>>((*value)[0]);
-      EXPECT_FLOAT_EQ(2.23, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_FLOAT_EQ(2.23, v.value());
+      }
       iter->Next();
     }
 
@@ -872,7 +904,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int64_t> v = std::any_cast<std::optional<int64_t>>((*value)[0]);
-      EXPECT_EQ(2000000000, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(2000000000, v.value());
+      }
       iter->Next();
     }
 
@@ -945,7 +980,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<double> v = std::any_cast<std::optional<double>>((*value)[0]);
-      EXPECT_DOUBLE_EQ(123456.23, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_DOUBLE_EQ(123456.23, v.value());
+      }
       iter->Next();
     }
 
@@ -1019,15 +1057,17 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<std::shared_ptr<std::string>> v =
           std::any_cast<std::optional<std::shared_ptr<std::string>>>((*value)[0]);
-      EXPECT_EQ("bbbbbbbbbbbbbbbbbbbbbbbb", *(v.value()));
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ("bbbbbbbbbbbbbbbbbbbbbbbb", *(v.value()));
+      }
       iter->Next();
     }
 
     aggregation_manager->Close();
   }
 
-
-   ////////////////////////////////////////////////// min ////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////// min ////////////////////////////////////////////////////////////
   // MIN bool
   {
     std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> group_by_operator_serial_schemas;
@@ -1094,7 +1134,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<bool> v = std::any_cast<std::optional<bool>>((*value)[0]);
-      EXPECT_EQ(false, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(false, v.value());
+      }
       iter->Next();
     }
 
@@ -1167,7 +1210,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int32_t> v = std::any_cast<std::optional<int32_t>>((*value)[0]);
-      EXPECT_EQ(1, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(1, v.value());
+      }
       iter->Next();
     }
 
@@ -1240,7 +1286,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<float> v = std::any_cast<std::optional<float>>((*value)[0]);
-      EXPECT_FLOAT_EQ(1.23, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_FLOAT_EQ(1.23, v.value());
+      }
       iter->Next();
     }
 
@@ -1313,7 +1362,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<int64_t> v = std::any_cast<std::optional<int64_t>>((*value)[0]);
-      EXPECT_EQ(1000000000, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ(1000000000, v.value());
+      }
       iter->Next();
     }
 
@@ -1386,7 +1438,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       const auto &key = iter->GetKey();
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<double> v = std::any_cast<std::optional<double>>((*value)[0]);
-      EXPECT_DOUBLE_EQ(1.23, v.value());
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_DOUBLE_EQ(1.23, v.value());
+      }
       iter->Next();
     }
 
@@ -1460,7 +1515,10 @@ TEST_F(CoprocessorAggregationManagerTest, ExecuteALL) {
       std::shared_ptr<std::vector<std::any>> value = iter->GetValue();
       std::optional<std::shared_ptr<std::string>> v =
           std::any_cast<std::optional<std::shared_ptr<std::string>>>((*value)[0]);
-      EXPECT_EQ("aaaaaaaaaaaaaaaaaaaaa", *(v.value()));
+      EXPECT_TRUE(v.has_value());
+      if (v.has_value()) {
+        EXPECT_EQ("aaaaaaaaaaaaaaaaaaaaa", *(v.value()));
+      }
       iter->Next();
     }
 

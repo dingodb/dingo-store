@@ -13,7 +13,6 @@
 // limitations under the License.
 #include "sdk/store/store_rpc_controller.h"
 
-#include <cstddef>
 #include <string>
 #include <utility>
 
@@ -29,7 +28,6 @@
 #include "sdk/client_stub.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
-#include "sdk/meta_cache.h"
 #include "sdk/status.h"
 #include "sdk/utils/async_util.h"
 

@@ -21,9 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
@@ -34,7 +32,6 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_flat.h"
 
 namespace dingodb {
 
@@ -55,7 +52,7 @@ class VectorIndexFlatSearchParamLimitTest : public testing::Test {
   inline static std::shared_ptr<VectorIndex> vector_index_flat_for_l2;      // id = 1;
   inline static std::shared_ptr<VectorIndex> vector_index_flat_for_ip;      // id = 2;
   inline static std::shared_ptr<VectorIndex> vector_index_flat_for_cosine;  // id = 3;
-  inline static constexpr faiss::idx_t dimension = 20;
+  inline static constexpr faiss::idx_t kDimension = 20;
   inline static int data_base_size = 20;
   inline static std::vector<float> data_base;
   inline static int64_t id_for_l2 = 1;
@@ -83,7 +80,7 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Create) {
     int64_t id = id_for_l2;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_dimension(kDimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
     vector_index_flat_for_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_flat_for_l2.get(), nullptr);
@@ -94,7 +91,7 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Create) {
     int64_t id = id_for_ip;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_dimension(kDimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     vector_index_flat_for_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
@@ -106,7 +103,7 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Create) {
     int64_t id = id_for_cosine;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    index_parameter.mutable_flat_parameter()->set_dimension(dimension);
+    index_parameter.mutable_flat_parameter()->set_dimension(kDimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
     vector_index_flat_for_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
     EXPECT_NE(vector_index_flat_for_cosine.get(), nullptr);
@@ -141,16 +138,15 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
     butil::Status ok;
     pb::common::VectorWithId vector_with_id;
     vector_with_id.set_id(0);
-    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_dimension(kDimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
 
-    std::array<float, dimension> my_value{0.560676634, 0.36369127,  0.397202849, 0.0810661539, 0.291333258,
-                                          0.545552671, 0.945311069, 0.694609702, 0.158891559,  0.366846412,
-                                          0.331690609, 0.189103171, 0.127474368, 0.468271106,  0.230491146,
-                                          0.427249402, 0.21386537,  0.42593497,  0.132474691,  0.483059853};
+    std::array<float, kDimension> my_value{0.560676634, 0.36369127,  0.397202849, 0.0810661539, 0.291333258,
+                                           0.545552671, 0.945311069, 0.694609702, 0.158891559,  0.366846412,
+                                           0.331690609, 0.189103171, 0.127474368, 0.468271106,  0.230491146,
+                                           0.427249402, 0.21386537,  0.42593497,  0.132474691,  0.483059853};
 
-    for (size_t i = 0; i < my_value.size(); i++) {
-      float value = my_value[i];
+    for (float value : my_value) {
       vector_with_id.mutable_vector()->add_float_values(value);
     }
 
@@ -176,19 +172,19 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
     std::vector<int64_t> result_vector_ids;
     {
       size_t i = 0;
-      std::cout << "[" << i << "]" << std::endl;
+      std::cout << "[" << i << "]" << '\n';
       for (const auto &result : results) {
         {
           size_t j = 0;
           for (const auto &vector_with_distances : result.vector_with_distances()) {
-            std::cout << "[" << j << "]" << std::endl;
+            std::cout << "[" << j << "]" << '\n';
             auto id = vector_with_distances.vector_with_id().id();
             auto distance = vector_with_distances.distance();
             auto metric_type = vector_with_distances.metric_type();
 
             result_vector_ids.push_back(id);
 
-            std::cout << vector_with_distances.DebugString() << std::endl;
+            std::cout << vector_with_distances.DebugString() << '\n';
             j++;
           }
         }
@@ -200,21 +196,21 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
     for (auto vector_id = vector_id_start; vector_id < vector_id_end; vector_id++) {
       std::cout << vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     std::sort(vector_ids_for_search.begin(), vector_ids_for_search.end());
     std::cout << "vector_ids_for_search : [";
     for (const auto vector_id : vector_ids_for_search) {
       std::cout << vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     std::sort(result_vector_ids.begin(), result_vector_ids.end());
     std::cout << "result_vector_ids     : [";
     for (const auto result_vector_id : result_vector_ids) {
       std::cout << result_vector_id << " ";
     }
-    std::cout << "]" << std::endl;
+    std::cout << "]" << '\n';
 
     bool is_return_true = !result_vector_ids.empty();
     std::cout << "====================> : ";
@@ -227,14 +223,14 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
         std::cout << *iter << " ";
       }
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 
     if (is_return_true) {
-      std::cout << name << " result_vector_ids all in vector_ids" << std::endl;
+      std::cout << name << " result_vector_ids all in vector_ids" << '\n';
     } else {
-      std::cout << name << " result_vector_ids not all in vector_ids" << std::endl;
+      std::cout << name << " result_vector_ids not all in vector_ids" << '\n';
     }
-    std::cout << "..........................................................................." << std::endl;
+    std::cout << "..........................................................................." << '\n';
   };
 
   // l2 ok crash
@@ -267,25 +263,25 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Upsert) {
     std::mt19937 rng;
     std::uniform_real_distribution<> distrib;
 
-    data_base.resize(dimension * data_base_size, 0.0f);
+    data_base.resize(kDimension * data_base_size, 0.0f);
     // float* xb = new float[dimension_ * data_base_size_];
 
     for (int i = 0; i < data_base_size; i++) {
-      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
-      data_base[dimension * i] += i / 1000.;
+      for (int j = 0; j < kDimension; j++) data_base[kDimension * i + j] = distrib(rng);
+      data_base[kDimension * i] += i / 1000.;
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
       std::cout << "[";
       std::cout << std::setiosflags(std::ios::right) << std::setw(3) << std::setfill('0') << i;
       std::cout << "] [";
-      for (faiss::idx_t j = 0; j < dimension; j++) {
+      for (faiss::idx_t j = 0; j < kDimension; j++) {
         if (0 != j) {
           // std::cout << ",";
         }
         // std::cout << std::setw(10) << data_base[i * dimension + j];
         std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ')
-                  << data_base[i * dimension + j] << " ";
+                  << data_base[i * kDimension + j] << " ";
       }
 
       std::cout << "]" << '\n';
@@ -300,8 +296,8 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Upsert) {
       pb::common::VectorWithId vector_with_id;
 
       vector_with_id.set_id(id);
-      for (size_t i = 0; i < dimension; i++) {
-        vector_with_id.mutable_vector()->add_float_values(data_base[j * dimension + i]);
+      for (size_t i = 0; i < kDimension; i++) {
+        vector_with_id.mutable_vector()->add_float_values(data_base[j * kDimension + i]);
       }
 
       vector_with_ids.push_back(vector_with_id);
@@ -346,16 +342,15 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, SearchAfterInsert) {
     butil::Status ok;
     pb::common::VectorWithId vector_with_id;
     vector_with_id.set_id(0);
-    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_dimension(kDimension);
     vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
 
-    std::array<float, dimension> my_value{0.560676634, 0.36369127,  0.397202849, 0.0810661539, 0.291333258,
-                                          0.545552671, 0.945311069, 0.694609702, 0.158891559,  0.366846412,
-                                          0.331690609, 0.189103171, 0.127474368, 0.468271106,  0.230491146,
-                                          0.427249402, 0.21386537,  0.42593497,  0.132474691,  0.483059853};
+    std::array<float, kDimension> my_value{0.560676634, 0.36369127,  0.397202849, 0.0810661539, 0.291333258,
+                                           0.545552671, 0.945311069, 0.694609702, 0.158891559,  0.366846412,
+                                           0.331690609, 0.189103171, 0.127474368, 0.468271106,  0.230491146,
+                                           0.427249402, 0.21386537,  0.42593497,  0.132474691,  0.483059853};
 
-    for (size_t i = 0; i < my_value.size(); i++) {
-      float value = my_value[i];
+    for (float value : my_value) {
       vector_with_id.mutable_vector()->add_float_values(value);
     }
 

@@ -31,12 +31,13 @@
 
 #include "butil/status.h"
 #include "common/constant.h"
-#include "config/config_manager.h"
+#include "common/helper.h"
+#include "config/yaml_config.h"
+#include "crontab/crontab.h"
 #include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
-#include "server/server.h"
 
 namespace dingodb {
 
@@ -95,7 +96,7 @@ class ScanTest : public testing::Test {
 
     config_ = std::make_shared<YamlConfig>();
     if (config_->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << std::endl;
+      std::cout << "Load config failed" << '\n';
       return;
     }
 
@@ -131,12 +132,12 @@ static std::chrono::milliseconds GetCurrentTime() {
 
 TEST_F(ScanTest, Time) {
   std::string t = Helper::NowTime();
-  std::cout << "now : " << t << std::endl;
+  std::cout << "now : " << t << '\n';
 
   auto ms = GetCurrentTime();
   std::string formate_str;
   formate_str = Helper::FormatMsTime(ms.count(), "%Y-%m-%d %H:%M:%S");
-  std::cout << "formate_str : " << formate_str << std::endl;
+  std::cout << "formate_str : " << formate_str << '\n';
 }
 
 TEST_F(ScanTest, Open) {

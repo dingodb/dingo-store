@@ -15,14 +15,9 @@
 #include "common/runnable.h"
 
 #include <atomic>
-#include <cassert>
-#include <cstddef>
 #include <cstdint>
-#include <memory>
 
 #include "butil/compiler_specific.h"
-#include "client/coordinator_client_function.h"
-#include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"

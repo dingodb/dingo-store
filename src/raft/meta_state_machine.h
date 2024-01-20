@@ -15,15 +15,11 @@
 #ifndef DINGODB_META_STATE_MACHINE_H_
 #define DINGODB_META_STATE_MACHINE_H_
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 
 #include "braft/raft.h"
-#include "brpc/controller.h"
-#include "common/context.h"
 #include "common/meta_control.h"
-#include "coordinator/coordinator_control.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 #include "raft/state_machine.h"

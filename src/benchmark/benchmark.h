@@ -23,13 +23,10 @@
 #include <thread>
 #include <vector>
 
-#include "benchmark/color.h"
 #include "benchmark/operation.h"
 #include "bvar/latency_recorder.h"
-#include "fmt/core.h"
 #include "sdk/client.h"
 #include "sdk/coordinator_proxy.h"
-#include "sdk/status.h"
 
 namespace dingodb {
 namespace benchmark {

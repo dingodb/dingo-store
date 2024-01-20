@@ -15,22 +15,13 @@
 #ifndef DINGODB_VECTOR_INDEX_BRUTEFORCE_H_  // NOLINT
 #define DINGODB_VECTOR_INDEX_BRUTEFORCE_H_
 
-#include <array>
-#include <atomic>
-#include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "bthread/mutex.h"
 #include "butil/status.h"
-#include "common/logging.h"
-#include "common/synchronization.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "vector/vector_index.h"
 
 namespace dingodb {

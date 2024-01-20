@@ -23,8 +23,6 @@
 #include <vector>
 
 #include "bthread/bthread.h"
-#include "butil/strings/string_split.h"
-#include "butil/strings/string_util.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
@@ -162,7 +160,7 @@ std::vector<std::string> FailPoint::ParseConfig(const std::string& config) {
   std::vector<std::string> result;
   for (auto i = begin; i != end; ++i) {
     const std::smatch& match = *i;
-    DINGO_LOG(DEBUG) << "match_results: " << match.size() << " " << match.length() << std::endl;
+    DINGO_LOG(DEBUG) << "match_results: " << match.size() << " " << match.length() << '\n';
     result.push_back(match.str(2));
     result.push_back(match.str(4));
     result.push_back(match.str(5));
@@ -229,6 +227,7 @@ std::vector<std::shared_ptr<FailPoint>> FailPointManager::GetAllFailPoints() {
   BAIDU_SCOPED_LOCK(mutex_);
 
   std::vector<std::shared_ptr<FailPoint>> failpoints;
+  failpoints.reserve(failpoints_.size());
   for (auto& [_, failpoint] : failpoints_) {
     failpoints.push_back(failpoint);
   }

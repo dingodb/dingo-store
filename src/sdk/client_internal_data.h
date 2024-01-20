@@ -15,14 +15,10 @@
 #ifndef DINGODB_SDK_CLIENT_IMPL_H_
 #define DINGODB_SDK_CLIENT_IMPL_H_
 
-#include <cstdint>
 #include <memory>
 
-#include "coordinator/coordinator_interaction.h"
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
-#include "sdk/meta_cache.h"
-#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
@@ -32,11 +28,11 @@ class Client::Data {
   Data(const Data&) = delete;
   const Data& operator=(const Data&) = delete;
 
-  Data() : init(false), stub(nullptr) {}
+  Data() : stub(nullptr) {}
 
   ~Data() = default;
 
-  bool init;
+  bool init{false};
   std::unique_ptr<ClientStub> stub;
 };
 

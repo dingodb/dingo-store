@@ -25,7 +25,6 @@
 #include <utility>
 #include <vector>
 
-#include "client/client_helper.h"
 #include "client/store_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -33,7 +32,6 @@
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
-#include "proto/store.pb.h"
 #include "rocksdb/db.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/options.h"

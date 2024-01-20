@@ -18,14 +18,12 @@
 #include <any>
 #include <atomic>
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "bthread/mutex.h"
-#include "bthread/types.h"
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -35,7 +33,6 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "server/server.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 

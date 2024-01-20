@@ -20,7 +20,6 @@
 #include <random>
 #include <string>
 
-#include "common/helper.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "engine/rocks_raw_engine.h"
@@ -76,13 +75,13 @@ class StoreRegionMetricsTest : public testing::Test {
 
     std::shared_ptr<dingodb::Config> config = std::make_shared<dingodb::YamlConfig>();
     if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << std::endl;
+      std::cout << "Load config failed" << '\n';
       return;
     }
 
     engine = std::make_shared<dingodb::RocksRawEngine>();
     if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << std::endl;
+      std::cout << "RocksRawEngine init failed" << '\n';
     }
   }
 

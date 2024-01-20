@@ -15,14 +15,7 @@
 #ifndef DINGODB_NODE_SERVICE_H_
 #define DINGODB_NODE_SERVICE_H_
 
-#include <memory>
-
-#include "brpc/controller.h"
-#include "brpc/server.h"
-#include "coordinator/coordinator_control.h"
-#include "engine/engine.h"
 #include "proto/node.pb.h"
-#include "server/server.h"
 
 namespace dingodb {
 

@@ -16,13 +16,11 @@
 
 #include <chrono>
 #include <condition_variable>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 
 #include "glog/logging.h"
-#include "sdk/client.h"
 #include "sdk/utils/actuator.h"
 
 namespace dingodb {

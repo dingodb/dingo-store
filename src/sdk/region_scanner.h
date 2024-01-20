@@ -20,7 +20,6 @@
 #include <optional>
 #include <vector>
 
-#include "glog/logging.h"
 #include "sdk/client.h"
 #include "sdk/region.h"
 #include "sdk/utils/callback.h"

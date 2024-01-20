@@ -15,25 +15,21 @@
 #include "vector/vector_index_ivf_flat.h"
 
 #include <algorithm>
-#include <atomic>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <future>
-#include <map>
 #include <memory>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "bthread/mutex.h"
-#include "bthread/types.h"
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
 #include "faiss/Index.h"
+#include "faiss/IndexFlat.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/AuxIndexStructures.h"
 #include "faiss/index_io.h"

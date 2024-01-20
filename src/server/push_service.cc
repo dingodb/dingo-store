@@ -16,14 +16,11 @@
 
 #include <cstdint>
 
-#include "bthread/bthread.h"
 #include "butil/status.h"
-#include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
-#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
 #include "proto/push.pb.h"

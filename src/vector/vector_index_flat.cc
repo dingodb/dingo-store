@@ -14,30 +14,26 @@
 
 #include "vector/vector_index_flat.h"
 
-#include <atomic>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <future>
-#include <map>
 #include <memory>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "bthread/mutex.h"
-#include "bthread/types.h"
 #include "butil/status.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "faiss/Index.h"
+#include "faiss/IndexFlat.h"
+#include "faiss/IndexIDMap.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/AuxIndexStructures.h"
 #include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
-#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_utils.h"

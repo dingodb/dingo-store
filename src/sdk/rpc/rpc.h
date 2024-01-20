@@ -15,10 +15,6 @@
 #ifndef DINGODB_SDK_RPC_H_
 #define DINGODB_SDK_RPC_H_
 
-#include <cstdint>
-#include <map>
-#include <memory>
-#include <mutex>
 #include <string>
 
 #include "brpc/callback.h"
@@ -26,7 +22,6 @@
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
 #include "butil/fast_rand.h"
-#include "butil/type_traits.h"
 #include "common/logging.h"
 #include "google/protobuf/message.h"
 #include "sdk/common/param_config.h"

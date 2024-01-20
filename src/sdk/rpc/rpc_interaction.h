@@ -15,7 +15,6 @@
 #ifndef DINGODB_SDK_RPC_INTERACTION_H_
 #define DINGODB_SDK_RPC_INTERACTION_H_
 
-#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -23,7 +22,6 @@
 #include "brpc/channel.h"
 #include "butil/endpoint.h"
 #include "rpc.h"
-#include "sdk/status.h"
 #include "sdk/utils/callback.h"
 
 namespace dingodb {

@@ -18,11 +18,11 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <shared_mutex>
 #include <string>
 
 #include "butil/containers/flat_map.h"
 #include "common/meta_control.h"
+#include "engine/engine.h"
 #include "proto/coordinator_internal.pb.h"
 
 namespace dingodb {

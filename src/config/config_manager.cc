@@ -16,10 +16,11 @@
 
 #include <memory>
 
+#include "bthread/mutex.h"
 #include "butil/scoped_lock.h"
+#include "common/logging.h"
 #include "common/role.h"
 #include "fmt/core.h"
-#include "proto/common.pb.h"
 
 namespace dingodb {
 

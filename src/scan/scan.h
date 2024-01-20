@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_ENGINE_SCAN_H_  // NOLINT
+#ifndef DINGODB_ENGINE_SCAN_H_
 #define DINGODB_ENGINE_SCAN_H_
 
-#include <chrono>  // NOLINT
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "bthread/types.h"

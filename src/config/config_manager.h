@@ -16,15 +16,11 @@
 #define DINGODB_CONFIG_MANAGER_H_
 
 #include <map>
-#include <mutex>
-#include <shared_mutex>
+#include <memory>
 #include <string>
 
-#include "bthread/mutex.h"
-#include "common/logging.h"
+#include "bthread/types.h"
 #include "config/config.h"
-#include "config/yaml_config.h"
-#include "proto/common.pb.h"
 
 namespace dingodb {
 

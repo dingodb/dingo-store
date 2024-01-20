@@ -15,7 +15,6 @@
 #ifndef DINGODB_COMMON_CONTEXT_H_
 #define DINGODB_COMMON_CONTEXT_H_
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>

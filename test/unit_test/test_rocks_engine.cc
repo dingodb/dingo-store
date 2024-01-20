@@ -22,24 +22,19 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
-#include "common/context.h"
 #include "common/helper.h"
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "engine/rocks_raw_engine.h"
 #include "proto/common.pb.h"
-#include "proto/store_internal.pb.h"
-#include "server/server.h"
 
 namespace dingodb {  // NOLINT
 

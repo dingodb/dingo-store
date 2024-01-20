@@ -36,16 +36,16 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "config/config.h"
+#include "config/config_manager.h"
 #include "config/yaml_config.h"
+#include "coordinator/tso_control.h"
 #include "engine/raw_engine.h"
 #include "engine/rocks_raw_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
-#include "proto/store_internal.pb.h"
-#include "server/server.h"
 
-namespace dingodb {  // NOLINT
+namespace dingodb {
 
 static const std::vector<std::string> kAllCFs = {Constant::kTxnWriteCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
                                                  Constant::kStoreDataCF};

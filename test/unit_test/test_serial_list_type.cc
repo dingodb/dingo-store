@@ -21,9 +21,7 @@
 
 #include <algorithm>
 #include <bitset>
-#include <functional>
 #include <memory>
-#include <new>
 #include <optional>
 #include <string>
 
@@ -108,11 +106,11 @@ class DingoSerialListTypeTest : public testing::Test {
     salary->SetIsKey(false);
     schemas_->at(10) = salary;
 
-    auto boollistNull = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<bool>>>>>();
-    boollistNull->SetIndex(11);
-    boollistNull->SetAllowNull(true);
-    boollistNull->SetIsKey(false);
-    schemas_->at(11) = boollistNull;
+    auto boollist_null = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<bool>>>>>();
+    boollist_null->SetIndex(11);
+    boollist_null->SetAllowNull(true);
+    boollist_null->SetIsKey(false);
+    schemas_->at(11) = boollist_null;
 
     auto boollist = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<bool>>>>>();
     boollist->SetIndex(12);
@@ -120,11 +118,11 @@ class DingoSerialListTypeTest : public testing::Test {
     boollist->SetIsKey(false);
     schemas_->at(12) = boollist;
 
-    auto stringlistNull = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<std::string>>>>>();
-    stringlistNull->SetIndex(13);
-    stringlistNull->SetAllowNull(true);
-    stringlistNull->SetIsKey(false);
-    schemas_->at(13) = stringlistNull;
+    auto stringlist_null = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<std::string>>>>>();
+    stringlist_null->SetIndex(13);
+    stringlist_null->SetAllowNull(true);
+    stringlist_null->SetIsKey(false);
+    schemas_->at(13) = stringlist_null;
 
     auto stringlist = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<std::string>>>>>();
     stringlist->SetIndex(14);
@@ -132,11 +130,11 @@ class DingoSerialListTypeTest : public testing::Test {
     stringlist->SetIsKey(false);
     schemas_->at(14) = stringlist;
 
-    auto doublelistNull = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<double>>>>>();
-    doublelistNull->SetIndex(15);
-    doublelistNull->SetAllowNull(true);
-    doublelistNull->SetIsKey(false);
-    schemas_->at(15) = doublelistNull;
+    auto doublelist_null = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<double>>>>>();
+    doublelist_null->SetIndex(15);
+    doublelist_null->SetAllowNull(true);
+    doublelist_null->SetIsKey(false);
+    schemas_->at(15) = doublelist_null;
 
     auto doublelist = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<double>>>>>();
     doublelist->SetIndex(16);
@@ -144,11 +142,11 @@ class DingoSerialListTypeTest : public testing::Test {
     doublelist->SetIsKey(false);
     schemas_->at(16) = doublelist;
 
-    auto floatlistNull = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<float>>>>>();
-    floatlistNull->SetIndex(17);
-    floatlistNull->SetAllowNull(true);
-    floatlistNull->SetIsKey(false);
-    schemas_->at(17) = floatlistNull;
+    auto floatlist_null = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<float>>>>>();
+    floatlist_null->SetIndex(17);
+    floatlist_null->SetAllowNull(true);
+    floatlist_null->SetIsKey(false);
+    schemas_->at(17) = floatlist_null;
 
     auto floatlist = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<float>>>>>();
     floatlist->SetIndex(18);
@@ -156,11 +154,11 @@ class DingoSerialListTypeTest : public testing::Test {
     floatlist->SetIsKey(false);
     schemas_->at(18) = floatlist;
 
-    auto integerlistNull = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<int32_t>>>>>();
-    integerlistNull->SetIndex(19);
-    integerlistNull->SetAllowNull(true);
-    integerlistNull->SetIsKey(false);
-    schemas_->at(19) = integerlistNull;
+    auto integerlist_null = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<int32_t>>>>>();
+    integerlist_null->SetIndex(19);
+    integerlist_null->SetAllowNull(true);
+    integerlist_null->SetIsKey(false);
+    schemas_->at(19) = integerlist_null;
 
     auto integerlist = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<int32_t>>>>>();
     integerlist->SetIndex(20);
@@ -168,11 +166,11 @@ class DingoSerialListTypeTest : public testing::Test {
     integerlist->SetIsKey(false);
     schemas_->at(20) = integerlist;
 
-    auto longlistNull = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<int64_t>>>>>();
-    longlistNull->SetIndex(21);
-    longlistNull->SetAllowNull(true);
-    longlistNull->SetIsKey(false);
-    schemas_->at(21) = longlistNull;
+    auto longlist_null = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<int64_t>>>>>();
+    longlist_null->SetIndex(21);
+    longlist_null->SetAllowNull(true);
+    longlist_null->SetIsKey(false);
+    schemas_->at(21) = longlist_null;
 
     auto longlist = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<int64_t>>>>>();
     longlist->SetIndex(22);
@@ -180,11 +178,11 @@ class DingoSerialListTypeTest : public testing::Test {
     longlist->SetIsKey(false);
     schemas_->at(22) = longlist;
 
-    auto stringlistNull1 = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<std::string>>>>>();
-    stringlistNull1->SetIndex(23);
-    stringlistNull1->SetAllowNull(true);
-    stringlistNull1->SetIsKey(false);
-    schemas_->at(23) = stringlistNull1;
+    auto stringlist_null1 = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<std::string>>>>>();
+    stringlist_null1->SetIndex(23);
+    stringlist_null1->SetAllowNull(true);
+    stringlist_null1->SetIsKey(false);
+    schemas_->at(23) = stringlist_null1;
 
     auto stringlist1 = std::make_shared<DingoSchema<optional<std::shared_ptr<std::vector<std::string>>>>>();
     stringlist1->SetIndex(24);
@@ -317,7 +315,7 @@ TEST_F(DingoSerialListTypeTest, boolListSchema) {
     const auto& vector2 = *data2.value();
     EXPECT_EQ(data1->size(), vector2.size());
     for (size_t j = 0; j < data1->size(); ++j) {
-      std::cout << "(*data1)[j]:" << (*data1)[j] << ",vector2[j]:" << vector2[j] << std::endl;
+      std::cout << "(*data1)[j]:" << (*data1)[j] << ",vector2[j]:" << vector2[j] << '\n';
       EXPECT_EQ((*data1)[j], vector2[j]);
     }
   } else {
@@ -1012,7 +1010,7 @@ TEST_F(DingoSerialListTypeTest, doubleSchemaPosFakeLeBe) {
   b1.SetAllowNull(true);
   b1.SetIsKey(true);
   if (!this->le) {
-    cout << "LE" << endl;
+    cout << "LE" << '\n';
     b1.SetIsLe(true);
   } else {
     b1.SetIsLe(false);
@@ -1611,8 +1609,8 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   InitRecord();
 
   vector<any>* record1 = GetRecord();
-  std::cout << "record1 size:" << record1->size() << std::endl;
-  std::cout << "schemas size:" << schemas->size() << std::endl;
+  std::cout << "record1 size:" << record1->size() << '\n';
+  std::cout << "schemas size:" << schemas->size() << '\n';
   pb::common::KeyValue kv;
   (void)re->Encode(*record1, kv);
   delete re;
@@ -1620,7 +1618,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
   vector<any> record2;
   (void)rd->Decode(kv, record2);
-  std::cout << "record2 size:" << record2.size() << std::endl;
+  std::cout << "record2 size:" << record2.size() << '\n';
   int i = 0;
   for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
@@ -1689,7 +1687,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1709,7 +1707,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1729,7 +1727,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1748,7 +1746,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1768,7 +1766,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1788,7 +1786,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1895,7 +1893,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1918,7 +1916,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1941,7 +1939,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1964,7 +1962,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1987,7 +1985,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -2010,7 +2008,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << std::endl;
+              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {

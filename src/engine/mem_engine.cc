@@ -14,8 +14,6 @@
 
 #include "engine/mem_engine.h"
 
-#include <cstdint>
-
 #include "common/logging.h"
 
 namespace dingodb {

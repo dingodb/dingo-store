@@ -17,8 +17,6 @@
 
 #include <memory>
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/tso_control.h"

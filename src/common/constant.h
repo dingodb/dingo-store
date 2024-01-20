@@ -16,7 +16,6 @@
 #define DINGODB_COMMON_CONSTANT_H_
 
 #include <cstdint>
-#include <map>
 #include <string>
 
 namespace dingodb {

@@ -15,22 +15,14 @@
 #include "vector/vector_index_hnsw.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
-#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <vector>
 
-#include "bthread/mutex.h"
-#include "bthread/types.h"
-#include "butil/compiler_specific.h"
-#include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -41,7 +33,6 @@
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
-#include "server/server.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_utils.h"
 

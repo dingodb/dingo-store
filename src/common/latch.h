@@ -15,10 +15,7 @@
 #ifndef DINGODB_COMMON_LATCH_H_
 #define DINGODB_COMMON_LATCH_H_
 
-#include <cassert>
 #include <deque>
-#include <functional>
-#include <mutex>
 #include <optional>
 #include <vector>
 

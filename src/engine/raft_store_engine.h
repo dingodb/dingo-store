@@ -30,7 +30,6 @@
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
-#include "proto/store_internal.pb.h"
 #include "raft/raft_node_manager.h"
 #include "vector/vector_index.h"
 

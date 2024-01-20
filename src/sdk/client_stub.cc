@@ -14,8 +14,6 @@
 
 #include "sdk/client_stub.h"
 
-#include "common/logging.h"
-#include "fmt/core.h"
 #include "sdk/common/param_config.h"
 #include "sdk/meta_cache.h"
 #include "sdk/rawkv/region_scanner_impl.h"

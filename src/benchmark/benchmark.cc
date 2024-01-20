@@ -24,6 +24,7 @@
 #include <thread>
 #include <vector>
 
+#include "benchmark/color.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 
@@ -77,13 +78,13 @@ void Stats::Report(bool is_cumulative, size_t milliseconds) const {
   double seconds = milliseconds / static_cast<double>(1000);
 
   if (is_cumulative) {
-    std::cout << COLOR_GREEN << fmt::format("Cumulative({}ms):", milliseconds) << COLOR_RESET << std::endl;
+    std::cout << COLOR_GREEN << fmt::format("Cumulative({}ms):", milliseconds) << COLOR_RESET << '\n';
   } else {
     if (epoch_ == 1) {
-      std::cout << COLOR_GREEN << fmt::format("Interval({}ms):", FLAGS_delay * 1000) << COLOR_RESET << std::endl;
+      std::cout << COLOR_GREEN << fmt::format("Interval({}ms):", FLAGS_delay * 1000) << COLOR_RESET << '\n';
     }
     if (epoch_ % 20 == 1) {
-      std::cout << COLOR_GREEN << Header() << COLOR_RESET << std::endl;
+      std::cout << COLOR_GREEN << Header() << COLOR_RESET << '\n';
     }
   }
 
@@ -92,7 +93,7 @@ void Stats::Report(bool is_cumulative, size_t milliseconds) const {
                            latency_recorder_->latency(), latency_recorder_->max_latency(),
                            latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
                            latency_recorder_->latency_percentile(0.99))
-            << std::endl;
+            << '\n';
 }
 
 std::string Stats::Header() {
@@ -119,11 +120,11 @@ void Benchmark::Stop() {
 }
 
 void Benchmark::Run() {
-  std::cout << COLOR_GREEN << "Arrange: " << COLOR_RESET << std::endl;
+  std::cout << COLOR_GREEN << "Arrange: " << COLOR_RESET << '\n';
 
   auto region_entries = ArrangeRegion(FLAGS_region_num);
 
-  std::cout << std::endl;
+  std::cout << '\n';
 
   if (region_entries.size() == FLAGS_region_num) {
     // Create multiple thread run benchmark
@@ -167,7 +168,7 @@ std::vector<RegionEntry> Benchmark::ArrangeRegion(int num) {
       return region_entries;
     }
 
-    std::cout << fmt::format("Create region({}) {} done", prefix, region_id) << std::endl;
+    std::cout << fmt::format("Create region({}) {} done", prefix, region_id) << '\n';
 
     RegionEntry region_entry;
     region_entry.prefix = prefix;
@@ -229,7 +230,7 @@ void Benchmark::ThreadRoutine(ThreadEntryPtr thread_entry) {
   // Set signal
   sigset_t sig_set;
   if (sigemptyset(&sig_set) || sigaddset(&sig_set, SIGINT) || pthread_sigmask(SIG_BLOCK, &sig_set, nullptr)) {
-    std::cerr << "Cannot block signal" << std::endl;
+    std::cerr << "Cannot block signal" << '\n';
     exit(1);
   }
 
@@ -310,7 +311,7 @@ Environment& Environment::GetInstance() {
 bool Environment::Init() {
   if (!IsSupportBenchmarkType(FLAGS_benchmark)) {
     std::cerr << fmt::format("Not support benchmark {}, just support: {}", FLAGS_benchmark, GetSupportBenchmarkType())
-              << std::endl;
+              << '\n';
     return false;
   }
 
@@ -349,45 +350,42 @@ void Environment::PrintVersionInfo() {
 
   auto version_info = response.version_info();
 
-  std::cout << COLOR_GREEN << "Version(dingo-store):" << COLOR_RESET << std::endl;
+  std::cout << COLOR_GREEN << "Version(dingo-store):" << COLOR_RESET << '\n';
 
-  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_hash", version_info.git_commit_hash()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "git_tag_name", version_info.git_tag_name()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_user", version_info.git_commit_user()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_mail", version_info.git_commit_mail()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_time", version_info.git_commit_time()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "major_version", version_info.major_version()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "minor_version", version_info.minor_version()) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "dingo_build_type", version_info.dingo_build_type()) << std::endl;
+  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_hash", version_info.git_commit_hash()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "git_tag_name", version_info.git_tag_name()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_user", version_info.git_commit_user()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_mail", version_info.git_commit_mail()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "git_commit_time", version_info.git_commit_time()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "major_version", version_info.major_version()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "minor_version", version_info.minor_version()) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "dingo_build_type", version_info.dingo_build_type()) << '\n';
   std::cout << fmt::format("{:<24}: {:>64}", "dingo_contrib_build_type", version_info.dingo_contrib_build_type())
-            << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "use_mkl", (version_info.use_mkl() ? "true" : "false")) << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "use_openblas", (version_info.use_openblas() ? "true" : "false"))
-            << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "use_tcmalloc", (version_info.use_tcmalloc() ? "true" : "false"))
-            << std::endl;
-  std::cout << fmt::format("{:<24}: {:>64}", "use_profiler", (version_info.use_profiler() ? "true" : "false"))
-            << std::endl;
+            << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "use_mkl", (version_info.use_mkl() ? "true" : "false")) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "use_openblas", (version_info.use_openblas() ? "true" : "false")) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "use_tcmalloc", (version_info.use_tcmalloc() ? "true" : "false")) << '\n';
+  std::cout << fmt::format("{:<24}: {:>64}", "use_profiler", (version_info.use_profiler() ? "true" : "false")) << '\n';
   std::cout << fmt::format("{:<24}: {:>64}", "use_sanitizer", (version_info.use_sanitizer() ? "true" : "false"))
-            << std::endl;
+            << '\n';
 
-  std::cout << std::endl;
+  std::cout << '\n';
 }
 
 void Environment::PrintParam() {
-  std::cout << COLOR_GREEN << "Parameter:" << COLOR_RESET << std::endl;
+  std::cout << COLOR_GREEN << "Parameter:" << COLOR_RESET << '\n';
 
-  std::cout << fmt::format("{:<16}: {:>32}", "benchmark", FLAGS_benchmark) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "region_num", FLAGS_region_num) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "prefix", FLAGS_prefix) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "concurrency", FLAGS_concurrency) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "req_num", FLAGS_req_num) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "delay(s)", FLAGS_delay) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "timelimit(s)", FLAGS_timelimit) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "key_size(byte)", FLAGS_key_size) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "value_size(byte)", FLAGS_value_size) << std::endl;
-  std::cout << fmt::format("{:<16}: {:>32}", "batch_size", FLAGS_batch_size) << std::endl;
-  std::cout << std::endl;
+  std::cout << fmt::format("{:<16}: {:>32}", "benchmark", FLAGS_benchmark) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "region_num", FLAGS_region_num) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "prefix", FLAGS_prefix) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "concurrency", FLAGS_concurrency) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "req_num", FLAGS_req_num) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "delay(s)", FLAGS_delay) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "timelimit(s)", FLAGS_timelimit) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "key_size(byte)", FLAGS_key_size) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "value_size(byte)", FLAGS_value_size) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "batch_size", FLAGS_batch_size) << '\n';
+  std::cout << '\n';
 }
 
 }  // namespace benchmark

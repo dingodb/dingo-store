@@ -19,7 +19,6 @@
 
 #include "sdk/client_stub.h"
 #include "sdk/rawkv/raw_kv_task.h"
-#include "sdk/rawkv/region_scanner_impl.h"
 #include "sdk/status.h"
 
 namespace dingodb {

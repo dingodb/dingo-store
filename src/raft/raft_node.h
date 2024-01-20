@@ -24,12 +24,9 @@
 #include <string>
 
 #include "common/context.h"
-#include "config/config.h"
-#include "engine/raw_engine.h"
 #include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "raft/state_machine.h"
 

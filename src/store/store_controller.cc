@@ -12,14 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "store/store_controller.h"
-
-#include <memory>
-#include <vector>
-
-#include "common/helper.h"
-#include "common/logging.h"
-#include "event/store_state_machine_event.h"
-#include "server/server.h"
-
 namespace dingodb {}  // namespace dingodb

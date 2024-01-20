@@ -20,7 +20,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <shared_mutex>
 #include <string>
 
 #include "common/meta_control.h"

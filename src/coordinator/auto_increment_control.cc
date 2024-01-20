@@ -24,7 +24,6 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
-#include "coordinator/coordinator_interaction.h"
 #include "engine/snapshot.h"
 #include "proto/error.pb.h"
 #include "server/server.h"

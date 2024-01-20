@@ -46,7 +46,7 @@ class Action {
   using ActionType = std::string;
 
   Action(uint32_t percent, int max_count, ActionType type, const std::string& arg)
-      : percent_(percent), max_count_(max_count), count_(0), type_(type), arg_(arg) {}
+      : percent_(percent), max_count_(max_count), type_(type), arg_(arg) {}
   virtual ~Action() = default;
 
   butil::Status Run();
@@ -61,7 +61,7 @@ class Action {
  private:
   uint32_t percent_;    // Random execute percent
   uint32_t max_count_;  // Max execute times
-  uint32_t count_;      // Current execute times
+  uint32_t count_{0};   // Current execute times
   ActionType type_;     // Action type, like panic/print/sleep/delay/yield
   std::string arg_;     // Action execute parameter
 };

@@ -17,13 +17,10 @@
 
 #include <cstdint>
 #include <map>
-#include <shared_mutex>
 
 #include "common/context.h"
 #include "engine/engine.h"
 #include "engine/snapshot.h"
-#include "proto/error.pb.h"
-#include "proto/store.pb.h"
 
 namespace dingodb {
 

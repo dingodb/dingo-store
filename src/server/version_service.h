@@ -17,11 +17,9 @@
 
 #include <atomic>
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <unordered_map>
 
-#include "brpc/server.h"
 #include "bthread/condition_variable.h"
 #include "bthread/mutex.h"
 #include "coordinator/kv_control.h"

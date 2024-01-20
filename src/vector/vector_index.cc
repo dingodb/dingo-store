@@ -18,16 +18,14 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "bthread/bthread.h"
-#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "config/config_manager.h"
 #include "fmt/core.h"
-#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"

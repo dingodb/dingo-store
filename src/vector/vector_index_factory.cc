@@ -14,18 +14,11 @@
 
 #include "vector/vector_index_factory.h"
 
-#include <atomic>
-#include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
-#include <string>
-#include <vector>
 
-#include "butil/status.h"
 #include "common/logging.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_bruteforce.h"

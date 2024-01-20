@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <shared_mutex>
 #include <vector>
 
 #include "raft/raft_node.h"

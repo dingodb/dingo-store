@@ -18,7 +18,6 @@
 #include <sys/types.h>
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -27,7 +26,6 @@
 #include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "butil/fast_rand.h"
-#include "butil/macros.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
 #include "common/helper.h"
@@ -35,10 +33,7 @@
 #include "common/safe_map.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
-#include "proto/meta.pb.h"
-#include "proto/version.pb.h"
 
 namespace dingodb {
 

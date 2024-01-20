@@ -15,31 +15,15 @@
 #ifndef DINGODB_VECTOR_INDEX_IVF_PQ_H_  // NOLINT
 #define DINGODB_VECTOR_INDEX_IVF_PQ_H_
 
-#include <array>
-#include <atomic>
-#include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
-#include <tuple>
-#include <utility>
 #include <vector>
 
-#include "bthread/mutex.h"
 #include "butil/status.h"
-#include "common/logging.h"
 #include "common/synchronization.h"
-#include "faiss/Index.h"
-#include "faiss/IndexFlat.h"
-#include "faiss/IndexIDMap.h"
-#include "faiss/IndexIVFFlat.h"
 #include "faiss/MetricType.h"
-#include "faiss/impl/IDSelector.h"
-#include "faiss/utils/distances.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_flat.h"
 #include "vector/vector_index_raw_ivf_pq.h"

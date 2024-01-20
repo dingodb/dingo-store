@@ -20,20 +20,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
-#include <string>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/logging.h"
 #include "faiss/MetricType.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_flat.h"
 
 namespace dingodb {
 
@@ -57,9 +54,9 @@ class VectorIndexMemoryFlatTest : public testing::Test {
 TEST_F(VectorIndexMemoryFlatTest, Create) {
   static const pb::common::Range kRange;
   std::cout << "pid : " << getpid() << '\n';
-  static pb::common::RegionEpoch kEpoch;
-  kEpoch.set_conf_version(1);
-  kEpoch.set_version(10);
+  static pb::common::RegionEpoch k_epoch;
+  k_epoch.set_conf_version(1);
+  k_epoch.set_version(10);
 
   // valid param L2
   {
@@ -68,7 +65,7 @@ TEST_F(VectorIndexMemoryFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_flat = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
     EXPECT_NE(vector_index_flat.get(), nullptr);
   }
 }

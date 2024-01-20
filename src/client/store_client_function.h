@@ -19,7 +19,8 @@
 #include <memory>
 #include <string>
 
-#include "client/client_interation.h"
+#include "proto/meta.pb.h"
+#include "proto/store.pb.h"
 
 namespace client {
 

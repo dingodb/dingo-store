@@ -36,8 +36,6 @@
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "coordinator/tso_control.h"
-#include "coprocessor/coprocessor_scalar.h"
-#include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "proto/common.pb.h"

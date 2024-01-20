@@ -23,15 +23,12 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
-#include "coprocessor/coprocessor_scalar.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
-#include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
-#include "vector/vector_index_factory.h"
 #include "vector/vector_index_flat.h"
 
 namespace dingodb {

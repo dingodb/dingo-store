@@ -20,25 +20,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
-#include "config/config_manager.h"
 #include "faiss/MetricType.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
-#include "server/server.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_hnsw.h"
-#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 

@@ -25,7 +25,6 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
-#include "common/synchronization.h"
 #include "coordinator/kv_control.h"
 #include "engine/snapshot.h"
 #include "google/protobuf/unknown_field_set.h"

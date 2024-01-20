@@ -53,13 +53,13 @@ class Slice {
   Slice(const struct SliceParts& parts, std::string* buf);
 
   // Return a pointer to the beginning of the referenced data
-  const char* data() const { return data_; }
+  const char* data() const { return data_; }  // NOLINT
 
   // Return the length (in bytes) of the referenced data
-  size_t size() const { return size_; }
+  size_t size() const { return size_; }  // NOLINT
 
   // Return true iff the length of the referenced data is zero
-  bool empty() const { return size_ == 0; }
+  bool empty() const { return size_ == 0; }  // NOLINT
 
   // Return the ith byte in the referenced data.
   // REQUIRES: n < size()
@@ -69,19 +69,19 @@ class Slice {
   }
 
   // Change this slice to refer to an empty array
-  void clear() {
+  void clear() {  // NOLINT
     data_ = "";
     size_ = 0;
   }
 
   // Drop the first "n" bytes from this slice.
-  void remove_prefix(size_t n) {
+  void remove_prefix(size_t n) {  // NOLINT
     assert(n <= size());
     data_ += n;
     size_ -= n;
   }
 
-  void remove_suffix(size_t n) {
+  void remove_suffix(size_t n) {  // NOLINT
     assert(n <= size());
     size_ -= n;
   }
@@ -104,21 +104,25 @@ class Slice {
   //   <  0 iff "*this" <  "b",
   //   == 0 iff "*this" == "b",
   //   >  0 iff "*this" >  "b"
-  int compare(const Slice& b) const;
+  int compare(const Slice& b) const;  // NOLINT
 
   // Return true iff "x" is a prefix of "*this"
-  bool starts_with(const Slice& x) const { return ((size_ >= x.size_) && (memcmp(data_, x.data_, x.size_) == 0)); }
+  bool starts_with(const Slice& x) const  // NOLINT
+  {
+    return ((size_ >= x.size_) && (memcmp(data_, x.data_, x.size_) == 0));
+  }
 
-  bool ends_with(const Slice& x) const {
+  bool ends_with(const Slice& x) const  // NOLINT
+  {
     return ((size_ >= x.size_) && (memcmp(data_ + size_ - x.size_, x.data_, x.size_) == 0));
   }
 
   // Compare two slices and returns the first byte where they differ
-  size_t difference_offset(const Slice& b) const;
+  size_t difference_offset(const Slice& b) const;  // NOLINT
 
   // private: make these public for rocksdbjni access
-  const char* data_;
-  size_t size_;
+  const char* data_;  // NOLINT
+  size_t size_;       // NOLINT
 
   // Intentionally copyable
 };
@@ -126,7 +130,7 @@ class Slice {
 // A set of Slices that are virtually concatenated together.  'parts' points
 // to an array of Slices.  The number of elements in the array is 'num_parts'.
 struct SliceParts {
-  SliceParts(const Slice* _parts, int _num_parts) : parts(_parts), num_parts(_num_parts) {}
+  SliceParts(const Slice* _parts, int _num_parts) : parts(_parts), num_parts(_num_parts) {}  // NOLINT
   SliceParts() : parts(nullptr), num_parts(0) {}
 
   const Slice* parts;

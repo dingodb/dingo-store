@@ -15,19 +15,15 @@
 #ifndef DINGODB_SDK_RAW_KV_TASK_H_
 #define DINGODB_SDK_RAW_KV_TASK_H_
 
-#include <functional>
-
-#include "fmt/core.h"
 #include "sdk/client_stub.h"
 #include "sdk/status.h"
-#include "sdk/utils/async_util.h"
 #include "sdk/utils/callback.h"
 
 namespace dingodb {
 namespace sdk {
 class RawKvTask {
  public:
-  RawKvTask(const ClientStub& stub) : stub(stub), retry_count_(0) {}
+  RawKvTask(const ClientStub& stub) : stub(stub) {}
   virtual ~RawKvTask() = default;
 
   Status Run();
@@ -53,7 +49,7 @@ class RawKvTask {
 
   Status status_;
   StatusCallback call_back_;
-  int retry_count_;
+  int retry_count_{0};
 };
 
 }  // namespace sdk

@@ -14,10 +14,7 @@
 
 #include "vector/vector_index_utils.h"
 
-#include <atomic>
-#include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -30,6 +27,8 @@
 #include "faiss/utils/extra_distances-inl.h"
 #include "fmt/core.h"
 #include "hnswlib/hnswlib.h"
+#include "hnswlib/space_ip.h"
+#include "hnswlib/space_l2.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 

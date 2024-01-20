@@ -16,7 +16,6 @@
 #define DINGODB_COORDINATOR_SERVICE_H_
 
 #include <memory>
-#include <string>
 
 #include "brpc/controller.h"
 #include "common/helper.h"

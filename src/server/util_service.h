@@ -15,8 +15,6 @@
 #ifndef DINGODB_UTIL_SERVICE_H_
 #define DINGODB_UTIL_SERVICE_H_
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
 #include "engine/storage.h"
 #include "proto/util.pb.h"
 

@@ -15,8 +15,6 @@
 #ifndef DINGODB_SDK_REGION_CREATOR_DATA_H_
 #define DINGODB_SDK_REGION_CREATOR_DATA_H_
 
-#include <optional>
-
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
 
@@ -27,7 +25,7 @@ class RegionCreator::Data {
   Data(const Data&) = delete;
   const Data& operator=(const Data&) = delete;
 
-  explicit Data(const ClientStub& stub) : stub(stub), replica_num(1), wait(true), engine_type(kLSM) {}
+  explicit Data(const ClientStub& stub) : stub(stub) {}
 
   ~Data() = default;
 
@@ -38,11 +36,11 @@ class RegionCreator::Data {
   std::string lower_bound;
   std::string upper_bound;
 
-  EngineType engine_type;
+  EngineType engine_type{kLSM};
 
-  int64_t replica_num;
+  int64_t replica_num{1};
 
-  bool wait;
+  bool wait{true};
 };
 
 }  // namespace sdk

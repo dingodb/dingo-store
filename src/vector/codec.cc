@@ -15,7 +15,6 @@
 #include "vector/codec.h"
 
 #include <cstdint>
-#include <utility>
 
 #include "butil/compiler_specific.h"
 #include "common/constant.h"

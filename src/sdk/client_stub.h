@@ -16,7 +16,6 @@
 #define DINGODB_SDK_CLIENT_STUB_H_
 
 #include <memory>
-#include <vector>
 
 #include "glog/logging.h"
 #include "sdk/admin_tool.h"

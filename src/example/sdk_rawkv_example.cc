@@ -14,15 +14,11 @@
 
 #include <unistd.h>
 
-#include <algorithm>
 #include <cstdint>
-#include <cstdio>
-#include <iterator>
 #include <memory>
 #include <vector>
 
 #include "common/logging.h"
-#include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
 #include "sdk/coordinator_proxy.h"

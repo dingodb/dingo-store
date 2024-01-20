@@ -15,8 +15,6 @@
 #ifndef DINGODB_DEBUG_SERVICE_H_
 #define DINGODB_DEBUG_SERVICE_H_
 
-#include "brpc/controller.h"
-#include "brpc/server.h"
 #include "proto/debug.pb.h"
 
 namespace dingodb {

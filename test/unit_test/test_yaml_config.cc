@@ -14,7 +14,6 @@
 
 #include <gtest/gtest.h>
 
-#include <iostream>
 #include <string>
 
 #include "config/yaml_config.h"

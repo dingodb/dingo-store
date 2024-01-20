@@ -16,20 +16,14 @@
 
 #include <sys/types.h>
 
-#include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "braft/configuration.h"
 #include "bthread/mutex.h"
 #include "butil/compiler_specific.h"
-#include "butil/containers/flat_map.h"
-#include "butil/scoped_lock.h"
-#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/safe_map.h"

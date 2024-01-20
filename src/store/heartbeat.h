@@ -15,7 +15,6 @@
 #ifndef DINGODB_SERVER_HEARTBEAT_H_
 #define DINGODB_SERVER_HEARTBEAT_H_
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 

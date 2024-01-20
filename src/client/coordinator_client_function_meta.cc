@@ -19,13 +19,11 @@
 
 #include "client/client_helper.h"
 #include "client/coordinator_client_function.h"
-#include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "coordinator/tso_control.h"
 #include "gflags/gflags_declare.h"
-#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 

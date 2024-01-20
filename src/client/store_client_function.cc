@@ -23,7 +23,6 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -31,6 +30,7 @@
 
 #include "bthread/bthread.h"
 #include "client/client_helper.h"
+#include "client/client_interation.h"
 #include "client/client_router.h"
 #include "common/helper.h"
 #include "common/logging.h"

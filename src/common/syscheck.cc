@@ -18,11 +18,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
 #include <string>
 
 #include "common/logging.h"

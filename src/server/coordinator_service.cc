@@ -18,7 +18,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <shared_mutex>
 #include <string>
 #include <vector>
 

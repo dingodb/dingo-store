@@ -14,6 +14,8 @@
 
 #include "common/synchronization.h"
 
+#include "common/logging.h"
+
 namespace dingodb {
 
 // BthreadCond

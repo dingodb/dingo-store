@@ -26,7 +26,7 @@
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
 #include "common/constant.h"
-#include "engine/raw_engine.h"
+#include "engine/engine.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
 #include "meta/store_meta_manager.h"

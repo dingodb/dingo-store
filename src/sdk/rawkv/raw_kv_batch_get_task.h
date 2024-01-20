@@ -16,14 +16,13 @@
 #define DINGODB_SDK_RAW_KV_BATCH_GET_TASK_H_
 
 #include <atomic>
-#include <mutex>
 #include <shared_mutex>
 #include <string_view>
 
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
-#include "sdk/rawkv/raw_kv_get_task.h"
 #include "sdk/rawkv/raw_kv_task.h"
+#include "sdk/store/store_rpc.h"
 #include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {

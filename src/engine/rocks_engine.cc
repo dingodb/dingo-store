@@ -13,31 +13,10 @@
 // limitations under the License.
 #include "engine/rocks_engine.h"
 
-#include <climits>
-#include <cstddef>
-#include <cstdint>
-#include <exception>
-#include <map>
 #include <memory>
-#include <optional>
-#include <stdexcept>
 #include <string>
-#include <tuple>
-#include <type_traits>
-#include <utility>
-#include <vector>
 
-#include "config/config_manager.h"
 #include "engine/engine.h"
-#include "proto/error.pb.h"
-#include "rocksdb/advanced_options.h"
-#include "rocksdb/cache.h"
-#include "rocksdb/filter_policy.h"
-#include "rocksdb/iterator.h"
-#include "rocksdb/slice.h"
-#include "rocksdb/table.h"
-#include "rocksdb/utilities/transaction_db.h"
-#include "rocksdb/write_batch.h"
 
 namespace dingodb {
 

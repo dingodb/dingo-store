@@ -14,6 +14,8 @@
 
 #include "sdk/rawkv/raw_kv_task.h"
 
+#include "sdk/utils/async_util.h"
+
 namespace dingodb {
 namespace sdk {
 

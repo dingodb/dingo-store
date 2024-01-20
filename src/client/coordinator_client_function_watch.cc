@@ -20,13 +20,10 @@
 #include <vector>
 
 #include "butil/status.h"
-#include "butil/time.h"
 #include "client/coordinator_client_function.h"
-#include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
-#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/version.pb.h"
