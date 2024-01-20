@@ -43,7 +43,7 @@
 #include "third-party/build/bdb/db.h"
 #include "third-party/build/bdb/db_cxx.h"
 
-#define BDB_FAST_GET_APROX_SIZE
+// #define BDB_FAST_GET_APROX_SIZE
 #define BDB_BUILD_USE_BULK_DELETE
 
 bvar::Adder<uint64_t> bdb_snapshot_alive_count("bdb_snapshot_alive_count");
@@ -264,14 +264,14 @@ void BdbHelper::CheckpointThread(DbEnv* env, Db* /*db*/, std::atomic<bool>& is_c
       try {
         int ret = env->lock_detect(0, DB_LOCK_MINWRITE, nullptr);
         if (ret != 0) {
-          DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, ret: {}.", ret);
+          DINGO_LOG(ERROR) << fmt::format("[bdb] env->lock_detect failed, ret: {}.", ret);
         }
       } catch (DbException& db_exception) {
         BdbHelper::PrintEnvStat(env);
-        DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, exception: {} {}.", db_exception.get_errno(),
+        DINGO_LOG(ERROR) << fmt::format("[bdb] env->lock_detect failed, exception: {} {}.", db_exception.get_errno(),
                                         db_exception.what());
       } catch (std::exception& std_exception) {
-        DINGO_LOG(ERROR) << fmt::format("[bdb] lock_detect failed, std exception: {}.", std_exception.what());
+        DINGO_LOG(ERROR) << fmt::format("[bdb] env->lock_detect failed, std exception: {}.", std_exception.what());
       }
     }
 
@@ -280,23 +280,23 @@ void BdbHelper::CheckpointThread(DbEnv* env, Db* /*db*/, std::atomic<bool>& is_c
       try {
         int ret = env->stat_print(DB_STAT_SUBSYSTEM);
         if (ret != 0) {
-          DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, ret: {}.", ret);
+          DINGO_LOG(ERROR) << fmt::format("[bdb] env->stat_print failed, ret: {}.", ret);
         } else {
-          DINGO_LOG(INFO) << fmt::format("[bdb] db_stat ok");
+          DINGO_LOG(INFO) << fmt::format("[bdb] env->stat_print ok");
         }
 
         // ret = env->memp_sync(nullptr);
         // if (ret != 0) {
-        //   DINGO_LOG(ERROR) << fmt::format("[bdb] memp_sync failed, ret: {}.", ret);
+        //   DINGO_LOG(ERROR) << fmt::format("[bdb] env->memp_sync failed, ret: {}.", ret);
         // } else {
-        //   DINGO_LOG(INFO) << fmt::format("[bdb] memp_sync ok");
+        //   DINGO_LOG(INFO) << fmt::format("[bdb] env->memp_sync ok");
         // }
 
         // ret = db->sync(0);
         // if (ret != 0) {
-        //   DINGO_LOG(ERROR) << fmt::format("[bdb] db sync failed, ret: {}.", ret);
+        //   DINGO_LOG(ERROR) << fmt::format("[bdb] db->sync failed, ret: {}.", ret);
         // } else {
-        //   DINGO_LOG(ERROR) << fmt::format("[bdb] db sync ok");
+        //   DINGO_LOG(ERROR) << fmt::format("[bdb] db->sync ok");
         // }
       } catch (DbException& db_exception) {
         DINGO_LOG(ERROR) << fmt::format("[bdb] db_stat failed, exception: {} {}.", db_exception.get_errno(),
@@ -862,6 +862,55 @@ butil::Status Reader::GetRangeKeys(const std::string& cf_name, const std::string
   iter->Seek(start_key);
   while (iter->Valid()) {
     keys.emplace_back(iter->Key());
+    iter->Next();
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Reader::GetRangeKeyValueSize(const std::string& cf_name, const std::string& start_key,
+                                           const std::string& end_key, int64_t limit, int64_t& key_size,
+                                           int64_t& value_size) {
+  key_size = 0;
+  value_size = 0;
+
+  DINGO_LOG(DEBUG) << fmt::format("[bdb] get range key value size, cf_name: {}, start_key: {}, end_key: {}, limit: {}.",
+                                  cf_name, Helper::StringToHex(start_key), Helper::StringToHex(end_key), limit);
+
+  if (limit == 0) {
+    return butil::Status();
+  }
+
+  if (BAIDU_UNLIKELY(start_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty start_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(end_key.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] not support empty end_key.");
+    return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
+  }
+
+  if (BAIDU_UNLIKELY(start_key >= end_key)) {
+    return butil::Status();
+  }
+
+  IteratorOptions options;
+  options.lower_bound = start_key;
+  options.upper_bound = end_key;
+  auto iter = NewIterator(cf_name, options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[bdb] create iterator failed.");
+    return butil::Status(pb::error::EINTERNAL, "Internal create iterator error.");
+  }
+
+  iter->Seek(start_key);
+  while (iter->Valid() && limit > 0) {
+    key_size += iter->Key().size();
+    value_size += iter->Value().size();
+
+    limit -= 1;
+
     iter->Next();
   }
 
@@ -1880,7 +1929,7 @@ void LogBDBError(const DbEnv*, const char* /*errpfx*/, const char* msg) {
   DINGO_LOG(ERROR) << "[bdb] error msg: " << msg;
 }
 
-void LogBDBMsg(const DbEnv*, const char* msg) { DINGO_LOG(ERROR) << "[bdb] bdb info msg: " << msg; }
+void LogBDBMsg(const DbEnv*, const char* msg) { DINGO_LOG(INFO) << "[bdb] bdb info msg: " << msg; }
 
 // override functions
 bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {
@@ -1957,7 +2006,7 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
       envp_->mutex_set_increment(FLAGS_bdb_mutex_increment);
     }
 
-    if (FLAGS_bdb_lk_partitions> 0) {
+    if (FLAGS_bdb_lk_partitions > 0) {
       envp_->set_lk_partitions(FLAGS_bdb_lk_partitions);
     }
 
@@ -2280,31 +2329,43 @@ butil::Status BdbRawEngine::Compact(const std::string& cf_name) {
   return butil::Status(pb::error::EINTERNAL, "Internal compact error.");
 }
 
-// TODO: now get approximate sizes is only calc the number of keys, but not the size of values.
-//       we need to calc the size of values in the future.
+// TODO: using DB_FAST_STAT to get approximate size is not accurate and very limited for btree.
+//       we need to implement our own approximate size function in the future.
+//       now using GetRangeKeyValueSize to get approximate size, this is very slow for large range.
+//       we skip GetApproximateSizes in metrics collect crontab for regions has lesser raft apply count than 10, so the
+//       performace penalty is acceptable.
 std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_name,
                                                        std::vector<pb::common::Range>& ranges) {
-  std::vector<int64_t> result_counts;
+  std::vector<int64_t> result_sizes;
 
-#ifndef BDB_FAST_GET_APROX_SIZE
   std::shared_ptr<bdb::Reader> bdb_reader = std::dynamic_pointer_cast<bdb::Reader>(reader_);
   if (bdb_reader == nullptr) {
     DINGO_LOG(ERROR) << "[bdb] reader pointer cast error.";
-    return result_counts;
+    return result_sizes;
   }
 
+#ifndef BDB_FAST_GET_APROX_SIZE
+
   for (const auto& range : ranges) {
-    int64_t count = 0;
-    butil::Status status = bdb_reader->GetRangeCountByCursor(cf_name, range.start_key(), range.end_key(), count);
-    if (BAIDU_UNLIKELY(!status.ok())) {
-      DINGO_LOG(ERROR) << fmt::format("[bdb] get range by cursor failed, status code: {}, message: {}",
-                                      status.error_code(), status.error_str());
-      return std::vector<int64_t>();
+    // Calculate the size of keys and values for each range
+    // we use the first 100 keys to calculate the average size of keys and values
+    int64_t key_size = 0;
+    int64_t value_size = 0;
+    auto ret =
+        bdb_reader->GetRangeKeyValueSize(cf_name, range.start_key(), range.end_key(), INT64_MAX, key_size, value_size);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[bdb] get range key value size failed, cf_name: {}, status code: {}, message: {}", cf_name, ret.error_code(),
+          ret.error_str());
     }
-    result_counts.push_back(count);
+
+    DINGO_LOG(DEBUG) << fmt::format("[bdb] cf_name: {}, key_size: {}, value_size: {}.", cf_name, key_size, value_size);
+
+    result_sizes.push_back(key_size + value_size);
   }
 
 #else
+  // DB_FAST_STAT is very limited for btree, it is based on the last metrics the database has full stat.
 
   // estimat count
   try {
@@ -2368,7 +2429,7 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
         count = 0;
       }
 
-      if (count > 0) {
+      if (count >= 0) {
         DINGO_LOG(INFO) << fmt::format(
             "[bdb] cf_name: {}, count: {}, bdb total key count: {}, range_result: {}, "
             "range_start.less: {}, "
@@ -2376,7 +2437,23 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
             "{}, range_end.greater: {}.",
             cf_name, count, bdb_total_key_count, range_result, range_start.less, range_end.equal, range_end.greater);
       }
-      result_counts.push_back(count);
+
+      // Calculate the size of keys and values for each range
+      // we use the first 100 keys to calculate the average size of keys and values
+      int64_t key_size = 0;
+      int64_t value_size = 0;
+      int64_t limit_count = 100;
+      auto ret1 = bdb_reader->GetRangeKeyValueSize(cf_name, range.start_key(), range.end_key(), limit_count, key_size,
+                                                   value_size);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[bdb] get range key value size failed, cf_name: {}, status code: {}, message: {}", cf_name,
+            ret1.error_code(), ret1.error_str());
+      }
+
+      result_sizes.push_back(count * (key_size + value_size) / limit_count);
+      DINGO_LOG(INFO) << fmt::format("[bdb] cf_name: {}, count: {}, key_size: {}, value_size: {}.", cf_name, count,
+                                     key_size, value_size);
     }
   } catch (DbException& db_exception) {
     bdb::BdbHelper::PrintEnvStat(GetEnv());
@@ -2387,7 +2464,7 @@ std::vector<int64_t> BdbRawEngine::GetApproximateSizes(const std::string& cf_nam
 
 #endif
 
-  return result_counts;
+  return result_sizes;
 }
 
 }  // namespace dingodb
