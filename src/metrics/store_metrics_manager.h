@@ -45,16 +45,75 @@ class RegionMetrics {
   std::string Serialize();
   void DeSerialize(const std::string& data);
 
+  // After split/merge, we need to reset the region metrics.
+  // the most important is the region size must be 0.
+  // The coordinator will check if the last_update_metrics_log_index_ and last_update_metrics_version is 0, if is 0, the
+  // automatic merge will skip this region.
+  void ResetMetricsForRegionVersionUpdate() {
+    BAIDU_SCOPED_LOCK(mutex_);
+
+    // force region_size update in next collect region metrics
+    inner_region_metrics_.set_region_size(0);
+    inner_region_metrics_.set_last_update_metrics_log_index(0);
+    inner_region_metrics_.set_last_update_metrics_version(0);
+
+    // UpdateMaxAndMinKeyPolicy
+    need_update_min_key_ = true;
+    need_update_max_key_ = true;
+  }
+
   int64_t LastLogIndex() {
     BAIDU_SCOPED_LOCK(mutex_);
     return last_log_index_;
   }
-  void SetLastLogIndex(int64_t last_log_index) { last_log_index_ = last_log_index; }
+
+  void SetLastLogIndex(int64_t last_log_index) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    last_log_index_ = last_log_index;
+  }
+
+  int64_t RegionVersion() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return region_version_;
+  }
+
+  void SetRegionVersion(int64_t region_version) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    region_version_ = region_version;
+  }
+
+  int64_t LastUpdateMetricsLogIndex() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.last_update_metrics_log_index();
+  }
+
+  void SetLastUpdateMetricsLogIndex(int64_t last_update_metrics_log_index) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_last_update_metrics_log_index(last_update_metrics_log_index);
+  }
+
+  void UpdateLastUpdateMetricsLogIndex() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    if (inner_region_metrics_.last_update_metrics_log_index() < last_log_index_) {
+      inner_region_metrics_.set_last_update_metrics_log_index(last_log_index_);
+    }
+  }
+
+  int64_t LastUpdateMetricsVersion() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.last_update_metrics_version();
+  }
+
+  void SetLastUpdateMetricsVersion(int64_t last_update_metrics_version) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    inner_region_metrics_.set_last_update_metrics_version(last_update_metrics_version);
+  }
 
   bool NeedUpdateMinKey() {
     BAIDU_SCOPED_LOCK(mutex_);
     return need_update_min_key_;
   }
+
   void SetNeedUpdateMinKey(bool need_update_min_key) {
     BAIDU_SCOPED_LOCK(mutex_);
     need_update_min_key_ = need_update_min_key;
@@ -64,12 +123,17 @@ class RegionMetrics {
     BAIDU_SCOPED_LOCK(mutex_);
     return need_update_max_key_;
   }
-  void SetNeedUpdateMaxKey(bool need_update_max_key) { need_update_max_key_ = need_update_max_key; }
+
+  void SetNeedUpdateMaxKey(bool need_update_max_key) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    need_update_max_key_ = need_update_max_key;
+  }
 
   bool NeedUpdateKeyCount() {
     BAIDU_SCOPED_LOCK(mutex_);
     return need_update_key_count_;
   }
+
   void SetNeedUpdateKeyCount(bool need_update_key_count) {
     BAIDU_SCOPED_LOCK(mutex_);
     need_update_key_count_ = need_update_key_count;
@@ -84,6 +148,7 @@ class RegionMetrics {
     BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_metrics_.min_key();
   }
+
   void SetMinKey(const std::string& min_key) {
     BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.set_min_key(min_key);
@@ -93,6 +158,7 @@ class RegionMetrics {
     BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_metrics_.max_key();
   }
+
   void SetMaxKey(const std::string& max_key) {
     BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.set_max_key(max_key);
@@ -102,15 +168,30 @@ class RegionMetrics {
     BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_metrics_.region_size();
   }
+
   void SetRegionSize(int64_t region_size) {
     BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.set_region_size(region_size);
+
+    // update last_update_metrics_timestamp
+    inner_region_metrics_.set_last_update_metrics_timestamp(butil::gettimeofday_ms());
+
+    // update last_update_metrics_log_index
+    if (last_log_index_ > inner_region_metrics_.last_update_metrics_log_index()) {
+      inner_region_metrics_.set_last_update_metrics_log_index(last_log_index_);
+    }
+
+    // update last_update_metrics_version
+    if (region_version_ > inner_region_metrics_.last_update_metrics_version()) {
+      inner_region_metrics_.set_last_update_metrics_version(region_version_);
+    }
   }
 
   int64_t KeyCount() {
     BAIDU_SCOPED_LOCK(mutex_);
     return inner_region_metrics_.row_count();
   }
+
   void SetKeyCount(int64_t key_count) {
     BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.set_row_count(key_count);
@@ -196,6 +277,8 @@ class RegionMetrics {
  private:
   // update metrics until raft log index
   int64_t last_log_index_{0};
+  // region version is update in collect approximate size metrics function
+  int64_t region_version_{0};
   // need update region min key
   bool need_update_min_key_{true};
   // need update region max key

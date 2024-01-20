@@ -24,12 +24,11 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "common/role.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
-#include "vector/vector_index_manager.h"
 
 namespace dingodb {
 
@@ -312,20 +311,67 @@ std::vector<std::vector<store::RegionPtr>> GenBatchRegion(std::vector<store::Reg
   return result;
 }
 
+DEFINE_int64(collect_approximate_size_log_index_interval, 10,
+             "Collecting approximate size log index interval, the region has raft log index greater than this value "
+             "will be collected region size");
+
 bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
   auto store_region_meta = GET_STORE_REGION_META;
   auto region_metricses = GetAllMetrics();
 
   std::vector<store::RegionPtr> need_collect_rocks_regions;
   std::vector<store::RegionPtr> need_collect_bdb_regions;
+
   for (const auto& region_metrics : region_metricses) {
+    DINGO_LOG(DEBUG) << fmt::format(
+        "[metrics.region] collect approximate size metrics start, region({}) log_index_id({})", region_metrics->Id(),
+        region_metrics->LastLogIndex());
+
     auto region = store_region_meta->GetRegion(region_metrics->Id());
     if (region == nullptr) {
+      DINGO_LOG(INFO) << fmt::format("[metrics.region] skip collect approximate size metrics, region({}) not exist",
+                                     region_metrics->Id());
       continue;
     }
+
     if (region->State() != pb::common::NORMAL) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[metrics.region] skip collect approximate size metrics for state not NORMAL, region({}) state({})",
+          region->Id(), pb::common::StoreRegionState_Name(region->State()));
       continue;
     }
+
+    // first update region_version in region metrics
+    auto region_version = region->Epoch().version();
+    if (region_version > region_metrics->RegionVersion()) {
+      region_metrics->SetRegionVersion(region_version);
+    }
+
+    // get region log index id
+    auto log_index_id = region_metrics->LastLogIndex();
+
+    // get last update metrics log index and version
+    auto last_update_metrics_log_index = region_metrics->LastUpdateMetricsLogIndex();
+    auto last_update_metrics_version = region_metrics->LastUpdateMetricsVersion();
+
+    // if the region version has been updated, update the last update metrics version, this is done in SetRegionSize
+    // else if the region version is equal and the difference between the current log index and the last update
+    // metrics log index is less than the interval, skip it
+    if (region_version <= last_update_metrics_version &&
+        (log_index_id - last_update_metrics_log_index < FLAGS_collect_approximate_size_log_index_interval)) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[metrics.region] skip collect approximate size metrics, region({}) log_index_id({}) region_version({}) "
+          "last_update_metrics_log_index({}) last_update_metrics_version({})",
+          region->Id(), log_index_id, region_version, last_update_metrics_log_index, last_update_metrics_version);
+
+      continue;
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[metrics.region] collect approximate size metrics, region({}) log_index_id({}) version({}) "
+        "last_update_metrics_log_index({}) last_update_metrics_version({})",
+        region->Id(), log_index_id, region_version, last_update_metrics_log_index, last_update_metrics_version);
+
     if (region->GetRawEngineType() == pb::common::RAW_ENG_ROCKSDB) {
       need_collect_rocks_regions.push_back(region);
     } else if (region->GetRawEngineType() == pb::common::RAW_ENG_BDB) {
@@ -346,6 +392,11 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
         auto region_metrics = GetMetrics(region_id);
         if (region_metrics != nullptr) {
           region_metrics->SetRegionSize(size);
+          region_metrics->UpdateLastUpdateMetricsLogIndex();
+
+          DINGO_LOG(INFO) << fmt::format(
+              "[metrics.region] get rocksdb region approximate size region({}) size({}) elapsed time[{} ms]", region_id,
+              size, Helper::TimestampMs() - start_time);
         }
       }
     }
@@ -368,6 +419,11 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
         auto region_metrics = GetMetrics(region_id);
         if (region_metrics != nullptr) {
           region_metrics->SetRegionSize(size);
+          region_metrics->UpdateLastUpdateMetricsLogIndex();
+
+          DINGO_LOG(INFO) << fmt::format(
+              "[metrics.region] get bdb region approximate size region({}) size({}) elapsed time[{} ms]", region_id,
+              size, Helper::TimestampMs() - start_time);
         }
       }
     }

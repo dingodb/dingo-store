@@ -378,44 +378,73 @@ static int32_t GetInterval(std::shared_ptr<Config> config, const std::string& co
   return interval_s > 0 ? interval_s : default_value;
 }
 
+DEFINE_int32(server_heartbeat_interval_s, 10, "heartbeat interval seconds");
+DEFINE_int32(server_metrics_collect_interval_s, 300, "metrics collect interval seconds");
+DEFINE_int32(server_store_metrics_collect_interval_s, 30, "store metrics collect interval seconds");
+DEFINE_int32(server_approximate_size_metrics_collect_interval_s, 300,
+             "approximate size metrics collect interval seconds");
+DEFINE_int32(scan_scan_interval_s, 30, "scan interval seconds");
+DEFINE_int32(scanv2_scan_interval_s, 30, "scan interval seconds");
+DEFINE_bool(region_enable_auto_split, true, "enable auto split");
+DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds");
+DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
+DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
+DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
+DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
+DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
+DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch interval seconds");
+DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
+DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
+DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index interval seconds");
+DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
+DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
+DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
+
 bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // Add heartbeat crontab
+  FLAGS_server_heartbeat_interval_s =
+      GetInterval(config, "server.heartbeat_interval_s", FLAGS_server_heartbeat_interval_s);
   crontab_configs_.push_back({
       "HEARTBEA",
       {pb::common::STORE, pb::common::INDEX},
-      GetInterval(config, "server.heartbeat_interval_s", Constant::kHeartbeatIntervalS) * 1000,
+      FLAGS_server_heartbeat_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerStoreHeartbeat({}, true); },
   });
 
   // Add store region metrics crontab
+  FLAGS_server_metrics_collect_interval_s =
+      GetInterval(config, "server.metrics_collect_interval_s", FLAGS_server_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "STORE_REGION_METRICS",
       {pb::common::STORE, pb::common::INDEX},
-      GetInterval(config, "server.metrics_collect_interval_s", Constant::kRegionMetricsCollectIntervalS) * 1000,
+      FLAGS_server_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreRegionMetrics(); },
   });
 
   // Add store metrics crontab
+  FLAGS_server_store_metrics_collect_interval_s =
+      GetInterval(config, "server.store_metrics_collect_interval_s", FLAGS_server_store_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "STORE_METRICS",
       {pb::common::STORE, pb::common::INDEX},
-      GetInterval(config, "server.store_metrics_collect_interval_s", Constant::kStoreMetricsCollectIntervalS) * 1000,
+      FLAGS_server_store_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreMetrics(); },
   });
 
   // Add store approximate size metrics crontab
+  FLAGS_server_approximate_size_metrics_collect_interval_s =
+      GetInterval(config, "server.approximate_size_metrics_collect_interval_s",
+                  FLAGS_server_approximate_size_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "APPROXIMATE_SIZE_METRICS",
       {pb::common::STORE, pb::common::INDEX},
-      GetInterval(config, "server.approximate_size_metrics_collect_interval_s",
-                  Constant::kApproximateSizeMetricsCollectIntervalS) *
-          1000,
+      FLAGS_server_approximate_size_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectApproximateSizeMetrics(); },
   });
@@ -423,10 +452,12 @@ bool Server::InitCrontabManager() {
   // Add scan crontab
   if (GetRole() == pb::common::STORE) {
     ScanManager::GetInstance().Init(config);
+
+    FLAGS_scan_scan_interval_s = GetInterval(config, "scan.scan_interval_s", FLAGS_scan_scan_interval_s);
     crontab_configs_.push_back({
         "SCAN",
         {pb::common::STORE},
-        GetInterval(config, "scan.scan_interval_s", Constant::kScanIntervalS) * 1000,
+        FLAGS_scan_scan_interval_s * 1000,
         false,
         [](void*) { ScanManager::RegularCleaningHandler(nullptr); },
     });
@@ -435,10 +466,12 @@ bool Server::InitCrontabManager() {
   // Add scan v2 crontab
   if (GetRole() == pb::common::STORE) {
     ScanManagerV2::GetInstance().Init(config);
+
+    FLAGS_scanv2_scan_interval_s = GetInterval(config, "scan_v2.scan_interval_s", FLAGS_scanv2_scan_interval_s);
     crontab_configs_.push_back({
         "SCAN_V2",
         {pb::common::STORE},
-        GetInterval(config, "scan_v2.scan_interval_s", Constant::kScanIntervalS) * 1000,
+        FLAGS_scanv2_scan_interval_s * 1000,
         false,
         [](void*) { ScanManagerV2::RegularCleaningHandler(nullptr); },
     });
@@ -446,12 +479,14 @@ bool Server::InitCrontabManager() {
 
   // Add split checker crontab
   if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
-    bool enable_auto_split = config->GetBool("region.enable_auto_split");
-    if (enable_auto_split) {
+    FLAGS_region_enable_auto_split = config->GetBool("region.enable_auto_split");
+    if (FLAGS_region_enable_auto_split) {
+      FLAGS_region_split_check_interval_s =
+          GetInterval(config, "region.split_check_interval_s", FLAGS_region_split_check_interval_s);
       crontab_configs_.push_back({
           "SPLIT_CHECKER",
           {pb::common::STORE, pb::common::INDEX},
-          GetInterval(config, "region.split_check_interval_s", Constant::kDefaultSplitCheckIntervalS) * 1000,
+          FLAGS_region_split_check_interval_s * 1000,
           false,
           [](void*) { PreSplitChecker::TriggerPreSplitCheck(nullptr); },
       });
@@ -459,64 +494,78 @@ bool Server::InitCrontabManager() {
   }
 
   // Add push crontab
+  FLAGS_coordinator_push_interval_s =
+      GetInterval(config, "coordinator.push_interval_s", FLAGS_coordinator_push_interval_s);
   crontab_configs_.push_back({
       "PUSH",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.push_interval_s", Constant::kPushIntervalS) * 1000,
+      FLAGS_coordinator_push_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCoordinatorPushToStore(nullptr); },
   });
 
   // Add update state crontab
+  FLAGS_coordinator_update_state_interval_s =
+      GetInterval(config, "coordinator.update_state_interval_s", FLAGS_coordinator_update_state_interval_s);
   crontab_configs_.push_back({
       "UPDATE",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.update_state_interval_s", Constant::kUpdateStateIntervalS) * 1000,
+      FLAGS_coordinator_update_state_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCoordinatorUpdateState(nullptr); },
   });
 
   // Add task list process crontab
+  FLAGS_coordinator_task_list_interval_s =
+      GetInterval(config, "coordinator.task_list_interval_s", FLAGS_coordinator_task_list_interval_s);
   crontab_configs_.push_back({
       "TASKLIST",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.task_list_interval_s", Constant::kTaskListIntervalS) * 1000,
+      FLAGS_coordinator_task_list_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCoordinatorTaskListProcess(nullptr); },
   });
 
   // Add calculate crontab
+  FLAGS_coordinator_calc_metrics_interval_s =
+      GetInterval(config, "coordinator.calc_metrics_interval_s", FLAGS_coordinator_calc_metrics_interval_s);
   crontab_configs_.push_back({
       "CALCULATE",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.calc_metrics_interval_s", Constant::kCalcMetricsIntervalS) * 1000,
+      FLAGS_coordinator_calc_metrics_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCalculateTableMetrics(nullptr); },
   });
 
   // Add recycle orphan crontab
+  FLAGS_coordinator_recycle_orphan_interval_s =
+      GetInterval(config, "coordinator.recycle_orphan_interval_s", FLAGS_coordinator_recycle_orphan_interval_s);
   crontab_configs_.push_back({
       "RECYCLE",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.recycle_orphan_interval_s", Constant::kRecycleOrphanIntervalS) * 1000,
+      FLAGS_coordinator_recycle_orphan_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCoordinatorRecycleOrphan(nullptr); },
   });
 
   // Add recycle orphan crontab
+  FLAGS_coordinator_remove_watch_interval_s =
+      GetInterval(config, "coordinator.remove_watch_interval_s", FLAGS_coordinator_remove_watch_interval_s);
   crontab_configs_.push_back({
       "REMOVE_WATCH",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.remove_watch_interval_s", Constant::kRemoveWatchIntervalS) * 1000,
+      FLAGS_coordinator_remove_watch_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerKvRemoveOneTimeWatch(nullptr); },
   });
 
   // Add lease crontab
+  FLAGS_coordinator_lease_interval_s =
+      GetInterval(config, "coordinator.lease_interval_s", FLAGS_coordinator_lease_interval_s);
   crontab_configs_.push_back({
       "LEASE",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.lease_interval_s", Constant::kLeaseIntervalS) * 1000,
+      FLAGS_coordinator_lease_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerLeaseTask(nullptr); },
   });
@@ -534,19 +583,24 @@ bool Server::InitCrontabManager() {
       FLAGS_compaction_retention_rev_count = compaction_retention_rev_count;
     }
   }
+
+  FLAGS_coordinator_compaction_interval_s =
+      GetInterval(config, "coordinator.compaction_interval_s", FLAGS_coordinator_compaction_interval_s);
   crontab_configs_.push_back({
       "COMPACTION",
       {pb::common::COORDINATOR},
-      GetInterval(config, "coordinator.compaction_interval_s", Constant::kCompactionIntervalS) * 1000,
+      FLAGS_coordinator_compaction_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCompactionTask(nullptr); },
   });
 
   // Add scrub vector index crontab
+  FLAGS_server_scrub_vector_index_interval_s =
+      GetInterval(config, "server.scrub_vector_index_interval_s", FLAGS_server_scrub_vector_index_interval_s);
   crontab_configs_.push_back({
       "SCRUB_VECTOR_INDEX",
       {pb::common::INDEX},
-      GetInterval(config, "server.scrub_vector_index_interval_s", Constant::kScrubVectorIndexIntervalS) * 1000,
+      FLAGS_server_scrub_vector_index_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
   });
@@ -554,29 +608,33 @@ bool Server::InitCrontabManager() {
   auto raft_store_engine = GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     // Add raft snapshot controller crontab
+    FLAGS_raft_snapshot_interval_s = GetInterval(config, "raft.snapshot_interval_s", FLAGS_raft_snapshot_interval_s);
     crontab_configs_.push_back({
         "RAFT_SNAPSHOT_CONTROLLER",
         {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX},
-        GetInterval(config, "raft.snapshot_interval_s", Constant::kRaftSnapshotIntervalS) * 1000,
+        FLAGS_raft_snapshot_interval_s * 1000,
         false,
         [](void*) { Server::GetInstance().GetRaftStoreEngine()->DoSnapshotPeriodicity(); },
     });
   }
 
   // Add gc update safe point ts crontab
+  FLAGS_gc_update_safe_point_interval_s =
+      GetInterval(config, "gc.update_safe_point_interval_s", FLAGS_gc_update_safe_point_interval_s);
   crontab_configs_.push_back({
       "GC_UPDATE_SAFE_POINT",
       {pb::common::STORE, pb::common::INDEX},
-      GetInterval(config, "gc.update_safe_point_interval_s", Constant::kGcUpdateSafePointIntervalS) * 1000,
+      FLAGS_gc_update_safe_point_interval_s * 1000,
       false,
       [](void*) { TxnEngineHelper::RegularUpdateSafePointTsHandler(nullptr); },
   });
 
   // Add gc  do gc crontab
+  FLAGS_gc_do_gc_interval_s = GetInterval(config, "gc.do_gc_interval_s", FLAGS_gc_do_gc_interval_s);
   crontab_configs_.push_back({
       "GC_DO_GC",
       {pb::common::STORE, pb::common::INDEX},
-      GetInterval(config, "gc.do_gc_interval_s", Constant::kGcDoGcPointIntervalS) * 1000,
+      FLAGS_gc_do_gc_interval_s * 1000,
       false,
       [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
   });

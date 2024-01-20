@@ -7,6 +7,7 @@ server:
   port: $SERVER_PORT$
   heartbeat_interval_s: 6
   metrics_collect_interval_s: 300
+  approximate_size_metrics_collect_interval_s: 300
   worker_thread_num: 128 # must >4, worker_thread_num priority worker_thread_ratio
   # worker_thread_ratio: 1 # cpu core * ratio
   read_worker_num: 48 # read_worker_num + write_worker_num + raft_apply_worker_num must < server.worker_thread_num
@@ -17,6 +18,7 @@ server:
 region:
   region_max_size: 268435456 # 256MB
   enable_auto_split: true
+  split_check_interval_s: 120
 raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$

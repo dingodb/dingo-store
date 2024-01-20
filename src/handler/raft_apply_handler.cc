@@ -624,8 +624,9 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
   }
 
   // Update region metrics min/max key policy
+  // Update region_size in next collect region metrics
   if (region_metrics != nullptr) {
-    region_metrics->UpdateMaxAndMinKeyPolicy();
+    region_metrics->ResetMetricsForRegionVersionUpdate();
   }
 
   return 0;
@@ -787,7 +788,8 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
 }
 
 int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target_region, std::shared_ptr<RawEngine>,
-                               const pb::raft::Request &req, store::RegionMetricsPtr, int64_t, int64_t /*log_id*/) {
+                               const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t,
+                               int64_t /*log_id*/) {
   assert(target_region != nullptr);
   const auto &request = req.commit_merge();
   auto store_region_meta = GET_STORE_REGION_META;
@@ -933,6 +935,12 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
       Helper::RegionEpochToString(request.source_region_epoch()), Helper::RangeToString(request.source_region_range()),
       request.entries().size(), actual_apply_log_count, target_region->EpochToString(), target_region->RangeToString(),
       Helper::TimestampMs() - start_time);
+
+  // Update region metrics min/max key policy
+  // Update region_size in next collect region metrics
+  if (region_metrics != nullptr) {
+    region_metrics->ResetMetricsForRegionVersionUpdate();
+  }
 
   return 0;
 }

@@ -62,6 +62,7 @@ void MergedIterator::Seek(const std::string& target) {
     Next(iter, i);
   }
 }
+
 bool MergedIterator::Valid() { return !min_heap_.empty(); }
 
 void MergedIterator::Next() {

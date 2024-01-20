@@ -189,26 +189,6 @@ class Constant {
   // hnsw max elements expand number
   static const uint32_t kHnswMaxElementsExpandNum = 10000;
 
-  // crontab default interval
-  static const int32_t kHeartbeatIntervalS = 10;
-  static const int32_t kScanIntervalS = 30;
-  static const int32_t kPushIntervalS = 1;
-  static const int32_t kUpdateStateIntervalS = 10;
-  static const int32_t kTaskListIntervalS = 1;
-  static const int32_t kCalcMetricsIntervalS = 60;
-  static const int32_t kRecycleOrphanIntervalS = 60;
-  static const int32_t kRemoveWatchIntervalS = 60;
-  static const int32_t kLeaseIntervalS = 60;
-  static const int32_t kCompactionIntervalS = 300;
-  static const int32_t kScrubVectorIndexIntervalS = 60;
-  static const int32_t kApproximateSizeMetricsCollectIntervalS = 50;
-  static const int32_t kStoreMetricsCollectIntervalS = 30;
-  static const int32_t kRegionMetricsCollectIntervalS = 300;
-  static const int32_t kDefaultSplitCheckIntervalS = 120;
-  static const int32_t kRaftSnapshotIntervalS = 120;
-  static constexpr int32_t kGcUpdateSafePointIntervalS = 60;
-  static constexpr int32_t kGcDoGcPointIntervalS = 60;
-
   // raft snapshot
   inline static const std::string kRaftSnapshotRegionMetaFileName = "region_meta";
   inline static const std::string kRaftSnapshotRegionDateFileNameSuffix = ".dingo_sst";
