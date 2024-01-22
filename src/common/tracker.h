@@ -24,10 +24,10 @@ namespace dingodb {
 
 class Tracker {
  public:
-  Tracker(pb::common::RequestInfo request_info);
+  Tracker(const pb::common::RequestInfo& request_info);
   ~Tracker() = default;
 
-  static std::shared_ptr<Tracker> New(pb::common::RequestInfo request_info);
+  static std::shared_ptr<Tracker> New(const pb::common::RequestInfo& request_info);
 
   struct Metrics {
     uint64_t total_rpc_time_ns{0};
