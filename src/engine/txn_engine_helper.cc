@@ -3608,7 +3608,6 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 
     std::shared_ptr<Context> ctx = std::make_shared<Context>(nullptr, nullptr, &request, &response);
     ctx->SetRegionId(region_ptr->Id());
-    // ctx->SetRequestId(request->request_info().request_id());
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetRegionEpoch(region_ptr->Epoch());
     ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);

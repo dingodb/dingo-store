@@ -74,12 +74,6 @@ class Context {
     return *this;
   }
 
-  int64_t RequestId() const { return request_id_; }
-  Context& SetRequestId(int64_t region_id) {
-    request_id_ = region_id;
-    return *this;
-  }
-
   TrackerPtr Tracker() { return tracker_; }
   void SetTracker(TrackerPtr tracker) { tracker_ = tracker; }
 
@@ -154,9 +148,6 @@ class Context {
   butil::Status status_{};
 
   WriteCbFunc write_cb_{};
-
-  // The request_id is set by the client, use this id to trace the request.
-  int64_t request_id_{0};
 
   TrackerPtr tracker_;
 };

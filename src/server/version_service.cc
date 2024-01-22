@@ -125,7 +125,7 @@ VersionService& VersionService::GetInstance() {
 }
 
 void DoLeaseRevoke(google::protobuf::RpcController* /*controller*/, const pb::version::LeaseRevokeRequest* request,
-                   pb::version::LeaseRevokeResponse* response, google::protobuf::Closure* done,
+                   pb::version::LeaseRevokeResponse* response, TrackClosure* done,
                    std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = kv_control->IsLeader();
@@ -155,7 +155,7 @@ void DoLeaseRevoke(google::protobuf::RpcController* /*controller*/, const pb::ve
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kKvRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -169,8 +169,8 @@ void DoLeaseRevoke(google::protobuf::RpcController* /*controller*/, const pb::ve
 }
 
 void DoLeaseGrant(google::protobuf::RpcController* /*controller*/, const pb::version::LeaseGrantRequest* request,
-                  pb::version::LeaseGrantResponse* response, google::protobuf::Closure* done,
-                  std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
+                  pb::version::LeaseGrantResponse* response, TrackClosure* done, std::shared_ptr<KvControl> kv_control,
+                  std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = kv_control->IsLeader();
   if (!is_leader) {
@@ -209,7 +209,7 @@ void DoLeaseGrant(google::protobuf::RpcController* /*controller*/, const pb::ver
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kKvRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -225,8 +225,8 @@ void DoLeaseGrant(google::protobuf::RpcController* /*controller*/, const pb::ver
 }
 
 void DoLeaseRenew(google::protobuf::RpcController* /*controller*/, const pb::version::LeaseRenewRequest* request,
-                  pb::version::LeaseRenewResponse* response, google::protobuf::Closure* done,
-                  std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
+                  pb::version::LeaseRenewResponse* response, TrackClosure* done, std::shared_ptr<KvControl> kv_control,
+                  std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = kv_control->IsLeader();
   if (!is_leader) {
@@ -256,7 +256,7 @@ void DoLeaseRenew(google::protobuf::RpcController* /*controller*/, const pb::ver
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kKvRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -486,7 +486,7 @@ void DoKvRange(google::protobuf::RpcController* /*controller*/, const pb::versio
 }
 
 void DoKvPut(google::protobuf::RpcController* controller, const pb::version::PutRequest* request,
-             pb::version::PutResponse* response, google::protobuf::Closure* done, std::shared_ptr<KvControl> kv_control,
+             pb::version::PutResponse* response, TrackClosure* done, std::shared_ptr<KvControl> kv_control,
              std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -521,7 +521,7 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
   std::shared_ptr<Context> const ctx =
       std::make_shared<Context>(static_cast<brpc::Controller*>(controller), nullptr, response);
   ctx->SetRegionId(Constant::kKvRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -541,7 +541,7 @@ void DoKvPut(google::protobuf::RpcController* controller, const pb::version::Put
 }
 
 void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::version::DeleteRangeRequest* request,
-                     pb::version::DeleteRangeResponse* response, google::protobuf::Closure* done,
+                     pb::version::DeleteRangeResponse* response, TrackClosure* done,
                      std::shared_ptr<KvControl> kv_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -577,7 +577,7 @@ void DoKvDeleteRange(google::protobuf::RpcController* /*controller*/, const pb::
 
   std::shared_ptr<Context> const ctx = std::make_shared<Context>(nullptr, nullptr, response);
   ctx->SetRegionId(Constant::kKvRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
