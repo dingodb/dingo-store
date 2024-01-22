@@ -37,6 +37,8 @@
 #include "server/server.h"
 #include "server/service_helper.h"
 
+DEFINE_int32(raft_apply_worker_max_pending_num, 0, "raft apply worker num");
+
 namespace dingodb {
 
 DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
@@ -316,6 +318,14 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvPutResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>([=]() { DoKvPut(storage, controller, request, response, svr_done, true); });
@@ -422,6 +432,14 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
                                   const pb::store::KvBatchPutRequest* request, pb::store::KvBatchPutResponse* response,
                                   google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   if (request->kvs().empty()) {
     return;
@@ -535,6 +553,14 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
                                      const pb::store::KvPutIfAbsentRequest* request,
                                      pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -651,6 +677,14 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   if (request->kvs().empty()) {
     return;
   }
@@ -758,6 +792,14 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
                                      pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   if (request->keys().empty()) {
     return;
   }
@@ -844,6 +886,14 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
                                      const pb::store::KvDeleteRangeRequest* request,
                                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -945,6 +995,14 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
                                        const pb::store::KvCompareAndSetRequest* request,
                                        pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -1063,6 +1121,14 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
                                             pb::store::KvBatchCompareAndSetResponse* response,
                                             google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   if (request->kvs().empty()) {
     return;
@@ -1923,6 +1989,14 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
@@ -2047,6 +2121,14 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
                                               pb::store::TxnPessimisticRollbackResponse* response,
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2201,6 +2283,14 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -2326,6 +2416,14 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -2443,6 +2541,14 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
@@ -2546,6 +2652,14 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                       const pb::store::TxnResolveLockRequest* request,
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -2773,6 +2887,14 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
@@ -2993,6 +3115,14 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
+
   // Run in queue.
   StoragePtr storage = storage_;
   auto task =
@@ -3065,6 +3195,14 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
 void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;
@@ -3154,6 +3292,14 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                       const pb::store::TxnDeleteRangeRequest* request,
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(FLAGS_raft_apply_worker_max_pending_num > 0 &&
+                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
+    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
+                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+  }
 
   // Run in queue.
   StoragePtr storage = storage_;

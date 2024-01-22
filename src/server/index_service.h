@@ -95,12 +95,14 @@ class IndexServiceImpl : public pb::index::IndexService {
   void SetStorage(StoragePtr storage) { storage_ = storage; }
   void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
   void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
+  void SetRaftApplyWorkSet(WorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
 
  private:
   StoragePtr storage_;
   // Run service request.
   WorkerSetPtr read_worker_set_;
   WorkerSetPtr write_worker_set_;
+  WorkerSetPtr raft_apply_worker_set_;
 };
 
 }  // namespace dingodb

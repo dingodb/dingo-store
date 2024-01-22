@@ -16,6 +16,7 @@ server:
   write_worker_num: 24 # read_worker_num + write_worker_num + raft_apply_worker_num must < server.worker_thread_num
   write_worker_max_pending_num: 1024 # 0 is unlimited
   raft_apply_worker_num: 24 # read_worker_num + write_worker_num + raft_apply_worker_num must < server.worker_thread_num
+  raft_apply_worker_max_pending_num: 1024 # 0 is unlimited
 region:
   region_max_size: 536870912 # 512MB
   enable_auto_split: true
