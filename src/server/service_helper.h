@@ -170,6 +170,7 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
   time_info->set_service_queue_wait_time_ns(tracker->ServiceQueueWaitTime());
   time_info->set_prepair_commit_time_ns(tracker->PrepairCommitTime());
   time_info->set_raft_commit_time_ns(tracker->RaftCommitTime());
+  time_info->set_raft_queue_wait_time_ns(tracker->RaftQueueWaitTime());
   time_info->set_raft_apply_time_ns(tracker->RaftApplyTime());
 }
 
