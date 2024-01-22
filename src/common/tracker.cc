@@ -20,12 +20,12 @@
 
 namespace dingodb {
 
-Tracker::Tracker(pb::common::RequestInfo request_info) : request_info_(request_info) {
+Tracker::Tracker(const pb::common::RequestInfo& request_info) : request_info_(request_info) {
   start_time_ = Helper::TimestampNs();
   last_time_ = start_time_;
 }
 
-std::shared_ptr<Tracker> Tracker::New(pb::common::RequestInfo request_info) {
+std::shared_ptr<Tracker> Tracker::New(const pb::common::RequestInfo& request_info) {
   return std::make_shared<Tracker>(request_info);
 }
 
