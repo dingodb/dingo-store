@@ -21,6 +21,7 @@
 
 #include "brpc/controller.h"
 #include "common/synchronization.h"
+#include "common/tracker.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
@@ -78,6 +79,9 @@ class Context {
     request_id_ = region_id;
     return *this;
   }
+
+  TrackerPtr Tracker() { return tracker_; }
+  void SetTracker(TrackerPtr tracker) { tracker_ = tracker; }
 
   pb::common::RegionEpoch RegionEpoch() const { return region_epoch_; }
   Context& SetRegionEpoch(const pb::common::RegionEpoch& region_epoch) {
@@ -153,6 +157,8 @@ class Context {
 
   // The request_id is set by the client, use this id to trace the request.
   int64_t request_id_{0};
+
+  TrackerPtr tracker_;
 };
 
 using ContextPtr = std::shared_ptr<Context>;

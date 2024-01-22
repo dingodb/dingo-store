@@ -44,9 +44,11 @@ static butil::Status ValidateVectorCalcDistance(const pb::index::VectorCalcDista
 
 void DoVectorCalcDistance(StoragePtr storage, google::protobuf::RpcController* controller,
                           const pb::index::VectorCalcDistanceRequest* request,
-                          pb::index::VectorCalcDistanceResponse* response, google::protobuf::Closure* done) {
+                          pb::index::VectorCalcDistanceResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   butil::Status status = ValidateVectorCalcDistance(request);
   if (!status.ok()) {

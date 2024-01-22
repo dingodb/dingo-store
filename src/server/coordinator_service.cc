@@ -50,10 +50,11 @@ DEFINE_bool(async_hello, true, "async hello");
 DEFINE_int32(hello_latency_ms, 0, "hello latency seconds");
 
 void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
-             pb::coordinator::HelloResponse *response, google::protobuf::Closure *done,
+             pb::coordinator::HelloResponse *response, TrackClosure *done,
              std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   *response->mutable_version_info() = GetVersionInfo();
   if (request->is_just_version_info()) {
@@ -143,9 +144,12 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
 
 void DoCreateExecutor(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::CreateExecutorRequest *request,
-                      pb::coordinator::CreateExecutorResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::CreateExecutorResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Executor Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -170,7 +174,7 @@ void DoCreateExecutor(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -183,9 +187,12 @@ void DoCreateExecutor(google::protobuf::RpcController * /*controller*/,
 
 void DoDeleteExecutor(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::DeleteExecutorRequest *request,
-                      pb::coordinator::DeleteExecutorResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::DeleteExecutorResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive Create Executor Request: IsLeader:" << is_leader
                      << ", Request: " << request->ShortDebugString();
@@ -213,7 +220,7 @@ void DoDeleteExecutor(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -226,10 +233,13 @@ void DoDeleteExecutor(google::protobuf::RpcController * /*controller*/,
 
 void DoCreateExecutorUser(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::CreateExecutorUserRequest *request,
-                          pb::coordinator::CreateExecutorUserResponse *response, google::protobuf::Closure *done,
+                          pb::coordinator::CreateExecutorUserResponse *response, TrackClosure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
                           std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Executor User Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -260,7 +270,7 @@ void DoCreateExecutorUser(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -273,10 +283,13 @@ void DoCreateExecutorUser(google::protobuf::RpcController * /*controller*/,
 
 void DoUpdateExecutorUser(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::UpdateExecutorUserRequest *request,
-                          pb::coordinator::UpdateExecutorUserResponse *response, google::protobuf::Closure *done,
+                          pb::coordinator::UpdateExecutorUserResponse *response, TrackClosure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
                           std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Update Executor User Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -305,7 +318,7 @@ void DoUpdateExecutorUser(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -318,10 +331,13 @@ void DoUpdateExecutorUser(google::protobuf::RpcController * /*controller*/,
 
 void DoDeleteExecutorUser(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::DeleteExecutorUserRequest *request,
-                          pb::coordinator::DeleteExecutorUserResponse *response, google::protobuf::Closure *done,
+                          pb::coordinator::DeleteExecutorUserResponse *response, TrackClosure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
                           std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Delete Executor User Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -349,7 +365,7 @@ void DoDeleteExecutorUser(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -362,10 +378,13 @@ void DoDeleteExecutorUser(google::protobuf::RpcController * /*controller*/,
 
 void DoGetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::GetExecutorUserMapRequest *request,
-                          pb::coordinator::GetExecutorUserMapResponse *response, google::protobuf::Closure *done,
+                          pb::coordinator::GetExecutorUserMapResponse *response, TrackClosure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
                           std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Get Executor User Map Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -387,9 +406,12 @@ void DoGetExecutorUserMap(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoCreateStore(google::protobuf::RpcController * /*controller*/, const pb::coordinator::CreateStoreRequest *request,
-                   pb::coordinator::CreateStoreResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::CreateStoreResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Create Store Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -420,7 +442,7 @@ void DoCreateStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -432,9 +454,12 @@ void DoCreateStore(google::protobuf::RpcController * /*controller*/, const pb::c
 }
 
 void DoDeleteStore(google::protobuf::RpcController * /*controller*/, const pb::coordinator::DeleteStoreRequest *request,
-                   pb::coordinator::DeleteStoreResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::DeleteStoreResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(WARNING) << "Receive Create Store Request: IsLeader:" << is_leader
                      << ", Request: " << request->ShortDebugString();
@@ -469,7 +494,7 @@ void DoDeleteStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -481,9 +506,12 @@ void DoDeleteStore(google::protobuf::RpcController * /*controller*/, const pb::c
 }
 
 void DoUpdateStore(google::protobuf::RpcController * /*controller*/, const pb::coordinator::UpdateStoreRequest *request,
-                   pb::coordinator::UpdateStoreResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::UpdateStoreResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(INFO) << "Receive Update Store Request: IsLeader:" << is_leader
                   << ", Request: " << request->ShortDebugString();
@@ -511,7 +539,7 @@ void DoUpdateStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -525,9 +553,12 @@ void DoUpdateStore(google::protobuf::RpcController * /*controller*/, const pb::c
 
 void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::ExecutorHeartbeatRequest *request,
-                         pb::coordinator::ExecutorHeartbeatResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::ExecutorHeartbeatResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Executor Heartbeat Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -571,7 +602,7 @@ void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -588,9 +619,12 @@ void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
 
 void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::StoreHeartbeatRequest *request,
-                      pb::coordinator::StoreHeartbeatResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::StoreHeartbeatResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
     DINGO_LOG(WARNING) << "Receive Store Heartbeat Request, IsLeader:" << is_leader
@@ -648,7 +682,7 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
 
     std::shared_ptr<Context> ctx = std::make_shared<Context>();
     ctx->SetRegionId(Constant::kMetaRegionId);
-    ctx->SetRequestId(request->request_info().request_id());
+    ctx->SetTracker(tracker);
 
     // this is a async operation will be block by closure
     auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -666,9 +700,11 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoGetStoreMap(google::protobuf::RpcController * /*controller*/, const pb::coordinator::GetStoreMapRequest *request,
-                   pb::coordinator::GetStoreMapResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::GetStoreMapResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreMap Request, IsLeader:" << is_leader
@@ -687,10 +723,13 @@ void DoGetStoreMap(google::protobuf::RpcController * /*controller*/, const pb::c
 
 void DoGetStoreMetrics(google::protobuf::RpcController * /*controller*/,
                        const pb::coordinator::GetStoreMetricsRequest *request,
-                       pb::coordinator::GetStoreMetricsResponse *response, google::protobuf::Closure *done,
+                       pb::coordinator::GetStoreMetricsResponse *response, TrackClosure *done,
                        std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreMetrics Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -712,10 +751,13 @@ void DoGetStoreMetrics(google::protobuf::RpcController * /*controller*/,
 
 void DoDeleteStoreMetrics(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::DeleteStoreMetricsRequest *request,
-                          pb::coordinator::DeleteStoreMetricsResponse *response, google::protobuf::Closure *done,
+                          pb::coordinator::DeleteStoreMetricsResponse *response, TrackClosure *done,
                           std::shared_ptr<CoordinatorControl> coordinator_control,
                           std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Delete StoreMetrics Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -730,10 +772,13 @@ void DoDeleteStoreMetrics(google::protobuf::RpcController * /*controller*/,
 
 void DoGetRegionMetrics(google::protobuf::RpcController * /*controller*/,
                         const pb::coordinator::GetRegionMetricsRequest *request,
-                        pb::coordinator::GetRegionMetricsResponse *response, google::protobuf::Closure *done,
+                        pb::coordinator::GetRegionMetricsResponse *response, TrackClosure *done,
                         std::shared_ptr<CoordinatorControl> coordinator_control,
                         std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMetrics Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -754,10 +799,13 @@ void DoGetRegionMetrics(google::protobuf::RpcController * /*controller*/,
 
 void DoDeleteRegionMetrics(google::protobuf::RpcController * /*controller*/,
                            const pb::coordinator::DeleteRegionMetricsRequest *request,
-                           pb::coordinator::DeleteRegionMetricsResponse *response, google::protobuf::Closure *done,
+                           pb::coordinator::DeleteRegionMetricsResponse *response, TrackClosure *done,
                            std::shared_ptr<CoordinatorControl> coordinator_control,
                            std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Delete RegionMetrics Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -772,10 +820,12 @@ void DoDeleteRegionMetrics(google::protobuf::RpcController * /*controller*/,
 
 void DoGetExecutorMap(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::GetExecutorMapRequest *request,
-                      pb::coordinator::GetExecutorMapResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::GetExecutorMapResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get ExecutorMap Request, IsLeader:" << is_leader
@@ -794,9 +844,11 @@ void DoGetExecutorMap(google::protobuf::RpcController * /*controller*/,
 
 void DoGetRegionMap(google::protobuf::RpcController * /*controller*/,
                     const pb::coordinator::GetRegionMapRequest *request,
-                    pb::coordinator::GetRegionMapResponse *response, google::protobuf::Closure *done,
+                    pb::coordinator::GetRegionMapResponse *response, TrackClosure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
@@ -816,10 +868,12 @@ void DoGetRegionMap(google::protobuf::RpcController * /*controller*/,
 
 void DoGetDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
                            const pb::coordinator::GetDeletedRegionMapRequest *request,
-                           pb::coordinator::GetDeletedRegionMapResponse *response, google::protobuf::Closure *done,
+                           pb::coordinator::GetDeletedRegionMapResponse *response, TrackClosure *done,
                            std::shared_ptr<CoordinatorControl> coordinator_control,
                            std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
@@ -839,10 +893,12 @@ void DoGetDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
 
 void DoAddDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
                            const pb::coordinator::AddDeletedRegionMapRequest *request,
-                           pb::coordinator::AddDeletedRegionMapResponse *response, google::protobuf::Closure *done,
+                           pb::coordinator::AddDeletedRegionMapResponse *response, TrackClosure *done,
                            std::shared_ptr<CoordinatorControl> coordinator_control,
                            std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
@@ -858,10 +914,12 @@ void DoAddDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
 
 void DoCleanDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
                              const pb::coordinator::CleanDeletedRegionMapRequest *request,
-                             pb::coordinator::CleanDeletedRegionMapResponse *response, google::protobuf::Closure *done,
+                             pb::coordinator::CleanDeletedRegionMapResponse *response, TrackClosure *done,
                              std::shared_ptr<CoordinatorControl> coordinator_control,
                              std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
@@ -877,10 +935,12 @@ void DoCleanDeletedRegionMap(google::protobuf::RpcController * /*controller*/,
 
 void DoGetRegionCount(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::GetRegionCountRequest *request,
-                      pb::coordinator::GetRegionCountResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::GetRegionCountResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
@@ -899,13 +959,14 @@ void DoGetRegionCount(google::protobuf::RpcController * /*controller*/,
 
 void DoGetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::GetCoordinatorMapRequest *request,
-                         pb::coordinator::GetCoordinatorMapResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::GetCoordinatorMapResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<KvControl> kv_control,
                          std::shared_ptr<TsoControl> tso_control,
                          std::shared_ptr<AutoIncrementControl> auto_increment_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Get CoordinatorMap Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t epoch;
   pb::common::Location leader_location;
@@ -940,10 +1001,11 @@ void DoGetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
 
 void DoConfigCoordinator(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::ConfigCoordinatorRequest *request,
-                         pb::coordinator::ConfigCoordinatorResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::ConfigCoordinatorResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -969,7 +1031,7 @@ void DoConfigCoordinator(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -985,10 +1047,11 @@ void DoConfigCoordinator(google::protobuf::RpcController * /*controller*/,
 // Region services
 void DoCreateRegionId(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::CreateRegionIdRequest *request,
-                      pb::coordinator::CreateRegionIdResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::CreateRegionIdResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Id Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1026,7 +1089,7 @@ void DoCreateRegionId(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1040,10 +1103,11 @@ void DoCreateRegionId(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoQueryRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::QueryRegionRequest *request,
-                   pb::coordinator::QueryRegionResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::QueryRegionResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Query Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1065,10 +1129,11 @@ void DoQueryRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
 void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
                     const pb::coordinator::CreateRegionRequest *request,
-                    pb::coordinator::CreateRegionResponse *response, google::protobuf::Closure *done,
+                    pb::coordinator::CreateRegionResponse *response, TrackClosure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Create Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1139,7 +1204,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1151,10 +1216,11 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::DropRegionRequest *request,
-                  pb::coordinator::DropRegionResponse *response, google::protobuf::Closure *done,
+                  pb::coordinator::DropRegionResponse *response, TrackClosure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Drop Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1181,7 +1247,7 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1194,11 +1260,12 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
 
 void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
                              const pb::coordinator::DropRegionPermanentlyRequest *request,
-                             pb::coordinator::DropRegionPermanentlyResponse *response, google::protobuf::Closure *done,
+                             pb::coordinator::DropRegionPermanentlyResponse *response, TrackClosure *done,
                              std::shared_ptr<CoordinatorControl> coordinator_control,
                              std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Drop Region Permanently Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1224,7 +1291,7 @@ void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1236,10 +1303,11 @@ void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::SplitRegionRequest *request,
-                   pb::coordinator::SplitRegionResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::SplitRegionResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Split Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1273,7 +1341,7 @@ void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1286,10 +1354,11 @@ void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 }
 
 void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::coordinator::MergeRegionRequest *request,
-                   pb::coordinator::MergeRegionResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::MergeRegionResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Merge Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1321,7 +1390,7 @@ void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1335,10 +1404,11 @@ void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
 void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
                         const pb::coordinator::ChangePeerRegionRequest *request,
-                        pb::coordinator::ChangePeerRegionResponse *response, google::protobuf::Closure *done,
+                        pb::coordinator::ChangePeerRegionResponse *response, TrackClosure *done,
                         std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Change Peer Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1385,7 +1455,7 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1399,11 +1469,12 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
 
 void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
                             const pb::coordinator::TransferLeaderRegionRequest *request,
-                            pb::coordinator::TransferLeaderRegionResponse *response, google::protobuf::Closure *done,
+                            pb::coordinator::TransferLeaderRegionResponse *response, TrackClosure *done,
                             std::shared_ptr<CoordinatorControl> coordinator_control,
                             std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Transfer Leader Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1435,7 +1506,7 @@ void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1448,11 +1519,12 @@ void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
 
 void DoGetOrphanRegion(google::protobuf::RpcController * /*controller*/,
                        const pb::coordinator::GetOrphanRegionRequest *request,
-                       pb::coordinator::GetOrphanRegionResponse *response, google::protobuf::Closure *done,
+                       pb::coordinator::GetOrphanRegionResponse *response, TrackClosure *done,
                        std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive Get Orphan Region Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1479,10 +1551,13 @@ void DoGetOrphanRegion(google::protobuf::RpcController * /*controller*/,
 // StoreOperation service
 void DoGetStoreOperation(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::GetStoreOperationRequest *request,
-                         pb::coordinator::GetStoreOperationResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::GetStoreOperationResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -1510,11 +1585,12 @@ void DoGetStoreOperation(google::protobuf::RpcController * /*controller*/,
 
 void DoCleanStoreOperation(google::protobuf::RpcController * /*controller*/,
                            const pb::coordinator::CleanStoreOperationRequest *request,
-                           pb::coordinator::CleanStoreOperationResponse *response, google::protobuf::Closure *done,
+                           pb::coordinator::CleanStoreOperationResponse *response, TrackClosure *done,
                            std::shared_ptr<CoordinatorControl> coordinator_control,
                            std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive CleanStoreOperation Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1540,7 +1616,7 @@ void DoCleanStoreOperation(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1553,10 +1629,11 @@ void DoCleanStoreOperation(google::protobuf::RpcController * /*controller*/,
 
 void DoAddStoreOperation(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::AddStoreOperationRequest *request,
-                         pb::coordinator::AddStoreOperationResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::AddStoreOperationResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive AddStoreOperation Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1582,7 +1659,7 @@ void DoAddStoreOperation(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1595,11 +1672,12 @@ void DoAddStoreOperation(google::protobuf::RpcController * /*controller*/,
 
 void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
                             const pb::coordinator::RemoveStoreOperationRequest *request,
-                            pb::coordinator::RemoveStoreOperationResponse *response, google::protobuf::Closure *done,
+                            pb::coordinator::RemoveStoreOperationResponse *response, TrackClosure *done,
                             std::shared_ptr<CoordinatorControl> coordinator_control,
                             std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive RemoveStoreOperation Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1626,7 +1704,7 @@ void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1640,10 +1718,11 @@ void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
 
 void DoGetRegionCmd(google::protobuf::RpcController * /*controller*/,
                     const pb::coordinator::GetRegionCmdRequest *request,
-                    pb::coordinator::GetRegionCmdResponse *response, google::protobuf::Closure *done,
+                    pb::coordinator::GetRegionCmdResponse *response, TrackClosure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive GetRegionCmd Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -1677,9 +1756,12 @@ void DoGetRegionCmd(google::protobuf::RpcController * /*controller*/,
 
 // task list
 void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::coordinator::GetTaskListRequest *request,
-                   pb::coordinator::GetTaskListResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::GetTaskListResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
@@ -1719,9 +1801,12 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
 
 void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
                      const pb::coordinator::CleanTaskListRequest *request,
-                     pb::coordinator::CleanTaskListResponse *response, google::protobuf::Closure *done,
+                     pb::coordinator::CleanTaskListResponse *response, TrackClosure *done,
                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
     DINGO_LOG(WARNING) << "Receive Clean TaskList Request, IsLeader:" << is_leader
@@ -1748,7 +1833,7 @@ void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1761,13 +1846,14 @@ void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
 
 // raft control
 void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordinator::RaftControlRequest *request,
-                   pb::coordinator::RaftControlResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::RaftControlResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<KvControl> kv_control,
                    std::shared_ptr<TsoControl> tso_control,
                    std::shared_ptr<AutoIncrementControl> auto_increment_control,
                    std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "Receive RaftControl Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   brpc::Controller *cntl = static_cast<brpc::Controller *>(controller);
   int64_t log_id = 0;
@@ -1906,10 +1992,11 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
 }
 
 void DoScanRegions(google::protobuf::RpcController * /*controller*/, const pb::coordinator::ScanRegionsRequest *request,
-                   pb::coordinator::ScanRegionsResponse *response, google::protobuf::Closure *done,
+                   pb::coordinator::ScanRegionsResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive ScanRegions Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   if (request->key().empty()) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
@@ -1982,11 +2069,12 @@ void DoScanRegions(google::protobuf::RpcController * /*controller*/, const pb::c
 
 void DoGetRangeRegionMap(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::GetRangeRegionMapRequest *request,
-                         pb::coordinator::GetRangeRegionMapResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::GetRangeRegionMapResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive GetRangeRegionMap Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -2017,10 +2105,11 @@ void DoGetRangeRegionMap(google::protobuf::RpcController * /*controller*/,
 
 void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
                          const pb::coordinator::UpdateGCSafePointRequest *request,
-                         pb::coordinator::UpdateGCSafePointResponse *response, google::protobuf::Closure *done,
+                         pb::coordinator::UpdateGCSafePointResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "Receive UpdateGCSafePoint Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -2050,7 +2139,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -2063,11 +2152,12 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
 void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
                       const pb::coordinator::GetGCSafePointRequest *request,
-                      pb::coordinator::GetGCSafePointResponse *response, google::protobuf::Closure *done,
+                      pb::coordinator::GetGCSafePointResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(DEBUG) << "Receive GetGCSafePoint Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -2091,11 +2181,12 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
 void DoUpdateRegionCmdStatus(google::protobuf::RpcController * /*controller*/,
                              const pb::coordinator::UpdateRegionCmdStatusRequest *request,
-                             pb::coordinator::UpdateRegionCmdStatusResponse *response, google::protobuf::Closure *done,
+                             pb::coordinator::UpdateRegionCmdStatusResponse *response, TrackClosure *done,
                              std::shared_ptr<CoordinatorControl> coordinator_control,
                              std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
-  DINGO_LOG(INFO) << "Receive UpdateRegionCmdStatus Request:" << request->ShortDebugString();
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
@@ -2121,7 +2212,7 @@ void DoUpdateRegionCmdStatus(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));

@@ -26,6 +26,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/synchronization.h"
+#include "common/tracker.h"
 #include "common/version.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -72,9 +73,11 @@ static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest
 
 void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
              const dingodb::pb::store::KvGetRequest* request, dingodb::pb::store::KvGetResponse* response,
-             google::protobuf::Closure* done) {
+             TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -93,7 +96,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -160,9 +163,11 @@ static butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatch
 
 void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controller,
                   const dingodb::pb::store::KvBatchGetRequest* request,
-                  dingodb::pb::store::KvBatchGetResponse* response, google::protobuf::Closure* done) {
+                  dingodb::pb::store::KvBatchGetResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -181,7 +186,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
 
   auto ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -247,9 +252,11 @@ static butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest
 
 void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
              const dingodb::pb::store::KvPutRequest* request, dingodb::pb::store::KvPutResponse* response,
-             google::protobuf::Closure* done, bool is_sync) {
+             TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -289,7 +296,6 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -352,9 +358,11 @@ static butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatch
 
 void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controller,
                   const dingodb::pb::store::KvBatchPutRequest* request,
-                  dingodb::pb::store::KvBatchPutResponse* response, google::protobuf::Closure* done, bool is_sync) {
+                  dingodb::pb::store::KvBatchPutResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -396,7 +404,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -458,9 +466,11 @@ static butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPu
 
 void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* controller,
                      const pb::store::KvPutIfAbsentRequest* request, pb::store::KvPutIfAbsentResponse* response,
-                     google::protobuf::Closure* done, bool is_sync) {
+                     TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -500,7 +510,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -569,10 +579,11 @@ static butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store:
 
 void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* controller,
                           const dingodb::pb::store::KvBatchPutIfAbsentRequest* request,
-                          dingodb::pb::store::KvBatchPutIfAbsentResponse* response, google::protobuf::Closure* done,
-                          bool is_sync) {
+                          dingodb::pb::store::KvBatchPutIfAbsentResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -614,7 +625,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -682,10 +693,11 @@ static butil::Status ValidateKvBatchDeleteRequest(const dingodb::pb::store::KvBa
 
 void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* controller,
                      const dingodb::pb::store::KvBatchDeleteRequest* request,
-                     dingodb::pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done,
-                     bool is_sync) {
+                     dingodb::pb::store::KvBatchDeleteResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -727,7 +739,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -788,10 +800,11 @@ static butil::Status ValidateKvDeleteRangeRequest(const pb::store::KvDeleteRange
 
 void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* controller,
                      const dingodb::pb::store::KvDeleteRangeRequest* request,
-                     dingodb::pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done,
-                     bool is_sync) {
+                     dingodb::pb::store::KvDeleteRangeResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -813,7 +826,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -866,10 +879,11 @@ static butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::Kv
 
 void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* controller,
                        const dingodb::pb::store::KvCompareAndSetRequest* request,
-                       dingodb::pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done,
-                       bool is_sync) {
+                       dingodb::pb::store::KvCompareAndSetResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -909,7 +923,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -975,10 +989,12 @@ static butil::Status ValidateKvBatchCompareAndSetRequest(const dingodb::pb::stor
 
 void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController* controller,
                             const dingodb::pb::store::KvBatchCompareAndSetRequest* request,
-                            dingodb::pb::store::KvBatchCompareAndSetResponse* response, google::protobuf::Closure* done,
+                            dingodb::pb::store::KvBatchCompareAndSetResponse* response, TrackClosure* done,
                             bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1020,7 +1036,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1090,9 +1106,11 @@ static butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScan
 
 void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controller,
                    const dingodb::pb::store::KvScanBeginRequest* request,
-                   dingodb::pb::store::KvScanBeginResponse* response, google::protobuf::Closure* done) {
+                   dingodb::pb::store::KvScanBeginResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1114,7 +1132,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1180,9 +1198,11 @@ static butil::Status ValidateKvScanContinueRequest(const dingodb::pb::store::KvS
 
 void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* controller,
                       const dingodb::pb::store::KvScanContinueRequest* request,
-                      dingodb::pb::store::KvScanContinueResponse* response, google::protobuf::Closure* done) {
+                      dingodb::pb::store::KvScanContinueResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1201,7 +1221,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1259,9 +1279,11 @@ static butil::Status ValidateKvScanReleaseRequest(const dingodb::pb::store::KvSc
 
 void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* controller,
                      const dingodb::pb::store::KvScanReleaseRequest* request,
-                     dingodb::pb::store::KvScanReleaseResponse* response, google::protobuf::Closure* done) {
+                     dingodb::pb::store::KvScanReleaseResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1280,7 +1302,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1360,9 +1382,11 @@ static butil::Status ValidateKvScanBeginRequestV2(const dingodb::pb::store::KvSc
 }
 void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* controller,
                      const dingodb::pb::store::KvScanBeginRequestV2* request,
-                     dingodb::pb::store::KvScanBeginResponseV2* response, google::protobuf::Closure* done) {
+                     dingodb::pb::store::KvScanBeginResponseV2* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1384,7 +1408,7 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1452,9 +1476,11 @@ static butil::Status ValidateKvScanContinueRequestV2(const dingodb::pb::store::K
 
 void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* controller,
                         const dingodb::pb::store::KvScanContinueRequestV2* request,
-                        dingodb::pb::store::KvScanContinueResponseV2* response, google::protobuf::Closure* done) {
+                        dingodb::pb::store::KvScanContinueResponseV2* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1473,7 +1499,7 @@ void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* con
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1534,9 +1560,11 @@ static butil::Status ValidateKvScanReleaseRequestV2(const dingodb::pb::store::Kv
 
 void DoKvScanReleaseV2(StoragePtr storage, google::protobuf::RpcController* controller,
                        const dingodb::pb::store::KvScanReleaseRequestV2* request,
-                       dingodb::pb::store::KvScanReleaseResponseV2* response, google::protobuf::Closure* done) {
+                       dingodb::pb::store::KvScanReleaseResponseV2* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1555,7 +1583,7 @@ void DoKvScanReleaseV2(StoragePtr storage, google::protobuf::RpcController* cont
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -1589,9 +1617,11 @@ void StoreServiceImpl::KvScanReleaseV2(::google::protobuf::RpcController* contro
 
 void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
               const dingodb::pb::store::TxnGetRequest* request, dingodb::pb::store::TxnGetResponse* response,
-              google::protobuf::Closure* done) {
+              TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1610,7 +1640,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1681,9 +1711,11 @@ static butil::Status ValidateTxnScanRequest(const pb::store::TxnScanRequest* req
 
 void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
                const dingodb::pb::store::TxnScanRequest* request, dingodb::pb::store::TxnScanResponse* response,
-               google::protobuf::Closure* done) {
+               TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1705,7 +1737,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1818,10 +1850,11 @@ static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store:
 
 void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* controller,
                           const dingodb::pb::store::TxnPessimisticLockRequest* request,
-                          dingodb::pb::store::TxnPessimisticLockResponse* response, google::protobuf::Closure* done,
-                          bool is_sync) {
+                          dingodb::pb::store::TxnPessimisticLockResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1863,7 +1896,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1947,10 +1980,12 @@ static butil::Status ValidateTxnPessimisticRollbackRequest(
 
 void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcController* controller,
                               const dingodb::pb::store::TxnPessimisticRollbackRequest* request,
-                              dingodb::pb::store::TxnPessimisticRollbackResponse* response,
-                              google::protobuf::Closure* done, bool is_sync) {
+                              dingodb::pb::store::TxnPessimisticRollbackResponse* response, TrackClosure* done,
+                              bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1992,7 +2027,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2078,9 +2113,11 @@ static butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPre
 
 void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controller,
                    const dingodb::pb::store::TxnPrewriteRequest* request,
-                   dingodb::pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done, bool is_sync) {
+                   dingodb::pb::store::TxnPrewriteResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2122,7 +2159,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2217,9 +2254,11 @@ static butil::Status ValidateTxnCommitRequest(const dingodb::pb::store::TxnCommi
 
 void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller,
                  const dingodb::pb::store::TxnCommitRequest* request, dingodb::pb::store::TxnCommitResponse* response,
-                 google::protobuf::Closure* done, bool is_sync) {
+                 TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2261,7 +2300,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2339,10 +2378,11 @@ static butil::Status ValidateTxnCheckTxnStatusRequest(const dingodb::pb::store::
 
 void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* controller,
                          const dingodb::pb::store::TxnCheckTxnStatusRequest* request,
-                         dingodb::pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done,
-                         bool is_sync) {
+                         dingodb::pb::store::TxnCheckTxnStatusResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2382,7 +2422,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2458,10 +2498,11 @@ static butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::Txn
 
 void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* controller,
                       const dingodb::pb::store::TxnResolveLockRequest* request,
-                      dingodb::pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done,
-                      bool is_sync) {
+                      dingodb::pb::store::TxnResolveLockResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2480,7 +2521,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2550,9 +2591,11 @@ static butil::Status ValidateTxnBatchGetRequest(const dingodb::pb::store::TxnBat
 
 void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controller,
                    const dingodb::pb::store::TxnBatchGetRequest* request,
-                   dingodb::pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
+                   dingodb::pb::store::TxnBatchGetResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2571,7 +2614,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2658,10 +2701,11 @@ static butil::Status ValidateTxnBatchRollbackRequest(const dingodb::pb::store::T
 
 void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* controller,
                         const dingodb::pb::store::TxnBatchRollbackRequest* request,
-                        dingodb::pb::store::TxnBatchRollbackResponse* response, google::protobuf::Closure* done,
-                        bool is_sync) {
+                        dingodb::pb::store::TxnBatchRollbackResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2703,7 +2747,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2786,9 +2830,11 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
 
 void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controller,
                    const dingodb::pb::store::TxnScanLockRequest* request,
-                   dingodb::pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
+                   dingodb::pb::store::TxnScanLockResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2807,7 +2853,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2883,9 +2929,11 @@ static butil::Status ValidateTxnHeartBeatRequest(const dingodb::pb::store::TxnHe
 
 void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* controller,
                     const dingodb::pb::store::TxnHeartBeatRequest* request,
-                    dingodb::pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done, bool is_sync) {
+                    dingodb::pb::store::TxnHeartBeatResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2925,7 +2973,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -2977,9 +3025,11 @@ static butil::Status ValidateTxnGcRequest(const dingodb::pb::store::TxnGcRequest
 
 void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
              const dingodb::pb::store::TxnGcRequest* request, dingodb::pb::store::TxnGcResponse* response,
-             google::protobuf::Closure* done, bool is_sync) {
+             TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -2998,7 +3048,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -3063,10 +3113,11 @@ static butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::Txn
 
 void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* controller,
                       const dingodb::pb::store::TxnDeleteRangeRequest* request,
-                      dingodb::pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done,
-                      bool is_sync) {
+                      dingodb::pb::store::TxnDeleteRangeResponse* response, TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -3085,7 +3136,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -3148,9 +3199,11 @@ static butil::Status ValidateTxnDumpRequest(const dingodb::pb::store::TxnDumpReq
 
 void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
                const dingodb::pb::store::TxnDumpRequest* request, dingodb::pb::store::TxnDumpResponse* response,
-               google::protobuf::Closure* done) {
+               TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -3169,7 +3222,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -3226,9 +3279,11 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
 }
 
 void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::store::HelloRequest* request,
-             dingodb::pb::store::HelloResponse* response, google::protobuf::Closure* done) {
+             dingodb::pb::store::HelloResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   *response->mutable_version_info() = GetVersionInfo();
   if (request->is_just_version_info()) {
