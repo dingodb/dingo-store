@@ -41,9 +41,10 @@
 #include "vector/vector_index_snapshot.h"
 #include "vector/vector_index_snapshot_manager.h"
 
-DEFINE_int64(catchup_log_min_gap, 8, "catch up log min gap");
-
 namespace dingodb {
+
+DEFINE_int64(catchup_log_min_gap, 8, "catch up log min gap");
+DEFINE_int32(vector_background_worker_num, 16, "vector index background worker num");
 
 std::string RebuildVectorIndexTask::Trace() {
   return fmt::format("[vector_index.rebuild][id({}).start_time({}).job_id({})] {}", vector_index_wrapper_->Id(),

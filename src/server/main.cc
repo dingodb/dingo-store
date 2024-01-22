@@ -80,6 +80,7 @@ DEFINE_int64(read_worker_max_pending_num, 0, "read service worker num");
 DEFINE_int64(write_worker_max_pending_num, 0, "write service worker num");
 
 DEFINE_int32(raft_apply_worker_num, 10, "raft apply worker num");
+DECLARE_int32(raft_apply_worker_max_pending_num);
 
 DEFINE_int32(coordinator_service_worker_num, 10, "service worker num");
 DEFINE_int64(coordinator_service_worker_max_pending_num, 0, "service worker num");
@@ -494,6 +495,19 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config) {
     return -1;
   }
   DINGO_LOG(INFO) << "server.write_worker_max_pending_num is set to " << FLAGS_write_worker_max_pending_num;
+
+  auto raft_apply_max_pending_num = config->GetInt64("server.raft_apply_worker_max_pending_num");
+  if (raft_apply_max_pending_num <= 0) {
+    DINGO_LOG(WARNING)
+        << "server.raft_apply_worker_max_pending_num is not set, use dingodb::FLAGS_raft_apply_worker_max_pending_num";
+  } else {
+    FLAGS_raft_apply_worker_max_pending_num = raft_apply_max_pending_num;
+  }
+  if (FLAGS_raft_apply_worker_max_pending_num < 0) {
+    DINGO_LOG(ERROR) << "server.raft_apply_worker_max_pending_num is less than 0";
+    return -1;
+  }
+  DINGO_LOG(INFO) << "server.raft_apply_worker_max_pending_num is set to " << FLAGS_raft_apply_worker_max_pending_num;
 
   return 0;
 }
@@ -981,6 +995,7 @@ int main(int argc, char *argv[]) {
         DINGO_LOG(ERROR) << "Init RaftApply WorkerSet failed!";
         return -1;
       }
+      store_service.SetRaftApplyWorkSet(raft_apply_worker_set);
       dingo_server.SetRaftApplyWorkerSet(raft_apply_worker_set);
       DINGO_LOG(INFO) << "RaftApply worker num: " << FLAGS_raft_apply_worker_num;
     } else {
@@ -1092,6 +1107,7 @@ int main(int argc, char *argv[]) {
         DINGO_LOG(ERROR) << "Init RaftApply WorkerSet failed!";
         return -1;
       }
+      index_service.SetRaftApplyWorkSet(raft_apply_worker_set);
       dingo_server.SetRaftApplyWorkerSet(raft_apply_worker_set);
       DINGO_LOG(INFO) << "RaftApply worker num: " << FLAGS_raft_apply_worker_num;
     } else {
