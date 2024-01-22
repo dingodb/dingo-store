@@ -90,9 +90,11 @@ static butil::Status ValidateVectorBatchQueryRequest(StoragePtr storage,
 
 void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* controller,
                         const pb::index::VectorBatchQueryRequest* request,
-                        pb::index::VectorBatchQueryResponse* response, google::protobuf::Closure* done) {
+                        pb::index::VectorBatchQueryResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -223,9 +225,11 @@ static butil::Status ValidateVectorSearchRequest(StoragePtr storage, const pb::i
 
 void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* controller,
                     const pb::index::VectorSearchRequest* request, pb::index::VectorSearchResponse* response,
-                    google::protobuf::Closure* done) {
+                    TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -386,10 +390,12 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
 }
 
 void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller,
-                 const pb::index::VectorAddRequest* request, pb::index::VectorAddResponse* response,
-                 google::protobuf::Closure* done, bool is_sync) {
+                 const pb::index::VectorAddRequest* request, pb::index::VectorAddResponse* response, TrackClosure* done,
+                 bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -408,7 +414,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -483,9 +489,11 @@ static butil::Status ValidateVectorDeleteRequest(StoragePtr storage, const pb::i
 
 void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* controller,
                     const pb::index::VectorDeleteRequest* request, pb::index::VectorDeleteResponse* response,
-                    google::protobuf::Closure* done, bool is_sync) {
+                    TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -504,7 +512,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
@@ -555,9 +563,11 @@ static butil::Status ValidateVectorGetBorderIdRequest(StoragePtr storage,
 
 void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* controller,
                          const pb::index::VectorGetBorderIdRequest* request,
-                         pb::index::VectorGetBorderIdResponse* response, google::protobuf::Closure* done) {
+                         pb::index::VectorGetBorderIdResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -643,9 +653,11 @@ static butil::Status ValidateVectorScanQueryRequest(StoragePtr storage,
 
 void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* controller,
                        const pb::index::VectorScanQueryRequest* request, pb::index::VectorScanQueryResponse* response,
-                       google::protobuf::Closure* done) {
+                       TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -743,9 +755,11 @@ static butil::Status ValidateVectorGetRegionMetricsRequest(StoragePtr storage,
 
 void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcController* controller,
                               const pb::index::VectorGetRegionMetricsRequest* request,
-                              pb::index::VectorGetRegionMetricsResponse* response, google::protobuf::Closure* done) {
+                              pb::index::VectorGetRegionMetricsResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -852,9 +866,11 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
 
 void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controller,
                    const pb::index::VectorCountRequest* request, pb::index::VectorCountResponse* response,
-                   google::protobuf::Closure* done) {
+                   TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -977,9 +993,11 @@ static butil::Status ValidateVectorSearchDebugRequest(StoragePtr storage,
 
 void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* controller,
                          const pb::index::VectorSearchDebugRequest* request,
-                         pb::index::VectorSearchDebugResponse* response, google::protobuf::Closure* done) {
+                         pb::index::VectorSearchDebugResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1076,10 +1094,11 @@ static butil::Status ValidateTxnGetRequest(const pb::store::TxnGetRequest* reque
 }
 
 void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* controller,
-                    const pb::store::TxnGetRequest* request, pb::store::TxnGetResponse* response,
-                    google::protobuf::Closure* done) {
+                    const pb::store::TxnGetRequest* request, pb::store::TxnGetResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1098,7 +1117,7 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1196,9 +1215,11 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
 
 void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* controller,
                      const pb::store::TxnScanRequest* request, pb::store::TxnScanResponse* response,
-                     google::protobuf::Closure* done) {
+                     TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1221,7 +1242,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1293,8 +1314,7 @@ butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store::TxnPes
 
 void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* controller,
                           const dingodb::pb::store::TxnPessimisticLockRequest* request,
-                          dingodb::pb::store::TxnPessimisticLockResponse* response, google::protobuf::Closure* done,
-                          bool is_sync);
+                          dingodb::pb::store::TxnPessimisticLockResponse* response, TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* controller,
                                           const pb::store::TxnPessimisticLockRequest* request,
@@ -1317,8 +1337,8 @@ butil::Status ValidateTxnPessimisticRollbackRequest(const dingodb::pb::store::Tx
 
 void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcController* controller,
                               const dingodb::pb::store::TxnPessimisticRollbackRequest* request,
-                              dingodb::pb::store::TxnPessimisticRollbackResponse* response,
-                              google::protobuf::Closure* done, bool is_sync);
+                              dingodb::pb::store::TxnPessimisticRollbackResponse* response, TrackClosure* done,
+                              bool is_sync);
 
 void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* controller,
                                               const pb::store::TxnPessimisticRollbackRequest* request,
@@ -1473,9 +1493,11 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
 
 void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* controller,
                          const pb::store::TxnPrewriteRequest* request, pb::store::TxnPrewriteResponse* response,
-                         google::protobuf::Closure* done, bool is_sync) {
+                         TrackClosure* done, bool is_sync) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1517,7 +1539,7 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1656,8 +1678,8 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
 }
 
 void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller,
-                 const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
-                 google::protobuf::Closure* done, bool is_sync);
+                 const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response, TrackClosure* done,
+                 bool is_sync);
 
 void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  const pb::store::TxnCommitRequest* request, pb::store::TxnCommitResponse* response,
@@ -1725,7 +1747,7 @@ static butil::Status VectorValidateTxnCheckTxnStatusRequest(const pb::store::Txn
 
 void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* controller,
                          const pb::store::TxnCheckTxnStatusRequest* request,
-                         pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done, bool is_sync);
+                         pb::store::TxnCheckTxnStatusResponse* response, TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* controller,
                                          const pb::store::TxnCheckTxnStatusRequest* request,
@@ -1811,7 +1833,7 @@ static butil::Status VectorValidateTxnResolveLockRequest(const pb::store::TxnRes
 
 void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* controller,
                       const pb::store::TxnResolveLockRequest* request, pb::store::TxnResolveLockResponse* response,
-                      google::protobuf::Closure* done, bool is_sync);
+                      TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controller,
                                       const pb::store::TxnResolveLockRequest* request,
@@ -1875,9 +1897,11 @@ static butil::Status ValidateTxnBatchGetRequest(const pb::store::TxnBatchGetRequ
 
 void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* controller,
                          const pb::store::TxnBatchGetRequest* request, pb::store::TxnBatchGetResponse* response,
-                         google::protobuf::Closure* done) {
+                         TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
 
   int64_t region_id = request->context().region_id();
   auto region = Server::GetInstance().GetRegion(region_id);
@@ -1896,7 +1920,7 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
@@ -1998,7 +2022,7 @@ static butil::Status ValidateTxnBatchRollbackRequest(const pb::store::TxnBatchRo
 
 void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* controller,
                         const pb::store::TxnBatchRollbackRequest* request,
-                        pb::store::TxnBatchRollbackResponse* response, google::protobuf::Closure* done, bool is_sync);
+                        pb::store::TxnBatchRollbackResponse* response, TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* controller,
                                         const pb::store::TxnBatchRollbackRequest* request,
@@ -2062,7 +2086,7 @@ static butil::Status ValidateTxnScanLockRequest(const pb::store::TxnScanLockRequ
 
 void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controller,
                    const pb::store::TxnScanLockRequest* request, pb::store::TxnScanLockResponse* response,
-                   google::protobuf::Closure* done);
+                   TrackClosure* done);
 
 void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    const pb::store::TxnScanLockRequest* request,
@@ -2112,7 +2136,7 @@ static butil::Status ValidateTxnHeartBeatRequest(const pb::store::TxnHeartBeatRe
 
 void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* controller,
                     const pb::store::TxnHeartBeatRequest* request, pb::store::TxnHeartBeatResponse* response,
-                    google::protobuf::Closure* done, bool is_sync);
+                    TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     const pb::store::TxnHeartBeatRequest* request,
@@ -2154,7 +2178,7 @@ static butil::Status VectorValidateTxnGcRequest(const pb::store::TxnGcRequest* r
 }
 
 void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
-             pb::store::TxnGcResponse* response, google::protobuf::Closure* done, bool is_sync);
+             pb::store::TxnGcResponse* response, TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const pb::store::TxnGcRequest* request,
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
@@ -2214,7 +2238,7 @@ static butil::Status ValidateTxnDeleteRangeRequest(const pb::store::TxnDeleteRan
 
 void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* controller,
                       const pb::store::TxnDeleteRangeRequest* request, pb::store::TxnDeleteRangeResponse* response,
-                      google::protobuf::Closure* done, bool is_sync);
+                      TrackClosure* done, bool is_sync);
 
 void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controller,
                                       const pb::store::TxnDeleteRangeRequest* request,
@@ -2263,8 +2287,7 @@ static butil::Status ValidateTxnDumpRequest(const pb::store::TxnDumpRequest* req
 }
 
 void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
-               const pb::store::TxnDumpRequest* request, pb::store::TxnDumpResponse* response,
-               google::protobuf::Closure* done);
+               const pb::store::TxnDumpRequest* request, pb::store::TxnDumpResponse* response, TrackClosure* done);
 
 void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
@@ -2281,7 +2304,7 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
 }
 
 void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::index::HelloRequest* request,
-             dingodb::pb::index::HelloResponse* response, google::protobuf::Closure* done) {
+             dingodb::pb::index::HelloResponse* response, TrackClosure* done) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
 

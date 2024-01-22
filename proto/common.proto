@@ -850,6 +850,11 @@ message RequestInfo {
 
 message TimeInfo {
   int64 total_rpc_time_ns = 1;
+
+  int64 service_queue_wait_time_ns = 2;
+  int64 prepair_commit_time_ns = 3;
+  int64 raft_commit_time_ns = 4;
+  int64 raft_apply_time_ns = 5;
 }
 
 message ResponseInfo {

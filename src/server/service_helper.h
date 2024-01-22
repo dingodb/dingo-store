@@ -24,6 +24,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/tracker.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/error.pb.h"
@@ -108,13 +109,27 @@ class ServiceTask : public TaskRunnable {
   Handler handle_;
 };
 
+class TrackClosure : public google::protobuf::Closure {
+ public:
+  TrackClosure(TrackerPtr tracker) : tracker(tracker) {}
+  ~TrackClosure() override = default;
+
+  TrackerPtr Tracker() { return tracker; };
+
+ protected:
+  TrackerPtr tracker;
+};
+
 // Wrapper brpc service closure for log.
 template <typename T, typename U>
-class ServiceClosure : public google::protobuf::Closure {
+class ServiceClosure : public TrackClosure {
  public:
   ServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request, U* response)
-      : method_name_(method_name), done_(done), request_(request), response_(response) {
-    start_time_ = Helper::TimestampNs();
+      : TrackClosure(Tracker::New(request->request_info())),
+        method_name_(method_name),
+        done_(done),
+        request_(request),
+        response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
@@ -124,19 +139,47 @@ class ServiceClosure : public google::protobuf::Closure {
 
  private:
   std::string method_name_;
-  uint64_t start_time_;
 
   google::protobuf::Closure* done_;
   const T* request_;
   U* response_;
 };
 
+inline void SetPbMessageResponseInfo(google::protobuf::Message* message, TrackerPtr tracker) {
+  if (BAIDU_UNLIKELY(message == nullptr || tracker == nullptr)) {
+    return;
+  }
+  const google::protobuf::Reflection* reflection = message->GetReflection();
+  const google::protobuf::Descriptor* desc = message->GetDescriptor();
+
+  const google::protobuf::FieldDescriptor* response_info_field = desc->FindFieldByName("response_info");
+  if (BAIDU_UNLIKELY(response_info_field == nullptr)) {
+    DINGO_LOG(ERROR) << "SetPbMessageError error_field is nullptr";
+    return;
+  }
+  if (BAIDU_UNLIKELY(response_info_field->message_type()->full_name() != "dingodb.pb.common.ResponseInfo")) {
+    DINGO_LOG(ERROR)
+        << "SetPbMessageError field->message_type()->full_name() is not pb::common::ResponseInfo, its_type="
+        << response_info_field->message_type()->full_name();
+    return;
+  }
+  pb::common::ResponseInfo* response_info =
+      dynamic_cast<pb::common::ResponseInfo*>(reflection->MutableMessage(message, response_info_field));
+  auto* time_info = response_info->mutable_time_info();
+  time_info->set_total_rpc_time_ns(tracker->TotalRpcTime());
+  time_info->set_service_queue_wait_time_ns(tracker->ServiceQueueWaitTime());
+  time_info->set_prepair_commit_time_ns(tracker->PrepairCommitTime());
+  time_info->set_raft_commit_time_ns(tracker->RaftCommitTime());
+  time_info->set_raft_apply_time_ns(tracker->RaftApplyTime());
+}
+
 template <typename T, typename U>
 void ServiceClosure<T, U>::Run() {
   std::unique_ptr<ServiceClosure<T, U>> self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
+  tracker->SetTotalRpcTime();
+  uint64_t elapsed_time = tracker->TotalRpcTime();
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -168,7 +211,7 @@ void ServiceClosure<T, U>::Run() {
     }
   }
 
-  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
+  SetPbMessageResponseInfo(response_, tracker);
 }
 
 template <>
@@ -177,7 +220,8 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
       self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
+  tracker->SetTotalRpcTime();
+  uint64_t elapsed_time = tracker->TotalRpcTime();
 
   if (response_->error().errcode() != 0) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -201,17 +245,20 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
     }
   }
 
-  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
+  SetPbMessageResponseInfo(response_, tracker);
 }
 
 // Wrapper brpc service closure for log.
 template <typename T, typename U>
-class CoordinatorServiceClosure : public google::protobuf::Closure {
+class CoordinatorServiceClosure : public TrackClosure {
  public:
   CoordinatorServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request,
                             U* response)
-      : method_name_(method_name), done_(done), request_(request), response_(response) {
-    start_time_ = Helper::TimestampNs();
+      : TrackClosure(Tracker::New(request->request_info())),
+        method_name_(method_name),
+        done_(done),
+        request_(request),
+        response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
@@ -221,7 +268,6 @@ class CoordinatorServiceClosure : public google::protobuf::Closure {
 
  private:
   std::string method_name_;
-  uint64_t start_time_;
 
   google::protobuf::Closure* done_;
   const T* request_;
@@ -233,7 +279,8 @@ void CoordinatorServiceClosure<T, U>::Run() {
   std::unique_ptr<CoordinatorServiceClosure<T, U>> self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
+  tracker->SetTotalRpcTime();
+  uint64_t elapsed_time = tracker->TotalRpcTime();
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -264,16 +311,19 @@ void CoordinatorServiceClosure<T, U>::Run() {
     }
   }
 
-  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
+  SetPbMessageResponseInfo(response_, tracker);
 }
 
 template <typename T, typename U>
-class NoContextServiceClosure : public google::protobuf::Closure {
+class NoContextServiceClosure : public TrackClosure {
  public:
   NoContextServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request,
                           U* response)
-      : method_name_(method_name), done_(done), request_(request), response_(response) {
-    start_time_ = Helper::TimestampNs();
+      : TrackClosure(Tracker::New(request->request_info())),
+        method_name_(method_name),
+        done_(done),
+        request_(request),
+        response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
@@ -283,7 +333,6 @@ class NoContextServiceClosure : public google::protobuf::Closure {
 
  private:
   std::string method_name_;
-  uint64_t start_time_;
 
   google::protobuf::Closure* done_;
   const T* request_;
@@ -295,7 +344,8 @@ void NoContextServiceClosure<T, U>::Run() {
   std::unique_ptr<NoContextServiceClosure<T, U>> self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
-  uint64_t elapsed_time = Helper::TimestampNs() - start_time_;
+  tracker->SetTotalRpcTime();
+  uint64_t elapsed_time = tracker->TotalRpcTime();
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -319,7 +369,7 @@ void NoContextServiceClosure<T, U>::Run() {
         request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
 
-  Helper::SetPbMessageResponseInfo(response_, elapsed_time);
+  SetPbMessageResponseInfo(response_, tracker);
 }
 
 }  // namespace dingodb

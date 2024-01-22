@@ -52,6 +52,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "common/service_access.h"
+#include "common/tracker.h"
 #include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/common.pb.h"
@@ -671,36 +672,6 @@ void Helper::SetPbMessageError(butil::Status status, google::protobuf::Message* 
   pb::error::Error* error = dynamic_cast<pb::error::Error*>(reflection->MutableMessage(message, error_field));
   error->set_errcode(static_cast<pb::error::Errno>(status.error_code()));
   error->set_errmsg(status.error_str());
-  // google::protobuf::Message* error = reflection->MutableMessage(message, error_field);
-  // const google::protobuf::Reflection* error_ref = error->GetReflection();
-  // const google::protobuf::Descriptor* error_desc = error->GetDescriptor();
-  // const google::protobuf::FieldDescriptor* errcode_field = error_desc->FindFieldByName("errcode");
-  // error_ref->SetEnumValue(error, errcode_field, status.error_code());
-  // const google::protobuf::FieldDescriptor* errmsg_field = error_desc->FindFieldByName("errmsg");
-  // error_ref->SetString(error, errmsg_field, status.error_str());
-}
-
-void Helper::SetPbMessageResponseInfo(google::protobuf::Message* message, int64_t elapsed_time_ns) {
-  if (BAIDU_UNLIKELY(message == nullptr)) {
-    return;
-  }
-  const google::protobuf::Reflection* reflection = message->GetReflection();
-  const google::protobuf::Descriptor* desc = message->GetDescriptor();
-
-  const google::protobuf::FieldDescriptor* response_info_field = desc->FindFieldByName("response_info");
-  if (BAIDU_UNLIKELY(response_info_field == nullptr)) {
-    DINGO_LOG(ERROR) << "SetPbMessageError error_field is nullptr";
-    return;
-  }
-  if (BAIDU_UNLIKELY(response_info_field->message_type()->full_name() != "dingodb.pb.common.ResponseInfo")) {
-    DINGO_LOG(ERROR)
-        << "SetPbMessageError field->message_type()->full_name() is not pb::common::ResponseInfo, its_type="
-        << response_info_field->message_type()->full_name();
-    return;
-  }
-  pb::common::ResponseInfo* response_info =
-      dynamic_cast<pb::common::ResponseInfo*>(reflection->MutableMessage(message, response_info_field));
-  response_info->mutable_time_info()->set_total_rpc_time_ns(elapsed_time_ns);
 }
 
 std::string Helper::MessageToJsonString(const google::protobuf::Message& message) {

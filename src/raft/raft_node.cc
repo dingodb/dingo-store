@@ -127,6 +127,11 @@ butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb:
 
   FAIL_POINT("before_raft_commit");
 
+  auto tracker = ctx->Tracker();
+  if (tracker) {
+    tracker->SetPrepairCommitTime();
+  }
+
   braft::Task task;
   task.data = &data;
   task.done = new BaseClosure(ctx, raft_cmd);

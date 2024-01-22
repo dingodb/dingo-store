@@ -102,6 +102,13 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       continue;
     }
 
+    auto* done = dynamic_cast<BaseClosure*>(iter.done());
+    auto ctx = done ? done->GetCtx() : nullptr;
+    auto tracker = ctx ? ctx->Tracker() : nullptr;
+    if (tracker != nullptr) {
+      tracker->SetRaftCommitTime();
+    }
+
     // Region is STANDBY state, wait to apply.
     while (region_->State() == pb::common::StoreRegionState::STANDBY) {
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is standby for spliting, waiting...",
@@ -128,9 +135,6 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       std::string s = fmt::format("Region({}) is {} state, abandon apply log", region_->Id(),
                                   pb::common::StoreRegionState_Name(region_state));
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
-
-      auto* done = dynamic_cast<BaseClosure*>(iter.done());
-      auto ctx = done ? done->GetCtx() : nullptr;
       if (ctx != nullptr) {
         ctx->SetStatus(butil::Status(pb::error::EREGION_UNAVAILABLE, s));
       }
@@ -142,9 +146,6 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       std::string s = fmt::format("Region({}) epoch is not match, region_epoch({}) raft_cmd_epoch({})", region_->Id(),
                                   region_->EpochToString(), Helper::RegionEpochToString(raft_cmd->header().epoch()));
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
-
-      auto* done = dynamic_cast<BaseClosure*>(iter.done());
-      auto ctx = done ? done->GetCtx() : nullptr;
       if (ctx != nullptr) {
         ctx->SetStatus(butil::Status(pb::error::EREGION_VERSION, s));
       }
@@ -186,6 +187,10 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       } else {
         DispatchEvent(EventType::kSmApply, event);
       }
+    }
+
+    if (tracker != nullptr) {
+      tracker->SetRaftApplyTime();
     }
 
     applied_term_ = iter.term();
