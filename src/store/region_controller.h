@@ -231,22 +231,6 @@ class DestroyRegionExecutorTask : public TaskRunnable {
   RegionCmdPtr region_cmd_;
 };
 
-class SnapshotVectorIndexTask : public TaskRunnable {
- public:
-  SnapshotVectorIndexTask(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd) : ctx_(ctx), region_cmd_(region_cmd) {}
-  ~SnapshotVectorIndexTask() override = default;
-
-  std::string Type() override { return "SNAPSHOT_VECTOR_INDEX"; }
-
-  void Run() override;
-
- private:
-  static butil::Status SaveSnapshot(std::shared_ptr<Context> ctx, int64_t vector_index_id);
-
-  std::shared_ptr<Context> ctx_;
-  RegionCmdPtr region_cmd_;
-};
-
 class UpdateDefinitionTask : public TaskRunnable {
  public:
   UpdateDefinitionTask(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd) : ctx_(ctx), region_cmd_(region_cmd) {}
@@ -300,6 +284,26 @@ class HoldVectorIndexTask : public TaskRunnable {
  private:
   static butil::Status HoldVectorIndex(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd);
   static butil::Status ValidateHoldVectorIndex(int64_t region_id);
+
+  std::shared_ptr<Context> ctx_;
+  RegionCmdPtr region_cmd_;
+};
+
+class SnapshotVectorIndexTask : public TaskRunnable {
+ public:
+  SnapshotVectorIndexTask(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd) : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~SnapshotVectorIndexTask() override = default;
+
+  std::string Type() override { return "SNAPSHOT_VECTOR_INDEX"; }
+
+  void Run() override;
+
+  static butil::Status PreValidateSnapshotVectorIndex(const pb::coordinator::RegionCmd& command);
+
+ private:
+  static butil::Status SaveSnapshotSync(std::shared_ptr<Context> ctx, int64_t vector_index_id);
+  static butil::Status SaveSnapshotAsync(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd);
+  static butil::Status ValidateSaveVectorIndex(int64_t region_id);
 
   std::shared_ptr<Context> ctx_;
   RegionCmdPtr region_cmd_;

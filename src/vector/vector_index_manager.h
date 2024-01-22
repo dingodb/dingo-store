@@ -134,25 +134,36 @@ class VectorIndexManager {
 
   static butil::Status ScrubVectorIndex();
 
+  static bvar::Adder<uint64_t> bvar_vector_index_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_rebuild_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_save_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_loadorbuild_task_running_num;
+
+  static bvar::Adder<uint64_t> bvar_vector_index_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_rebuild_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_save_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_loadorbuild_task_total_num;
+
   static std::atomic<int> vector_index_task_running_num;
-  static int GetVectorIndexTaskRunningNum() { return vector_index_task_running_num.load(); }
-  static void IncVectorIndexTaskRunningNum() { vector_index_task_running_num.fetch_add(1); }
-  static void DecVectorIndexTaskRunningNum() { vector_index_task_running_num.fetch_sub(1); }
-
   static std::atomic<int> vector_index_rebuild_task_running_num;
-  static int GetVectorIndexRebuildTaskRunningNum() { return vector_index_rebuild_task_running_num.load(); }
-  static void IncVectorIndexRebuildTaskRunningNum() { vector_index_rebuild_task_running_num.fetch_add(1); }
-  static void DecVectorIndexRebuildTaskRunningNum() { vector_index_rebuild_task_running_num.fetch_sub(1); }
-
   static std::atomic<int> vector_index_save_task_running_num;
-  static int GetVectorIndexSaveTaskRunningNum() { return vector_index_save_task_running_num.load(); }
-  static void IncVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_add(1); }
-  static void DecVectorIndexSaveTaskRunningNum() { vector_index_save_task_running_num.fetch_sub(1); }
-
   static std::atomic<int> vector_index_loadorbuild_task_running_num;
-  static int GetVectorIndexLoadorbuildTaskRunningNum() { return vector_index_loadorbuild_task_running_num.load(); }
-  static void IncVectorIndexLoadorbuildTaskRunningNum() { vector_index_loadorbuild_task_running_num.fetch_add(1); }
-  static void DecVectorIndexLoadorbuildTaskRunningNum() { vector_index_loadorbuild_task_running_num.fetch_sub(1); }
+
+  static int GetVectorIndexTaskRunningNum();
+  static void IncVectorIndexTaskRunningNum();
+  static void DecVectorIndexTaskRunningNum();
+
+  static int GetVectorIndexRebuildTaskRunningNum();
+  static void IncVectorIndexRebuildTaskRunningNum();
+  static void DecVectorIndexRebuildTaskRunningNum();
+
+  static int GetVectorIndexSaveTaskRunningNum();
+  static void IncVectorIndexSaveTaskRunningNum();
+  static void DecVectorIndexSaveTaskRunningNum();
+
+  static int GetVectorIndexLoadorbuildTaskRunningNum();
+  static void IncVectorIndexLoadorbuildTaskRunningNum();
+  static void DecVectorIndexLoadorbuildTaskRunningNum();
 
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
 

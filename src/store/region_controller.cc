@@ -1071,41 +1071,6 @@ void DestroyRegionExecutorTask::Run() {
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
 }
 
-butil::Status SnapshotVectorIndexTask::SaveSnapshot(std::shared_ptr<Context> /*ctx*/, int64_t vector_index_id) {
-  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] save snapshot.", vector_index_id);
-  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
-
-  auto region = store_region_meta->GetRegion(vector_index_id);
-  if (region == nullptr) {
-    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", vector_index_id));
-  }
-
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  if (vector_index_wrapper == nullptr || vector_index_wrapper->GetOwnVectorIndex() == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
-  }
-
-  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, "from client");
-  if (!status.ok()) {
-    return status;
-  }
-
-  return butil::Status();
-}
-
-void SnapshotVectorIndexTask::Run() {
-  auto status = SaveSnapshot(ctx_, region_cmd_->snapshot_vector_index_request().vector_index_id());
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] save vector index snapshot failed, error: {}",
-                                    region_cmd_->snapshot_vector_index_request().vector_index_id(), status.error_str());
-  }
-
-  Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
-      region_cmd_,
-      status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
-}
-
 butil::Status UpdateDefinitionTask::PreValidateUpdateDefinition(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
@@ -1317,6 +1282,113 @@ void HoldVectorIndexTask::Run() {
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+}
+
+butil::Status SnapshotVectorIndexTask::SaveSnapshotSync(std::shared_ptr<Context> /*ctx*/, int64_t vector_index_id) {
+  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] save snapshot.", vector_index_id);
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+
+  auto region = store_region_meta->GetRegion(vector_index_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", vector_index_id));
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr || vector_index_wrapper->GetOwnVectorIndex() == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", vector_index_id));
+  }
+
+  auto status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, "from client");
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status SnapshotVectorIndexTask::PreValidateSnapshotVectorIndex(const pb::coordinator::RegionCmd& command) {
+  return ValidateSaveVectorIndex(command.snapshot_vector_index_request().vector_index_id());
+}
+
+butil::Status SnapshotVectorIndexTask::ValidateSaveVectorIndex(int64_t region_id) {
+  auto store_region_meta = GET_STORE_REGION_META;
+  auto region = store_region_meta->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
+  }
+
+  // Validate raft node exists
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_store_engine != nullptr) {
+    auto node = raft_store_engine->GetNode(region_id);
+    if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node %lu.", region_id);
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status SnapshotVectorIndexTask::SaveSnapshotAsync(std::shared_ptr<Context> /*ctx*/, RegionCmdPtr region_cmd) {
+  int64_t region_id = region_cmd->snapshot_vector_index_request().vector_index_id();
+  int64_t raft_log_index = region_cmd->snapshot_vector_index_request().raft_log_index();
+
+  auto store_region_meta = GET_STORE_REGION_META;
+  auto region = store_region_meta->GetRegion(region_id);
+  if (region == nullptr) {
+    return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
+  }
+
+  auto status = ValidateSaveVectorIndex(region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, fmt::format("Not found vector index {}", region_id));
+  }
+
+  ADD_REGION_CHANGE_RECORD(*region_cmd);
+
+  if (raft_log_index > 0 && vector_index_wrapper->SnapshotLogId() >= raft_log_index) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({})] skip save vector index.", region_id) << ", "
+                    << vector_index_wrapper->SnapshotLogId() << " >= " << raft_log_index;
+    return butil::Status();
+  }
+
+  // Save vector index.
+  DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({})] region_save_vector_index.", region_id);
+  VectorIndexManager::LaunchSaveVectorIndex(vector_index_wrapper,
+                                            fmt::format("{}-region_save_vector_index", region_cmd->job_id()));
+
+  return butil::Status();
+}
+
+void SnapshotVectorIndexTask::Run() {
+  if (region_cmd_->snapshot_vector_index_request().raft_log_index() == 0) {
+    auto status = SaveSnapshotSync(ctx_, region_cmd_->snapshot_vector_index_request().vector_index_id());
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] save vector index snapshot failed, error: {}",
+                                      region_cmd_->snapshot_vector_index_request().vector_index_id(),
+                                      status.error_str());
+    }
+
+    Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
+        region_cmd_,
+        status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+  } else {
+    auto status = SaveSnapshotAsync(ctx_, region_cmd_);
+    if (!status.ok()) {
+      DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] save vector index  failed, {}",
+                                        region_cmd_->switch_split_request().region_id(), status.error_str());
+    }
+
+    Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
+        region_cmd_,
+        status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+  }
 }
 
 bool ControlExecutor::Init() { return worker_->Init(); }
@@ -1672,6 +1744,7 @@ RegionController::ValidaterMap RegionController::validaters = {
     {pb::coordinator::CMD_UPDATE_DEFINITION, UpdateDefinitionTask::PreValidateUpdateDefinition},
     {pb::coordinator::CMD_SWITCH_SPLIT, SwitchSplitTask::PreValidateSwitchSplit},
     {pb::coordinator::CMD_HOLD_VECTOR_INDEX, HoldVectorIndexTask::PreValidateHoldVectorIndex},
+    {pb::coordinator::CMD_SNAPSHOT_VECTOR_INDEX, SnapshotVectorIndexTask::PreValidateSnapshotVectorIndex},
 };
 
 }  // namespace dingodb
