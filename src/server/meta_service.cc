@@ -70,7 +70,7 @@ void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefi
 }
 
 void DoGetSchemas(google::protobuf::RpcController * /*controller*/, const pb::meta::GetSchemasRequest *request,
-                  pb::meta::GetSchemasResponse *response, google::protobuf::Closure *done,
+                  pb::meta::GetSchemasResponse *response, TrackClosure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -100,7 +100,7 @@ void DoGetSchemas(google::protobuf::RpcController * /*controller*/, const pb::me
 }
 
 void DoGetSchema(google::protobuf::RpcController * /*controller*/, const pb::meta::GetSchemaRequest *request,
-                 pb::meta::GetSchemaResponse *response, google::protobuf::Closure *done,
+                 pb::meta::GetSchemaResponse *response, TrackClosure *done,
                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -131,7 +131,7 @@ void DoGetSchema(google::protobuf::RpcController * /*controller*/, const pb::met
 
 void DoGetSchemaByName(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::GetSchemaByNameRequest *request, pb::meta::GetSchemaByNameResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -156,7 +156,7 @@ void DoGetSchemaByName(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoGetTablesCount(google::protobuf::RpcController * /*controller*/, const pb::meta::GetTablesCountRequest *request,
-                      pb::meta::GetTablesCountResponse *response, google::protobuf::Closure *done,
+                      pb::meta::GetTablesCountResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -185,7 +185,7 @@ void DoGetTablesCount(google::protobuf::RpcController * /*controller*/, const pb
 
 void DoGetTablesBySchema(google::protobuf::RpcController * /*controller*/,
                          const pb::meta::GetTablesBySchemaRequest *request,
-                         pb::meta::GetTablesBySchemaResponse *response, google::protobuf::Closure *done,
+                         pb::meta::GetTablesBySchemaResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -222,7 +222,7 @@ void DoGetTablesBySchema(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoGetTable(google::protobuf::RpcController * /*controller*/, const pb::meta::GetTableRequest *request,
-                pb::meta::GetTableResponse *response, google::protobuf::Closure *done,
+                pb::meta::GetTableResponse *response, TrackClosure *done,
                 std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -248,7 +248,7 @@ void DoGetTable(google::protobuf::RpcController * /*controller*/, const pb::meta
 }
 
 void DoGetTableByName(google::protobuf::RpcController * /*controller*/, const pb::meta::GetTableByNameRequest *request,
-                      pb::meta::GetTableByNameResponse *response, google::protobuf::Closure *done,
+                      pb::meta::GetTableByNameResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -275,7 +275,7 @@ void DoGetTableByName(google::protobuf::RpcController * /*controller*/, const pb
 }
 
 void DoGetTableRange(google::protobuf::RpcController * /*controller*/, const pb::meta::GetTableRangeRequest *request,
-                     pb::meta::GetTableRangeResponse *response, google::protobuf::Closure *done,
+                     pb::meta::GetTableRangeResponse *response, TrackClosure *done,
                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -302,7 +302,7 @@ void DoGetTableRange(google::protobuf::RpcController * /*controller*/, const pb:
 
 void DoGetTableMetrics(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::GetTableMetricsRequest *request, pb::meta::GetTableMetricsResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -327,7 +327,7 @@ void DoGetTableMetrics(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoCreateTableId(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTableIdRequest *request,
-                     pb::meta::CreateTableIdResponse *response, google::protobuf::Closure *done,
+                     pb::meta::CreateTableIdResponse *response, TrackClosure *done,
                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -357,7 +357,7 @@ void DoCreateTableId(google::protobuf::RpcController * /*controller*/, const pb:
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -377,7 +377,7 @@ void DoCreateTableId(google::protobuf::RpcController * /*controller*/, const pb:
 }
 
 void DoCreateTableIds(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTableIdsRequest *request,
-                      pb::meta::CreateTableIdsResponse *response, google::protobuf::Closure *done,
+                      pb::meta::CreateTableIdsResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -415,7 +415,7 @@ void DoCreateTableIds(google::protobuf::RpcController * /*controller*/, const pb
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -437,7 +437,7 @@ void DoCreateTableIds(google::protobuf::RpcController * /*controller*/, const pb
 }
 
 void DoCreateTable(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTableRequest *request,
-                   pb::meta::CreateTableResponse *response, google::protobuf::Closure *done,
+                   pb::meta::CreateTableResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -556,7 +556,7 @@ void DoCreateTable(google::protobuf::RpcController * /*controller*/, const pb::m
 }
 
 void DoDropSchema(google::protobuf::RpcController * /*controller*/, const pb::meta::DropSchemaRequest *request,
-                  pb::meta::DropSchemaResponse *response, google::protobuf::Closure *done,
+                  pb::meta::DropSchemaResponse *response, TrackClosure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -586,7 +586,7 @@ void DoDropSchema(google::protobuf::RpcController * /*controller*/, const pb::me
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -599,7 +599,7 @@ void DoDropSchema(google::protobuf::RpcController * /*controller*/, const pb::me
 }
 
 void DoCreateSchema(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateSchemaRequest *request,
-                    pb::meta::CreateSchemaResponse *response, google::protobuf::Closure *done,
+                    pb::meta::CreateSchemaResponse *response, TrackClosure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -636,7 +636,7 @@ void DoCreateSchema(google::protobuf::RpcController * /*controller*/, const pb::
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -649,7 +649,7 @@ void DoCreateSchema(google::protobuf::RpcController * /*controller*/, const pb::
 }
 
 void DoDropTable(google::protobuf::RpcController * /*controller*/, const pb::meta::DropTableRequest *request,
-                 pb::meta::DropTableResponse *response, google::protobuf::Closure *done,
+                 pb::meta::DropTableResponse *response, TrackClosure *done,
                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -679,7 +679,7 @@ void DoDropTable(google::protobuf::RpcController * /*controller*/, const pb::met
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -693,7 +693,7 @@ void DoDropTable(google::protobuf::RpcController * /*controller*/, const pb::met
 
 void DoGetAutoIncrements(google::protobuf::RpcController * /*controller*/,
                          const pb::meta::GetAutoIncrementsRequest *request,
-                         pb::meta::GetAutoIncrementsResponse *response, google::protobuf::Closure *done,
+                         pb::meta::GetAutoIncrementsResponse *response, TrackClosure *done,
                          std::shared_ptr<AutoIncrementControl> auto_increment_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -723,7 +723,7 @@ void DoGetAutoIncrements(google::protobuf::RpcController * /*controller*/,
 
 void DoGetAutoIncrement(google::protobuf::RpcController * /*controller*/,
                         const pb::meta::GetAutoIncrementRequest *request, pb::meta::GetAutoIncrementResponse *response,
-                        google::protobuf::Closure *done, std::shared_ptr<AutoIncrementControl> auto_increment_control,
+                        TrackClosure *done, std::shared_ptr<AutoIncrementControl> auto_increment_control,
                         std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -748,7 +748,7 @@ void DoGetAutoIncrement(google::protobuf::RpcController * /*controller*/,
 
 void DoCreateAutoIncrement(google::protobuf::RpcController *controller,
                            const pb::meta::CreateAutoIncrementRequest *request,
-                           pb::meta::CreateAutoIncrementResponse *response, google::protobuf::Closure *done,
+                           pb::meta::CreateAutoIncrementResponse *response, TrackClosure *done,
                            std::shared_ptr<AutoIncrementControl> auto_increment_control,
                            std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -771,7 +771,7 @@ void DoCreateAutoIncrement(google::protobuf::RpcController *controller,
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), nullptr, response);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -788,7 +788,7 @@ void DoCreateAutoIncrement(google::protobuf::RpcController *controller,
 
 void DoUpdateAutoIncrement(google::protobuf::RpcController * /*controller*/,
                            const ::dingodb::pb::meta::UpdateAutoIncrementRequest *request,
-                           pb::meta::UpdateAutoIncrementResponse *response, google::protobuf::Closure *done,
+                           pb::meta::UpdateAutoIncrementResponse *response, TrackClosure *done,
                            std::shared_ptr<AutoIncrementControl> auto_increment_control,
                            std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -813,7 +813,7 @@ void DoUpdateAutoIncrement(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -831,7 +831,7 @@ void DoUpdateAutoIncrement(google::protobuf::RpcController * /*controller*/,
 
 void DoGenerateAutoIncrement(google::protobuf::RpcController *controller,
                              const ::dingodb::pb::meta::GenerateAutoIncrementRequest *request,
-                             pb::meta::GenerateAutoIncrementResponse *response, google::protobuf::Closure *done,
+                             pb::meta::GenerateAutoIncrementResponse *response, TrackClosure *done,
                              std::shared_ptr<AutoIncrementControl> auto_increment_control,
                              std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -857,7 +857,7 @@ void DoGenerateAutoIncrement(google::protobuf::RpcController *controller,
   std::shared_ptr<Context> ctx =
       std::make_shared<Context>(static_cast<brpc::Controller *>(controller), nullptr, response);
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -875,7 +875,7 @@ void DoGenerateAutoIncrement(google::protobuf::RpcController *controller,
 
 void DoDeleteAutoIncrement(google::protobuf::RpcController * /*controller*/,
                            const ::dingodb::pb::meta::DeleteAutoIncrementRequest *request,
-                           pb::meta::DeleteAutoIncrementResponse *response, google::protobuf::Closure *done,
+                           pb::meta::DeleteAutoIncrementResponse *response, TrackClosure *done,
                            std::shared_ptr<AutoIncrementControl> auto_increment_control,
                            std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
@@ -898,7 +898,7 @@ void DoDeleteAutoIncrement(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kAutoIncrementRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -915,7 +915,7 @@ void DoDeleteAutoIncrement(google::protobuf::RpcController * /*controller*/,
 
 void DoGetIndexesCount(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::GetIndexesCountRequest *request, pb::meta::GetIndexesCountResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -942,7 +942,7 @@ void DoGetIndexesCount(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoGetIndexes(google::protobuf::RpcController * /*controller*/, const pb::meta::GetIndexesRequest *request,
-                  pb::meta::GetIndexesResponse *response, google::protobuf::Closure *done,
+                  pb::meta::GetIndexesResponse *response, TrackClosure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -980,7 +980,7 @@ void DoGetIndexes(google::protobuf::RpcController * /*controller*/, const pb::me
 }
 
 void DoGetIndex(google::protobuf::RpcController * /*controller*/, const pb::meta::GetIndexRequest *request,
-                pb::meta::GetIndexResponse *response, google::protobuf::Closure *done,
+                pb::meta::GetIndexResponse *response, TrackClosure *done,
                 std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1011,7 +1011,7 @@ void DoGetIndex(google::protobuf::RpcController * /*controller*/, const pb::meta
 }
 
 void DoGetIndexByName(google::protobuf::RpcController * /*controller*/, const pb::meta::GetIndexByNameRequest *request,
-                      pb::meta::GetIndexByNameResponse *response, google::protobuf::Closure *done,
+                      pb::meta::GetIndexByNameResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -1044,7 +1044,7 @@ void DoGetIndexByName(google::protobuf::RpcController * /*controller*/, const pb
 }
 
 void DoGetIndexRange(google::protobuf::RpcController * /*controller*/, const pb::meta::GetIndexRangeRequest *request,
-                     pb::meta::GetIndexRangeResponse *response, google::protobuf::Closure *done,
+                     pb::meta::GetIndexRangeResponse *response, TrackClosure *done,
                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1071,7 +1071,7 @@ void DoGetIndexRange(google::protobuf::RpcController * /*controller*/, const pb:
 
 void DoGetIndexMetrics(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::GetIndexMetricsRequest *request, pb::meta::GetIndexMetricsResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1096,7 +1096,7 @@ void DoGetIndexMetrics(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoCreateIndexId(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateIndexIdRequest *request,
-                     pb::meta::CreateIndexIdResponse *response, google::protobuf::Closure *done,
+                     pb::meta::CreateIndexIdResponse *response, TrackClosure *done,
                      std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1131,7 +1131,7 @@ void DoCreateIndexId(google::protobuf::RpcController * /*controller*/, const pb:
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1146,7 +1146,7 @@ void DoCreateIndexId(google::protobuf::RpcController * /*controller*/, const pb:
 }
 
 void DoCreateIndex(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateIndexRequest *request,
-                   pb::meta::CreateIndexResponse *response, google::protobuf::Closure *done,
+                   pb::meta::CreateIndexResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1283,7 +1283,7 @@ void DoCreateIndex(google::protobuf::RpcController * /*controller*/, const pb::m
 }
 
 void DoUpdateIndex(google::protobuf::RpcController * /*controller*/, const pb::meta::UpdateIndexRequest *request,
-                   pb::meta::UpdateIndexResponse *response, google::protobuf::Closure *done,
+                   pb::meta::UpdateIndexResponse *response, TrackClosure *done,
                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1331,7 +1331,7 @@ void DoUpdateIndex(google::protobuf::RpcController * /*controller*/, const pb::m
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1346,7 +1346,7 @@ void DoUpdateIndex(google::protobuf::RpcController * /*controller*/, const pb::m
 }
 
 void DoDropIndex(google::protobuf::RpcController * /*controller*/, const pb::meta::DropIndexRequest *request,
-                 pb::meta::DropIndexResponse *response, google::protobuf::Closure *done,
+                 pb::meta::DropIndexResponse *response, TrackClosure *done,
                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1376,7 +1376,7 @@ void DoDropIndex(google::protobuf::RpcController * /*controller*/, const pb::met
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1390,7 +1390,7 @@ void DoDropIndex(google::protobuf::RpcController * /*controller*/, const pb::met
 
 void DoGenerateTableIds(google::protobuf::RpcController * /*controller*/,
                         const pb::meta::GenerateTableIdsRequest *request, pb::meta::GenerateTableIdsResponse *response,
-                        google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                        TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                         std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1418,7 +1418,7 @@ void DoGenerateTableIds(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1433,7 +1433,7 @@ void DoGenerateTableIds(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoCreateTables(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTablesRequest *request,
-                    pb::meta::CreateTablesResponse *response, google::protobuf::Closure *done,
+                    pb::meta::CreateTablesResponse *response, TrackClosure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1652,7 +1652,7 @@ void DoCreateTables(google::protobuf::RpcController * /*controller*/, const pb::
 }
 
 void DoGetTables(google::protobuf::RpcController * /*controller*/, const pb::meta::GetTablesRequest *request,
-                 pb::meta::GetTablesResponse *response, google::protobuf::Closure *done,
+                 pb::meta::GetTablesResponse *response, TrackClosure *done,
                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1688,7 +1688,7 @@ void DoGetTables(google::protobuf::RpcController * /*controller*/, const pb::met
 }
 
 void DoDropTables(google::protobuf::RpcController * /*controller*/, const pb::meta::DropTablesRequest *request,
-                  pb::meta::DropTablesResponse *response, google::protobuf::Closure *done,
+                  pb::meta::DropTablesResponse *response, TrackClosure *done,
                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1720,7 +1720,7 @@ void DoDropTables(google::protobuf::RpcController * /*controller*/, const pb::me
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1735,7 +1735,7 @@ void DoDropTables(google::protobuf::RpcController * /*controller*/, const pb::me
 }
 
 void DoUpdateTables(google::protobuf::RpcController * /*controller*/, const pb::meta::UpdateTablesRequest *request,
-                    pb::meta::UpdateTablesResponse *response, google::protobuf::Closure *done,
+                    pb::meta::UpdateTablesResponse *response, TrackClosure *done,
                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1789,7 +1789,7 @@ void DoUpdateTables(google::protobuf::RpcController * /*controller*/, const pb::
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1803,7 +1803,7 @@ void DoUpdateTables(google::protobuf::RpcController * /*controller*/, const pb::
 
 void DoAddIndexOnTable(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::AddIndexOnTableRequest *request, pb::meta::AddIndexOnTableResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1838,7 +1838,7 @@ void DoAddIndexOnTable(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1852,7 +1852,7 @@ void DoAddIndexOnTable(google::protobuf::RpcController * /*controller*/,
 
 void DoDropIndexOnTable(google::protobuf::RpcController * /*controller*/,
                         const pb::meta::DropIndexOnTableRequest *request, pb::meta::DropIndexOnTableResponse *response,
-                        google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                        TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                         std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1884,7 +1884,7 @@ void DoDropIndexOnTable(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1898,7 +1898,7 @@ void DoDropIndexOnTable(google::protobuf::RpcController * /*controller*/,
 
 void DoSwitchAutoSplit(google::protobuf::RpcController * /*controller*/,
                        const ::dingodb::pb::meta::SwitchAutoSplitRequest *request,
-                       pb::meta::SwitchAutoSplitResponse *response, google::protobuf::Closure *done,
+                       pb::meta::SwitchAutoSplitResponse *response, TrackClosure *done,
                        std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1922,7 +1922,7 @@ void DoSwitchAutoSplit(google::protobuf::RpcController * /*controller*/,
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(done->Tracker());
 
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
@@ -1937,8 +1937,8 @@ void DoSwitchAutoSplit(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoTsoService(google::protobuf::RpcController *controller, const ::dingodb::pb::meta::TsoRequest *request,
-                  pb::meta::TsoResponse *response, google::protobuf::Closure *done,
-                  std::shared_ptr<TsoControl> tso_control, std::shared_ptr<Engine> /*raft_engine*/) {
+                  pb::meta::TsoResponse *response, TrackClosure *done, std::shared_ptr<TsoControl> tso_control,
+                  std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
   if (!tso_control->IsLeader()) {
@@ -1957,7 +1957,7 @@ void DoTsoService(google::protobuf::RpcController *controller, const ::dingodb::
 
 void DoGetDeletedTable(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::GetDeletedTableRequest *request, pb::meta::GetDeletedTableResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -1984,7 +1984,7 @@ void DoGetDeletedTable(google::protobuf::RpcController * /*controller*/,
 
 void DoGetDeletedIndex(google::protobuf::RpcController * /*controller*/,
                        const pb::meta::GetDeletedIndexRequest *request, pb::meta::GetDeletedIndexResponse *response,
-                       google::protobuf::Closure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
                        std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
@@ -2011,7 +2011,7 @@ void DoGetDeletedIndex(google::protobuf::RpcController * /*controller*/,
 
 void DoCleanDeletedTable(google::protobuf::RpcController * /*controller*/,
                          const pb::meta::CleanDeletedTableRequest *request,
-                         pb::meta::CleanDeletedTableResponse *response, google::protobuf::Closure *done,
+                         pb::meta::CleanDeletedTableResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -2036,7 +2036,7 @@ void DoCleanDeletedTable(google::protobuf::RpcController * /*controller*/,
 
 void DoCleanDeletedIndex(google::protobuf::RpcController * /*controller*/,
                          const pb::meta::CleanDeletedIndexRequest *request,
-                         pb::meta::CleanDeletedIndexResponse *response, google::protobuf::Closure *done,
+                         pb::meta::CleanDeletedIndexResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -2060,7 +2060,7 @@ void DoCleanDeletedIndex(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoHello(google::protobuf::RpcController * /*controller*/, const pb::meta::HelloRequest *request,
-             pb::meta::HelloResponse *response, google::protobuf::Closure *done,
+             pb::meta::HelloResponse *response, TrackClosure *done,
              std::shared_ptr<AutoIncrementControl> auto_increment_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard const done_guard(done);
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();

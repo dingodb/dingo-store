@@ -534,7 +534,7 @@ void NodeServiceImpl::CommitMerge(google::protobuf::RpcController* /*controller*
   auto storage = Server::GetInstance().GetStorage();
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->target_region_id());
-  ctx->SetRequestId(request->request_info().request_id());
+  ctx->SetTracker(svr_done->Tracker());
   ctx->SetRegionEpoch(request->target_region_epoch());
 
   pb::common::RegionDefinition region_definition;
