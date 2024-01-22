@@ -35,8 +35,6 @@ class ConfigHelper {
 
   static uint32_t GetElectionTimeout();
 
-  static uint32_t GetVectorIndexBackgroundWorkerNum();
-
   static int GetRocksDBBackgroundThreadNum();
   static int GetRocksDBStatsDumpPeriodSec();
 };

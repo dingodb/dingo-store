@@ -110,6 +110,8 @@ DECLARE_int32(bthread_concurrency);
 
 namespace dingodb {
 DECLARE_int32(brpc_worker_thread_num);
+DECLARE_int32(vector_background_worker_num);
+DECLARE_int32(vector_fast_background_worker_num);
 }  // namespace dingodb
 
 // Get server endpoint from config
@@ -423,7 +425,7 @@ int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
   return num;
 }
 
-int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config) {
+int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb::pb::common::ClusterRole role) {
   // init service_worker_num
   int read_worker_num = config->GetInt("server.read_worker_num");
   if (read_worker_num <= 0) {
@@ -508,6 +510,37 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config) {
     return -1;
   }
   DINGO_LOG(INFO) << "server.raft_apply_worker_max_pending_num is set to " << FLAGS_raft_apply_worker_max_pending_num;
+
+  if (role == dingodb::pb::common::ClusterRole::INDEX) {
+    // init vector index manager background worker num
+    auto vector_background_worker_num = config->GetInt("vector.background_worker_num");
+    if (vector_background_worker_num <= 0) {
+      vector_background_worker_num = dingodb::FLAGS_vector_background_worker_num;
+      DINGO_LOG(WARNING) << fmt::format("[config] vector.background_worker_num is too small, set default value({})",
+                                        dingodb::FLAGS_vector_background_worker_num);
+    }
+    dingodb::FLAGS_vector_background_worker_num = vector_background_worker_num;
+
+    auto vector_fast_background_worker_num = config->GetInt("vector.fast_background_worker_num");
+    if (vector_fast_background_worker_num <= 0) {
+      vector_fast_background_worker_num = dingodb::FLAGS_vector_fast_background_worker_num;
+      DINGO_LOG(WARNING) << fmt::format(
+          "[config] vector.fast_background_worker_num is too small, set default value({})",
+          dingodb::FLAGS_vector_fast_background_worker_num);
+    }
+    dingodb::FLAGS_vector_fast_background_worker_num = vector_fast_background_worker_num;
+
+    if (FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num +
+            dingodb::FLAGS_vector_fast_background_worker_num + dingodb::FLAGS_vector_background_worker_num >
+        GetWorkerThreadNum(config)) {
+      DINGO_LOG(ERROR) << "server.read_worker_num[" << FLAGS_read_worker_num << "] + server.write_worker_num["
+                       << FLAGS_write_worker_num << "] + server.raft_apply_worker_num[" << FLAGS_raft_apply_worker_num
+                       << "] + vector.fast_background_worker_num[" << dingodb::FLAGS_vector_fast_background_worker_num
+                       << "] + vector.background_worker_num[" << dingodb::FLAGS_vector_background_worker_num
+                       << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+      return -1;
+    }
+  }
 
   return 0;
 }
@@ -964,7 +997,7 @@ int main(int argc, char *argv[]) {
 
   } else if (role == dingodb::pb::common::ClusterRole::STORE) {
     // init service workers
-    auto ret1 = InitServiceWorkerParameters(config);
+    auto ret1 = InitServiceWorkerParameters(config, role);
     if (ret1 < 0) {
       DINGO_LOG(ERROR) << "InitServiceWorkerParameters failed!";
       return -1;
@@ -1075,7 +1108,7 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
   } else if (role == dingodb::pb::common::ClusterRole::INDEX) {
     // init service workers
-    auto ret1 = InitServiceWorkerParameters(config);
+    auto ret1 = InitServiceWorkerParameters(config, role);
     if (ret1 < 0) {
       DINGO_LOG(ERROR) << "InitServiceWorkerParameters failed!";
       return -1;
