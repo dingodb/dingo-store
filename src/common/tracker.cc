@@ -56,6 +56,14 @@ void Tracker::SetRaftCommitTime() {
 
 uint64_t Tracker::RaftCommitTime() const { return metrics_.raft_commit_time_ns; }
 
+void Tracker::SetRaftQueueWaitTime() {
+  uint64_t now_time = Helper::TimestampNs();
+  metrics_.raft_queue_wait_time_ns = now_time - last_time_;
+  last_time_ = now_time;
+}
+
+uint64_t Tracker::RaftQueueWaitTime() const { return metrics_.raft_queue_wait_time_ns; }
+
 void Tracker::SetRaftApplyTime() {
   uint64_t now_time = Helper::TimestampNs();
   metrics_.raft_apply_time_ns = now_time - last_time_;

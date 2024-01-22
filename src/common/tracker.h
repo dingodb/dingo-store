@@ -34,6 +34,7 @@ class Tracker {
     uint64_t service_queue_wait_time_ns{0};
     uint64_t prepair_commit_time_ns{0};
     uint64_t raft_commit_time_ns{0};
+    uint64_t raft_queue_wait_time_ns{0};
     uint64_t raft_apply_time_ns{0};
   };
 
@@ -48,6 +49,9 @@ class Tracker {
 
   void SetRaftCommitTime();
   uint64_t RaftCommitTime() const;
+
+  void SetRaftQueueWaitTime();
+  uint64_t RaftQueueWaitTime() const;
 
   void SetRaftApplyTime();
   uint64_t RaftApplyTime() const;

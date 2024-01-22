@@ -854,7 +854,8 @@ message TimeInfo {
   int64 service_queue_wait_time_ns = 2;
   int64 prepair_commit_time_ns = 3;
   int64 raft_commit_time_ns = 4;
-  int64 raft_apply_time_ns = 5;
+  int64 raft_queue_wait_time_ns = 5;
+  int64 raft_apply_time_ns = 6;
 }
 
 message ResponseInfo {

@@ -173,8 +173,12 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
         // Run in queue.
         auto cond = std::make_shared<BthreadCond>();
 
-        auto task = std::make_shared<DispatchEventTask>(
-            [this, event, cond]() { DoDispatchEvent(region_->Id(), listeners_, EventType::kSmApply, event, cond); });
+        auto task = std::make_shared<DispatchEventTask>([this, event, cond, tracker]() {
+          if (tracker != nullptr) {
+            tracker->SetRaftQueueWaitTime();
+          }
+          DoDispatchEvent(region_->Id(), listeners_, EventType::kSmApply, event, cond);
+        });
 
         bool ret = raft_apply_worker_set_->ExecuteRR(task);
         if (BAIDU_UNLIKELY(!ret)) {
