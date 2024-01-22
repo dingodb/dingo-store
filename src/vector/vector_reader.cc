@@ -27,6 +27,7 @@
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_flat.h"
@@ -354,8 +355,8 @@ butil::Status VectorReader::VectorBatchQuery(std::shared_ptr<Engine::VectorReade
     pb::common::VectorWithId vector_with_id;
     auto status =
         QueryVectorWithId(ctx->region_range, ctx->partition_id, vector_id, ctx->with_vector_data, vector_with_id);
-    if (!status.ok()) {
-      DINGO_LOG(WARNING) << fmt::format("Query vector_with_id failed, vector_id: {} error: {} ", vector_id,
+    if ((!status.ok()) && status.error_code() != pb::error::EKEY_NOT_FOUND) {
+      DINGO_LOG(WARNING) << fmt::format("Query vector_with_id failed, vector_id: {} error: {}", vector_id,
                                         status.error_str());
     }
 

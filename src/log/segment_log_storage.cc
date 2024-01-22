@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <utility>
@@ -709,7 +710,8 @@ int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) 
   do {
     ret = LoadMeta();
     if (ret != 0 && errno == ENOENT) {
-      DINGO_LOG(WARNING) << fmt::format("[raft.log][region({})] path: {}", region_id_, path_);
+      DINGO_LOG(INFO) << fmt::format("[raft.log][region({})] file not exists (ENOENT), is_empty=true, path: {}",
+                                     region_id_, path_);
       is_empty = true;
     } else if (ret != 0) {
       break;
@@ -1297,6 +1299,13 @@ int SegmentLogStorage::LoadMeta() {
 
   std::string meta_path(path_);
   meta_path.append("/" SEGMENT_META_FILE);
+
+  // check if meta_path file is exists
+  if (!std::filesystem::exists(meta_path)) {
+    DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] meta file is not exists, path: {}", region_id_,
+                                   FirstLogIndex(), LastLogIndex(), meta_path);
+    return -1;
+  }
 
   braft::ProtoBufFile pb_file(meta_path);
   pb::store_internal::LogMeta meta;

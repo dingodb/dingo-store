@@ -391,7 +391,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
                                                 std::priority_queue<std::pair<float, hnswlib::labeltype>>& result,
                                                 size_t row, int topk) {
     if (result.size() != topk) {
-      LOG(WARNING) << fmt::format("[vector_index.hnsw] tok and result size not match, topk: {} result: {}", topk,
+      LOG(WARNING) << fmt::format("[vector_index.hnsw] topk and result size not match, topk: {} result: {}", topk,
                                   result.size());
     }
 
