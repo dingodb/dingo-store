@@ -86,7 +86,59 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
   }
   ~LoadOrBuildVectorIndexTask() override = default;
 
-  std::string Type() override { return "LOADORBUILD_VECTOR_INDEX"; }
+  std::string Type() override { return "LOAD_OR_BUILD_VECTOR_INDEX"; }
+
+  void Run() override;
+
+  std::string Trace() override;
+
+ private:
+  VectorIndexWrapperPtr vector_index_wrapper_;
+  bool is_temp_hold_vector_index_;
+  int64_t job_id_;
+  std::string trace_;
+  int64_t start_time_;
+};
+
+class LoadAsyncBuildVectorIndexTask : public TaskRunnable {
+ public:
+  LoadAsyncBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
+                                int64_t job_id, const std::string& trace)
+      : vector_index_wrapper_(vector_index_wrapper),
+        is_temp_hold_vector_index_(is_temp_hold_vector_index),
+        job_id_(job_id),
+        trace_(trace) {
+    start_time_ = Helper::TimestampMs();
+  }
+  ~LoadAsyncBuildVectorIndexTask() override = default;
+
+  std::string Type() override { return "LOAD_ASYNC_BUILD_VECTOR_INDEX"; }
+
+  void Run() override;
+
+  std::string Trace() override;
+
+ private:
+  VectorIndexWrapperPtr vector_index_wrapper_;
+  bool is_temp_hold_vector_index_;
+  int64_t job_id_;
+  std::string trace_;
+  int64_t start_time_;
+};
+
+class BuildVectorIndexTask : public TaskRunnable {
+ public:
+  BuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index, int64_t job_id,
+                       const std::string& trace)
+      : vector_index_wrapper_(vector_index_wrapper),
+        is_temp_hold_vector_index_(is_temp_hold_vector_index),
+        job_id_(job_id),
+        trace_(trace) {
+    start_time_ = Helper::TimestampMs();
+  }
+  ~BuildVectorIndexTask() override = default;
+
+  std::string Type() override { return "LOAD_ASYNC_BUILD_VECTOR_INDEX"; }
 
   void Run() override;
 
@@ -115,6 +167,10 @@ class VectorIndexManager {
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
   static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
                                               const pb::common::RegionEpoch& epoch, const std::string& trace);
+  static butil::Status LoadVectorIndexOnly(VectorIndexWrapperPtr vector_index_wrapper,
+                                           const pb::common::RegionEpoch& epoch, const std::string& trace);
+  static butil::Status BuildVectorIndexOnly(VectorIndexWrapperPtr vector_index_wrapper,
+                                            const pb::common::RegionEpoch& epoch, const std::string& trace);
   static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
                                            int64_t job_id, const std::string& trace);
   // Parallel load or build vector index at server bootstrap.
@@ -131,6 +187,8 @@ class VectorIndexManager {
   // Launch rebuild vector index at execute queue.
   static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id,
                                        const std::string& trace);
+  static void LaunchBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
+                                     bool is_fast_build, int64_t job_id, const std::string& trace);
 
   static butil::Status ScrubVectorIndex();
 
@@ -166,6 +224,7 @@ class VectorIndexManager {
   static void DecVectorIndexLoadorbuildTaskRunningNum();
 
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
+  bool ExecuteTaskFast(int64_t region_id, TaskRunnablePtr task);
 
   std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
@@ -187,7 +246,8 @@ class VectorIndexManager {
                                      const std::string& start_key, [[maybe_unused]] const std::string& end_key);
 
   // Execute all vector index load/build/rebuild/save task.
-  WorkerSetPtr workers_;
+  WorkerSetPtr background_workers_;
+  WorkerSetPtr fast_background_workers_;
 };
 
 using VectorIndexManagerPtr = std::shared_ptr<VectorIndexManager>;

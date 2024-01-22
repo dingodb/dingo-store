@@ -203,8 +203,6 @@ class Constant {
 
   static constexpr uint32_t kLogPrintMaxLength = 256;
 
-  static constexpr uint32_t kVectorIndexBackgroundWorkerNumDefaultValue = 8;
-
   // raft snapshot policy string
   inline static const std::string kRaftSnapshotPolicyDingo = "dingo";
   inline static const std::string kRaftSnapshotPolicyCheckpoint = "checkpoint";

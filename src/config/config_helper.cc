@@ -135,21 +135,6 @@ uint32_t ConfigHelper::GetElectionTimeout() {
   return election_timeout_s;
 }
 
-uint32_t ConfigHelper::GetVectorIndexBackgroundWorkerNum() {
-  auto config = ConfigManager::GetInstance().GetRoleConfig();
-  if (config == nullptr) {
-    return Constant::kVectorIndexBackgroundWorkerNumDefaultValue;
-  }
-
-  int vector_index_background_worker_num = config->GetInt("vector.background_worker_num");
-  if (vector_index_background_worker_num <= 0) {
-    vector_index_background_worker_num = Constant::kVectorIndexBackgroundWorkerNumDefaultValue;
-    DINGO_LOG(WARNING) << fmt::format("[config] vector.background_worker_num is too small, set default value({})",
-                                      Constant::kVectorIndexBackgroundWorkerNumDefaultValue);
-  }
-  return vector_index_background_worker_num;
-}
-
 int ConfigHelper::GetRocksDBBackgroundThreadNum() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
