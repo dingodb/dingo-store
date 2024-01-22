@@ -2445,6 +2445,26 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
   // check if need to send load vector index to store
   if (split_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
       split_from_region.definition().index_parameter().has_vector_index_parameter()) {
+    const auto& vector_index_status = region_metrics.vector_index_status();
+
+    if (vector_index_status.apply_log_id() > vector_index_status.snapshot_log_id()) {
+      DINGO_LOG(INFO) << "SplitRegionWithTaskList vector index region has "
+                         "to do snapshot_vector_index, split_from_region_id="
+                      << split_from_region_id << ", split_to_region_id=" << split_to_region_id
+                      << ", apply_log_id=" << vector_index_status.apply_log_id()
+                      << ", snapshot_log_id=" << vector_index_status.snapshot_log_id();
+
+      // save snapshot log first
+      // force node to save vector index to speed up hold_vector_index
+      for (const auto& peer : split_from_region.definition().peers()) {
+        AddSnapshotVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id,
+                                   vector_index_status.apply_log_id(), meta_increment);
+      }
+
+      // check if snapshot_vector_index is finished
+      AddCheckVectorIndexSnapshotLogIdTask(new_task_list, split_from_region_id, vector_index_status.apply_log_id());
+    }
+
     // send load vector index to store
     for (const auto& peer : split_from_region.definition().peers()) {
       AddLoadVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id, meta_increment);
@@ -2452,8 +2472,8 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
 
     // check vector index is ready
     for (const auto& peer : split_from_region.definition().peers()) {
-      AddCheckVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id,
-                              split_from_region.definition().epoch().version());
+      AddCheckStoreVectorIndexTask(new_task_list, peer.store_id(), split_from_region_id,
+                                   split_from_region.definition().epoch().version());
     }
   }
 
@@ -2713,8 +2733,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
 
     // check vector index is ready
     for (const auto& peer : merge_from_region.definition().peers()) {
-      AddCheckVectorIndexTask(new_task_list, peer.store_id(), merge_from_region_id,
-                              merge_from_region.definition().epoch().version());
+      AddCheckStoreVectorIndexTask(new_task_list, peer.store_id(), merge_from_region_id,
+                                   merge_from_region.definition().epoch().version());
     }
   }
 
@@ -4671,6 +4691,36 @@ void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int6
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
 
+void CoordinatorControl::AddSnapshotVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                                    int64_t region_id, int64_t snapshot_log_id,
+                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // build split_region task
+  auto* region_save_vector_task = task_list->add_tasks();
+
+  // generate store operation for stores
+  auto* store_operation_save_vector = region_save_vector_task->add_store_operations();
+  store_operation_save_vector->set_id(store_id);
+  auto* region_cmd_to_add = store_operation_save_vector->add_region_cmds();
+
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_region_id(region_id);
+  region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SNAPSHOT_VECTOR_INDEX);
+  region_cmd_to_add->mutable_snapshot_vector_index_request()->set_vector_index_id(region_id);
+  region_cmd_to_add->mutable_snapshot_vector_index_request()->set_raft_log_index(snapshot_log_id);
+  region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
+  region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
+}
+
+void CoordinatorControl::AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::TaskList* task_list, int64_t region_id,
+                                                              int64_t vector_snapshot_log_id) {
+  // build check_vector_index task
+  auto* check_vector_task = task_list->add_tasks();
+  auto* region_check = check_vector_task->mutable_pre_check();
+  region_check->set_type(pb::coordinator::TaskPreCheckType::REGION_CHECK);
+  region_check->mutable_region_check()->set_region_id(region_id);
+  region_check->mutable_region_check()->set_vector_snapshot_log_id(vector_snapshot_log_id);
+}
+
 void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, int64_t store_id, int64_t region_id,
                                       int64_t split_to_region_id, const std::string& water_shed_key,
                                       bool store_create_region,
@@ -4720,8 +4770,8 @@ void CoordinatorControl::AddCheckMergeResultTask(pb::coordinator::TaskList* task
   *split_result_check->mutable_region_check()->mutable_range() = range;
 }
 
-void CoordinatorControl::AddCheckVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
-                                                 int64_t region_id, int64_t vector_index_version) {
+void CoordinatorControl::AddCheckStoreVectorIndexTask(pb::coordinator::TaskList* task_list, int64_t store_id,
+                                                      int64_t region_id, int64_t vector_index_version) {
   // build check_vector_index task
   auto* check_vector_task = task_list->add_tasks();
   auto* region_check = check_vector_task->mutable_pre_check();
@@ -4827,6 +4877,19 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
       std::sort(peers_of_region.begin(), peers_of_region.end());
 
       if (!std::equal(peers_to_check.begin(), peers_to_check.end(), peers_of_region.begin(), peers_of_region.end())) {
+        check_passed = false;
+      }
+    }
+
+    if (region_check.vector_snapshot_log_id() > 0) {
+      auto region_metrics = GetRegionMetrics(task_pre_check.region_check().region_id());
+      if (region_check.vector_snapshot_log_id() > region_metrics.vector_index_status().snapshot_log_id()) {
+        DINGO_LOG(INFO) << "check vector_index failed, region_check.vector_snapshot_log_id()="
+                        << region_check.vector_snapshot_log_id()
+                        << " region_metrics.vector_index_status().snapshot_log_id()="
+                        << region_metrics.vector_index_status().snapshot_log_id()
+                        << ", region_id=" << task_pre_check.region_check().region_id()
+                        << ", region_metrics=" << region_metrics.ShortDebugString();
         check_passed = false;
       }
     }

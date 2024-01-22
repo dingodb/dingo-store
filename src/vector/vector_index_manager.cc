@@ -23,6 +23,7 @@
 
 #include "bthread/bthread.h"
 #include "butil/status.h"
+#include "bvar/reducer.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/synchronization.h"
@@ -89,6 +90,7 @@ void RebuildVectorIndexTask::Run() {
                                       vector_index_wrapper_->Id(), trace_, pb::common::StoreRegionState_Name(state));
     return;
   }
+
   if (Helper::InvalidRange(region->Range())) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] region range invalid.",
                                       vector_index_wrapper_->Id(), trace_);
@@ -316,10 +318,80 @@ void LoadOrBuildVectorIndexTask::Run() {
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuilded vector index {}", region->Id()));
 }
 
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_task_running_num("dingo_vector_index_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_rebuild_task_running_num(
+    "dingo_vector_index_rebuild_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_save_task_running_num(
+    "dingo_vector_index_save_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_loadorbuild_task_running_num(
+    "dingo_vector_index_loadorbuild_task_running_num");
+
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_task_total_num("dingo_vector_index_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_rebuild_task_total_num(
+    "dingo_vector_index_rebuild_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_save_task_total_num(
+    "dingo_vector_index_save_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_loadorbuild_task_total_num(
+    "dingo_vector_index_loadorbuild_task_total_num");
+
 std::atomic<int> VectorIndexManager::vector_index_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_rebuild_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_save_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_loadorbuild_task_running_num = 0;
+
+int VectorIndexManager::GetVectorIndexTaskRunningNum() { return vector_index_task_running_num.load(); }
+
+void VectorIndexManager::IncVectorIndexTaskRunningNum() {
+  vector_index_task_running_num.fetch_add(1);
+  bvar_vector_index_task_running_num << 1;
+  bvar_vector_index_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexTaskRunningNum() {
+  vector_index_task_running_num.fetch_sub(1);
+  bvar_vector_index_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexRebuildTaskRunningNum() { return vector_index_rebuild_task_running_num.load(); }
+
+void VectorIndexManager::IncVectorIndexRebuildTaskRunningNum() {
+  vector_index_rebuild_task_running_num.fetch_add(1);
+  bvar_vector_index_rebuild_task_running_num << 1;
+  bvar_vector_index_rebuild_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexRebuildTaskRunningNum() {
+  vector_index_rebuild_task_running_num.fetch_sub(1);
+  bvar_vector_index_rebuild_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexSaveTaskRunningNum() { return vector_index_save_task_running_num.load(); }
+
+void VectorIndexManager::IncVectorIndexSaveTaskRunningNum() {
+  vector_index_save_task_running_num.fetch_add(1);
+  bvar_vector_index_save_task_running_num << 1;
+  bvar_vector_index_save_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexSaveTaskRunningNum() {
+  vector_index_save_task_running_num.fetch_sub(1);
+  bvar_vector_index_save_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum() {
+  return vector_index_loadorbuild_task_running_num.load();
+}
+
+void VectorIndexManager::IncVectorIndexLoadorbuildTaskRunningNum() {
+  vector_index_loadorbuild_task_running_num.fetch_add(1);
+  bvar_vector_index_loadorbuild_task_running_num << 1;
+  bvar_vector_index_loadorbuild_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexLoadorbuildTaskRunningNum() {
+  vector_index_loadorbuild_task_running_num.fetch_sub(1);
+  bvar_vector_index_loadorbuild_task_running_num << -1;
+}
 
 bool VectorIndexManager::Init() {
   workers_ = WorkerSet::New("VectorIndexBackground", ConfigHelper::GetVectorIndexBackgroundWorkerNum(), 0);

@@ -789,9 +789,13 @@ class CoordinatorControl : public MetaControl {
   void AddSplitTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                     int64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
+  void AddSnapshotVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                                  int64_t snapshot_log_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckSplitResultTask(pb::coordinator::TaskList *task_list, int64_t split_to_region_id);
-  static void AddCheckVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                                      int64_t vector_index_version);
+  static void AddCheckStoreVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+                                           int64_t vector_index_version);
+  static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::TaskList *task_list, int64_t region_id,
+                                                   int64_t vector_snapshot_log_id);
   void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckStoreRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);

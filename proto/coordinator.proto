@@ -35,6 +35,9 @@ message RegionCheck {
   dingodb.pb.common.RegionRaftStatus raft_status = 4;
   dingodb.pb.common.ReplicaStatus replica_status = 5;
   repeated dingodb.pb.common.Peer peers = 6;
+
+  // check vector index
+  int64 vector_snapshot_log_id = 12;  // check if vector index snapshot log id is equal to or bigger than this value
 }
 
 message StoreRegionCheck {
@@ -124,6 +127,7 @@ message TransferLeaderRequest {
 
 message SnapshotVectorIndexRequest {
   int64 vector_index_id = 1;  // vector index id
+  int64 raft_log_index = 2;   // if snapshot_log_id < raft_log_index, no need to save snapshot
 }
 
 message UpdateDefinitionRequest {
