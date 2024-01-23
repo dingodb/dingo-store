@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@ class RegionCreator;
 class TestBase;
 class TransactionOptions;
 class Transaction;
+class VectorIndexCreator;
 
 /// @brief Callers must keep client valid in it's lifetime in order to interact with the cluster,
 class Client : public std::enable_shared_from_this<Client> {
@@ -60,6 +62,18 @@ class Client : public std::enable_shared_from_this<Client> {
   Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
 
   Status DropRegion(int64_t region_id);
+
+  Status NewVectorIndexCreator(std::shared_ptr<VectorIndexCreator>& index_creator);
+  // NOTE:: Caller must delete *index_creator when it is no longer needed.
+  Status NewVectorIndexCreator(VectorIndexCreator** index_creator);
+
+  Status GetIndexId(const std::string& index_name, int64_t& out_index_id);
+
+  Status DropIndex(int64_t index_id);
+
+  Status DropIndexByName(const std::string& index_name);
+
+  // TODO：list index/ GetIndexes 
 
  private:
   friend class RawKV;
@@ -211,7 +225,7 @@ class RegionCreator {
   /// optional, if not called, defaults is kLSM
   RegionCreator& SetEngineType(EngineType engine_type);
 
-  /// optional, if not called, defaults is 1
+  /// optional, if not called, defaults is 3
   RegionCreator& SetReplicaNum(int64_t num);
 
   /// Wait for the region to be fully created before returning.

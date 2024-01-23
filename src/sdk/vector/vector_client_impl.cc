@@ -12,37 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_REGION_CREATOR_DATA_H_
-#define DINGODB_SDK_REGION_CREATOR_DATA_H_
-
 #include "sdk/client.h"
-#include "sdk/client_stub.h"
 
 namespace dingodb {
 namespace sdk {
-class RegionCreator::Data {
- public:
-  Data(const Data&) = delete;
-  const Data& operator=(const Data&) = delete;
 
-  explicit Data(const ClientStub& stub) : stub(stub) {}
 
-  ~Data() = default;
-
-  const ClientStub& stub;
-
-  std::string region_name;
-
-  std::string lower_bound;
-  std::string upper_bound;
-
-  EngineType engine_type{kLSM};
-
-  int64_t replica_num{3};
-
-  bool wait{true};
-};
-
-}  // namespace sdk
+}
 }  // namespace dingodb
-#endif  // DINGODB_SDK_REGION_CREATOR_DATA_H_
