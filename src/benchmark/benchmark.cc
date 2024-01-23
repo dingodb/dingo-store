@@ -18,6 +18,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <ios>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -27,10 +28,17 @@
 #include "benchmark/color.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "sdk/client.h"
 
 DEFINE_string(coordinator_url, "file://./coor_list", "Coordinator url");
 DEFINE_bool(show_version, false, "Show dingo-store version info");
 DEFINE_string(prefix, "BENCH", "Region range prefix");
+
+DEFINE_string(raw_engine, "LSM", "Raw engine type");
+DEFINE_validator(raw_engine, [](const char*, const std::string& value) -> bool {
+  auto raw_engine_type = dingodb::Helper::ToUpper(value);
+  return raw_engine_type == "LSM" || raw_engine_type == "BTREE" || raw_engine_type == "XDP";
+});
 
 DEFINE_uint32(region_num, 1, "Region number");
 DEFINE_uint32(concurrency, 1, "Concurrency of request");
@@ -53,6 +61,19 @@ static const std::string kClientRaw = "w";
 static const std::string kRegionNamePrefix = "Benchmark_";
 
 static std::string EncodeRawKey(const std::string& str) { return kClientRaw + str; }
+
+sdk::EngineType GetRawEngineType() {
+  auto raw_engine = Helper::ToUpper(FLAGS_raw_engine);
+  if (raw_engine == "LSM") {
+    return sdk::EngineType::kLSM;
+  } else if (FLAGS_raw_engine == "BTREE") {
+    return sdk::EngineType::kBTree;
+  } else if (raw_engine == "XDP") {
+    return sdk::EngineType::kXDPROCKS;
+  }
+
+  LOG(FATAL) << fmt::format("Not support raw_engine: {}", FLAGS_raw_engine);
+}
 
 Stats::Stats() { latency_recorder_ = std::make_shared<bvar::LatencyRecorder>(); }
 
@@ -163,7 +184,8 @@ std::vector<RegionEntry> Benchmark::ArrangeRegion(int num) {
 
   for (int i = 0; i < num; ++i) {
     std::string prefix = fmt::format("{}{:06}", FLAGS_prefix, i);
-    auto region_id = CreateRegion(kRegionNamePrefix + std::to_string(i + 1), prefix, Helper::PrefixNext(prefix));
+    auto region_id =
+        CreateRegion(kRegionNamePrefix + std::to_string(i + 1), prefix, Helper::PrefixNext(prefix), GetRawEngineType());
     if (region_id == 0) {
       return region_entries;
     }
@@ -378,6 +400,7 @@ void Environment::PrintParam() {
   std::cout << fmt::format("{:<16}: {:>32}", "benchmark", FLAGS_benchmark) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "region_num", FLAGS_region_num) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "prefix", FLAGS_prefix) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "raw_engine", FLAGS_raw_engine) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "concurrency", FLAGS_concurrency) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "req_num", FLAGS_req_num) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "delay(s)", FLAGS_delay) << '\n';

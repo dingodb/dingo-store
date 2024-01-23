@@ -89,7 +89,7 @@ class Benchmark {
   std::vector<RegionEntry> ArrangeRegion(int num);
 
   int64_t CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
-                       sdk::EngineType engine_type = sdk::kLSM, int replicas = 3);
+                       sdk::EngineType engine_type, int replicas = 3);
   void DropRegion(int64_t region_id);
 
   void ThreadRoutine(ThreadEntryPtr thread_entry);
