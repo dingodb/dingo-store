@@ -132,6 +132,8 @@ class StoreServiceImpl : public pb::store::StoreService {
   void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
   void SetRaftApplyWorkSet(WorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
 
+  bool IsRaftApplyPendingExceed();
+
  private:
   StoragePtr storage_;
   // Run service request.
