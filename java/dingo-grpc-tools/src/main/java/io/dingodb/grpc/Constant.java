@@ -9,6 +9,7 @@ import io.grpc.stub.annotations.RpcMethod;
 
 public class Constant {
     public static final String SERVICE_PKG = "io.dingodb.sdk.service";
+    public static final String SERVICE_DESC_PKG = "io.dingodb.sdk.service.desc";
     public static final String MSG_PKG = "io.dingodb.sdk.service.entity";
 
     public static final String GRPC_ANNOTATION = RpcMethod.class.getName();

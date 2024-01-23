@@ -17,6 +17,7 @@
 package io.dingodb.sdk.service;
 
 import io.dingodb.sdk.common.DingoClientException;
+import io.dingodb.sdk.common.utils.Future;
 import io.dingodb.sdk.service.entity.common.KeyValue;
 import io.dingodb.sdk.service.entity.meta.TsoOpType;
 import io.dingodb.sdk.service.entity.meta.TsoRequest;
@@ -37,7 +38,12 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -157,11 +163,39 @@ public class LockService {
         return kvService.kvRange(rangeRequest()).getKvs();
     }
 
+    public Kv currentLock() {
+        return listLock().stream()
+            .filter(Objects::nonNull)
+            .min(Comparator.comparingLong(Kv::getCreateRevision))
+            .orElse(null);
+    }
+
     public void close() {
         try {
             kvService.kvDeleteRange(deleteAllRangeRequest());
         } catch (Exception ignore) {
         }
+    }
+
+    public Kv put(long ts, String key, String value) {
+        PutRequest request = putRequest(key, value);
+        PutResponse putResponse = kvService.kvPut(ts, request);
+        long createRevision = putResponse.getHeader().getRevision();
+        long modRevision = putResponse.getHeader().getRevision();
+        if (putResponse.getPrevKv() != null) {
+            createRevision = putResponse.getPrevKv().getCreateRevision();
+        }
+        return Kv.builder()
+            .kv(request.getKeyValue())
+            .createRevision(createRevision)
+            .modRevision(modRevision)
+            .build();
+    }
+
+    public void delete(long ts, String key) {
+        kvService.kvDeleteRange(
+            ts, deleteRangeRequest(key)
+        );
     }
 
     public Lock newLock() {
@@ -229,7 +263,7 @@ public class LockService {
         private boolean locked() {
             if (locked > 0) {
                 if (destroyFuture.isDone()) {
-                    throw new RuntimeException("The lock destroyed.");
+                    return false;
                 }
                 locked++;
                 return true;
@@ -237,11 +271,8 @@ public class LockService {
             return false;
         }
 
-        public synchronized CompletableFuture<Void> watchDestroy() {
-            if (locked > 0) {
-                return destroyFuture;
-            }
-            throw new RuntimeException("Cannot watch, not lock.");
+        public Future watchDestroy() {
+            return new Future(destroyFuture);
         }
 
         private boolean isLockRevision(long revision, RangeResponse rangeResponse) {
@@ -261,7 +292,7 @@ public class LockService {
                 }
                 if (!destroyFuture.isDone()) {
                     locked++;
-                    watchLock(current);
+                    watchLock(current, this::destroy);
                 }
                 return true;
             }
@@ -279,7 +310,7 @@ public class LockService {
                     long revision = response.getHeader().getRevision();
                     RangeResponse rangeResponse = kvService.kvRange(rangeRequest());
                     if (isLockRevision(revision, rangeResponse)) {
-                        return;
+                        break;
                     }
                     Kv previous = rangeResponse.getKvs().stream().filter(Objects::nonNull)
                         .filter(__ -> __.getCreateRevision() < revision)
@@ -325,7 +356,7 @@ public class LockService {
                     .min(Comparator.comparingLong(Kv::getCreateRevision));
                 if (current.map(Kv::getModRevision).filter(__ -> __ == revision).isPresent()) {
                     locked++;
-                    watchLock(current.get());
+                    watchLock(current.get(), this::destroy);
                     return true;
                 }
             } catch (Exception e) {
@@ -355,7 +386,7 @@ public class LockService {
                         }
                         if (!destroyFuture.isDone()) {
                             locked++;
-                            watchLock(current);
+                            watchLock(current, this::destroy);
                             return true;
                         }
                         throw new RuntimeException("Destroyed!");
@@ -376,24 +407,6 @@ public class LockService {
             return false;
         }
 
-
-        private void watchLock(Kv kv) {
-            CompletableFuture.supplyAsync(() ->
-                kvService.watch(watchRequest(kv.getKv().getKey(), kv.getModRevision()))
-            ).whenComplete((r, e) -> {
-                if (e != null) {
-                    if (!(e instanceof DingoClientException)) {
-                        watchLock(kv);
-                        return;
-                    }
-                    log.error("Watch locked error, or watch retry time great than lease ttl.", e);
-                }
-                if (r.getEvents().stream().anyMatch(event -> event.getType() == EventType.DELETE)) {
-                    this.destroy();
-                }
-            });
-        }
-
         @Override
         public synchronized void unlock() {
             if (locked == 0) {
@@ -408,6 +421,26 @@ public class LockService {
         public synchronized Condition newCondition() {
             throw new UnsupportedOperationException();
         }
+    }
+
+    public void watchLock(Kv kv, Runnable task) {
+        CompletableFuture.supplyAsync(() ->
+            kvService.watch(watchRequest(kv.getKv().getKey(), kv.getModRevision()))
+        ).whenCompleteAsync((r, e) -> {
+            if (e != null) {
+                if (!(e instanceof DingoClientException)) {
+                    watchLock(kv, task);
+                    return;
+                }
+                log.error("Watch locked error, or watch retry time great than lease ttl.", e);
+                return;
+            }
+            if (r.getEvents().stream().anyMatch(event -> event.getType() == EventType.DELETE)) {
+                task.run();
+            } else {
+                watchLock(kv, task);
+            }
+        });
     }
 
     private PutRequest putRequest(String resourceKey, String value) {
