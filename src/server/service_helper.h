@@ -189,6 +189,9 @@ void ServiceClosure<T, U>::Run() {
       response_->mutable_error()->set_errmsg(fmt::format("Not leader({}) on region {}, please redirect leader({}).",
                                                          Server::GetInstance().ServerAddr(),
                                                          request_->context().region_id(), response_->error().errmsg()));
+    } else if (response_->error().errcode() == pb::error::EREQUEST_FULL) {
+      DINGO_LOG(WARNING) << fmt::format("Worker set pending task count, {}",
+                                        Server::GetInstance().GetAllWorkSetPendingTaskCount());
     }
 
     DINGO_LOG(ERROR) << fmt::format(

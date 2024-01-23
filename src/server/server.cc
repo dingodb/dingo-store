@@ -34,6 +34,7 @@
 #include "engine/engine.h"
 #include "engine/raft_store_engine.h"
 #include "engine/rocks_raw_engine.h"
+#include "fmt/core.h"
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
@@ -937,6 +938,7 @@ std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split
 void Server::SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set) { store_service_read_worker_set_ = worker_set; }
 
 void Server::SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set) { store_service_write_worker_set_ = worker_set; }
+
 void Server::SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set) { index_service_read_worker_set_ = worker_set; }
 
 void Server::SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set) { index_service_write_worker_set_ = worker_set; }
@@ -985,6 +987,19 @@ std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {
     return {};
   }
   return raft_apply_worker_set_->GetPendingTaskTrace();
+}
+
+std::string Server::GetAllWorkSetPendingTaskCount() {
+  uint64_t store_servcie_read_pending_task_count = store_service_read_worker_set_->PendingTaskCount();
+  uint64_t store_servcie_write_pending_task_count = store_service_write_worker_set_->PendingTaskCount();
+  uint64_t index_servcie_read_pending_task_count = index_service_read_worker_set_->PendingTaskCount();
+  uint64_t index_servcie_write_pending_task_count = index_service_write_worker_set_->PendingTaskCount();
+  uint64_t raft_apply_pending_task_count = raft_apply_worker_set_->PendingTaskCount();
+
+  return fmt::format("store_read({}) store_write({}) index_read({}) index_write({}) raft_apply({})",
+                     store_servcie_read_pending_task_count, store_servcie_write_pending_task_count,
+                     index_servcie_read_pending_task_count, index_servcie_write_pending_task_count,
+                     raft_apply_pending_task_count);
 }
 
 ThreadPoolPtr Server::GetVectorIndexThreadPool() { return vector_index_thread_pool_; }
