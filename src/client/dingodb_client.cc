@@ -323,15 +323,16 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "KvBatchGet") {
       client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
-      client::SendKvPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key));
+      std::string value = FLAGS_value.empty() ? client::Helper::GenRandomString(256) : FLAGS_value;
+      client::SendKvPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key), value);
     } else if (method == "KvBatchPut") {
-      client::SendKvBatchPut(FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix), FLAGS_count);
     } else if (method == "KvPutIfAbsent") {
-      client::SendKvPutIfAbsent(FLAGS_region_id, FLAGS_key);
+      client::SendKvPutIfAbsent(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key));
     } else if (method == "KvBatchPutIfAbsent") {
-      client::SendKvBatchPutIfAbsent(FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchPutIfAbsent(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix), FLAGS_count);
     } else if (method == "KvBatchDelete") {
-      client::SendKvBatchDelete(FLAGS_region_id, FLAGS_key);
+      client::SendKvBatchDelete(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key));
     } else if (method == "KvDeleteRange") {
       client::SendKvDeleteRange(FLAGS_region_id, FLAGS_prefix);
     } else if (method == "KvScan") {

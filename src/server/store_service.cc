@@ -298,6 +298,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
+  ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
