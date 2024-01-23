@@ -190,6 +190,8 @@ class Server {
 
   std::vector<std::vector<std::string>> GetRaftApplyWorkerSetTrace();
 
+  std::string GetAllWorkSetPendingTaskCount();
+
   ThreadPoolPtr GetVectorIndexThreadPool();
 
   Server(const Server&) = delete;
