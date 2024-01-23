@@ -28,6 +28,7 @@ static std::string GetUsageMessage() {
   message += "\n  --benchmark benchmark type, default(fillseq)";
   message += "\n  --show_version show dingo-store cluster version info, default(false)";
   message += "\n  --prefix region range prefix, used to distinguish region, default(BENCH)";
+  message += "\n  --raw_engine raw engine type, support LSM/BTREE/XDP default(LSM)";
   message += "\n  --region_num region number, default(1)";
   message += "\n  --concurrency concurrency as thread number, default(1)";
   message += "\n  --req_num invoke RPC request number, default(10000)";
