@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import static io.dingodb.error.ErrorOuterClass.Errno.EKEY_OUT_OF_RANGE_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ELEASE_NOT_EXISTS_OR_EXPIRED_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_COMMITLOG_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_INIT_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_NOTLEADER_VALUE;
@@ -67,7 +68,8 @@ public final class ErrorCodeUtils {
         EREGION_PEER_CHANGEING_VALUE,
         EREGION_STATE_VALUE,
         EVECTOR_INDEX_NOT_READY_VALUE,
-        EREQUEST_FULL_VALUE
+        EREQUEST_FULL_VALUE,
+        ELEASE_NOT_EXISTS_OR_EXPIRED_VALUE
     );
 
     public static final List<Integer> ignoreCode = Arrays.asList(

@@ -3,6 +3,7 @@ package io.dingodb.sdk.service;
 import io.dingodb.sdk.common.utils.Optional;
 import io.dingodb.sdk.common.utils.Parameters;
 import io.dingodb.sdk.service.caller.RpcCaller;
+import io.dingodb.sdk.service.desc.coordinator.CoordinatorServiceDescriptors;
 import io.dingodb.sdk.service.entity.common.Location;
 import io.dingodb.sdk.service.entity.coordinator.GetCoordinatorMapRequest;
 import io.dingodb.sdk.service.entity.coordinator.GetCoordinatorMapResponse;

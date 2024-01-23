@@ -65,6 +65,7 @@ import static com.google.common.base.CaseFormat.UPPER_CAMEL;
 import static io.dingodb.grpc.Constant.CALLER;
 import static io.dingodb.grpc.Constant.MSG_PKG;
 import static io.dingodb.grpc.Constant.SERVICE_CALL_CYCLE;
+import static io.dingodb.grpc.Constant.SERVICE_DESC_PKG;
 import static io.dingodb.grpc.Constant.SERVICE_METHOD_BUILDER;
 import static io.dingodb.grpc.Constant.SERVICE_PKG;
 import static javax.lang.model.element.Modifier.ABSTRACT;
@@ -108,6 +109,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
         }
         Map<ClassName, TypeSpec.Builder> rpcs = new HashMap<>();
         Map<ClassName, TypeSpec.Builder> rpcDescriptors = new HashMap<>();
+        Map<ClassName, ClassName> descNames = new HashMap<>();
         Set<FileObject> sources = new TreeSet<>(Comparator.comparing(FileObject::getName));
         Set<TypeElement> serviceElements = new TreeSet<>(Comparator.comparing(Element::toString));
         Set<TypeElement> entityElements = new TreeSet<>(Comparator.comparing(Element::toString));
@@ -123,7 +125,10 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             String name = element.getEnclosingElement().getSimpleName().toString();
             name = name.substring(0, name.length() - 4);
             ClassName serviceName = ClassName.get(SERVICE_PKG, name);
-            ClassName serviceDescName = ClassName.get(SERVICE_PKG, name + "Descriptors");
+            ClassName serviceDescName = ClassName.get(
+                SERVICE_DESC_PKG + "." + messageGenerateProcessor.packageOf(element), name + "Descriptors"
+            );
+            descNames.putIfAbsent(serviceName, serviceDescName);
             TypeSpec.Builder typeBuilder = rpcs.computeIfAbsent(serviceName, TypeSpec::interfaceBuilder);
             TypeSpec.Builder typeDescBuilder = rpcDescriptors.computeIfAbsent(
                 serviceName, k -> TypeSpec.interfaceBuilder(serviceDescName)
@@ -175,7 +180,10 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
             }
 
             for (Map.Entry<ClassName, TypeSpec.Builder> entry : rpcDescriptors.entrySet()) {
-                createJavaFile(entry.getKey().packageName(), entry.getValue().addModifiers(PUBLIC).build());
+                createJavaFile(
+                    descNames.get(entry.getKey()).packageName(),
+                    entry.getValue().addModifiers(PUBLIC).build()
+                );
             }
 
             for (Map.Entry<ClassName, TypeSpec.Builder> entry : rpcs.entrySet()) {
@@ -203,7 +211,7 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                     .addModifiers(PUBLIC);
 
                 createJavaFile(
-                    SERVICE_PKG, builder.build(), ClassName.get(SERVICE_PKG, serviceName.simpleName() + "Descriptors")
+                    SERVICE_PKG, builder.build(), descNames.get(entry.getKey())
                 );
             }
         } catch (Exception e) {
