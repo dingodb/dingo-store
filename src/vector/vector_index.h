@@ -26,6 +26,7 @@
 #include "butil/status.h"
 #include "common/runnable.h"
 #include "faiss/MetricType.h"
+#include "faiss/impl/IDSelector.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_snapshot.h"
@@ -85,84 +86,48 @@ class VectorIndex {
     std::vector<faiss::idx_t>* id_map_{nullptr};
   };
 
+  class ConcreteFilterFunctor : public FilterFunctor, public faiss::IDSelectorBatch {
+   public:
+    ConcreteFilterFunctor(const ConcreteFilterFunctor&) = delete;
+    ConcreteFilterFunctor(ConcreteFilterFunctor&&) = delete;
+    ConcreteFilterFunctor& operator=(const ConcreteFilterFunctor&) = delete;
+    ConcreteFilterFunctor& operator=(ConcreteFilterFunctor&&) = delete;
+
+    explicit ConcreteFilterFunctor(const std::vector<int64_t>& vector_ids)
+        : IDSelectorBatch(vector_ids.size(), vector_ids.data()) {}
+
+    ~ConcreteFilterFunctor() override = default;
+
+    bool Check(int64_t vector_id) override { return is_member(vector_id); }
+  };
+
   // List filter
   // be careful not to use the parent class to release,
   // otherwise there will be memory leaks
-  class HnswListFilterFunctor : public FilterFunctor {
+  class HnswListFilterFunctor : public ConcreteFilterFunctor {
    public:
-    HnswListFilterFunctor(const HnswListFilterFunctor&) = delete;
-    HnswListFilterFunctor(HnswListFilterFunctor&&) = delete;
-    HnswListFilterFunctor& operator=(const HnswListFilterFunctor&) = delete;
-    HnswListFilterFunctor& operator=(HnswListFilterFunctor&&) = delete;
-
-    explicit HnswListFilterFunctor(const std::vector<int64_t>& vector_ids) {
-      for (auto vector_id : vector_ids) {
-        vector_ids_.insert(vector_id);
-      }
-    }
-
+    explicit HnswListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
     ~HnswListFilterFunctor() override = default;
-
-    bool Check(int64_t vector_id) override { return vector_ids_.find(vector_id) != vector_ids_.end(); }
-
-   private:
-    std::unordered_set<int64_t> vector_ids_;
   };
 
-  class FlatListFilterFunctor : public FilterFunctor {
+  class FlatListFilterFunctor : public ConcreteFilterFunctor {
    public:
-    explicit FlatListFilterFunctor(const std::vector<int64_t>& vector_ids) {
-      // highly optimized code, do not modify it
-      array_indexs_.rehash(vector_ids.size());
-      array_indexs_.insert(vector_ids.begin(), vector_ids.end());
-    }
-    FlatListFilterFunctor(const FlatListFilterFunctor&) = delete;
-    FlatListFilterFunctor(FlatListFilterFunctor&&) = delete;
-    FlatListFilterFunctor& operator=(const FlatListFilterFunctor&) = delete;
-    FlatListFilterFunctor& operator=(FlatListFilterFunctor&&) = delete;
-
-    bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
-
-   private:
-    std::unordered_set<int64_t> array_indexs_;
+    explicit FlatListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
+    ~FlatListFilterFunctor() override = default;
   };
 
   // List filter just for ivf flat
-  class IvfFlatListFilterFunctor : public FilterFunctor {
+  class IvfFlatListFilterFunctor : public ConcreteFilterFunctor {
    public:
-    explicit IvfFlatListFilterFunctor(const std::vector<int64_t>& vector_ids) {
-      // highly optimized code, do not modify it
-      array_indexs_.rehash(vector_ids.size());
-      array_indexs_.insert(vector_ids.begin(), vector_ids.end());
-    }
-    IvfFlatListFilterFunctor(const IvfFlatListFilterFunctor&) = delete;
-    IvfFlatListFilterFunctor(IvfFlatListFilterFunctor&&) = delete;
-    IvfFlatListFilterFunctor& operator=(const IvfFlatListFilterFunctor&) = delete;
-    IvfFlatListFilterFunctor& operator=(IvfFlatListFilterFunctor&&) = delete;
-
-    bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
-
-   private:
-    std::unordered_set<int64_t> array_indexs_;
+    explicit IvfFlatListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
+    ~IvfFlatListFilterFunctor() override = default;
   };
 
   // List filter just for ivf pq
-  class IvfPqListFilterFunctor : public FilterFunctor {
+  class IvfPqListFilterFunctor : public ConcreteFilterFunctor {
    public:
-    explicit IvfPqListFilterFunctor(const std::vector<int64_t>& vector_ids) {
-      // highly optimized code, do not modify it
-      array_indexs_.rehash(vector_ids.size());
-      array_indexs_.insert(vector_ids.begin(), vector_ids.end());
-    }
-    IvfPqListFilterFunctor(const IvfPqListFilterFunctor&) = delete;
-    IvfPqListFilterFunctor(IvfPqListFilterFunctor&&) = delete;
-    IvfPqListFilterFunctor& operator=(const IvfPqListFilterFunctor&) = delete;
-    IvfPqListFilterFunctor& operator=(IvfPqListFilterFunctor&&) = delete;
-
-    bool Check(int64_t index) override { return array_indexs_.find(index) != array_indexs_.end(); }
-
-   private:
-    std::unordered_set<int64_t> array_indexs_;
+    explicit IvfPqListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
+    ~IvfPqListFilterFunctor() override = default;
   };
 
   virtual int32_t GetDimension() = 0;
