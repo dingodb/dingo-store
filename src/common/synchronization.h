@@ -15,6 +15,7 @@
 #ifndef DINGODB_COMMON_SYNCHRONIZATION_H_
 #define DINGODB_COMMON_SYNCHRONIZATION_H_
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <queue>
@@ -184,6 +185,38 @@ class ResourcePool {
   bthread_cond_t cond_;    // condition variable
   std::queue<T> pool_;
   bvar::Adder<int64_t>* pool_size_;
+};
+
+class AtomicGuard {
+ public:
+  AtomicGuard(std::atomic<bool>& flag) : m_flag_(flag) { m_flag_.store(true); }
+  ~AtomicGuard() {
+    if (!released_) {
+      m_flag_.store(false);
+    }
+  }
+
+  void Release() { released_ = true; }
+
+ private:
+  bool released_ = false;
+  std::atomic<bool>& m_flag_;
+};
+
+class BvarLatencyGuard {
+ public:
+  explicit BvarLatencyGuard(bvar::LatencyRecorder* latency_recoder);
+  ~BvarLatencyGuard();
+
+  BvarLatencyGuard(const BvarLatencyGuard&) = delete;
+  BvarLatencyGuard& operator=(const BvarLatencyGuard&) = delete;
+
+  void Release();
+
+ private:
+  bvar::LatencyRecorder* latency_recorder_;
+  int64_t start_time_us_;
+  bool is_release_ = false;
 };
 
 };  // namespace dingodb

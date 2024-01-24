@@ -72,22 +72,6 @@ struct WatchNode {
   bool need_prev_kv;
 };
 
-class AtomicGuard {
- public:
-  AtomicGuard(std::atomic<bool> &flag) : m_flag_(flag) { m_flag_.store(true); }
-  ~AtomicGuard() {
-    if (!released_) {
-      m_flag_.store(false);
-    }
-  }
-
-  void Release() { released_ = true; }
-
- private:
-  bool released_ = false;
-  std::atomic<bool> &m_flag_;
-};
-
 class MetaBvarCoordinator {
  public:
   MetaBvarCoordinator() {

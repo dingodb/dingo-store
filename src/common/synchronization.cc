@@ -14,6 +14,7 @@
 
 #include "common/synchronization.h"
 
+#include "bvar/latency_recorder.h"
 #include "common/logging.h"
 
 namespace dingodb {
@@ -177,6 +178,19 @@ ScopeGuard::~ScopeGuard() {
 }
 
 void ScopeGuard::Release() { is_release_ = true; }
+
+// BvarLatencyGuard
+BvarLatencyGuard::BvarLatencyGuard(bvar::LatencyRecorder* latency_recoder) : latency_recorder_(latency_recoder) {
+  start_time_us_ = butil::gettimeofday_us();
+}
+
+BvarLatencyGuard::~BvarLatencyGuard() {
+  if (!is_release_) {
+    (*latency_recorder_) << butil::gettimeofday_us() - start_time_us_;
+  }
+}
+
+void BvarLatencyGuard::Release() { is_release_ = true; }
 
 // RWLock
 bool RWLock::CanRead() const {

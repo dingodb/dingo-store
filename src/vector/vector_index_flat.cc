@@ -42,6 +42,12 @@ namespace dingodb {
 
 DEFINE_int64(flat_need_save_count, 10000, "flat need save count");
 
+bvar::LatencyRecorder g_flat_upsert_latency("dingo_flat_upsert_latency");
+bvar::LatencyRecorder g_flat_search_latency("dingo_flat_search_latency");
+bvar::LatencyRecorder g_flat_range_search_latency("dingo_flat_range_search_latency");
+bvar::LatencyRecorder g_flat_delete_latency("dingo_flat_delete_latency");
+bvar::LatencyRecorder g_flat_load_latency("dingo_flat_load_latency");
+
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range) {
@@ -111,6 +117,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
   // c++ 20 fix this bug.
   const std::unique_ptr<float[]>& vectors2 = vectors;
 
+  BvarLatencyGuard bvar_guard(&g_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
   std::thread([&]() {
     if (is_upsert) {
@@ -146,6 +153,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
 
   size_t remove_count = 0;
   {
+    BvarLatencyGuard bvar_guard(&g_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
     std::thread([&]() { remove_count = index_id_map2_->remove_ids(sel); }).join();
   }
@@ -190,6 +198,7 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   faiss::SearchParameters flat_search_parameters;
 
   {
+    BvarLatencyGuard bvar_guard(&g_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
     // use std::thread to call faiss functions
     std::thread t([&]() {
@@ -249,6 +258,7 @@ butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId>
   }
 
   {
+    BvarLatencyGuard bvar_guard(&g_flat_range_search_latency);
     RWLockReadGuard guard(&rw_lock_);
     // use std::thread to call faiss functions
     std::promise<butil::Status> promise_status;
@@ -341,6 +351,8 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
+
+  BvarLatencyGuard bvar_guard(&g_flat_load_latency);
 
   // The outside has been locked. Remove the locking operation here.
   // BAIDU_SCOPED_LOCK(mutex_);
