@@ -148,6 +148,7 @@ struct VectorWithId {
 };
 
 enum FilterSource : uint8_t {
+  kNoneFilterSource,
   // filter vector scalar include post filter and pre filter
   kScalarFilter,
   // use coprocessor only include pre filter
@@ -157,6 +158,7 @@ enum FilterSource : uint8_t {
 };
 
 enum FilterType : uint8_t {
+  kNoneFilterType,
   // first vector search, then filter
   kQueryPost,
   // first search from rocksdb, then search vector
@@ -165,110 +167,69 @@ enum FilterType : uint8_t {
 
 enum SearchExtraParamType : uint8_t { kParallelOnQueries, kNprobe, kRecallNum, kEfSearch };
 
-class SearchParameter {
- public:
-  SearchParameter()
-      : topk_(0),
-        with_vector_data_(false),
-        with_scalar_data_(false),
-        with_table_data_(false),
-        enable_range_search_(false),
-        use_brute_force_(false) {}
-
-  ~SearchParameter() = default;
-
+struct SearchParameter {
   SearchParameter(SearchParameter&& other) noexcept
-      : topk_(other.topk_),
-        with_vector_data_(other.with_vector_data_),
-        with_scalar_data_(other.with_scalar_data_),
-        with_table_data_(other.with_table_data_),
-        enable_range_search_(other.enable_range_search_),
-        radius_(other.radius_),
-        filter_source_(other.filter_source_),
-        filter_type_(other.filter_type_),
-        vector_ids_(std::move(other.vector_ids_)),
-        use_brute_force_(other.use_brute_force_),
-        extra_params_(std::move(other.extra_params_)) {
-    other.topk_ = 0;
-    other.with_vector_data_ = false;
-    other.with_scalar_data_ = false;
-    other.with_table_data_ = false;
-    other.enable_range_search_ = false;
-    other.radius_ = 0.0f;
-    other.use_brute_force_ = false;
+      : topk(other.topk),
+        with_vector_data(other.with_vector_data),
+        with_scalar_data(other.with_scalar_data),
+        with_table_data(other.with_table_data),
+        enable_range_search(other.enable_range_search),
+        radius(other.radius),
+        filter_source(other.filter_source),
+        filter_type(other.filter_type),
+        vector_ids(std::move(other.vector_ids)),
+        use_brute_force(other.use_brute_force),
+        extra_params(std::move(other.extra_params)) {
+    other.topk = 0;
+    other.with_vector_data = true;
+    other.with_scalar_data = false;
+    other.with_table_data = false;
+    other.enable_range_search = false;
+    other.radius = 0.0f;
+    other.filter_source = kNoneFilterSource;
+    other.filter_type = kNoneFilterType;
+    other.use_brute_force = false;
   }
 
   SearchParameter& operator=(SearchParameter&& other) noexcept {
-    topk_ = other.topk_;
-    with_vector_data_ = other.with_vector_data_;
-    with_scalar_data_ = other.with_scalar_data_;
-    with_table_data_ = other.with_table_data_;
-    enable_range_search_ = other.enable_range_search_;
-    radius_ = other.radius_;
-    filter_source_ = other.filter_source_;
-    filter_type_ = other.filter_type_;
-    vector_ids_ = std::move(other.vector_ids_);
-    use_brute_force_ = other.use_brute_force_;
-    extra_params_ = std::move(other.extra_params_);
+    topk = other.topk;
+    with_vector_data = other.with_vector_data;
+    with_scalar_data = other.with_scalar_data;
+    with_table_data = other.with_table_data;
+    enable_range_search = other.enable_range_search;
+    radius = other.radius;
+    filter_source = other.filter_source;
+    filter_type = other.filter_type;
+    vector_ids = std::move(other.vector_ids);
+    use_brute_force = other.use_brute_force;
+    extra_params = std::move(other.extra_params);
 
-    other.topk_ = 0;
-    other.with_vector_data_ = false;
-    other.with_scalar_data_ = false;
-    other.with_table_data_ = false;
-    other.enable_range_search_ = false;
-    other.radius_ = 0.0f;
-    other.use_brute_force_ = false;
+    other.topk = 0;
+    other.with_vector_data = true;
+    other.with_scalar_data = false;
+    other.with_table_data = false;
+    other.enable_range_search = false;
+    other.radius = 0.0f;
+    other.filter_source = kNoneFilterSource;
+    other.filter_type = kNoneFilterType;
+    other.use_brute_force = false;
 
     return *this;
   }
 
-  Status SetTopK(int32_t topk);
-  int32_t GetTopK() const;
-
-  Status SetWithVectorData(bool with_vector_data);
-  bool WithVectorData() const;
-
-  Status SetWithScalarData(bool with_scalar_data);
-  bool WithScalarData() const;
-
-  Status SetWithTableData(bool with_table_data);
-  bool WithTableData() const;
-
-  Status SetEnableRangeSearch(bool enable_range_search);
-  bool EnableRangeSearch() const;
-
-  Status SetRadius(float radius);
-  float GetRadius() const;
-
-  Status SetFilterSource(FilterSource filter_source);
-  FilterSource GetFilterSource() const;
-
-  Status SetFilterType(FilterType filter_type);
-  FilterType GetFilterType() const;
-
-  Status AddVectorId(int64_t id);
-  std::vector<int64_t> GetVectorIds() const;
-
-  Status SetUseBruteForce(bool use_brute_force);
-  bool UseBruteForce() const;
-
-  Status AddExtraParam(SearchExtraParamType param_type, const std::string& value);
-  std::unordered_map<SearchExtraParamType, int32_t> GetExtraParams() const;
-
- private:
-  int32_t topk_;
-  bool with_vector_data_;
-  bool with_scalar_data_;
+  int32_t topk{0};
+  bool with_vector_data{true};
+  bool with_scalar_data{false};
   //  TODO: selected keys
-  bool with_table_data_;      // Default false, if true, response without table data
-  bool enable_range_search_;  // if enable_range_search = true. top_n disabled.
-  float radius_;
-  FilterSource filter_source_;
-  FilterType filter_type_;
+  bool with_table_data{false};      // Default false, if true, response without table data
+  bool enable_range_search{false};  // if enable_range_search = true. top_n disabled.
+  float radius{0.0f};
+  FilterSource filter_source{kNoneFilterSource};
+  FilterType filter_type{kNoneFilterType};
   // TODO: coprocessorv2
-  std::vector<int64_t> vector_ids_;  // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
-  bool use_brute_force_;             // use brute-force search
-  std::unordered_map<SearchExtraParamType, int32_t> extra_params_;  // The search method to use
+  std::vector<int64_t> vector_ids;  // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
+  bool use_brute_force{false};      // use brute-force search
+  std::unordered_map<SearchExtraParamType, int32_t> extra_params;  // The search method to use
 };
 
 struct SearchResult {
@@ -337,8 +298,9 @@ class VectorClient : public std::enable_shared_from_this<VectorClient> {
 
   ~VectorClient();
 
-  Status Add(int64_t index_id, std::vector<VectorWithId> vectors, bool replace_deleted = false, bool is_update = false);
-  Status Add(const std::string& index_name, std::vector<VectorWithId> vectors, bool replace_deleted = false,
+  Status Add(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
+             bool is_update = false);
+  Status Add(const std::string& index_name, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
              bool is_update = false);
 
   Status Search(int64_t index_id, const SearchParameter& search_param, const std::vector<VectorWithId>& target_vectors,
