@@ -21,7 +21,39 @@ option cc_generic_services = true;
 
 message ClusterStatRequest {};
 message ClusterStatResponse {};
+message DingoRequest {};
+message DingoResponse {};
+message TableRequest {};
+message TableResponse {};
+message RegionRequest {};
+message RegionResponse {};
+message StoreMetricsRequest {};
+message StoreMetricsResponse {};
+message TaskListRequest {};
+message TaskListResponse {};
+message StoreOperationRequest {};
+message StoreOperationResponse {};
 
 service dingo {
   rpc default_method(ClusterStatRequest) returns (ClusterStatResponse);
+}
+
+service table {
+  rpc default_method(TableRequest) returns (TableResponse);
+}
+
+service region {
+  rpc default_method(RegionRequest) returns (RegionResponse);
+}
+
+service store_metrics {
+  rpc default_method(StoreMetricsRequest) returns (StoreMetricsResponse);
+}
+
+service task_list {
+  rpc default_method(TaskListRequest) returns (TaskListResponse);
+}
+
+service store_operation {
+  rpc default_method(StoreOperationRequest) returns (StoreOperationResponse);
 }

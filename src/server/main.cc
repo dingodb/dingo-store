@@ -25,6 +25,9 @@
 #include "butil/string_printf.h"
 #include "common/role.h"
 #include "gflags/gflags_declare.h"
+#include "server/store_metrics_service.h"
+#include "server/store_operation_service.h"
+#include "server/task_list_service.h"
 
 #endif
 
@@ -59,8 +62,13 @@
 #include "server/meta_service.h"
 #include "server/node_service.h"
 #include "server/push_service.h"
+#include "server/region_service.h"
 #include "server/server.h"
+#include "server/store_metrics_service.h"
+#include "server/store_operation_service.h"
 #include "server/store_service.h"
+#include "server/table_service.h"
+#include "server/task_list_service.h"
 #include "server/util_service.h"
 #include "server/version_service.h"
 
@@ -785,6 +793,11 @@ int main(int argc, char *argv[]) {
   dingodb::MetaServiceImpl meta_service;
   dingodb::VersionServiceProtoImpl version_service;
   dingodb::ClusterStatImpl cluster_stat_service;
+  dingodb::TableImpl table_service;
+  dingodb::RegionImpl region_service;
+  dingodb::StoreMetricsImpl store_metrics_service;
+  dingodb::TaskListImpl task_list_service;
+  dingodb::StoreOperationImpl store_operation_service;
 
   // for store and index
   dingodb::DebugServiceImpl debug_service;
@@ -954,6 +967,31 @@ int main(int argc, char *argv[]) {
     cluster_stat_service.SetControl(dingo_server.GetCoordinatorControl());
     if (0 != brpc_server.AddService(&cluster_stat_service, brpc::SERVER_OWNS_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add cluster stat service";
+      return -1;
+    }
+    table_service.SetControl(dingo_server.GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&table_service, brpc::SERVER_OWNS_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add table service";
+      return -1;
+    }
+    region_service.SetControl(dingo_server.GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&region_service, brpc::SERVER_OWNS_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add region service";
+      return -1;
+    }
+    store_metrics_service.SetControl(dingo_server.GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&store_metrics_service, brpc::SERVER_OWNS_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add store metrics service";
+      return -1;
+    }
+    task_list_service.SetControl(dingo_server.GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&task_list_service, brpc::SERVER_OWNS_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add task list service";
+      return -1;
+    }
+    store_operation_service.SetControl(dingo_server.GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&store_operation_service, brpc::SERVER_OWNS_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add store operation service";
       return -1;
     }
 
