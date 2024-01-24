@@ -24,6 +24,7 @@ namespace dingodb {
 
 class VectorCodec {
  public:
+  static void EncodeVectorKey(char prefix, int64_t partition_id, std::string& result);
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result);
 
   static int64_t DecodeVectorId(const std::string& value);

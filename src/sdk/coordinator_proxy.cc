@@ -56,6 +56,18 @@ Status CoordinatorProxy::Open(std::string naming_service_url) {
   return Status::OK();
 }
 
+Status CoordinatorProxy::Hello(const pb::coordinator::HelloRequest& request, pb::coordinator::HelloResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_->SendRequest("Hello", request, response);
+  DINGO_LOG(DEBUG) << "Hello error_code:" << rpc_status.error_code() << ", error_cstr:" << rpc_status.error_cstr()
+                   << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+  if (!rpc_status.ok()) {
+    std::string msg = fmt::format("Fail hello {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
+  }
+  return Status::OK();
+}
+
 Status CoordinatorProxy::QueryRegion(const pb::coordinator::QueryRegionRequest& request,
                                      pb::coordinator::QueryRegionResponse& response) {
   butil::Status rpc_status = coordinator_interaction_->SendRequest("QueryRegion", request, response);
@@ -117,24 +129,39 @@ Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& 
   return Status::OK();
 }
 
-Status CoordinatorProxy::Hello(const pb::coordinator::HelloRequest& request, pb::coordinator::HelloResponse& response) {
-  butil::Status rpc_status = coordinator_interaction_->SendRequest("Hello", request, response);
-  DINGO_LOG(DEBUG) << "Hello error_code:" << rpc_status.error_code() << ", error_cstr:" << rpc_status.error_cstr()
-                   << ", request:" << request.DebugString() << ", response:" << response.DebugString();
-  if (!rpc_status.ok()) {
-    std::string msg = fmt::format("Fail hello {}", rpc_status.error_cstr());
-    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
-    return Status::RemoteError(rpc_status.error_code(), msg);
-  }
-  return Status::OK();
-}
-
 Status CoordinatorProxy::TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
   butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("TsoService", request, response);
   DINGO_LOG(DEBUG) << "TsoService error_code:" << rpc_status.error_code() << ", error_cstr:" << rpc_status.error_cstr()
                    << ", request:" << request.DebugString() << ", response:" << response.DebugString();
   if (!rpc_status.ok()) {
     std::string msg = fmt::format("Fail tso service {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
+  }
+  return Status::OK();
+}
+
+Status CoordinatorProxy::CreateIndex(const pb::meta::CreateIndexRequest& request,
+                                     pb::meta::CreateIndexResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("CreateIndex", request, response);
+  DINGO_LOG(DEBUG) << "CreateIndex error_code:" << rpc_status.error_code() << ", error_cstr:" << rpc_status.error_cstr()
+                   << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+  if (!rpc_status.ok()) {
+    std::string msg = fmt::format("Fail create index {}", rpc_status.error_cstr());
+    DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
+    return Status::RemoteError(rpc_status.error_code(), msg);
+  }
+  return Status::OK();
+}
+
+Status CoordinatorProxy::CreateTableIds(const pb::meta::CreateTableIdsRequest& request,
+                                        pb::meta::CreateTableIdsResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("CreateTableIds", request, response);
+  DINGO_LOG(DEBUG) << "CreateTableIds error_code:" << rpc_status.error_code()
+                   << ", error_cstr:" << rpc_status.error_cstr() << ", request:" << request.DebugString()
+                   << ", response:" << response.DebugString();
+  if (!rpc_status.ok()) {
+    std::string msg = fmt::format("Fail create table ids {}", rpc_status.error_cstr());
     DINGO_LOG(INFO) << msg << ", request:" << request.DebugString() << ", response:" << response.DebugString();
     return Status::RemoteError(rpc_status.error_code(), msg);
   }

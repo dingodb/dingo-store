@@ -16,6 +16,7 @@
 #define DINGODB_SDK_ADMIN_TOOL_H_
 
 #include "sdk/coordinator_proxy.h"
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
@@ -36,6 +37,8 @@ class AdminTool {
   Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
 
   Status DropRegion(int64_t region_id);
+
+  Status CreateTableIds(int64_t count, std::vector<int64_t>& out_table_ids);
 
  private:
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;

@@ -26,6 +26,19 @@
 
 namespace dingodb {
 
+// TODO: refact 
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string& result) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "]";
+  }
+
+  // Buf buf(17);
+  Buf buf(Constant::kVectorKeyMinLenWithPrefix);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  buf.GetBytes(result);
+}
+
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result) {
   if (BAIDU_UNLIKELY(prefix == 0)) {
     // Buf buf(16);

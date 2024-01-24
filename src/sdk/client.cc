@@ -45,6 +45,8 @@
 #include "sdk/region_creator_internal_data.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_impl.h"
+#include "sdk/vector.h"
+#include "sdk/vector/vector_index_creator_internal_data.h"
 
 namespace dingodb {
 namespace sdk {
@@ -153,6 +155,11 @@ Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_p
 Status Client::DropRegion(int64_t region_id) {
   data_->stub->GetMetaCache()->RemoveRegion(region_id);
   return data_->stub->GetAdminTool()->DropRegion(region_id);
+}
+
+Status Client::NewVectorIndexCreator(VectorIndexCreator** index_creator) {
+  *index_creator = new VectorIndexCreator(new VectorIndexCreator::Data(*data_->stub));
+  return Status::OK();
 }
 
 RawKV::RawKV(Data* data) : data_(data) {}

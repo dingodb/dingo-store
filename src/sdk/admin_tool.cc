@@ -80,5 +80,26 @@ Status AdminTool::DropRegion(int64_t region_id) {
   return ret;
 }
 
+Status AdminTool::CreateTableIds(int64_t count, std::vector<int64_t>& out_table_ids) {
+  CHECK(count > 0) << "count must greater 0";
+  pb::meta::CreateTableIdsRequest request;
+  pb::meta::CreateTableIdsResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  request.set_count(count);
+  DINGO_RETURN_NOT_OK(coordinator_proxy_->CreateTableIds(request, response));
+  CHECK_EQ(response.table_ids_size(), count);
+
+  for (const auto& id : response.table_ids()) {
+    out_table_ids.push_back(id.entity_id());
+  }
+
+  return Status::OK();
+}
+
 }  // namespace sdk
 }  // namespace dingodb
