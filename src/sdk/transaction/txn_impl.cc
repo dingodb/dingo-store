@@ -668,11 +668,10 @@ Status Transaction::TxnImpl::PreCommit() {
   DCHECK_EQ(rpcs.size(), sub_tasks.size());
 
   std::vector<std::thread> thread_pool;
-  for (auto i = 1; i < sub_tasks.size(); i++) {
-    thread_pool.emplace_back(&Transaction::TxnImpl::ProcessTxnPrewriteSubTask, this, &sub_tasks[i]);
+  thread_pool.reserve(sub_tasks.size());
+  for (auto& sub_task : sub_tasks) {
+    thread_pool.emplace_back(&Transaction::TxnImpl::ProcessTxnPrewriteSubTask, this, &sub_task);
   }
-
-  ProcessTxnPrewriteSubTask(sub_tasks.data());
 
   for (auto& thread : thread_pool) {
     thread.join();
@@ -854,11 +853,10 @@ Status Transaction::TxnImpl::Commit() {
       DCHECK_EQ(rpcs.size(), sub_tasks.size());
 
       std::vector<std::thread> thread_pool;
-      for (auto i = 1; i < sub_tasks.size(); i++) {
-        thread_pool.emplace_back(&Transaction::TxnImpl::ProcessTxnCommitSubTask, this, &sub_tasks[i]);
+      thread_pool.reserve(sub_tasks.size());
+      for (auto& sub_task : sub_tasks) {
+        thread_pool.emplace_back(&Transaction::TxnImpl::ProcessTxnCommitSubTask, this, &sub_task);
       }
-
-      ProcessTxnCommitSubTask(sub_tasks.data());
 
       for (auto& thread : thread_pool) {
         thread.join();

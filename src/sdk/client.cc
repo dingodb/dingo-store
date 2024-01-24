@@ -102,13 +102,8 @@ Status Client::NewRawKV(std::shared_ptr<RawKV>& raw_kv) {
 }
 
 Status Client::NewRawKV(RawKV** raw_kv) {
-  std::shared_ptr<RawKV> tmp;
-  Status s = NewRawKV(tmp);
-  if (s.ok()) {
-    *raw_kv = tmp.get();
-    tmp.reset();
-  }
-  return s;
+  *raw_kv = new RawKV(new RawKV::Data(*data_->stub));
+  return Status::OK();
 }
 
 Status Client::NewTransaction(const TransactionOptions& options, std::shared_ptr<Transaction>& txn) {
@@ -121,12 +116,15 @@ Status Client::NewTransaction(const TransactionOptions& options, std::shared_ptr
 }
 
 Status Client::NewTransaction(const TransactionOptions& options, Transaction** txn) {
-  std::shared_ptr<Transaction> tmp;
-  Status s = NewTransaction(options, tmp);
-  if (s.ok()) {
-    *txn = tmp.get();
-    tmp.reset();
+  Transaction* tmp_txn = new Transaction(new Transaction::TxnImpl(*data_->stub, options));
+  tmp_txn->Begin();
+  Status s = tmp_txn->Begin();
+  if (!s.ok()) {
+    delete tmp_txn;
+    return s;
   }
+
+  *txn = tmp_txn;
 
   return s;
 }
