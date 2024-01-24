@@ -38,6 +38,9 @@ static std::string GetUsageMessage() {
   message += "\n  --value_size value size, default(256)";
   message += "\n  --batch_size batch put size, default(1)";
   message += "\n  --arrange_kv_num the number of arrange kv, used by readseq/readrandom/readmissing, default(10000)";
+  message += "\n  --is_single_region_txn is single transaction, default(true)";
+  message += "\n  --is_pessimistic_txn optimistic or pessimistic transaction, default(false)";
+  message += "\n  --txn_isolation_level transaction isolation level SI/RC, default(SI)";
 
   return message;
 }

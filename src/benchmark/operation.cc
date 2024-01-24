@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <random>
 #include <string>
+#include <vector>
 
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -32,6 +33,13 @@ DEFINE_uint32(batch_size, 1, "Batch size");
 
 DEFINE_uint32(arrange_kv_num, 10000, "The number of kv for read");
 
+DEFINE_bool(is_pessimistic_txn, false, "Optimistic or pessimistic transaction");
+DEFINE_string(txn_isolation_level, "SI", "Transaction isolation level");
+DEFINE_validator(txn_isolation_level, [](const char*, const std::string& value) -> bool {
+  auto isolation_level = dingodb::Helper::ToUpper(value);
+  return isolation_level == "SI" || isolation_level == "RC";
+});
+
 namespace dingodb {
 namespace benchmark {
 
@@ -41,31 +49,41 @@ static const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j
                                  'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
                                  'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
-using BuildFuncer = std::function<OperationPtr(std::shared_ptr<sdk::Client> client, const std::string& prefix)>;
+using BuildFuncer = std::function<OperationPtr(std::shared_ptr<sdk::Client> client)>;
 using OperationBuilderMap = std::map<std::string, BuildFuncer>;
 
 static OperationBuilderMap support_operations = {
     {"fillseq",
-     [](std::shared_ptr<sdk::Client> client, const std::string& prefix) -> OperationPtr {
-       return std::make_shared<FillSeqOperation>(client, prefix);
-     }},
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr { return std::make_shared<FillSeqOperation>(client); }},
     {"fillrandom",
-     [](std::shared_ptr<sdk::Client> client, const std::string& prefix) -> OperationPtr {
-       return std::make_shared<FillRandomOperation>(client, prefix);
-     }},
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr { return std::make_shared<FillRandomOperation>(client); }},
     {"readseq",
-     [](std::shared_ptr<sdk::Client> client, const std::string& prefix) -> OperationPtr {
-       return std::make_shared<ReadSeqOperation>(client, prefix);
-     }},
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr { return std::make_shared<ReadSeqOperation>(client); }},
     {"readrandom",
-     [](std::shared_ptr<sdk::Client> client, const std::string& prefix) -> OperationPtr {
-       return std::make_shared<ReadRandomOperation>(client, prefix);
-     }},
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr { return std::make_shared<ReadRandomOperation>(client); }},
     {"readmissing",
-     [](std::shared_ptr<sdk::Client> client, const std::string& prefix) -> OperationPtr {
-       return std::make_shared<ReadMissingOperation>(client, prefix);
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<ReadMissingOperation>(client);
+     }},
+    {"filltxnseq",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr { return std::make_shared<FillTxnSeqOperation>(client); }},
+    {"filltxnrandom",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<FillTxnRandomOperation>(client);
      }},
 };
+
+static sdk::TransactionIsolation GetTxnIsolationLevel() {
+  auto isolation_level = dingodb::Helper::ToUpper(FLAGS_txn_isolation_level);
+  if (isolation_level == "SI") {
+    return sdk::TransactionIsolation::kSnapshotIsolation;
+  } else if (isolation_level == "RC") {
+    return sdk::TransactionIsolation::kReadCommitted;
+  }
+
+  LOG(FATAL) << fmt::format("Not support transaction isolation level: {}", FLAGS_txn_isolation_level);
+  return sdk::TransactionIsolation::kReadCommitted;
+}
 
 // rand string
 static std::string GenRandomString(int len) {
@@ -86,15 +104,14 @@ static std::string GenSeqString(int num, int len) { return fmt::format("{0:0{1}}
 
 static std::string EncodeRawKey(const std::string& str) { return kClientRaw + str; }
 
-BaseOperation::BaseOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix)
-    : client(client), prefix(prefix) {
+BaseOperation::BaseOperation(std::shared_ptr<sdk::Client> client) : client(client) {
   auto status = client->NewRawKV(raw_kv);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
 }
 
-Operation::Result BaseOperation::KvPut(bool is_random) {
+Operation::Result BaseOperation::KvPut(const std::string& prefix, bool is_random) {
   Operation::Result result;
   int random_str_len = FLAGS_key_size - prefix.size();
 
@@ -118,7 +135,7 @@ Operation::Result BaseOperation::KvPut(bool is_random) {
   return result;
 }
 
-Operation::Result BaseOperation::KvBatchPut(bool is_random) {
+Operation::Result BaseOperation::KvBatchPut(const std::string& prefix, bool is_random) {
   Operation::Result result;
   int random_str_len = FLAGS_key_size - prefix.size();
 
@@ -179,11 +196,110 @@ Operation::Result BaseOperation::KvBatchGet(const std::vector<std::string>& keys
   return result;
 }
 
-Operation::Result FillSeqOperation::Execute() { return FLAGS_batch_size == 1 ? KvPut(false) : KvBatchPut(false); }
+Operation::Result BaseOperation::KvTxnPut(const std::vector<std::string>& prefixes, bool is_random) {
+  Operation::Result result;
 
-Operation::Result FillRandomOperation::Execute() { return FLAGS_batch_size == 1 ? KvPut(true) : KvBatchPut(true); }
+  int64_t start_time = Helper::TimestampUs();
 
-bool ReadOperation::Arrange() {
+  sdk::Transaction* txn = nullptr;
+  sdk::TransactionOptions options;
+  options.kind = FLAGS_is_pessimistic_txn ? sdk::TransactionKind::kPessimistic : sdk::TransactionKind::kOptimistic;
+  options.isolation = GetTxnIsolationLevel();
+
+  result.status = client->NewTransaction(options, &txn);
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  for (const auto& prefix : prefixes) {
+    int random_str_len = FLAGS_key_size - prefix.size();
+
+    size_t count = counter.fetch_add(1, std::memory_order_relaxed);
+    std::string key = is_random ? EncodeRawKey(prefix + GenRandomString(random_str_len))
+                                : EncodeRawKey(prefix + GenSeqString(count, random_str_len));
+
+    std::string value = GenRandomString(FLAGS_value_size);
+    result.write_bytes = key.size() + value.size();
+
+    result.status = txn->Put(key, value);
+    if (!result.status.IsOK()) {
+      goto end;
+    }
+  }
+
+  result.status = txn->PreCommit();
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  result.status = txn->Commit();
+
+end:
+  result.eplased_time = Helper::TimestampUs() - start_time;
+  delete txn;
+
+  return result;
+}
+
+Operation::Result BaseOperation::KvTxnBatchPut(const std::vector<std::string>& prefixes, bool is_random) {
+  Operation::Result result;
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::Transaction* txn = nullptr;
+  sdk::TransactionOptions options;
+  options.kind = FLAGS_is_pessimistic_txn ? sdk::TransactionKind::kPessimistic : sdk::TransactionKind::kOptimistic;
+  options.isolation = GetTxnIsolationLevel();
+
+  result.status = client->NewTransaction(options, &txn);
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  for (const auto& prefix : prefixes) {
+    int random_str_len = FLAGS_key_size - prefix.size();
+
+    std::vector<sdk::KVPair> kvs;
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      sdk::KVPair kv;
+      size_t count = counter.fetch_add(1, std::memory_order_relaxed);
+      kv.key = is_random ? EncodeRawKey(prefix + GenRandomString(random_str_len))
+                         : EncodeRawKey(prefix + GenSeqString(count, random_str_len));
+      kv.value = GenRandomString(FLAGS_value_size);
+
+      kvs.push_back(kv);
+      result.write_bytes += kv.key.size() + kv.value.size();
+    }
+
+    result.status = txn->BatchPut(kvs);
+    if (!result.status.IsOK()) {
+      goto end;
+    }
+  }
+
+  result.status = txn->PreCommit();
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  result.status = txn->Commit();
+
+end:
+  result.eplased_time = Helper::TimestampUs() - start_time;
+  delete txn;
+
+  return result;
+}
+
+Operation::Result FillSeqOperation::Execute(const std::string& prefix) {
+  return FLAGS_batch_size == 1 ? KvPut(prefix, false) : KvBatchPut(prefix, false);
+}
+
+Operation::Result FillRandomOperation::Execute(const std::string& prefix) {
+  return FLAGS_batch_size == 1 ? KvPut(prefix, true) : KvBatchPut(prefix, true);
+}
+
+bool ReadOperation::Arrange(const std::string& prefix) {
   int random_str_len = FLAGS_key_size - prefix.size();
 
   uint32_t batch_size = 256;
@@ -214,17 +330,33 @@ bool ReadOperation::Arrange() {
   return true;
 }
 
-Operation::Result ReadSeqOperation::Execute() { return KvGet(keys[index_++ % keys.size()]); }
+Operation::Result ReadSeqOperation::Execute(const std::string&) { return KvGet(keys[index_++ % keys.size()]); }
 
-Operation::Result ReadRandomOperation::Execute() {
+Operation::Result ReadRandomOperation::Execute(const std::string&) {
   uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
   return KvGet(keys[index]);
 }
 
-Operation::Result ReadMissingOperation::Execute() {
+Operation::Result ReadMissingOperation::Execute(const std::string& prefix) {
   int random_str_len = FLAGS_key_size + 4 - prefix.size();
   std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
   return KvGet(key);
+}
+
+Operation::Result FillTxnSeqOperation::Execute(const std::string& prefix) {
+  return FLAGS_batch_size == 1 ? KvTxnPut({prefix}, false) : KvTxnBatchPut({prefix}, false);
+}
+
+Operation::Result FillTxnSeqOperation::Execute(const std::vector<std::string>& prefixes) {
+  return FLAGS_batch_size == 1 ? KvTxnPut(prefixes, false) : KvTxnBatchPut(prefixes, false);
+}
+
+Operation::Result FillTxnRandomOperation::Execute(const std::string& prefix) {
+  return FLAGS_batch_size == 1 ? KvTxnPut({prefix}, true) : KvTxnBatchPut({prefix}, true);
+}
+
+Operation::Result FillTxnRandomOperation::Execute(const std::vector<std::string>& prefixes) {
+  return FLAGS_batch_size == 1 ? KvTxnPut(prefixes, true) : KvTxnBatchPut(prefixes, true);
 }
 
 bool IsSupportBenchmarkType(const std::string& benchmark) {
@@ -242,13 +374,13 @@ std::string GetSupportBenchmarkType() {
   return benchmarks;
 }
 
-OperationPtr NewOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix) {
+OperationPtr NewOperation(std::shared_ptr<sdk::Client> client) {
   auto it = support_operations.find(FLAGS_benchmark);
   if (it == support_operations.end()) {
     return nullptr;
   }
 
-  return it->second(client, prefix);
+  return it->second(client);
 }
 
 }  // namespace benchmark

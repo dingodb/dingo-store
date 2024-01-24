@@ -42,10 +42,13 @@ class Operation {
   };
 
   // Do some ready work at arrange stage
-  virtual bool Arrange() = 0;
+  virtual bool Arrange(const std::string& prefix) = 0;
 
   // RPC invoke, return execute result
-  virtual Result Execute() = 0;
+  virtual Result Execute(const std::string& prefix) = 0;
+
+  // RPC invoke, return execute result, for transaction access multiple region
+  virtual Result Execute(const std::vector<std::string>& prefixes) = 0;
 };
 using OperationPtr = std::shared_ptr<Operation>;
 
@@ -53,23 +56,27 @@ using OperationPtr = std::shared_ptr<Operation>;
 // Support common method
 class BaseOperation : public Operation {
  public:
-  BaseOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix);
+  BaseOperation(std::shared_ptr<sdk::Client> client);
   ~BaseOperation() override = default;
 
-  bool Arrange() override { return true; }
+  bool Arrange(const std::string&) override { return true; }
 
-  Result Execute() override { return {}; }
+  Result Execute(const std::string&) override { return {}; }
+
+  Result Execute(const std::vector<std::string>&) override { return {}; }
 
  protected:
-  Result KvPut(bool is_random);
-  Result KvBatchPut(bool is_random);
+  Result KvPut(const std::string& prefix, bool is_random);
+  Result KvBatchPut(const std::string& prefix, bool is_random);
 
   Result KvGet(std::string key);
   Result KvBatchGet(const std::vector<std::string>& keys);
 
+  Result KvTxnPut(const std::vector<std::string>& prefixes, bool is_random);
+  Result KvTxnBatchPut(const std::vector<std::string>& prefixes, bool is_random);
+
   std::shared_ptr<sdk::Client> client;
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  std::string prefix;
 
   std::atomic<size_t> counter{0};
 };
@@ -77,28 +84,28 @@ class BaseOperation : public Operation {
 // Sequence write operation
 class FillSeqOperation : public BaseOperation {
  public:
-  FillSeqOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix) : BaseOperation(client, prefix) {}
+  FillSeqOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
   ~FillSeqOperation() override = default;
 
-  Result Execute() override;
+  Result Execute(const std::string& prefix) override;
 };
 
 // Random write operation
 class FillRandomOperation : public BaseOperation {
  public:
-  FillRandomOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix) : BaseOperation(client, prefix) {}
+  FillRandomOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
   ~FillRandomOperation() override = default;
 
-  Result Execute() override;
+  Result Execute(const std::string& prefix) override;
 };
 
 // Read operation base class
 class ReadOperation : public BaseOperation {
  public:
-  ReadOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix) : BaseOperation(client, prefix) {}
+  ReadOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
   ~ReadOperation() override = default;
 
-  bool Arrange() override;
+  bool Arrange(const std::string& prefix) override;
 
  protected:
   std::vector<std::string> keys;
@@ -107,10 +114,10 @@ class ReadOperation : public BaseOperation {
 // Sequence read operation
 class ReadSeqOperation : public ReadOperation {
  public:
-  ReadSeqOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix) : ReadOperation(client, prefix) {}
+  ReadSeqOperation(std::shared_ptr<sdk::Client> client) : ReadOperation(client) {}
   ~ReadSeqOperation() override = default;
 
-  Result Execute() override;
+  Result Execute(const std::string& prefix) override;
 
  private:
   uint32_t index_{0};
@@ -119,25 +126,44 @@ class ReadSeqOperation : public ReadOperation {
 // Random read operation
 class ReadRandomOperation : public ReadOperation {
  public:
-  ReadRandomOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix) : ReadOperation(client, prefix) {}
+  ReadRandomOperation(std::shared_ptr<sdk::Client> client) : ReadOperation(client) {}
   ~ReadRandomOperation() override = default;
 
-  Result Execute() override;
+  Result Execute(const std::string& prefix) override;
 };
 
 // Missing read operation
 class ReadMissingOperation : public ReadOperation {
  public:
-  ReadMissingOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix)
-      : ReadOperation(client, prefix) {}
+  ReadMissingOperation(std::shared_ptr<sdk::Client> client) : ReadOperation(client) {}
   ~ReadMissingOperation() override = default;
 
-  Result Execute() override;
+  Result Execute(const std::string& prefix) override;
+};
+
+// Transaction Sequence write operation
+class FillTxnSeqOperation : public BaseOperation {
+ public:
+  FillTxnSeqOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
+  ~FillTxnSeqOperation() override = default;
+
+  Result Execute(const std::string& prefix) override;
+  Result Execute(const std::vector<std::string>&) override;
+};
+
+// Transaction random write operation
+class FillTxnRandomOperation : public BaseOperation {
+ public:
+  FillTxnRandomOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
+  ~FillTxnRandomOperation() override = default;
+
+  Result Execute(const std::string& prefix) override;
+  Result Execute(const std::vector<std::string>&) override;
 };
 
 bool IsSupportBenchmarkType(const std::string& benchmark);
 std::string GetSupportBenchmarkType();
-OperationPtr NewOperation(std::shared_ptr<sdk::Client> client, const std::string& prefix);
+OperationPtr NewOperation(std::shared_ptr<sdk::Client> client);
 
 }  // namespace benchmark
 }  // namespace dingodb
