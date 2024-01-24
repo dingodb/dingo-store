@@ -39,55 +39,372 @@ void ClusterStatImpl::GetTabInfo(brpc::TabInfoList* info_list) const {
   info->path = "/dingo";
 }
 
-void ClusterStatImpl::default_method(::google::protobuf::RpcController* controller,
-                                     const pb::cluster::ClusterStatRequest* /*request*/,
-                                     pb::cluster::ClusterStatResponse* /*response*/,
-                                     ::google::protobuf::Closure* done) {
-  brpc::ClosureGuard const done_guard(done);
-  brpc::Controller* cntl = (brpc::Controller*)controller;
-  const bool is_html = brpc::UseHTML(cntl->http_request());
-
-  cntl->http_response().set_content_type("text/html");
-
-  int64_t cluster_id = 0;
-  int64_t epoch = 0;
-  pb::common::Location coordinator_leader_location;
-  std::vector<pb::common::Location> locations;
-  controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
-
-  butil::IOBufBuilder os;
-  const std::string header_in_str = "DingoDB Node Info (" + std::string(GIT_VERSION) + ")";
-  // If Current Request is HTML mode, then construct HTML HEADER
-  os << "<!DOCTYPE html><html><head>\n"
-     << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
-     << "<title>DingoDB Cluster Stat Information</title>\n"
-     << GetTabHead() << "</head><body>";
-  cntl->server()->PrintTabsBody(os, "Cluster");
-
-  os << "<h1 style=\"text-align: center;\">" << header_in_str << "</h1>";
-
-  os << "<p style=\"text-align: center; \">Coordinator";
-  if (controller_->IsLeader()) {
-    os << "(Leader)</a></p>";
-
-    pb::common::StoreMap store_map;
-    controller_->GetStoreMap(store_map);
-
-    for (const auto& store : store_map.stores()) {
-      os << "<p style=\"text-align: center; \">" + std::to_string(store.id()) + " (" +
-                pb::common::StoreType_Name(store.store_type()) + ") " + pb::common::StoreState_Name(store.state()) +
-                " <a href=http://" + store.server_location().host() + ":" +
-                std::to_string(store.server_location().port()) + "> server:" + store.server_location().host() + ":" +
-                std::to_string(store.server_location().port()) + "</a> <a href=http://" + store.raft_location().host() +
-                ":" + std::to_string(store.raft_location().port()) +
-                "/raft_stat> raft:" + store.raft_location().host() + ":" +
-                std::to_string(store.raft_location().port()) + "</a></p>";
+// Print a table in HTML or plain text format.
+// @param os Output stream
+// @param use_html Whether to use HTML format
+// @param table_header Header of the table
+// @param min_widths Minimum width of each column
+// @param table_contents Contents of the table
+// @param table_urls Urls of the table
+void ClusterStatImpl::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
+                                     const std::vector<int32_t>& min_widths,
+                                     const std::vector<std::vector<std::string>>& table_contents,
+                                     const std::vector<std::vector<std::string>>& table_urls) {
+  if (use_html) {
+    // os << "<table class=\"gridtable sortable\" border=\"1\"><tr>";
+    os << R"(<table class="gridtable sortable" border="1"><tr>)";
+    for (const auto& header : table_header) {
+      os << "<th>" << header << "</th>";
     }
+    os << "</tr>\n";
   } else {
-    os << "(Follower) Leader is <a href=http://" + coordinator_leader_location.host() + ":" +
-              std::to_string(coordinator_leader_location.port()) + "/dingo>" + coordinator_leader_location.host() +
-              ":" + std::to_string(coordinator_leader_location.port()) + "</a></p>";
+    for (const auto& header : table_header) {
+      os << header << "|";
+    }
   }
+
+  for (int i = 0; i < table_contents.size(); i++) {
+    const auto& line = table_contents[i];
+    const std::vector<std::string>& url_line = table_urls.empty() ? std::vector<std::string>() : table_urls[i];
+
+    if (use_html) {
+      os << "<tr>";
+    }
+    for (size_t i = 0; i < line.size(); ++i) {
+      if (use_html) {
+        os << "<td>";
+      }
+
+      if (use_html) {
+        if (!url_line.empty() && !url_line[i].empty()) {
+          if (url_line[i].substr(0, 4) == "http") {
+            os << "<a href=\"" << url_line[i] << "\">" << line[i] << "</a>";
+          } else {
+            os << "<a href=\"" << url_line[i] << line[i] << "\">" << line[i] << "</a>";
+          }
+        } else {
+          os << brpc::min_width(line[i], min_widths[i]);
+        }
+      } else {
+        os << brpc::min_width(line[i], min_widths[i]);
+      }
+      if (use_html) {
+        os << "</td>";
+      } else {
+        os << "|";
+      }
+    }
+    if (use_html) {
+      os << "</tr>";
+    }
+    os << '\n';
+  }
+
+  if (use_html) {
+    os << "</table>\n";
+  }
+}
+
+void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
+  std::vector<std::string> table_header;
+
+  table_header.push_back("ID");
+  table_header.push_back("TYPE");
+  table_header.push_back("STATE");
+  table_header.push_back("IN_STATE");
+  table_header.push_back("SERVER_LOCATION");
+  table_header.push_back("RAFT_LOCATION");
+  table_header.push_back("RESOURCE_TAG");
+  table_header.push_back("CREATE_TIME");
+  table_header.push_back("UPDATE_TIME");
+  table_header.push_back("STORE_METRICS");
+  table_header.push_back("STORE_OPERATION");
+  table_header.push_back("INFO");
+
+  std::vector<int32_t> min_widths;
+
+  min_widths.push_back(10);  // ID
+  min_widths.push_back(16);  // TYPE
+  min_widths.push_back(16);  // STATE
+  min_widths.push_back(10);  // IN_STATE
+  min_widths.push_back(30);  // SERVER_LOCATION
+  min_widths.push_back(30);  // RAFT_LOCATION
+  min_widths.push_back(15);  // RESOURCE_TAG
+  min_widths.push_back(30);  // CREATE_TIME
+  min_widths.push_back(30);  // UPDATE_TIME
+  min_widths.push_back(10);  // STORE_METRICS
+  min_widths.push_back(10);  // STORE_OPERATION
+  min_widths.push_back(5);   // INFO
+
+  std::vector<std::vector<std::string>> table_contents;
+  std::vector<std::vector<std::string>> table_urls;
+
+  pb::common::StoreMap store_map;
+  controller_->GetStoreMap(store_map);
+
+  for (const auto& store : store_map.stores()) {
+    std::vector<std::string> line;
+    std::vector<std::string> url_line;
+
+    line.push_back(std::to_string(store.id()));  // ID
+    url_line.push_back(std::string());
+    line.push_back(pb::common::StoreType_Name(store.store_type()));  // TYPE
+    url_line.push_back(std::string());
+    line.push_back(pb::common::StoreState_Name(store.state()));  // STATE
+    url_line.push_back(std::string());
+    line.push_back(pb::common::StoreInState_Name(store.in_state()));  //
+    url_line.push_back(std::string());
+    line.push_back(store.server_location().host() + ":" +
+                   std::to_string(store.server_location().port()));  // SERVER_LOCATION
+    url_line.push_back("http://" + store.server_location().host() + ":" +
+                       std::to_string(store.server_location().port()));
+    line.push_back(store.raft_location().host() + ":" + std::to_string(store.raft_location().port()));  // RAFT_LOCATION
+    url_line.push_back("http://" + store.raft_location().host() + ":" + std::to_string(store.raft_location().port()) +
+                       "/raft_stat");
+    if (store.resource_tag().empty()) {
+      line.push_back("N/A");  // RESOURCE_TAG
+    } else {
+      line.push_back(store.resource_tag());  // RESOURCE_TAG
+    }
+    url_line.push_back(std::string());
+    line.push_back(Helper::FormatMsTime(store.create_timestamp(), "%Y-%m-%d %H:%M:%S"));  // CREATE_TIME
+    url_line.push_back(std::string());
+    line.push_back(Helper::FormatMsTime(store.last_seen_timestamp(), "%Y-%m-%d %H:%M:%S"));  // UPDATE_TIME
+    url_line.push_back(std::string());
+    line.push_back(std::to_string(store.id()));  // STORE_METRICS
+    url_line.push_back("/store_metrics/");
+    line.push_back(std::to_string(store.id()));  // STORE_OPERATION
+    url_line.push_back("/store_operation/");
+    line.push_back("Hello");  // INFO
+    if (store.store_type() == pb::common::StoreType::NODE_TYPE_STORE) {
+      url_line.push_back("http://" + store.server_location().host() + ":" +
+                         std::to_string(store.server_location().port()) + "/StoreService/Hello/");
+    } else if (store.store_type() == pb::common::StoreType::NODE_TYPE_INDEX) {
+      url_line.push_back("http://" + store.server_location().host() + ":" +
+                         std::to_string(store.server_location().port()) + "/IndexService/Hello/");
+    } else {
+      url_line.push_back(std::string());
+    }
+
+    table_contents.push_back(line);
+    table_urls.push_back(url_line);
+  }
+
+  PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+}
+
+void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
+  std::vector<std::string> table_header;
+
+  table_header.push_back("ID");
+  table_header.push_back("USER");
+  table_header.push_back("STATUS");
+  table_header.push_back("SERVER_LOCATION");
+  table_header.push_back("RESOURCE_TAG");
+  table_header.push_back("CREATE_TIME");
+  table_header.push_back("UPDATE_TIME");
+
+  std::vector<int32_t> min_widths;
+
+  min_widths.push_back(10);  // ID
+  min_widths.push_back(16);  // USER
+  min_widths.push_back(16);  // STATUS
+  min_widths.push_back(30);  // SERVER_LOCATION
+  min_widths.push_back(15);  // RESOURCE_TAG
+  min_widths.push_back(30);  // CREATE_TIME
+  min_widths.push_back(30);  // UPDATE_TIME
+
+  std::vector<std::vector<std::string>> table_contents;
+  std::vector<std::vector<std::string>> table_urls;
+
+  pb::common::ExecutorMap executor_map;
+  controller_->GetExecutorMap(executor_map);
+
+  for (const auto& executor : executor_map.executors()) {
+    std::vector<std::string> line;
+
+    line.push_back(executor.id());
+    line.push_back(executor.executor_user().user());
+    line.push_back(pb::common::ExecutorState_Name(executor.state()));
+    line.push_back(executor.server_location().host() + ":" + std::to_string(executor.server_location().port()));
+    if (executor.resource_tag().empty()) {
+      line.push_back("N/A");
+    } else {
+      line.push_back(executor.resource_tag());
+    }
+    line.push_back(Helper::FormatMsTime(executor.create_timestamp(), "%Y-%m-%d %H:%M:%S"));
+    line.push_back(Helper::FormatMsTime(executor.last_seen_timestamp(), "%Y-%m-%d %H:%M:%S"));
+
+    table_contents.push_back(line);
+  }
+
+  PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+}
+
+void ClusterStatImpl::PrintRegions(std::ostream& os, bool use_html) {
+  std::vector<std::string> table_header;
+
+  table_header.push_back("REGION_ID");
+  table_header.push_back("REGION_NAME");
+  table_header.push_back("EPOCH");
+  table_header.push_back("REGION_TYPE");
+  table_header.push_back("REGION_STATE");
+  table_header.push_back("BRAFT_STATUS");
+  table_header.push_back("REPLICA_STATUS");
+  table_header.push_back("STORE_REGION_STATE");
+  table_header.push_back("LEADER_ID");
+  table_header.push_back("REPLICA");
+  table_header.push_back("START_KEY");
+  table_header.push_back("END_KEY");
+  table_header.push_back("SCHEMA_ID");
+  table_header.push_back("TABLE_ID");
+  table_header.push_back("INDEX_ID");
+  table_header.push_back("PART_ID");
+  table_header.push_back("ENGINE");
+  table_header.push_back("CREATE_TIME");
+  table_header.push_back("UPDATE_TIME");
+  table_header.push_back("APPLIED_INDEX");
+  table_header.push_back("VECTOR_TYPE");
+
+  std::vector<int32_t> min_widths;
+
+  min_widths.push_back(10);  // REGION_ID
+  min_widths.push_back(20);  // REGION_NAME
+  min_widths.push_back(6);   // EPOCH
+  min_widths.push_back(10);  // REGION_TYPE
+  min_widths.push_back(10);  // REGION_STATE
+  min_widths.push_back(10);  // BRAFT_STATUS
+  min_widths.push_back(10);  // REPLICA_STATUS
+  min_widths.push_back(10);  // STORE_REGION_STATE
+  min_widths.push_back(10);  // LEADER_ID
+  min_widths.push_back(10);  // REPLICA
+  min_widths.push_back(20);  // START_KEY
+  min_widths.push_back(20);  // END_KEY
+  min_widths.push_back(10);  // SCHEMA_ID
+  min_widths.push_back(10);  // TABLE_ID
+  min_widths.push_back(10);  // INDEX_ID
+  min_widths.push_back(10);  // PART_ID
+  min_widths.push_back(10);  // ENGINE
+  min_widths.push_back(20);  // CREATE_TIME
+  min_widths.push_back(20);  // UPDATE_TIME
+  min_widths.push_back(10);  // APPLIED_INDEX
+  min_widths.push_back(10);  // VECTOR_TYPE
+
+  std::vector<std::vector<std::string>> table_contents;
+  std::vector<std::vector<std::string>> table_urls;
+
+  pb::common::RegionMap region_map;
+  controller_->GetRegionMapFull(region_map);
+
+  for (const auto& region : region_map.regions()) {
+    std::vector<std::string> line;
+    std::vector<std::string> url_line;
+
+    line.push_back(std::to_string(region.id()));
+    url_line.push_back(std::string("/region/"));
+
+    line.push_back(region.definition().name());
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().epoch().conf_version()) + "-" +
+                   std::to_string(region.definition().epoch().version()));
+    url_line.push_back(std::string());
+
+    line.push_back(pb::common::RegionType_Name(region.region_type()));
+    url_line.push_back(std::string());
+
+    line.push_back(pb::common::RegionState_Name(region.state()));
+    url_line.push_back(std::string());
+
+    line.push_back(pb::common::RegionRaftStatus_Name(region.status().raft_status()));
+    url_line.push_back(std::string());
+
+    line.push_back(pb::common::ReplicaStatus_Name(region.status().replica_status()));
+    url_line.push_back(std::string());
+
+    line.push_back(pb::common::StoreRegionState_Name(region.metrics().store_region_state()));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.leader_store_id()));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().peers_size()));
+    url_line.push_back(std::string());
+
+    line.push_back(Helper::StringToHex(region.definition().range().start_key()));
+    url_line.push_back(std::string());
+
+    line.push_back(Helper::StringToHex(region.definition().range().end_key()));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().schema_id()));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().table_id()));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().index_id()));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().part_id()));
+    url_line.push_back(std::string());
+
+    line.push_back(pb::common::RawEngine_Name(region.definition().raw_engine()));
+    url_line.push_back(std::string());
+
+    line.push_back(Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));
+    url_line.push_back(std::string());
+
+    line.push_back(Helper::FormatMsTime(region.metrics().last_update_metrics_timestamp(), "%Y-%m-%d %H:%M:%S"));
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().last_update_metrics_log_index()));
+    url_line.push_back(std::string());
+
+    auto vector_index_type = region.definition().index_parameter().vector_index_parameter().vector_index_type();
+    if (vector_index_type != pb::common::VECTOR_INDEX_TYPE_NONE) {
+      line.push_back(pb::common::VectorIndexType_Name(vector_index_type));
+    } else {
+      line.push_back("N/A");
+    }
+    url_line.push_back(std::string());
+
+    table_contents.push_back(line);
+    table_urls.push_back(url_line);
+  }
+
+  PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+}
+
+void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
+  std::vector<std::string> table_header;
+
+  table_header.push_back("SCHEMA_NAME");
+  table_header.push_back("TABLE_ID");
+  table_header.push_back("TABLE_NAME");
+  table_header.push_back("ENGINE");
+  table_header.push_back("TYPE");
+  table_header.push_back("PARTITIONS");
+  table_header.push_back("REGIONS");
+  table_header.push_back("VECTOR_INDEX_TYPE");
+  table_header.push_back("VECTOR_DIMENSION");
+  table_header.push_back("VECTOR_METRIC_TYPE");
+
+  std::vector<int32_t> min_widths;
+
+  min_widths.push_back(10);  // SCHMEA_NAME
+  min_widths.push_back(10);  // TABLE_ID
+  min_widths.push_back(20);  // TABLE_NAME
+  min_widths.push_back(6);   // ENGINE
+  min_widths.push_back(6);   // TYPE
+  min_widths.push_back(2);   // PARTITIONS
+  min_widths.push_back(2);   // REGIONS
+  min_widths.push_back(30);  // VECTOR_INDEX_TYPE
+  min_widths.push_back(5);   // VECTOR_DIMENSION
+  min_widths.push_back(20);  // VECTOR_METRIC_TYPE
+
+  std::vector<std::vector<std::string>> table_contents;
+  std::vector<std::vector<std::string>> table_urls;
 
   // 1. Get All Schema
   std::vector<pb::meta::Schema> schemas;
@@ -99,68 +416,230 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   for (const auto& schema : schemas) {
     int64_t const schema_id = schema.id().entity_id();
-    if (schema_id == 0 || schema.name() != Constant::kDingoSchemaName) {
+    if (schema_id == 0 || schema.name() == Constant::kRootSchemaName) {
       continue;
     }
 
-    PrintSchema(os, schema.name());
-    os << "<hr>";
-
-    pb::common::RegionMap region_map;
-    controller_->GetRegionMapFull(region_map);
-
     for (const auto& table_entry : schema.table_ids()) {
+      std::vector<std::string> line;
+      std::vector<std::string> url_line;
+
+      line.push_back(schema.name());  // SCHEMA_NAME
+      url_line.push_back(std::string());
+      line.push_back(std::to_string(table_entry.entity_id()));  // TABLE_ID
+      url_line.push_back(std::string("/table/"));
+
       // Start TableID
-      os << "<ul>";
       auto table_id = table_entry.entity_id();
-      os << "<li> TableID: " << std::to_string(table_id);
-      // Start Append Table Information
-      os << "<ul>";
 
       pb::meta::TableDefinitionWithId table_definition;
       controller_->GetTable(schema_id, table_id, table_definition);
-      os << "<li> TableName:" << table_definition.table_definition().name() << "</li>";
-      pb::meta::TableDefinition table_def = table_definition.table_definition();
-      PrintTableDefinition(os, table_definition.table_definition());
+
+      line.push_back(table_definition.table_definition().name());  // TABLE_NAME
+      url_line.push_back(std::string());
+      line.push_back(pb::common::Engine_Name(table_definition.table_definition().engine()));  // ENGINE
+      url_line.push_back(std::string());
+      line.push_back("TABLE");  // TYPE
+      url_line.push_back(std::string());
+      line.push_back(
+          std::to_string(table_definition.table_definition().table_partition().partitions_size()));  // PARTITIONS
+      url_line.push_back(std::string());
 
       pb::meta::TableRange table_range;
       controller_->GetTableRange(schema_id, table_id, table_range);
 
-      PrintTableRegions(os, region_map, table_range);
-      // End Append Table Information
-      os << "</ul>";
-      os << "</li>";
-      // End of TableID
-      os << "</ul>";
+      line.push_back(std::to_string(table_range.range_distribution_size()));  // REGIONS
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // VECTOR_INDEX_TYPE
+      url_line.push_back(std::string());
+      line.push_back("N/A");  // VECTOR_DIMENSION
+      url_line.push_back(std::string());
+      line.push_back("N/A");  // VECTOR_METRIC_TYPE
+      url_line.push_back(std::string());
+
+      table_contents.push_back(line);
+      table_urls.push_back(url_line);
     }
 
     for (const auto& index_entry : schema.index_ids()) {
-      // Start IndexID
-      os << "<ul>";
-      auto index_id = index_entry.entity_id();
-      os << "<li> IndexID: " << std::to_string(index_id);
-      // Start Append Index Information
-      os << "<ul>";
+      std::vector<std::string> line;
+      std::vector<std::string> url_line;
+
+      line.push_back(schema.name());  // SCHEMA_NAME
+      url_line.push_back(std::string());
+      line.push_back(std::to_string(index_entry.entity_id()));  // INDEX_ID
+      url_line.push_back(std::string("/table/"));
+
+      // Start TableID
+      auto table_id = index_entry.entity_id();
 
       pb::meta::TableDefinitionWithId table_definition;
-      controller_->GetIndex(schema_id, index_id, false, table_definition);
-      os << "<li> IndexName:" << table_definition.table_definition().name() << "</li>";
-      PrintIndexDefinition(os, table_definition.table_definition());
+      controller_->GetIndex(schema_id, table_id, false, table_definition);
 
-      pb::meta::IndexRange index_range;
-      controller_->GetIndexRange(schema_id, index_id, index_range);
+      line.push_back(table_definition.table_definition().name());  // TABLE_NAME
+      url_line.push_back(std::string());
+      line.push_back(pb::common::Engine_Name(table_definition.table_definition().engine()));  // ENGINE
+      url_line.push_back(std::string());
+      line.push_back("INDEX");  // TYPE
+      url_line.push_back(std::string());
+      line.push_back(
+          std::to_string(table_definition.table_definition().table_partition().partitions_size()));  // PARTITIONS
+      url_line.push_back(std::string());
 
-      PrintIndexRegions(os, region_map, index_range);
-      // End Append Table Information
-      os << "</ul>";
-      os << "</li>";
-      // End of TableID
-      os << "</ul>";
+      pb::meta::IndexRange table_range;
+      controller_->GetIndexRange(schema_id, table_id, table_range);
+
+      line.push_back(std::to_string(table_range.range_distribution_size()));  // REGIONS
+      url_line.push_back(std::string());
+
+      if (table_definition.table_definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
+        const auto& vector_index_parameter =
+            table_definition.table_definition().index_parameter().vector_index_parameter();
+
+        line.push_back(pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type()));
+        url_line.push_back(std::string());
+
+        if (vector_index_parameter.has_flat_parameter()) {
+          line.push_back(std::to_string(vector_index_parameter.flat_parameter().dimension()));  // VECTOR_DIMENSION
+          url_line.push_back(std::string());
+          line.push_back(pb::common::MetricType_Name(
+              vector_index_parameter.flat_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          url_line.push_back(std::string());
+        } else if (vector_index_parameter.has_bruteforce_parameter()) {
+          line.push_back(
+              std::to_string(vector_index_parameter.bruteforce_parameter().dimension()));  // VECTOR_DIMENSION
+          url_line.push_back(std::string());
+          line.push_back(pb::common::MetricType_Name(
+              vector_index_parameter.bruteforce_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          url_line.push_back(std::string());
+        } else if (vector_index_parameter.has_ivf_flat_parameter()) {
+          line.push_back(std::to_string(vector_index_parameter.ivf_flat_parameter().dimension()));  // VECTOR_DIMENSION
+          url_line.push_back(std::string());
+          line.push_back(pb::common::MetricType_Name(
+              vector_index_parameter.ivf_flat_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          url_line.push_back(std::string());
+        } else if (vector_index_parameter.has_ivf_pq_parameter()) {
+          line.push_back(std::to_string(vector_index_parameter.ivf_pq_parameter().dimension()));  // VECTOR_DIMENSION
+          url_line.push_back(std::string());
+          line.push_back(pb::common::MetricType_Name(
+              vector_index_parameter.ivf_pq_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          url_line.push_back(std::string());
+        } else if (vector_index_parameter.has_hnsw_parameter()) {
+          line.push_back(std::to_string(vector_index_parameter.hnsw_parameter().dimension()));  // VECTOR_DIMENSION
+          url_line.push_back(std::string());
+          line.push_back(pb::common::MetricType_Name(
+              vector_index_parameter.hnsw_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          url_line.push_back(std::string());
+        } else {
+          line.push_back("N/A");  // VECTOR_DIMENSION
+          url_line.push_back(std::string());
+          line.push_back("N/A");  // VECTOR_METRIC_TYPE
+          url_line.push_back(std::string());
+        }
+
+      } else {
+        line.push_back("N/A");  // VECTOR_INDEX_TYPE
+        url_line.push_back(std::string());
+        line.push_back("N/A");  // VECTOR_DIMENSION
+        url_line.push_back(std::string());
+        line.push_back("N/A");  // VECTOR_METRIC_TYPE
+        url_line.push_back(std::string());
+      }
+
+      table_contents.push_back(line);
+      table_urls.push_back(url_line);
     }
   }
 
-  os << "</body></html>";
+  PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+}
+
+void ClusterStatImpl::default_method(::google::protobuf::RpcController* controller,
+                                     const pb::cluster::ClusterStatRequest* /*request*/,
+                                     pb::cluster::ClusterStatResponse* /*response*/,
+                                     ::google::protobuf::Closure* done) {
+  brpc::ClosureGuard const done_guard(done);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  const brpc::Server* server = cntl->server();
+  butil::IOBufBuilder os;
+  const bool use_html = brpc::UseHTML(cntl->http_request());
+  cntl->http_response().set_content_type(use_html ? "text/html" : "text/plain");
+
+  if (use_html) {
+    os << "<!DOCTYPE html><html><head>\n"
+       << brpc::gridtable_style() << "<script src=\"/js/sorttable\"></script>\n"
+       << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
+       << brpc::TabsHead() << "</head><body>";
+    server->PrintTabsBody(os, "dingo");
+  }
+
+  int64_t cluster_id = 0;
+  int64_t epoch = 0;
+  pb::common::Location coordinator_leader_location;
+  std::vector<pb::common::Location> locations;
+  controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
+
+  os << "dingo-store version: " << std::string(GIT_VERSION) << '\n';
+  if (controller_->IsLeader()) {
+    os << (use_html ? "<br>\n" : "\n");
+    os << "dingo-store role: " << '\n';
+    os << "<a href=\"/CoordinatorService/Hello/"
+       << "\">"
+       << "LEADER"
+       << "</a>" << '\n';
+
+    // add url for task_list
+    os << (use_html ? "<br>\n" : "\n");
+    os << "<a href=\"/task_list/"
+       << "\">"
+       << "GET_TASK_LIST"
+       << "</a>" << '\n';
+
+    for (const auto& location : locations) {
+      os << (use_html ? "<br>\n" : "\n");
+      os << "Follower is <a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" +
+                location.host() + ":" + std::to_string(location.port()) + "</a>"
+         << '\n';
+    }
+  } else {
+    os << (use_html ? "<br>\n" : "\n");
+    os << "dingo-store role: " << '\n';
+    os << "<a href=\"/CoordinatorService/Hello/"
+       << "\">"
+       << "FOLLOWER"
+       << "</a>" << '\n';
+
+    os << (use_html ? "<br>\n" : "\n");
+    os << "Leader is <a href=http://" + coordinator_leader_location.host() + ":" +
+              std::to_string(coordinator_leader_location.port()) + "/dingo>" + coordinator_leader_location.host() +
+              ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
+       << '\n';
+  }
+
+  os << (use_html ? "<br>\n" : "\n");
+  os << (use_html ? "<br>\n" : "\n");
+  os << "STORE AND INDEX: " << '\n';
+  PrintStores(os, use_html);
+
+  os << (use_html ? "<br>\n" : "\n");
+  os << "EXECUTOR: " << '\n';
+  PrintExecutors(os, use_html);
+
+  os << (use_html ? "<br>\n" : "\n");
+  os << "TABLE AND INDEX: " << '\n';
+  PrintSchemaTables(os, use_html);
+
+  os << (use_html ? "<br>\n" : "\n");
+  os << "REGION: " << '\n';
+  PrintRegions(os, use_html);
+
+  if (use_html) {
+    os << "</body></html>\n";
+  }
+
   os.move_to(cntl->response_attachment());
+  cntl->set_response_compress_type(brpc::COMPRESS_TYPE_GZIP);
 }
 
 bool ClusterStatImpl::GetRegionInfo(int64_t region_id, const pb::common::RegionMap& region_map,

@@ -2068,7 +2068,7 @@ void DoScanRegions(google::protobuf::RpcController * /*controller*/, const pb::c
 }
 
 void DoGetRangeRegionMap(google::protobuf::RpcController * /*controller*/,
-                         const pb::coordinator::GetRangeRegionMapRequest *request,
+                         const pb::coordinator::GetRangeRegionMapRequest * /*request*/,
                          pb::coordinator::GetRangeRegionMapResponse *response, TrackClosure *done,
                          std::shared_ptr<CoordinatorControl> coordinator_control,
                          std::shared_ptr<Engine> /*raft_engine*/) {
@@ -2151,7 +2151,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
-                      const pb::coordinator::GetGCSafePointRequest *request,
+                      const pb::coordinator::GetGCSafePointRequest * /*request*/,
                       pb::coordinator::GetGCSafePointResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
