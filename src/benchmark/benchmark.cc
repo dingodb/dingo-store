@@ -48,10 +48,14 @@ DEFINE_uint32(timelimit, 0, "Time limit in seconds");
 
 DEFINE_uint32(delay, 2, "Interval in seconds between intermediate reports");
 
+DEFINE_bool(is_single_region_txn, true, "Is single region txn");
+
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);
 DECLARE_uint32(value_size);
 DECLARE_uint32(batch_size);
+DECLARE_bool(is_pessimistic_txn);
+DECLARE_string(txn_isolation_level);
 
 namespace dingodb {
 namespace benchmark {
@@ -73,6 +77,7 @@ sdk::EngineType GetRawEngineType() {
   }
 
   LOG(FATAL) << fmt::format("Not support raw_engine: {}", FLAGS_raw_engine);
+  return sdk::EngineType::kLSM;
 }
 
 Stats::Stats() { latency_recorder_ = std::make_shared<bvar::LatencyRecorder>(); }
@@ -140,47 +145,50 @@ void Benchmark::Stop() {
   }
 }
 
-void Benchmark::Run() {
-  std::cout << COLOR_GREEN << "Arrange: " << COLOR_RESET << '\n';
-
-  auto region_entries = ArrangeRegion(FLAGS_region_num);
-
-  std::cout << '\n';
-
-  if (region_entries.size() == FLAGS_region_num) {
-    // Create multiple thread run benchmark
-    thread_entries_.reserve(FLAGS_concurrency);
-    for (int i = 0; i < FLAGS_concurrency; ++i) {
-      auto thread_entry = std::make_shared<ThreadEntry>();
-      thread_entry->client = client_;
-      thread_entry->region_entries = region_entries;
-
-      thread_entry->thread =
-          std::thread([this](ThreadEntryPtr thread_entry) mutable { ThreadRoutine(thread_entry); }, thread_entry);
-      thread_entries_.push_back(thread_entry);
-    }
-
-    size_t start_time = Helper::TimestampMs();
-
-    // Interval report
-    IntervalReport();
-
-    for (auto& thread_entry : thread_entries_) {
-      thread_entry->thread.join();
-    }
-
-    // Cumulative report
-    Report(true, Helper::TimestampMs() - start_time);
+bool Benchmark::Run() {
+  if (!Arrange()) {
+    Clean();
+    return false;
   }
 
-  // Drop region
-  for (auto& region_entry : region_entries) {
-    DropRegion(region_entry.region_id);
-  }
+  Launch();
+
+  size_t start_time = Helper::TimestampMs();
+
+  // Interval report
+  IntervalReport();
+
+  Wait();
+
+  // Cumulative report
+  Report(true, Helper::TimestampMs() - start_time);
+
+  Clean();
+  return true;
 }
 
-std::vector<RegionEntry> Benchmark::ArrangeRegion(int num) {
-  std::vector<RegionEntry> region_entries;
+bool Benchmark::Arrange() {
+  std::cout << COLOR_GREEN << "Arrange: " << COLOR_RESET << '\n';
+
+  region_entries_ = ArrangeRegion(FLAGS_region_num);
+  if (region_entries_.size() != FLAGS_region_num) {
+    return false;
+  }
+
+  if (!ArrangeOperation()) {
+    return false;
+  }
+
+  if (!ArrangeData()) {
+    return false;
+  }
+
+  std::cout << '\n';
+  return true;
+}
+
+std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
+  std::vector<RegionEntryPtr> region_entries;
 
   for (int i = 0; i < num; ++i) {
     std::string prefix = fmt::format("{}{:06}", FLAGS_prefix, i);
@@ -192,20 +200,66 @@ std::vector<RegionEntry> Benchmark::ArrangeRegion(int num) {
 
     std::cout << fmt::format("Create region({}) {} done", prefix, region_id) << '\n';
 
-    RegionEntry region_entry;
-    region_entry.prefix = prefix;
-    region_entry.region_id = region_id;
-
-    region_entry.operation = NewOperation(client_, prefix);
+    auto region_entry = std::make_shared<RegionEntry>();
+    region_entry->prefix = prefix;
+    region_entry->region_id = region_id;
 
     region_entries.push_back(region_entry);
   }
 
-  for (auto& region_entry : region_entries) {
-    region_entry.operation->Arrange();
+  return region_entries;
+}
+
+bool Benchmark::ArrangeOperation() {
+  uint32_t operation_num = std::max(FLAGS_concurrency, FLAGS_region_num);
+  for (uint32_t i = 0; i < operation_num; ++i) {
+    operations_.push_back(NewOperation(client_));
   }
 
-  return region_entries;
+  for (int i = 0; i < region_entries_.size(); ++i) {
+    region_entries_[i]->operation = operations_[i];
+  }
+
+  for (int i = 0; i < thread_entries_.size(); ++i) {
+    thread_entries_[i]->operation = operations_[i];
+  }
+
+  return true;
+}
+
+bool Benchmark::ArrangeData() {
+  for (auto& region_entry : region_entries_) {
+    region_entry->operation->Arrange(region_entry->prefix);
+  }
+
+  return true;
+}
+
+void Benchmark::Launch() {
+  // Create multiple thread run benchmark
+  thread_entries_.reserve(FLAGS_concurrency);
+  for (int i = 0; i < FLAGS_concurrency; ++i) {
+    auto thread_entry = std::make_shared<ThreadEntry>();
+    thread_entry->client = client_;
+    thread_entry->region_entries = region_entries_;
+
+    thread_entry->thread =
+        std::thread([this](ThreadEntryPtr thread_entry) mutable { ThreadRoutine(thread_entry); }, thread_entry);
+    thread_entries_.push_back(thread_entry);
+  }
+}
+
+void Benchmark::Wait() {
+  for (auto& thread_entry : thread_entries_) {
+    thread_entry->thread.join();
+  }
+}
+
+void Benchmark::Clean() {
+  // Drop region
+  for (auto& region_entry : region_entries_) {
+    DropRegion(region_entry->region_id);
+  }
 }
 
 int64_t Benchmark::CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
@@ -248,6 +302,18 @@ void Benchmark::DropRegion(int64_t region_id) {
   CHECK(status.IsOK()) << fmt::format("Drop region failed, {}", status.ToString());
 }
 
+static std::vector<std::string> ExtractPrefixs(const std::vector<RegionEntryPtr>& region_entries) {
+  std::vector<std::string> prefixes;
+  prefixes.reserve(region_entries.size());
+  for (const auto& region_entry : region_entries) {
+    prefixes.push_back(region_entry->prefix);
+  }
+
+  return prefixes;
+}
+
+static bool IsTransactionBenchmark() { return (FLAGS_benchmark == "filltxnseq" || FLAGS_benchmark == "filltxnrandom"); }
+
 void Benchmark::ThreadRoutine(ThreadEntryPtr thread_entry) {
   // Set signal
   sigset_t sig_set;
@@ -256,22 +322,32 @@ void Benchmark::ThreadRoutine(ThreadEntryPtr thread_entry) {
     exit(1);
   }
 
-  auto region_entries = thread_entry->region_entries;
+  if (IsTransactionBenchmark()) {
+    if (FLAGS_is_single_region_txn) {
+      ExecutePerRegion(thread_entry);
+    } else {
+      ExecuteMultiRegion(thread_entry);
+    }
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = thread_entry->client->NewRawKV(raw_kv);
-  if (!status.IsOK()) {
-    LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
+  } else {
+    ExecutePerRegion(thread_entry);
   }
+
+  thread_entry->is_stop.store(true, std::memory_order_relaxed);
+}
+
+void Benchmark::ExecutePerRegion(ThreadEntryPtr thread_entry) {
+  auto region_entries = thread_entry->region_entries;
 
   int64_t req_num_per_thread = static_cast<int64_t>(FLAGS_req_num / (FLAGS_concurrency * FLAGS_region_num));
   for (int64_t i = 0; i < req_num_per_thread; ++i) {
     if (thread_entry->is_stop.load(std::memory_order_relaxed)) {
       break;
     }
+
     for (const auto& region : region_entries) {
       size_t eplased_time;
-      auto result = region.operation->Execute();
+      auto result = region->operation->Execute(region->prefix);
       {
         std::lock_guard lock(mutex_);
         if (result.status.ok()) {
@@ -284,8 +360,31 @@ void Benchmark::ThreadRoutine(ThreadEntryPtr thread_entry) {
       }
     }
   }
+}
 
-  thread_entry->is_stop.store(true, std::memory_order_relaxed);
+void Benchmark::ExecuteMultiRegion(ThreadEntryPtr thread_entry) {
+  auto region_entries = thread_entry->region_entries;
+
+  auto prefixes = ExtractPrefixs(region_entries);
+  int64_t req_num_per_thread = static_cast<int64_t>(FLAGS_req_num / (FLAGS_concurrency * FLAGS_region_num));
+
+  for (int64_t i = 0; i < req_num_per_thread; ++i) {
+    if (thread_entry->is_stop.load(std::memory_order_relaxed)) {
+      break;
+    }
+
+    auto result = thread_entry->operation->Execute(prefixes);
+    {
+      std::lock_guard lock(mutex_);
+      if (result.status.ok()) {
+        stats_interval_->Add(result.eplased_time, result.write_bytes, result.read_bytes);
+        stats_cumulative_->Add(result.eplased_time, result.write_bytes, result.read_bytes);
+      } else {
+        stats_interval_->AddError();
+        stats_cumulative_->AddError();
+      }
+    }
+  }
 }
 
 void Benchmark::IntervalReport() {
@@ -408,6 +507,10 @@ void Environment::PrintParam() {
   std::cout << fmt::format("{:<16}: {:>32}", "key_size(byte)", FLAGS_key_size) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "value_size(byte)", FLAGS_value_size) << '\n';
   std::cout << fmt::format("{:<16}: {:>32}", "batch_size", FLAGS_batch_size) << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "is_single_region_txn", FLAGS_is_single_region_txn ? "true" : "false")
+            << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "is_pessimistic_txn", FLAGS_is_pessimistic_txn ? "true" : "false") << '\n';
+  std::cout << fmt::format("{:<16}: {:>32}", "txn_isolation_level", FLAGS_txn_isolation_level) << '\n';
   std::cout << '\n';
 }
 

@@ -63,13 +63,15 @@ struct RegionEntry {
 
   OperationPtr operation;
 };
+using RegionEntryPtr = std::shared_ptr<RegionEntry>;
 
 struct ThreadEntry {
   std::thread thread;
   std::atomic<bool> is_stop{false};
 
+  OperationPtr operation;
   std::shared_ptr<sdk::Client> client;
-  std::vector<RegionEntry> region_entries;
+  std::vector<RegionEntryPtr> region_entries;
 };
 using ThreadEntryPtr = std::shared_ptr<ThreadEntry>;
 
@@ -83,16 +85,28 @@ class Benchmark {
 
   void Stop();
 
-  void Run();
+  bool Run();
 
  private:
-  std::vector<RegionEntry> ArrangeRegion(int num);
+  bool Arrange();
+
+  std::vector<RegionEntryPtr> ArrangeRegion(int num);
+  bool ArrangeOperation();
+  bool ArrangeData();
+
+  void Launch();
+  void Wait();
+
+  void Clean();
 
   int64_t CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
                        sdk::EngineType engine_type, int replicas = 3);
   void DropRegion(int64_t region_id);
 
   void ThreadRoutine(ThreadEntryPtr thread_entry);
+
+  void ExecutePerRegion(ThreadEntryPtr thread_entry);
+  void ExecuteMultiRegion(ThreadEntryPtr thread_entry);
 
   bool IsStop();
 
@@ -102,7 +116,9 @@ class Benchmark {
   std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
   std::shared_ptr<sdk::Client> client_;
 
+  std::vector<RegionEntryPtr> region_entries_;
   std::vector<ThreadEntryPtr> thread_entries_;
+  std::vector<OperationPtr> operations_;
 
   std::mutex mutex_;
   StatsPtr stats_interval_;
