@@ -35,7 +35,7 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
     DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                    region->Id());
   } else {
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, 0, "being leader");
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, 0, "being leader");
   }
 
   return 0;
@@ -80,7 +80,7 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
     DINGO_LOG(WARNING) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                       region->Id());
   } else {
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, 0, "being follower");
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, 0, "being follower");
   }
 
   return 0;
