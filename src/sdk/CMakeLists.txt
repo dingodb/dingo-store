@@ -27,6 +27,7 @@ add_library(sdk
   transaction/txn_impl.cc
   transaction/txn_lock_resolver.cc
   transaction/txn_region_scanner_impl.cc
+  vector/vector_index_creator.cc
   utils/thread_pool_actuator.cc
   # TODO: use libary
   ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc

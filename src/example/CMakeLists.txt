@@ -21,3 +21,9 @@ add_executable(sdk_transaction_gc_op_all_and_lock_example
 target_link_libraries(sdk_transaction_gc_op_all_and_lock_example
     sdk
 )
+
+add_executable(sdk_vector_example
+    sdk_vector_example.cc)
+target_link_libraries(sdk_vector_example
+    sdk
+)

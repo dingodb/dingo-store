@@ -63,7 +63,6 @@ class Client : public std::enable_shared_from_this<Client> {
 
   Status DropRegion(int64_t region_id);
 
-  Status NewVectorIndexCreator(std::shared_ptr<VectorIndexCreator>& index_creator);
   // NOTE:: Caller must delete *index_creator when it is no longer needed.
   Status NewVectorIndexCreator(VectorIndexCreator** index_creator);
 

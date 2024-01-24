@@ -104,7 +104,6 @@ struct BruteForceParam {
   MetricType metric_type;
 };
 
-
 enum ValueType : uint8_t { kFloat, kUinT8 };
 
 struct Vector {
@@ -304,23 +303,21 @@ class VectorIndexCreator {
 
   VectorIndexCreator& SetName(const std::string& name);
 
-  VectorIndexCreator& SetRangePartitions(const std::vector<int64_t>& separator_id);
+  VectorIndexCreator& SetRangePartitions(std::vector<int64_t> separator_id);
 
   VectorIndexCreator& SetReplicaNum(int64_t num);
 
   // one of FlatParam/IvfFlatParam/HnswParam/DiskAnnParam/BruteForceParam, if set multiple, the last one will effective
-  VectorIndexCreator& SetFlatParam(FlatParam& params);
-  VectorIndexCreator& SetIvfFlatParam(IvfFlatParam& params);
-  VectorIndexCreator& SetIvfPqParam(IvfPqParam& params);
-  VectorIndexCreator& SetHnswParam(HnswParam& params);
+  VectorIndexCreator& SetFlatParam(const FlatParam& params);
+  VectorIndexCreator& SetIvfFlatParam(const IvfFlatParam& params);
+  VectorIndexCreator& SetIvfPqParam(const IvfPqParam& params);
+  VectorIndexCreator& SetHnswParam(const HnswParam& params);
   // VectorIndexCreator& SetDiskAnnParam(DiskAnnParam& params);
-  VectorIndexCreator& SetBruteForceParam(BruteForceParam& params);
+  VectorIndexCreator& SetBruteForceParam(const BruteForceParam& params);
 
   // VectorIndexCreator& SetAutoIncrement(bool auto_incr);
 
   // VectorIndexCreator& SetAutoIncrementStart(int64_t start_id);
-
-  VectorIndexCreator& Wait(bool wait);
 
   Status Create(int64_t& out_index_id);
 
