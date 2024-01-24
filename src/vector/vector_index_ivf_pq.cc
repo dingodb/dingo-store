@@ -37,6 +37,13 @@
 
 namespace dingodb {
 
+bvar::LatencyRecorder g_ivf_pq_upsert_latency("dingo_ivf_pq_upsert_latency");
+bvar::LatencyRecorder g_ivf_pq_search_latency("dingo_ivf_pq_search_latency");
+bvar::LatencyRecorder g_ivf_pq_range_search_latency("dingo_ivf_pq_range_search_latency");
+bvar::LatencyRecorder g_ivf_pq_delete_latency("dingo_ivf_pq_delete_latency");
+bvar::LatencyRecorder g_ivf_pq_load_latency("dingo_ivf_pq_load_latency");
+bvar::LatencyRecorder g_ivf_pq_train_latency("dingo_ivf_pq_train_latency");
+
 VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                    const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range), index_type_in_ivf_pq_(IndexTypeInIvfPq::kUnknow) {
@@ -73,6 +80,8 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
   if (vector_with_ids.empty()) {
     return butil::Status();
   }
+
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_upsert_latency);
 
   butil::Status status;
   {
@@ -120,6 +129,7 @@ butil::Status VectorIndexIvfPq::Add(const std::vector<pb::common::VectorWithId>&
 }
 
 butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_delete_latency);
   RWLockWriteGuard guard(&rw_lock_);
   if (delete_ids.empty()) {
     return butil::Status::OK();
@@ -139,6 +149,7 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
                                        std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
                                        const pb::common::VectorSearchParameter& parameter,
                                        std::vector<pb::index::VectorWithDistanceResult>& results) {
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_search_latency);
   RWLockReadGuard guard(&rw_lock_);
   butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
                                                 vector_with_ids, topk, filters, reconstruct, parameter, results);
@@ -160,6 +171,7 @@ butil::Status VectorIndexIvfPq::RangeSearch(std::vector<pb::common::VectorWithId
                                             std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                                             bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                             std::vector<pb::index::VectorWithDistanceResult>& results) {
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_range_search_latency);
   RWLockReadGuard guard(&rw_lock_);
   butil::Status status =
       InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch, false,
@@ -204,6 +216,8 @@ butil::Status VectorIndexIvfPq::Save(const std::string& path) {
 butil::Status VectorIndexIvfPq::Load(const std::string& path) {
   butil::Status status;
   std::string error_message;
+
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_load_latency);
 
   // The outside has been locked. Remove the locking operation here.
   // BAIDU_SCOPED_LOCK(mutex_);
@@ -337,6 +351,7 @@ butil::Status VectorIndexIvfPq::Train(const std::vector<float>& train_datas) {
 
   faiss::idx_t train_subvector_size = pq.cp.max_points_per_centroid * (1 << nbits_per_idx_);
 
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_train_latency);
   RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(DoIsTrained())) {
     std::string s = fmt::format("already trained . ignore");

@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "bvar/latency_recorder.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -46,6 +47,12 @@ DEFINE_uint32(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
 DEFINE_uint32(hnsw_vector_batch_size_per_task, 64, "hnsw vector batch size per task");
 
 DECLARE_int64(vector_max_batch_count);
+
+bvar::LatencyRecorder g_hnsw_upsert_latency("dingo_hnsw_upsert_latency");
+bvar::LatencyRecorder g_hnsw_search_latency("dingo_hnsw_search_latency");
+bvar::LatencyRecorder g_hnsw_range_search_latency("dingo_hnsw_range_search_latency");
+bvar::LatencyRecorder g_hnsw_delete_latency("dingo_hnsw_delete_latency");
+bvar::LatencyRecorder g_hnsw_load_latency("dingo_hnsw_load_latency");
 
 // Filter vecotr id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
@@ -194,6 +201,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
 
+  BvarLatencyGuard bvar_guard(&g_hnsw_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
 
   // Add data to index
@@ -243,6 +251,7 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids, bo
 
   butil::Status ret;
 
+  BvarLatencyGuard bvar_guard(&g_hnsw_delete_latency);
   RWLockWriteGuard guard(&rw_lock_);
 
   // Add data to index
@@ -271,7 +280,8 @@ butil::Status VectorIndexHnsw::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Load(const std::string& path) {
-  RWLockWriteGuard guard(&rw_lock_);
+  BvarLatencyGuard bvar_guard(&g_hnsw_load_latency);
+  // RWLockWriteGuard guard(&rw_lock_);
 
   // FIXME: need to prevent SEGV when delete old_hnsw_index
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
@@ -410,6 +420,7 @@ butil::Status VectorIndexHnsw::Search(std::vector<pb::common::VectorWithId> vect
 
   auto hnsw_filter = filters.empty() ? nullptr : std::make_shared<HnswRangeFilterFunctor>(filters);
 
+  BvarLatencyGuard bvar_guard(&g_hnsw_search_latency);
   RWLockReadGuard guard(&rw_lock_);
 
   if (search_parameter.hnsw().efsearch() > 0) {

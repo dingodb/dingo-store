@@ -43,6 +43,13 @@
 namespace dingodb {
 DEFINE_int64(ivf_flat_need_save_count, 10000, "ivf flat need save count");
 
+bvar::LatencyRecorder g_ivf_flat_upsert_latency("dingo_ivf_flat_upsert_latency");
+bvar::LatencyRecorder g_ivf_flat_search_latency("dingo_ivf_flat_search_latency");
+bvar::LatencyRecorder g_ivf_flat_range_search_latency("dingo_ivf_flat_range_search_latency");
+bvar::LatencyRecorder g_ivf_flat_delete_latency("dingo_ivf_flat_delete_latency");
+bvar::LatencyRecorder g_ivf_flat_load_latency("dingo_ivf_flat_load_latency");
+bvar::LatencyRecorder g_ivf_flat_train_latency("dingo_ivf_flat_train_latency");
+
 VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                        const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : VectorIndex(id, vector_index_parameter, epoch, range) {
@@ -94,6 +101,7 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
   // c++ 20 fix this bug.
   const std::unique_ptr<float[]>& vectors2 = vectors;
 
+  BvarLatencyGuard bvar_guard(&g_ivf_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("ivf flat not train. train first.");
@@ -156,6 +164,7 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
 
   size_t remove_count = 0;
   {
+    BvarLatencyGuard bvar_guard(&g_ivf_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
@@ -211,6 +220,7 @@ butil::Status VectorIndexIvfFlat::Search(std::vector<pb::common::VectorWithId> v
   const std::unique_ptr<float[]>& vectors2 = vectors;
 
   {
+    BvarLatencyGuard bvar_guard(&g_ivf_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
@@ -292,6 +302,7 @@ butil::Status VectorIndexIvfFlat::RangeSearch(std::vector<pb::common::VectorWith
   }
 
   {
+    BvarLatencyGuard bvar_guard(&g_ivf_flat_range_search_latency);
     RWLockReadGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf flat not train. train first. ignored");
@@ -410,6 +421,8 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
+
+  BvarLatencyGuard bvar_guard(&g_ivf_flat_load_latency);
 
   // The outside has been locked. Remove the locking operation here.
   // BAIDU_SCOPED_LOCK(mutex_);
@@ -599,6 +612,7 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
     DINGO_LOG(WARNING) << s;
   }
 
+  BvarLatencyGuard bvar_guard(&g_ivf_flat_train_latency);
   RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(DoIsTrained())) {
     std::string s = fmt::format("already trained . ignore");

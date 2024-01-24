@@ -42,6 +42,9 @@ namespace dingodb {
 DEFINE_int64(vector_index_max_range_search_result_count, 1024, "max range search result count");
 DEFINE_int64(vector_index_bruteforce_batch_count, 2048, "bruteforce batch count");
 
+bvar::LatencyRecorder g_bruteforce_search_latency("dingo_bruteforce_search_latency");
+bvar::LatencyRecorder g_bruteforce_range_search_latency("dingo_bruteforce_range_search_latency");
+
 butil::Status VectorReader::QueryVectorWithId(const pb::common::Range& region_range, int64_t partition_id,
                                               int64_t vector_id, bool with_vector_data,
                                               pb::common::VectorWithId& vector_with_id) {
@@ -1367,6 +1370,8 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
     return butil::Status();
   }
 
+  BvarLatencyGuard bvar_guard(&g_bruteforce_search_latency);
+
   // topk results
   std::vector<std::priority_queue<DistanceResult>> top_rsults;
   top_rsults.resize(vector_with_ids.size());
@@ -1525,6 +1530,8 @@ butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_i
   if (!iterator->Valid()) {
     return butil::Status();
   }
+
+  BvarLatencyGuard bvar_guard(&g_bruteforce_range_search_latency);
 
   // range search results
   std::vector<std::vector<std::pair<float, pb::common::VectorWithDistance>>> range_rsults;
