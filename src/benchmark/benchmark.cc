@@ -211,25 +211,14 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
 }
 
 bool Benchmark::ArrangeOperation() {
-  uint32_t operation_num = std::max(FLAGS_concurrency, FLAGS_region_num);
-  for (uint32_t i = 0; i < operation_num; ++i) {
-    operations_.push_back(NewOperation(client_));
-  }
-
-  for (int i = 0; i < region_entries_.size(); ++i) {
-    region_entries_[i]->operation = operations_[i];
-  }
-
-  for (int i = 0; i < thread_entries_.size(); ++i) {
-    thread_entries_[i]->operation = operations_[i];
-  }
+  operation_ = NewOperation(client_);
 
   return true;
 }
 
 bool Benchmark::ArrangeData() {
   for (auto& region_entry : region_entries_) {
-    region_entry->operation->Arrange(region_entry->prefix);
+    operation_->Arrange(region_entry);
   }
 
   return true;
@@ -312,7 +301,10 @@ static std::vector<std::string> ExtractPrefixs(const std::vector<RegionEntryPtr>
   return prefixes;
 }
 
-static bool IsTransactionBenchmark() { return (FLAGS_benchmark == "filltxnseq" || FLAGS_benchmark == "filltxnrandom"); }
+static bool IsTransactionBenchmark() {
+  return (FLAGS_benchmark == "filltxnseq" || FLAGS_benchmark == "filltxnrandom" || FLAGS_benchmark == "readtxnseq" ||
+          FLAGS_benchmark == "readtxnrandom" || FLAGS_benchmark == "readtxnmissing");
+}
 
 void Benchmark::ThreadRoutine(ThreadEntryPtr thread_entry) {
   // Set signal
@@ -345,9 +337,9 @@ void Benchmark::ExecutePerRegion(ThreadEntryPtr thread_entry) {
       break;
     }
 
-    for (const auto& region : region_entries) {
+    for (const auto& region_entry : region_entries) {
       size_t eplased_time;
-      auto result = region->operation->Execute(region->prefix);
+      auto result = operation_->Execute(region_entry);
       {
         std::lock_guard lock(mutex_);
         if (result.status.ok()) {
@@ -365,15 +357,14 @@ void Benchmark::ExecutePerRegion(ThreadEntryPtr thread_entry) {
 void Benchmark::ExecuteMultiRegion(ThreadEntryPtr thread_entry) {
   auto region_entries = thread_entry->region_entries;
 
-  auto prefixes = ExtractPrefixs(region_entries);
-  int64_t req_num_per_thread = static_cast<int64_t>(FLAGS_req_num / (FLAGS_concurrency * FLAGS_region_num));
+  int64_t req_num_per_thread = static_cast<int64_t>(FLAGS_req_num / FLAGS_concurrency);
 
   for (int64_t i = 0; i < req_num_per_thread; ++i) {
     if (thread_entry->is_stop.load(std::memory_order_relaxed)) {
       break;
     }
 
-    auto result = thread_entry->operation->Execute(prefixes);
+    auto result = operation_->Execute(region_entries);
     {
       std::lock_guard lock(mutex_);
       if (result.status.ok()) {
@@ -496,21 +487,21 @@ void Environment::PrintVersionInfo() {
 void Environment::PrintParam() {
   std::cout << COLOR_GREEN << "Parameter:" << COLOR_RESET << '\n';
 
-  std::cout << fmt::format("{:<16}: {:>32}", "benchmark", FLAGS_benchmark) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "region_num", FLAGS_region_num) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "prefix", FLAGS_prefix) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "raw_engine", FLAGS_raw_engine) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "concurrency", FLAGS_concurrency) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "req_num", FLAGS_req_num) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "delay(s)", FLAGS_delay) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "timelimit(s)", FLAGS_timelimit) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "key_size(byte)", FLAGS_key_size) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "value_size(byte)", FLAGS_value_size) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "batch_size", FLAGS_batch_size) << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "is_single_region_txn", FLAGS_is_single_region_txn ? "true" : "false")
+  std::cout << fmt::format("{:<24}: {:>32}", "benchmark", FLAGS_benchmark) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "region_num", FLAGS_region_num) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "prefix", FLAGS_prefix) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "raw_engine", FLAGS_raw_engine) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "concurrency", FLAGS_concurrency) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "req_num", FLAGS_req_num) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "delay(s)", FLAGS_delay) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "timelimit(s)", FLAGS_timelimit) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "key_size(byte)", FLAGS_key_size) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "value_size(byte)", FLAGS_value_size) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "batch_size", FLAGS_batch_size) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "is_single_region_txn", FLAGS_is_single_region_txn ? "true" : "false")
             << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "is_pessimistic_txn", FLAGS_is_pessimistic_txn ? "true" : "false") << '\n';
-  std::cout << fmt::format("{:<16}: {:>32}", "txn_isolation_level", FLAGS_txn_isolation_level) << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "is_pessimistic_txn", FLAGS_is_pessimistic_txn ? "true" : "false") << '\n';
+  std::cout << fmt::format("{:<24}: {:>32}", "txn_isolation_level", FLAGS_txn_isolation_level) << '\n';
   std::cout << '\n';
 }
 

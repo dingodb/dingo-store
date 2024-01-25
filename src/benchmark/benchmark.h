@@ -61,7 +61,10 @@ struct RegionEntry {
   int64_t region_id;
   std::string prefix;
 
-  OperationPtr operation;
+  std::atomic<size_t> counter{0};
+
+  int read_index{0};
+  std::vector<std::string> keys;
 };
 using RegionEntryPtr = std::shared_ptr<RegionEntry>;
 
@@ -69,7 +72,6 @@ struct ThreadEntry {
   std::thread thread;
   std::atomic<bool> is_stop{false};
 
-  OperationPtr operation;
   std::shared_ptr<sdk::Client> client;
   std::vector<RegionEntryPtr> region_entries;
 };
@@ -115,10 +117,10 @@ class Benchmark {
 
   std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
   std::shared_ptr<sdk::Client> client_;
+  OperationPtr operation_;
 
   std::vector<RegionEntryPtr> region_entries_;
   std::vector<ThreadEntryPtr> thread_entries_;
-  std::vector<OperationPtr> operations_;
 
   std::mutex mutex_;
   StatsPtr stats_interval_;
