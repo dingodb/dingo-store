@@ -749,7 +749,7 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
 
   auto task = std::make_shared<LoadOrBuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index, job_id,
                                                            fmt::format("{}-{}", job_id, trace));
-  if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTaskFast(vector_index_wrapper->Id(), task)) {
+  if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
     DINGO_LOG(ERROR) << fmt::format(
         "[vector_index.launch][index_id({})] Launch loadorbuild vector index failed, job({}) trace({})",
         vector_index_wrapper->Id(), job_id, trace);

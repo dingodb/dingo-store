@@ -1472,10 +1472,6 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
-  if (vector_index_wrapper->IsExceedsMaxElements()) {
-    return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
-                         fmt::format("Vector index {} exceeds max elements.", region->Id()));
-  }
 
   std::vector<int64_t> vector_ids;
   auto dimension = vector_index_wrapper->GetDimension();
@@ -1492,37 +1488,47 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
     // check if vector_id is legal
     const auto& vector = mutation.vector();
     if (mutation.op() == pb::store::Op::Put || mutation.op() == pb::store::PutIfAbsent) {
+      if (vector_index_wrapper->IsExceedsMaxElements()) {
+        return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
+                             fmt::format("Vector index {} exceeds max elements.", region->Id()));
+      }
+
       if (vector.id() == 0 || vector.id() == INT64_MAX || vector.id() < 0) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
                              "Param vector id is not allowed to be zero ,INT64_MAX or NEGATIVE");
       }
 
+      if (vector.id() != vector_id) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector id is not equal to vector_id in mutation key");
+      }
+
       if (vector.vector().float_values().empty()) {
         return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+      }
+
+      // check vector dimension
+      if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+        if (vector.vector().float_values().size() != dimension) {
+          return butil::Status(
+              pb::error::EILLEGAL_PARAMTETERS,
+              "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
+        }
+      } else {
+        if (vector.vector().binary_values().size() != dimension) {
+          return butil::Status(
+              pb::error::EILLEGAL_PARAMTETERS,
+              "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
+        }
       }
     } else if (mutation.op() == pb::store::Op::Delete) {
       continue;
     } else {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param op is error");
-    }
-
-    // check vector dimension
-    if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
-        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
-        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
-        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
-      if (vector.vector().float_values().size() != dimension) {
-        return butil::Status(
-            pb::error::EILLEGAL_PARAMTETERS,
-            "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
-      }
-    } else {
-      if (vector.vector().binary_values().size() != dimension) {
-        return butil::Status(
-            pb::error::EILLEGAL_PARAMTETERS,
-            "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
-      }
     }
   }
 
