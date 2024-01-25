@@ -18,13 +18,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "benchmark/benchmark.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 
 DEFINE_string(benchmark, "fillseq", "Benchmark type");
+DEFINE_validator(benchmark, [](const char*, const std::string& value) -> bool {
+  return dingodb::benchmark::IsSupportBenchmarkType(value);
+});
 
 DEFINE_uint32(key_size, 64, "Key size");
 DEFINE_uint32(value_size, 256, "Value size");
@@ -71,6 +76,16 @@ static OperationBuilderMap support_operations = {
      [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
        return std::make_shared<FillTxnRandomOperation>(client);
      }},
+    {"readtxnseq",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr { return std::make_shared<TxnReadSeqOperation>(client); }},
+    {"readtxnrandom",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<TxnReadRandomOperation>(client);
+     }},
+    {"readtxnmissing",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<TxnReadMissingOperation>(client);
+     }},
 };
 
 static sdk::TransactionIsolation GetTxnIsolationLevel() {
@@ -111,8 +126,11 @@ BaseOperation::BaseOperation(std::shared_ptr<sdk::Client> client) : client(clien
   }
 }
 
-Operation::Result BaseOperation::KvPut(const std::string& prefix, bool is_random) {
+Operation::Result BaseOperation::KvPut(RegionEntryPtr region_entry, bool is_random) {
   Operation::Result result;
+  std::string& prefix = region_entry->prefix;
+  auto& counter = region_entry->counter;
+
   int random_str_len = FLAGS_key_size - prefix.size();
 
   size_t count = counter.fetch_add(1, std::memory_order_relaxed);
@@ -135,8 +153,11 @@ Operation::Result BaseOperation::KvPut(const std::string& prefix, bool is_random
   return result;
 }
 
-Operation::Result BaseOperation::KvBatchPut(const std::string& prefix, bool is_random) {
+Operation::Result BaseOperation::KvBatchPut(RegionEntryPtr region_entry, bool is_random) {
   Operation::Result result;
+  std::string& prefix = region_entry->prefix;
+  auto& counter = region_entry->counter;
+
   int random_str_len = FLAGS_key_size - prefix.size();
 
   std::vector<sdk::KVPair> kvs;
@@ -196,8 +217,29 @@ Operation::Result BaseOperation::KvBatchGet(const std::vector<std::string>& keys
   return result;
 }
 
-Operation::Result BaseOperation::KvTxnPut(const std::vector<std::string>& prefixes, bool is_random) {
+Operation::Result BaseOperation::KvTxnPut(std::vector<RegionEntryPtr>& region_entries, bool is_random) {
+  std::vector<sdk::KVPair> kvs;
+  for (const auto& region_entry : region_entries) {
+    int random_str_len = FLAGS_key_size - region_entry->prefix.size();
+
+    sdk::KVPair kv;
+    size_t count = region_entry->counter.fetch_add(1, std::memory_order_relaxed);
+    kv.key = is_random ? EncodeRawKey(region_entry->prefix + GenRandomString(random_str_len))
+                       : EncodeRawKey(region_entry->prefix + GenSeqString(count, random_str_len));
+
+    kv.value = GenRandomString(FLAGS_value_size);
+    kvs.push_back(kv);
+  }
+
+  return KvTxnPut(kvs);
+}
+
+Operation::Result BaseOperation::KvTxnPut(const std::vector<sdk::KVPair>& kvs) {
   Operation::Result result;
+
+  for (const auto& kv : kvs) {
+    result.write_bytes += kv.key.size() + kv.value.size();
+  }
 
   int64_t start_time = Helper::TimestampUs();
 
@@ -211,17 +253,8 @@ Operation::Result BaseOperation::KvTxnPut(const std::vector<std::string>& prefix
     goto end;
   }
 
-  for (const auto& prefix : prefixes) {
-    int random_str_len = FLAGS_key_size - prefix.size();
-
-    size_t count = counter.fetch_add(1, std::memory_order_relaxed);
-    std::string key = is_random ? EncodeRawKey(prefix + GenRandomString(random_str_len))
-                                : EncodeRawKey(prefix + GenSeqString(count, random_str_len));
-
-    std::string value = GenRandomString(FLAGS_value_size);
-    result.write_bytes = key.size() + value.size();
-
-    result.status = txn->Put(key, value);
+  for (const auto& kv : kvs) {
+    result.status = txn->Put(kv.key, kv.value);
     if (!result.status.IsOK()) {
       goto end;
     }
@@ -241,37 +274,81 @@ end:
   return result;
 }
 
-Operation::Result BaseOperation::KvTxnBatchPut(const std::vector<std::string>& prefixes, bool is_random) {
-  Operation::Result result;
+Operation::Result BaseOperation::KvTxnBatchPut(std::vector<RegionEntryPtr>& region_entries, bool is_random) {
+  std::vector<sdk::KVPair> kvs;
+  for (const auto& region_entry : region_entries) {
+    int random_str_len = FLAGS_key_size - region_entry->prefix.size();
 
-  int64_t start_time = Helper::TimestampUs();
-
-  sdk::Transaction* txn = nullptr;
-  sdk::TransactionOptions options;
-  options.kind = FLAGS_is_pessimistic_txn ? sdk::TransactionKind::kPessimistic : sdk::TransactionKind::kOptimistic;
-  options.isolation = GetTxnIsolationLevel();
-
-  result.status = client->NewTransaction(options, &txn);
-  if (!result.status.IsOK()) {
-    goto end;
-  }
-
-  for (const auto& prefix : prefixes) {
-    int random_str_len = FLAGS_key_size - prefix.size();
-
-    std::vector<sdk::KVPair> kvs;
     for (int i = 0; i < FLAGS_batch_size; ++i) {
       sdk::KVPair kv;
-      size_t count = counter.fetch_add(1, std::memory_order_relaxed);
-      kv.key = is_random ? EncodeRawKey(prefix + GenRandomString(random_str_len))
-                         : EncodeRawKey(prefix + GenSeqString(count, random_str_len));
+      size_t count = region_entry->counter.fetch_add(1, std::memory_order_relaxed);
+      kv.key = is_random ? EncodeRawKey(region_entry->prefix + GenRandomString(random_str_len))
+                         : EncodeRawKey(region_entry->prefix + GenSeqString(count, random_str_len));
       kv.value = GenRandomString(FLAGS_value_size);
 
       kvs.push_back(kv);
-      result.write_bytes += kv.key.size() + kv.value.size();
     }
+  }
 
-    result.status = txn->BatchPut(kvs);
+  return KvTxnBatchPut(kvs);
+}
+
+Operation::Result BaseOperation::KvTxnBatchPut(const std::vector<sdk::KVPair>& kvs) {
+  Operation::Result result;
+
+  for (const auto& kv : kvs) {
+    result.write_bytes += kv.key.size() + kv.value.size();
+  }
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::Transaction* txn = nullptr;
+  sdk::TransactionOptions options;
+  options.kind = FLAGS_is_pessimistic_txn ? sdk::TransactionKind::kPessimistic : sdk::TransactionKind::kOptimistic;
+  options.isolation = GetTxnIsolationLevel();
+
+  result.status = client->NewTransaction(options, &txn);
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  result.status = txn->BatchPut(kvs);
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  result.status = txn->PreCommit();
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  result.status = txn->Commit();
+
+end:
+  result.eplased_time = Helper::TimestampUs() - start_time;
+  delete txn;
+
+  return result;
+}
+
+Operation::Result BaseOperation::KvTxnGet(const std::vector<std::string>& keys) {
+  Operation::Result result;
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::Transaction* txn = nullptr;
+  sdk::TransactionOptions options;
+  options.kind = FLAGS_is_pessimistic_txn ? sdk::TransactionKind::kPessimistic : sdk::TransactionKind::kOptimistic;
+  options.isolation = GetTxnIsolationLevel();
+
+  result.status = client->NewTransaction(options, &txn);
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  for (const auto& key : keys) {
+    std::string value;
+    result.status = txn->Get(key, value);
     if (!result.status.IsOK()) {
       goto end;
     }
@@ -291,15 +368,153 @@ end:
   return result;
 }
 
-Operation::Result FillSeqOperation::Execute(const std::string& prefix) {
-  return FLAGS_batch_size == 1 ? KvPut(prefix, false) : KvBatchPut(prefix, false);
+Operation::Result BaseOperation::KvTxnBatchGet(const std::vector<std::vector<std::string>>& keys) {
+  Operation::Result result;
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::Transaction* txn = nullptr;
+  sdk::TransactionOptions options;
+  options.kind = FLAGS_is_pessimistic_txn ? sdk::TransactionKind::kPessimistic : sdk::TransactionKind::kOptimistic;
+  options.isolation = GetTxnIsolationLevel();
+
+  result.status = client->NewTransaction(options, &txn);
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  for (const auto& batch_keys : keys) {
+    std::vector<sdk::KVPair> kvs;
+    result.status = txn->BatchGet(batch_keys, kvs);
+    if (!result.status.IsOK()) {
+      goto end;
+    }
+  }
+
+  result.status = txn->PreCommit();
+  if (!result.status.IsOK()) {
+    goto end;
+  }
+
+  result.status = txn->Commit();
+
+end:
+  result.eplased_time = Helper::TimestampUs() - start_time;
+  delete txn;
+
+  return result;
 }
 
-Operation::Result FillRandomOperation::Execute(const std::string& prefix) {
-  return FLAGS_batch_size == 1 ? KvPut(prefix, true) : KvBatchPut(prefix, true);
+Operation::Result FillSeqOperation::Execute(RegionEntryPtr region_entry) {
+  return FLAGS_batch_size == 1 ? KvPut(region_entry, false) : KvBatchPut(region_entry, false);
 }
 
-bool ReadOperation::Arrange(const std::string& prefix) {
+Operation::Result FillRandomOperation::Execute(RegionEntryPtr region_entry) {
+  return FLAGS_batch_size == 1 ? KvPut(region_entry, true) : KvBatchPut(region_entry, true);
+}
+
+bool ReadOperation::Arrange(RegionEntryPtr region_entry) {
+  std::string& prefix = region_entry->prefix;
+  int random_str_len = FLAGS_key_size - prefix.size();
+
+  uint32_t batch_size = 256;
+  std::vector<sdk::KVPair> kvs;
+  kvs.reserve(batch_size);
+  for (uint32_t i = 0; i < FLAGS_arrange_kv_num; ++i) {
+    sdk::KVPair kv;
+    size_t count = region_entry->counter.fetch_add(1, std::memory_order_relaxed);
+    kv.key = EncodeRawKey(prefix + GenSeqString(count, random_str_len));
+    kv.value = GenRandomString(FLAGS_value_size);
+
+    kvs.push_back(kv);
+    region_entry->keys.push_back(kv.key);
+
+    if ((i + 1) % batch_size == 0 || (i + 1 == FLAGS_arrange_kv_num)) {
+      auto status = raw_kv->BatchPut(kvs);
+      if (!status.ok()) {
+        return false;
+      }
+      kvs.clear();
+      std::cout << '\r' << fmt::format("Region({}) put progress [{}%]", prefix, i * 100 / FLAGS_arrange_kv_num)
+                << std::flush;
+    }
+  }
+
+  std::cout << "\r" << fmt::format("Region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
+
+  return true;
+}
+
+Operation::Result ReadSeqOperation::Execute(RegionEntryPtr region_entry) {
+  auto& keys = region_entry->keys;
+
+  if (FLAGS_batch_size <= 1) {
+    return KvGet(keys[region_entry->read_index++ % keys.size()]);
+  } else {
+    std::vector<std::string> keys;
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      keys.push_back(keys[region_entry->read_index++ % keys.size()]);
+    }
+    return KvBatchGet(keys);
+  }
+}
+
+Operation::Result ReadRandomOperation::Execute(RegionEntryPtr region_entry) {
+  auto& keys = region_entry->keys;
+
+  if (FLAGS_batch_size <= 1) {
+    uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
+    return KvGet(keys[index]);
+  } else {
+    std::vector<std::string> keys;
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
+      keys.push_back(keys[index]);
+    }
+    return KvBatchGet(keys);
+  }
+}
+
+Operation::Result ReadMissingOperation::Execute(RegionEntryPtr region_entry) {
+  std::string& prefix = region_entry->prefix;
+
+  int random_str_len = FLAGS_key_size + 4 - prefix.size();
+  if (FLAGS_batch_size <= 1) {
+    std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
+    return KvGet(key);
+  } else {
+    std::vector<std::string> keys;
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
+      keys.push_back(key);
+    }
+    return KvBatchGet(keys);
+  }
+}
+
+Operation::Result FillTxnSeqOperation::Execute(RegionEntryPtr region_entry) {
+  std::vector<RegionEntryPtr> region_entries = {region_entry};
+  return FLAGS_batch_size == 1 ? KvTxnPut(region_entries, false) : KvTxnBatchPut(region_entries, false);
+}
+
+Operation::Result FillTxnSeqOperation::Execute(std::vector<RegionEntryPtr>& region_entries) {
+  return FLAGS_batch_size == 1 ? KvTxnPut(region_entries, false) : KvTxnBatchPut(region_entries, false);
+}
+
+Operation::Result FillTxnRandomOperation::Execute(RegionEntryPtr region_entry) {
+  std::vector<RegionEntryPtr> region_entries = {region_entry};
+  return FLAGS_batch_size == 1 ? KvTxnPut(region_entries, true) : KvTxnBatchPut(region_entries, true);
+}
+
+Operation::Result FillTxnRandomOperation::Execute(std::vector<RegionEntryPtr>& region_entries) {
+  return FLAGS_batch_size == 1 ? KvTxnPut(region_entries, true) : KvTxnBatchPut(region_entries, true);
+}
+
+bool TxnReadOperation::Arrange(RegionEntryPtr region_entry) {
+  auto& prefix = region_entry->prefix;
+  auto& counter = region_entry->counter;
+  auto& keys = region_entry->keys;
+
   int random_str_len = FLAGS_key_size - prefix.size();
 
   uint32_t batch_size = 256;
@@ -315,8 +530,8 @@ bool ReadOperation::Arrange(const std::string& prefix) {
     keys.push_back(kv.key);
 
     if ((i + 1) % batch_size == 0 || (i + 1 == FLAGS_arrange_kv_num)) {
-      auto status = raw_kv->BatchPut(kvs);
-      if (!status.ok()) {
+      auto result = KvTxnBatchPut(kvs);
+      if (!result.status.ok()) {
         return false;
       }
       kvs.clear();
@@ -325,38 +540,148 @@ bool ReadOperation::Arrange(const std::string& prefix) {
     }
   }
 
-  std::cout << "\r" << fmt::format("Region({}) put ............ done", prefix) << '\n';
+  std::cout << "\r" << fmt::format("Region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
 
   return true;
 }
 
-Operation::Result ReadSeqOperation::Execute(const std::string&) { return KvGet(keys[index_++ % keys.size()]); }
+Operation::Result TxnReadSeqOperation::Execute(RegionEntryPtr region_entry) {
+  auto& keys = region_entry->keys;
 
-Operation::Result ReadRandomOperation::Execute(const std::string&) {
-  uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
-  return KvGet(keys[index]);
+  if (FLAGS_batch_size <= 1) {
+    return KvTxnGet({keys[region_entry->read_index++ % keys.size()]});
+  } else {
+    std::vector<std::string> batch_keys;
+    batch_keys.reserve(FLAGS_batch_size);
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      batch_keys.push_back(keys[region_entry->read_index++ % keys.size()]);
+    }
+    return KvTxnBatchGet({batch_keys});
+  }
 }
 
-Operation::Result ReadMissingOperation::Execute(const std::string& prefix) {
+Operation::Result TxnReadSeqOperation::Execute(std::vector<RegionEntryPtr>& region_entries) {
+  if (FLAGS_batch_size <= 1) {
+    std::vector<std::string> tmp_keys;
+    for (auto& region_entry : region_entries) {
+      auto& keys = region_entry->keys;
+      tmp_keys.push_back(keys[region_entry->read_index++ % keys.size()]);
+    }
+
+    return KvTxnGet(tmp_keys);
+  } else {
+    std::vector<std::vector<std::string>> tmp_keys;
+    for (auto& region_entry : region_entries) {
+      auto& keys = region_entry->keys;
+
+      std::vector<std::string> batch_keys;
+      batch_keys.reserve(FLAGS_batch_size);
+      for (int i = 0; i < FLAGS_batch_size; ++i) {
+        batch_keys.push_back(keys[region_entry->read_index++ % keys.size()]);
+      }
+
+      tmp_keys.push_back(batch_keys);
+    }
+
+    return KvTxnBatchGet(tmp_keys);
+  }
+}
+
+Operation::Result TxnReadRandomOperation::Execute(RegionEntryPtr region_entry) {
+  auto& keys = region_entry->keys;
+
+  if (FLAGS_batch_size <= 1) {
+    uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
+    return KvTxnGet({keys[index]});
+  } else {
+    std::vector<std::string> batch_keys;
+    batch_keys.reserve(FLAGS_batch_size);
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
+      batch_keys.push_back(keys[index]);
+    }
+    return KvTxnBatchGet({batch_keys});
+  }
+}
+
+Operation::Result TxnReadRandomOperation::Execute(std::vector<RegionEntryPtr>& region_entries) {
+  if (FLAGS_batch_size <= 1) {
+    std::vector<std::string> tmp_keys;
+    for (auto& region_entry : region_entries) {
+      auto& keys = region_entry->keys;
+      uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
+      tmp_keys.push_back(keys[index]);
+    }
+
+    return KvTxnGet(tmp_keys);
+  } else {
+    std::vector<std::vector<std::string>> tmp_keys;
+    for (auto& region_entry : region_entries) {
+      auto& keys = region_entry->keys;
+
+      std::vector<std::string> batch_keys;
+      batch_keys.reserve(FLAGS_batch_size);
+      for (int i = 0; i < FLAGS_batch_size; ++i) {
+        uint32_t index = Helper::GenerateRealRandomInteger(0, UINT32_MAX) % keys.size();
+        batch_keys.push_back(keys[index]);
+      }
+
+      tmp_keys.push_back(batch_keys);
+    }
+
+    return KvTxnBatchGet(tmp_keys);
+  }
+}
+
+Operation::Result TxnReadMissingOperation::Execute(RegionEntryPtr region_entry) {
+  auto& prefix = region_entry->prefix;
+
   int random_str_len = FLAGS_key_size + 4 - prefix.size();
-  std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
-  return KvGet(key);
+  if (FLAGS_batch_size <= 1) {
+    std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
+    return KvTxnGet({key});
+  } else {
+    std::vector<std::string> batch_keys;
+    batch_keys.reserve(FLAGS_batch_size);
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
+      batch_keys.push_back(key);
+    }
+    return KvTxnBatchGet({batch_keys});
+  }
 }
 
-Operation::Result FillTxnSeqOperation::Execute(const std::string& prefix) {
-  return FLAGS_batch_size == 1 ? KvTxnPut({prefix}, false) : KvTxnBatchPut({prefix}, false);
-}
+Operation::Result TxnReadMissingOperation::Execute(std::vector<RegionEntryPtr>& region_entries) {
+  if (FLAGS_batch_size <= 1) {
+    std::vector<std::string> tmp_keys;
+    for (auto& region_entry : region_entries) {
+      auto& prefix = region_entry->prefix;
+      int random_str_len = FLAGS_key_size + 4 - prefix.size();
 
-Operation::Result FillTxnSeqOperation::Execute(const std::vector<std::string>& prefixes) {
-  return FLAGS_batch_size == 1 ? KvTxnPut(prefixes, false) : KvTxnBatchPut(prefixes, false);
-}
+      std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
+      tmp_keys.push_back(key);
+    }
 
-Operation::Result FillTxnRandomOperation::Execute(const std::string& prefix) {
-  return FLAGS_batch_size == 1 ? KvTxnPut({prefix}, true) : KvTxnBatchPut({prefix}, true);
-}
+    return KvTxnGet(tmp_keys);
+  } else {
+    std::vector<std::vector<std::string>> tmp_keys;
+    for (auto& region_entry : region_entries) {
+      auto& keys = region_entry->keys;
+      auto& prefix = region_entry->prefix;
+      int random_str_len = FLAGS_key_size + 4 - prefix.size();
 
-Operation::Result FillTxnRandomOperation::Execute(const std::vector<std::string>& prefixes) {
-  return FLAGS_batch_size == 1 ? KvTxnPut(prefixes, true) : KvTxnBatchPut(prefixes, true);
+      std::vector<std::string> batch_keys;
+      batch_keys.reserve(FLAGS_batch_size);
+      for (int i = 0; i < FLAGS_batch_size; ++i) {
+        std::string key = EncodeRawKey(prefix + GenRandomString(random_str_len));
+        batch_keys.push_back(key);
+      }
+
+      tmp_keys.push_back(batch_keys);
+    }
+
+    return KvTxnBatchGet(tmp_keys);
+  }
 }
 
 bool IsSupportBenchmarkType(const std::string& benchmark) {

@@ -990,11 +990,15 @@ std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {
 }
 
 std::string Server::GetAllWorkSetPendingTaskCount() {
-  uint64_t store_servcie_read_pending_task_count = store_service_read_worker_set_->PendingTaskCount();
-  uint64_t store_servcie_write_pending_task_count = store_service_write_worker_set_->PendingTaskCount();
-  uint64_t index_servcie_read_pending_task_count = index_service_read_worker_set_->PendingTaskCount();
-  uint64_t index_servcie_write_pending_task_count = index_service_write_worker_set_->PendingTaskCount();
-  uint64_t raft_apply_pending_task_count = raft_apply_worker_set_->PendingTaskCount();
+  uint64_t store_servcie_read_pending_task_count =
+      store_service_read_worker_set_ ? store_service_read_worker_set_->PendingTaskCount() : 0;
+  uint64_t store_servcie_write_pending_task_count =
+      store_service_write_worker_set_ ? store_service_write_worker_set_->PendingTaskCount() : 0;
+  uint64_t index_servcie_read_pending_task_count =
+      index_service_read_worker_set_ ? index_service_read_worker_set_->PendingTaskCount() : 0;
+  uint64_t index_servcie_write_pending_task_count =
+      index_service_write_worker_set_ ? index_service_write_worker_set_->PendingTaskCount() : 0;
+  uint64_t raft_apply_pending_task_count = raft_apply_worker_set_ ? raft_apply_worker_set_->PendingTaskCount() : 0;
 
   return fmt::format("store_read({}) store_write({}) index_read({}) index_write({}) raft_apply({})",
                      store_servcie_read_pending_task_count, store_servcie_write_pending_task_count,
