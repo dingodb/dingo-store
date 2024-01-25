@@ -1258,8 +1258,9 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
     ADD_REGION_CHANGE_RECORD(*region_cmd);
     // Load vector index.
     DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, region_cmd->job_id(),
-                                                     "hold vector index");
+    // use slow load
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, true, false, region_cmd->job_id(),
+                                                        "hold vector index");
 
   } else {
     // Delete vector index.

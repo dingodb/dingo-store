@@ -328,26 +328,34 @@ std::string LoadAsyncBuildVectorIndexTask::Trace() {
 void LoadAsyncBuildVectorIndexTask::Run() {
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.loadasyncbuild][index_id({})][trace({})] run, pending tasks({}/{}) total running({}/{}) "
-      "wait_time({}).",
+      "wait_time({}) is_fast_load ({}).",
       vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->LoadorbuildingNum(),
       vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum(),
-      VectorIndexManager::GetVectorIndexTaskRunningNum(), Helper::TimestampMs() - start_time_);
+      VectorIndexManager::GetVectorIndexTaskRunningNum(), Helper::TimestampMs() - start_time_, is_fast_load_);
 
   int64_t start_time = Helper::TimestampMs();
   VectorIndexManager::IncVectorIndexTaskRunningNum();
-  VectorIndexManager::IncVectorIndexLoadorbuildTaskRunningNum();
+  if (is_fast_load_) {
+    VectorIndexManager::IncVectorIndexFastLoadTaskRunningNum();
+  } else {
+    VectorIndexManager::IncVectorIndexSlowLoadTaskRunningNum();
+  }
   ON_SCOPE_EXIT([&]() {
     VectorIndexManager::DecVectorIndexTaskRunningNum();
-    VectorIndexManager::DecVectorIndexLoadorbuildTaskRunningNum();
+    if (is_fast_load_) {
+      VectorIndexManager::DecVectorIndexFastLoadTaskRunningNum();
+    } else {
+      VectorIndexManager::DecVectorIndexSlowLoadTaskRunningNum();
+    }
     vector_index_wrapper_->DecPendingTaskNum();
     vector_index_wrapper_->DecLoadoruildingNum();
 
     LOG(INFO) << fmt::format(
         "[vector_index.loadasyncbuild][index_id({})][trace({})] run finish, pending tasks({}/{}) total running({}/{}) "
-        "run_time({}).",
+        "run_time({}) is_fast_load ({}).",
         vector_index_wrapper_->Id(), trace_, vector_index_wrapper_->LoadorbuildingNum(),
-        vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexLoadorbuildTaskRunningNum(),
-        VectorIndexManager::GetVectorIndexTaskRunningNum(), Helper::TimestampMs() - start_time);
+        vector_index_wrapper_->PendingTaskNum(), VectorIndexManager::GetVectorIndexFastLoadTaskRunningNum(),
+        VectorIndexManager::GetVectorIndexTaskRunningNum(), Helper::TimestampMs() - start_time, is_fast_load_);
   });
 
   // Get region meta
@@ -361,8 +369,8 @@ void LoadAsyncBuildVectorIndexTask::Run() {
   if (state == pb::common::StoreRegionState::DELETING || state == pb::common::StoreRegionState::DELETED ||
       state == pb::common::StoreRegionState::ORPHAN || state == pb::common::StoreRegionState::TOMBSTONE) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.loadasyncbuild][index_id({})][trace({})] region state({}) not match.",
-        vector_index_wrapper_->Id(), trace_, pb::common::StoreRegionState_Name(state));
+        "[vector_index.loadasyncbuild][index_id({})][trace({})] region state({}) not match. is_fast_load ({})",
+        vector_index_wrapper_->Id(), trace_, pb::common::StoreRegionState_Name(state), is_fast_load_);
     return;
   }
 
@@ -402,8 +410,14 @@ void LoadAsyncBuildVectorIndexTask::Run() {
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     auto status = VectorIndexSnapshotManager::PullLastSnapshotFromPeers(snapshot_set, region->Epoch());
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.loadasyncbuild][region({})][trace({})] pull vector index last snapshot done, error: {}",
-        vector_index_wrapper_->Id(), trace_, Helper::PrintStatus(status));
+        "[vector_index.loadasyncbuild][region({})][trace({})] pull vector index last snapshot done, error: {} version: "
+        "{} applied_index {}",
+        vector_index_wrapper_->Id(), trace_, Helper::PrintStatus(status), region->Epoch().version(), applied_index);
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.loadasyncbuild][region({})][trace({})] skip pull vector index last snapshot for new create "
+        "region, version: {} applied_index {}",
+        vector_index_wrapper_->Id(), trace_, region->Epoch().version(), applied_index);
   }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadasyncbuilding vector index {}", region->Id()));
@@ -413,12 +427,12 @@ void LoadAsyncBuildVectorIndexTask::Run() {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadasyncbuilded vector index {} failed", region->Id()));
 
     // start to do async build vector index.
-    bool is_fast_build = (region->Epoch().version() == 1) && (applied_index <= FLAGS_vector_fast_build_log_gap);
+    bool is_fast_build =
+        is_fast_load_ && (region->Epoch().version() == 1) && (applied_index <= FLAGS_vector_fast_build_log_gap);
 
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.load][index_id({}_v{})][trace({})] load vector index failed, will try to do async build, call "
-        "LaunchBuildVectorIndex "
-        "error {} applied_index {} is_fast_build {} region_version {}",
+        "LaunchBuildVectorIndex error {} applied_index {} is_fast_build {} region_version {}",
         vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str(), applied_index,
         is_fast_build, region->Epoch().version());
 
@@ -446,10 +460,18 @@ void BuildVectorIndexTask::Run() {
 
   int64_t start_time = Helper::TimestampMs();
   VectorIndexManager::IncVectorIndexTaskRunningNum();
-  VectorIndexManager::IncVectorIndexRebuildTaskRunningNum();
+  if (is_fast_build_) {
+    VectorIndexManager::IncVectorIndexFastBuildTaskRunningNum();
+  } else {
+    VectorIndexManager::IncVectorIndexSlowBuildTaskRunningNum();
+  }
   ON_SCOPE_EXIT([&]() {
     VectorIndexManager::DecVectorIndexTaskRunningNum();
-    VectorIndexManager::DecVectorIndexRebuildTaskRunningNum();
+    if (is_fast_build_) {
+      VectorIndexManager::DecVectorIndexFastBuildTaskRunningNum();
+    } else {
+      VectorIndexManager::DecVectorIndexSlowBuildTaskRunningNum();
+    }
     vector_index_wrapper_->DecPendingTaskNum();
     vector_index_wrapper_->DecRebuildingNum();
 
@@ -519,6 +541,14 @@ bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_save_task_running_nu
     "dingo_vector_index_save_task_running_num");
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_loadorbuild_task_running_num(
     "dingo_vector_index_loadorbuild_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_fast_load_task_running_num(
+    "dingo_vector_index_fast_load_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_slow_load_task_running_num(
+    "dingo_vector_index_slow_load_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_fast_build_task_running_num(
+    "dingo_vector_index_fast_build_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_slow_build_task_running_num(
+    "dingo_vector_index_slow_build_task_running_num");
 
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_task_total_num("dingo_vector_index_task_total_num");
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_rebuild_task_total_num(
@@ -527,11 +557,23 @@ bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_save_task_total_num(
     "dingo_vector_index_save_task_total_num");
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_loadorbuild_task_total_num(
     "dingo_vector_index_loadorbuild_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_fast_load_task_total_num(
+    "dingo_vector_index_fast_load_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_slow_load_task_total_num(
+    "dingo_vector_index_slow_load_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_fast_build_task_total_num(
+    "dingo_vector_index_fast_build_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_slow_build_task_total_num(
+    "dingo_vector_index_slow_build_task_total_num");
 
 std::atomic<int> VectorIndexManager::vector_index_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_rebuild_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_save_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_loadorbuild_task_running_num = 0;
+std::atomic<int> VectorIndexManager::vector_index_fast_load_task_running_num = 0;
+std::atomic<int> VectorIndexManager::vector_index_slow_load_task_running_num = 0;
+std::atomic<int> VectorIndexManager::vector_index_fast_build_task_running_num = 0;
+std::atomic<int> VectorIndexManager::vector_index_slow_build_task_running_num = 0;
 
 int VectorIndexManager::GetVectorIndexTaskRunningNum() { return vector_index_task_running_num.load(); }
 
@@ -585,6 +627,66 @@ void VectorIndexManager::IncVectorIndexLoadorbuildTaskRunningNum() {
 void VectorIndexManager::DecVectorIndexLoadorbuildTaskRunningNum() {
   vector_index_loadorbuild_task_running_num.fetch_sub(1);
   bvar_vector_index_loadorbuild_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexFastLoadTaskRunningNum() {
+  return vector_index_fast_load_task_running_num.load();
+}
+
+void VectorIndexManager::IncVectorIndexFastLoadTaskRunningNum() {
+  vector_index_fast_load_task_running_num.fetch_add(1);
+  bvar_vector_index_fast_load_task_running_num << 1;
+  bvar_vector_index_fast_load_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexFastLoadTaskRunningNum() {
+  vector_index_fast_load_task_running_num.fetch_sub(1);
+  bvar_vector_index_fast_load_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexSlowLoadTaskRunningNum() {
+  return vector_index_slow_load_task_running_num.load();
+}
+
+void VectorIndexManager::IncVectorIndexSlowLoadTaskRunningNum() {
+  vector_index_slow_load_task_running_num.fetch_add(1);
+  bvar_vector_index_slow_load_task_running_num << 1;
+  bvar_vector_index_slow_load_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexSlowLoadTaskRunningNum() {
+  vector_index_slow_load_task_running_num.fetch_sub(1);
+  bvar_vector_index_slow_load_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexFastBuildTaskRunningNum() {
+  return vector_index_fast_build_task_running_num.load();
+}
+
+void VectorIndexManager::IncVectorIndexFastBuildTaskRunningNum() {
+  vector_index_fast_build_task_running_num.fetch_add(1);
+  bvar_vector_index_fast_build_task_running_num << 1;
+  bvar_vector_index_fast_build_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexFastBuildTaskRunningNum() {
+  vector_index_fast_build_task_running_num.fetch_sub(1);
+  bvar_vector_index_fast_build_task_running_num << -1;
+}
+
+int VectorIndexManager::GetVectorIndexSlowBuildTaskRunningNum() {
+  return vector_index_slow_build_task_running_num.load();
+}
+
+void VectorIndexManager::IncVectorIndexSlowBuildTaskRunningNum() {
+  vector_index_slow_build_task_running_num.fetch_add(1);
+  bvar_vector_index_slow_build_task_running_num << 1;
+  bvar_vector_index_slow_build_task_total_num << 1;
+}
+
+void VectorIndexManager::DecVectorIndexSlowBuildTaskRunningNum() {
+  vector_index_slow_build_task_running_num.fetch_sub(1);
+  bvar_vector_index_slow_build_task_running_num << -1;
 }
 
 bool VectorIndexManager::Init() {
@@ -760,8 +862,8 @@ void VectorIndexManager::LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vect
 }
 
 void VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                                         bool is_temp_hold_vector_index, int64_t job_id,
-                                                         const std::string& trace) {
+                                                         bool is_temp_hold_vector_index, bool is_fast_load,
+                                                         int64_t job_id, const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
   if (is_temp_hold_vector_index) {
@@ -770,23 +872,32 @@ void VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(VectorIndexWrapperPtr v
 
   if (vector_index_wrapper->LoadorbuildingNum() > 0) {
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.launch][index_id({})] Already exist loadorbuild on execute queue, job({}) trace({}).",
+        "[vector_index.launch][index_id({})] Already exist loadasyncbuild on execute queue, job({}) trace({}).",
         vector_index_wrapper->Id(), job_id, trace);
     return;
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})] Launch loadorbuild vector index, pending tasks({}) total running({}) "
-      "job({}) trace({}).",
-      vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum(), job_id,
-      trace);
+      "[vector_index.launch][index_id({})] Launch loadasyncbuild vector index, pending tasks({}) total running({}) "
+      "job({}) trace({}) is_fast_load({}).",
+      vector_index_wrapper->Id(), vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum(), job_id, trace,
+      is_fast_load);
 
-  auto task = std::make_shared<LoadAsyncBuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index, job_id,
-                                                              fmt::format("{}-{}", job_id, trace));
-  if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTaskFast(vector_index_wrapper->Id(), task)) {
+  auto task = std::make_shared<LoadAsyncBuildVectorIndexTask>(
+      vector_index_wrapper, is_temp_hold_vector_index, is_fast_load, job_id, fmt::format("{}-{}", job_id, trace));
+
+  bool ret = false;
+  if (is_fast_load) {
+    ret = Server::GetInstance().GetVectorIndexManager()->ExecuteTaskFast(vector_index_wrapper->Id(), task);
+  } else {
+    ret = Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task);
+  }
+
+  if (!ret) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.launch][index_id({})] Launch loadorbuild vector index failed, job({}) trace({})",
-        vector_index_wrapper->Id(), job_id, trace);
+        "[vector_index.launch][index_id({})] Launch loadasyncbuild vector index failed, job({}) trace({}) is_fast_load "
+        "({})",
+        vector_index_wrapper->Id(), job_id, trace, is_fast_load);
   } else {
     vector_index_wrapper->IncLoadoruildingNum();
     vector_index_wrapper->IncPendingTaskNum();
@@ -1127,8 +1238,8 @@ void VectorIndexManager::LaunchBuildVectorIndex(VectorIndexWrapperPtr vector_ind
       vector_index_wrapper->Id(), trace, vector_index_wrapper->RebuildingNum(), is_fast_build,
       vector_index_wrapper->PendingTaskNum(), GetVectorIndexTaskRunningNum());
 
-  auto task = std::make_shared<BuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index, job_id,
-                                                     fmt::format("{}-{}", job_id, trace));
+  auto task = std::make_shared<BuildVectorIndexTask>(vector_index_wrapper, is_temp_hold_vector_index, is_fast_build,
+                                                     job_id, fmt::format("{}-{}", job_id, trace));
   bool ret = false;
   if (is_fast_build) {
     ret = Server::GetInstance().GetVectorIndexManager()->ExecuteTaskFast(vector_index_wrapper->Id(), task);

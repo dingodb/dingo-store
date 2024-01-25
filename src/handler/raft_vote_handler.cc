@@ -18,11 +18,11 @@
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "server/server.h"
-#include "vector/vector_index_snapshot_manager.h"
 
 namespace dingodb {
+
+DECLARE_int64(vector_fast_build_log_gap);
 
 int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
   if (region == nullptr) {
@@ -35,7 +35,22 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
     DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                    region->Id());
   } else {
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, 0, "being leader");
+    bool is_fast_load = false;
+
+    if (region->Epoch().version() == 1) {
+      auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
+      int64_t applied_index = -1;
+      if (raft_meta != nullptr) {
+        applied_index = raft_meta->AppliedId();
+
+        if (applied_index < FLAGS_vector_fast_build_log_gap) {
+          // use fast load
+          is_fast_load = true;
+        }
+      }
+    }
+
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "being leader");
   }
 
   return 0;
@@ -80,7 +95,22 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
     DINGO_LOG(WARNING) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                       region->Id());
   } else {
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, 0, "being follower");
+    bool is_fast_load = false;
+
+    if (region->Epoch().version() == 1) {
+      auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
+      int64_t applied_index = -1;
+      if (raft_meta != nullptr) {
+        applied_index = raft_meta->AppliedId();
+
+        if (applied_index < FLAGS_vector_fast_build_log_gap) {
+          // use fast load
+          is_fast_load = true;
+        }
+      }
+    }
+
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "being follower");
   }
 
   return 0;
