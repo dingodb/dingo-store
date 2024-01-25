@@ -263,6 +263,11 @@ butil::Status Storage::KvScanBeginV2(std::shared_ptr<Context> ctx, const std::st
 
   ScanManagerV2& manager = ScanManagerV2::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.CreateScan(scan_id);
+  if (!scan) {
+    std::string s = fmt::format("ScanManagerV2::CreateScan failed, scan_id  {} repeated.", scan_id);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
 
   auto raw_engine = engine_->GetRawEngine(ctx->RawEngineType());
   status = scan->Open(std::to_string(scan_id), raw_engine, cf_name);
@@ -292,8 +297,9 @@ butil::Status Storage::KvScanContinueV2(std::shared_ptr<Context> /*ctx*/, int64_
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
   if (!scan) {
-    DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
-    return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
+    std::string s = fmt::format("scan_id: {} not found", scan_id);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::ESCAN_NOTFOUND, s);
   }
 
   status = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, kvs, has_more);
@@ -312,8 +318,9 @@ butil::Status Storage::KvScanReleaseV2(std::shared_ptr<Context> /*ctx*/, int64_t
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
   if (!scan) {
-    DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
-    return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
+    std::string s = fmt::format("scan_id: {} not found", scan_id);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::ESCAN_NOTFOUND, s);
   }
 
   status = ScanHandler::ScanRelease(scan, std::to_string(scan_id));
