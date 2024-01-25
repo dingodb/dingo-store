@@ -560,7 +560,8 @@ int RaftLoadSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
       vector_index_wrapper->ClearVectorIndex("load raft snapshot");
     }
 
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, 0, "load raft snapshot");
+    // use slow load
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, false, 0, "load raft snapshot");
   }
 
   return 0;

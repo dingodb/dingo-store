@@ -183,7 +183,8 @@ bool VectorIndexWrapper::Recover() {
 
   if (IsTempHoldVectorIndex()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] need bootstrap build vector index.", Id());
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(GetSelf(), false, 0, "recover");
+    // use slow load
+    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(GetSelf(), false, false, 0, "recover");
   }
 
   return true;

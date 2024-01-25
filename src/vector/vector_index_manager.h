@@ -103,9 +103,10 @@ class LoadOrBuildVectorIndexTask : public TaskRunnable {
 class LoadAsyncBuildVectorIndexTask : public TaskRunnable {
  public:
   LoadAsyncBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
-                                int64_t job_id, const std::string& trace)
+                                bool is_fast_load, int64_t job_id, const std::string& trace)
       : vector_index_wrapper_(vector_index_wrapper),
         is_temp_hold_vector_index_(is_temp_hold_vector_index),
+        is_fast_load_(is_fast_load),
         job_id_(job_id),
         trace_(trace) {
     start_time_ = Helper::TimestampMs();
@@ -121,6 +122,7 @@ class LoadAsyncBuildVectorIndexTask : public TaskRunnable {
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
   bool is_temp_hold_vector_index_;
+  bool is_fast_load_;
   int64_t job_id_;
   std::string trace_;
   int64_t start_time_;
@@ -128,10 +130,11 @@ class LoadAsyncBuildVectorIndexTask : public TaskRunnable {
 
 class BuildVectorIndexTask : public TaskRunnable {
  public:
-  BuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index, int64_t job_id,
-                       const std::string& trace)
+  BuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index, bool is_fast_build,
+                       int64_t job_id, const std::string& trace)
       : vector_index_wrapper_(vector_index_wrapper),
         is_temp_hold_vector_index_(is_temp_hold_vector_index),
+        is_fast_build_(is_fast_build),
         job_id_(job_id),
         trace_(trace) {
     start_time_ = Helper::TimestampMs();
@@ -147,6 +150,7 @@ class BuildVectorIndexTask : public TaskRunnable {
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
   bool is_temp_hold_vector_index_;
+  bool is_fast_build_;
   int64_t job_id_;
   std::string trace_;
   int64_t start_time_;
@@ -171,10 +175,14 @@ class VectorIndexManager {
                                            const pb::common::RegionEpoch& epoch, const std::string& trace);
   static butil::Status BuildVectorIndexOnly(VectorIndexWrapperPtr vector_index_wrapper,
                                             const pb::common::RegionEpoch& epoch, const std::string& trace);
+
+  // LaunchLoadAsyncBuildVectorIndex is unused now.
   static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
                                            int64_t job_id, const std::string& trace);
   static void LaunchLoadAsyncBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                              bool is_temp_hold_vector_index, int64_t job_id, const std::string& trace);
+                                              bool is_temp_hold_vector_index, bool is_fast_load, int64_t job_id,
+                                              const std::string& trace);
+
   // Parallel load or build vector index at server bootstrap.
   static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency,
                                                       const std::string& trace);
@@ -198,16 +206,28 @@ class VectorIndexManager {
   static bvar::Adder<uint64_t> bvar_vector_index_rebuild_task_running_num;
   static bvar::Adder<uint64_t> bvar_vector_index_save_task_running_num;
   static bvar::Adder<uint64_t> bvar_vector_index_loadorbuild_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_fast_load_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_slow_load_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_fast_build_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_slow_build_task_running_num;
 
   static bvar::Adder<uint64_t> bvar_vector_index_task_total_num;
   static bvar::Adder<uint64_t> bvar_vector_index_rebuild_task_total_num;
   static bvar::Adder<uint64_t> bvar_vector_index_save_task_total_num;
   static bvar::Adder<uint64_t> bvar_vector_index_loadorbuild_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_fast_load_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_slow_load_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_fast_build_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_slow_build_task_total_num;
 
   static std::atomic<int> vector_index_task_running_num;
   static std::atomic<int> vector_index_rebuild_task_running_num;
   static std::atomic<int> vector_index_save_task_running_num;
   static std::atomic<int> vector_index_loadorbuild_task_running_num;
+  static std::atomic<int> vector_index_fast_load_task_running_num;
+  static std::atomic<int> vector_index_slow_load_task_running_num;
+  static std::atomic<int> vector_index_fast_build_task_running_num;
+  static std::atomic<int> vector_index_slow_build_task_running_num;
 
   static int GetVectorIndexTaskRunningNum();
   static void IncVectorIndexTaskRunningNum();
@@ -224,6 +244,22 @@ class VectorIndexManager {
   static int GetVectorIndexLoadorbuildTaskRunningNum();
   static void IncVectorIndexLoadorbuildTaskRunningNum();
   static void DecVectorIndexLoadorbuildTaskRunningNum();
+
+  static int GetVectorIndexFastLoadTaskRunningNum();
+  static void IncVectorIndexFastLoadTaskRunningNum();
+  static void DecVectorIndexFastLoadTaskRunningNum();
+
+  static int GetVectorIndexSlowLoadTaskRunningNum();
+  static void IncVectorIndexSlowLoadTaskRunningNum();
+  static void DecVectorIndexSlowLoadTaskRunningNum();
+
+  static int GetVectorIndexFastBuildTaskRunningNum();
+  static void IncVectorIndexFastBuildTaskRunningNum();
+  static void DecVectorIndexFastBuildTaskRunningNum();
+
+  static int GetVectorIndexSlowBuildTaskRunningNum();
+  static void IncVectorIndexSlowBuildTaskRunningNum();
+  static void DecVectorIndexSlowBuildTaskRunningNum();
 
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
   bool ExecuteTaskFast(int64_t region_id, TaskRunnablePtr task);
