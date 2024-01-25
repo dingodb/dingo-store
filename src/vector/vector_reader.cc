@@ -839,9 +839,11 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
     [[maybe_unused]] const std::vector<pb::common::VectorWithId>& vector_with_ids,
     [[maybe_unused]] const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
-  std::string s = fmt::format("vector index search table filter for coprocessor not support now !!! ");
-  DINGO_LOG(ERROR) << s;
-  return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  //   std::string s = fmt::format("vector index search table filter for coprocessor not support now !!! ");
+  //   DINGO_LOG(ERROR) << s;
+  //   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+
+  DINGO_LOG(DEBUG) << "vector index search table filter for coprocessor support";
 
   // table pre filter search
 
