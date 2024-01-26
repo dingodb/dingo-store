@@ -57,17 +57,34 @@ class Stats {
 using StatsPtr = std::shared_ptr<Stats>;
 using MultiStats = std::vector<StatsPtr>;
 
+// region info
 struct RegionEntry {
   int64_t region_id;
+  // range: [prefix, prefix+1)
   std::string prefix;
 
+  // generate auto-increment id
   std::atomic<size_t> counter{0};
+  size_t GenId() { return counter.fetch_add(1, std::memory_order_relaxed); }
 
+  // used by sequence read
   int read_index{0};
+  // prepare data for read benchmark
   std::vector<std::string> keys;
 };
 using RegionEntryPtr = std::shared_ptr<RegionEntry>;
 
+// vector index info
+struct VectorIndexEntry {
+  int64_t index_id;
+
+  // generate auto-increment id
+  std::atomic<size_t> counter{0};
+  size_t GenId() { return counter.fetch_add(1, std::memory_order_relaxed); }
+};
+using VectorIndexEntryPtr = std::shared_ptr<VectorIndexEntry>;
+
+// thread info
 struct ThreadEntry {
   std::thread thread;
   std::atomic<bool> is_stop{false};
@@ -93,6 +110,7 @@ class Benchmark {
   bool Arrange();
 
   std::vector<RegionEntryPtr> ArrangeRegion(int num);
+  std::vector<VectorIndexEntryPtr> ArrangeVectorIndex(int num);
   bool ArrangeOperation();
   bool ArrangeData();
 
@@ -104,6 +122,9 @@ class Benchmark {
   int64_t CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
                        sdk::EngineType engine_type, int replicas = 3);
   void DropRegion(int64_t region_id);
+
+  int64_t CreateVectorIndex(const std::string& name, const std::string& vector_index_type);
+  void DropVectorIndex(int64_t vector_index_id);
 
   void ThreadRoutine(ThreadEntryPtr thread_entry);
 
@@ -120,6 +141,7 @@ class Benchmark {
   OperationPtr operation_;
 
   std::vector<RegionEntryPtr> region_entries_;
+  std::vector<VectorIndexEntryPtr> vector_index_entries_;
   std::vector<ThreadEntryPtr> thread_entries_;
 
   std::mutex mutex_;

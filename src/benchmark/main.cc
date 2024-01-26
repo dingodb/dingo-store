@@ -30,6 +30,7 @@ static std::string GetUsageMessage() {
   message += "\n  --prefix region range prefix, used to distinguish region, default(BENCH)";
   message += "\n  --raw_engine raw engine type, support LSM/BTREE/XDP default(LSM)";
   message += "\n  --region_num region number, default(1)";
+  message += "\n  --vector_index_num vector index number, default(1)";
   message += "\n  --concurrency concurrency as thread number, default(1)";
   message += "\n  --req_num invoke RPC request number, default(10000)";
   message += "\n  --delay print benchmark metrics interval time, unit(second), default(2)";
@@ -41,6 +42,24 @@ static std::string GetUsageMessage() {
   message += "\n  --is_single_region_txn is single transaction, default(true)";
   message += "\n  --is_pessimistic_txn optimistic or pessimistic transaction, default(false)";
   message += "\n  --txn_isolation_level transaction isolation level SI/RC, default(SI)";
+  message += "\n  --vector_dimension vector dimension, default(256)";
+  message += "\n  --vector_value_type vector value type float/uint8, default(float)";
+  message += "\n  --vector_max_element_num vector index contain max element number, default(100000)";
+  message += "\n  --vector_metric_type calcute vector distance method L2/IP/COSINE, default(L2)";
+  message += "\n  --hnsw_ef_construction HNSW ef construction, default(true)";
+  message += "\n  --hnsw_nlink_num HNSW nlink number, default(32)";
+  message += "\n  --ivf_ncentroids IVF ncentroids, default(2048)";
+  message += "\n  --ivf_nsubvector IVF nsubvector, default(64)";
+  message += "\n  --ivf_bucket_init_size IVF bucket init size, default(1000)";
+  message += "\n  --ivf_bucket_max_size IVF bucket max size, default(1280000)";
+  message += "\n  --ivf_nbits_per_idx IVF nbits per index, default(8)";
+  message += "\n  --vector_search_topk IVF Vector search flag topk, default(10)";
+  message += "\n  --vector_search_with_vector_data vector search flag with_vector_data, default(true)";
+  message += "\n  --vector_search_with_scalar_data vector search flag with_scalar_data, default(false)";
+  message += "\n  --vector_search_with_table_data vector search flag with_table_data, default(false)";
+  message += "\n  --vector_search_use_brute_force vector search flag use_brute_force, default(false)";
+  message += "\n  --vector_search_enable_range_search vector search flag enable_range_search, default(false)";
+  message += "\n  --vector_search_radius vector search flag radius, default(0.1)";
 
   return message;
 }

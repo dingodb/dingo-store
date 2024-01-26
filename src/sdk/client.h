@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "sdk/status.h"
+#include "sdk/vector.h"
 
 namespace dingodb {
 namespace sdk {
@@ -76,7 +77,7 @@ class Client : public std::enable_shared_from_this<Client> {
 
   Status DropIndexByName(int64_t schema_id, const std::string& index_name);
 
-  // TODO：list index/ GetIndexes 
+  // TODO：list index/ GetIndexes
 
  private:
   friend class RawKV;

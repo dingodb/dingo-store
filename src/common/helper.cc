@@ -801,6 +801,38 @@ int64_t Helper::GenId() {
   return ++id;
 }
 
+std::vector<float> Helper::GenerateFloatVector(int dimension) {
+  // Create a random number generator engine
+  std::random_device rd;      // Obtain a random seed from the hardware
+  std::mt19937_64 gen(rd());  // Standard 64-bit mersenne_twister_engine seeded with rd()
+
+  // Create a distribution for the desired range
+  std::uniform_real_distribution<> dis(0, 1);
+
+  std::vector<float> vec;
+  vec.reserve(dimension);
+  for (int i = 0; i < dimension; ++i) {
+    vec.push_back(dis(gen));
+  }
+  return vec;
+}
+
+std::vector<uint8_t> Helper::GenerateInt8Vector(int dimension) {
+  // Create a random number generator engine
+  std::random_device rd;      // Obtain a random seed from the hardware
+  std::mt19937_64 gen(rd());  // Standard 64-bit mersenne_twister_engine seeded with rd()
+
+  // Create a distribution for the desired range
+  std::uniform_int_distribution<uint8_t> dis(0, 255);
+
+  std::vector<uint8_t> vec;
+  vec.reserve(dimension);
+  for (int i = 0; i < dimension; ++i) {
+    vec.push_back(dis(gen));
+  }
+  return vec;
+}
+
 std::string Helper::GenNewTableCheckName(int64_t schema_id, const std::string& table_name) {
   Buf buf(8);
   buf.WriteLong(schema_id);

@@ -128,7 +128,7 @@ struct Vector {
   int32_t dimension;
   ValueType value_type;
   std::vector<float> float_values;
-  std::vector<std::string> binary_values;
+  std::vector<uint8_t> binary_values;
 
   explicit Vector() : value_type(kNoneValueType), dimension(0) {}
 
@@ -150,6 +150,8 @@ struct Vector {
 
   Vector(const Vector&) = delete;
   const Vector& operator=(const Vector&) = delete;
+
+  uint32_t Size() const { return float_values.size() * 4 + binary_values.size() + 4; }
 };
 
 std::string DumpToString(const Vector& obj);

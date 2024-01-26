@@ -217,6 +217,8 @@ class Helper {
   static int64_t GenerateRandomInteger(int64_t min_value, int64_t max_value);
   static float GenerateRandomFloat(float min_value, float max_value);
   static int64_t GenId();
+  static std::vector<float> GenerateFloatVector(int dimension);
+  static std::vector<uint8_t> GenerateInt8Vector(int dimension);
 
   // Gen coordinator new_table_check_name
   static std::string GenNewTableCheckName(int64_t schema_id, const std::string& table_name);
