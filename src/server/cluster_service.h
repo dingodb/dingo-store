@@ -20,7 +20,10 @@
 #include <string>
 
 #include "brpc/builtin/tabbed.h"
+#include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
+#include "coordinator/kv_control.h"
+#include "coordinator/tso_control.h"
 #include "proto/cluster_stat.pb.h"
 
 namespace dingodb {
@@ -31,10 +34,16 @@ class ClusterStatImpl : public pb::cluster::dingo, public brpc::Tabbed {
   void default_method(::google::protobuf::RpcController* controller, const pb::cluster::ClusterStatRequest* request,
                       pb::cluster::ClusterStatResponse* response, ::google::protobuf::Closure* done) override;
   void GetTabInfo(brpc::TabInfoList*) const override;
-  void SetControl(std::shared_ptr<CoordinatorControl> controller) { controller_ = controller; }
+  void SetControl(std::shared_ptr<CoordinatorControl> coordinator_controller, std::shared_ptr<KvControl> kv_controller,
+                  std::shared_ptr<TsoControl> tso_controller,
+                  std::shared_ptr<AutoIncrementControl> auto_increment_controller);
 
  private:
-  std::shared_ptr<CoordinatorControl> controller_;
+  std::shared_ptr<CoordinatorControl> coordinator_controller_;
+  std::shared_ptr<KvControl> kv_controller_;
+  std::shared_ptr<TsoControl> tso_controller_;
+  std::shared_ptr<AutoIncrementControl> auto_increment_controller_;
+
   static void PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
                              const std::vector<int32_t>& min_widths,
                              const std::vector<std::vector<std::string>>& table_contents,

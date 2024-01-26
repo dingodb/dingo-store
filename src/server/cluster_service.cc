@@ -27,10 +27,8 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -155,7 +153,7 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
   std::vector<std::vector<std::string>> table_urls;
 
   pb::common::StoreMap store_map;
-  controller_->GetStoreMap(store_map);
+  coordinator_controller_->GetStoreMap(store_map);
 
   std::map<std::string, pb::common::Store> store_map_by_type_id;
   for (const auto& store : store_map.stores()) {
@@ -238,7 +236,7 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
   std::vector<std::vector<std::string>> table_urls;
 
   pb::common::ExecutorMap executor_map;
-  controller_->GetExecutorMap(executor_map);
+  coordinator_controller_->GetExecutorMap(executor_map);
 
   for (const auto& executor : executor_map.executors()) {
     std::vector<std::string> line;
@@ -362,7 +360,7 @@ void ClusterStatImpl::PrintRegions(std::ostream& os, bool use_html) {
   std::vector<std::vector<std::string>> table_urls;
 
   pb::common::RegionMap region_map;
-  controller_->GetRegionMapFull(region_map);
+  coordinator_controller_->GetRegionMapFull(region_map);
 
   for (const auto& region : region_map.regions()) {
     std::vector<std::string> line;
@@ -580,7 +578,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
 
   // 1. Get All Schema
   std::vector<pb::meta::Schema> schemas;
-  controller_->GetSchemas(0, schemas);
+  coordinator_controller_->GetSchemas(0, schemas);
 
   if (schemas.empty()) {
     DINGO_LOG(ERROR) << "Get Schemas Failed";
@@ -605,7 +603,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       auto table_id = table_entry.entity_id();
 
       pb::meta::TableDefinitionWithId table_definition;
-      controller_->GetTable(schema_id, table_id, table_definition);
+      coordinator_controller_->GetTable(schema_id, table_id, table_definition);
 
       line.push_back(table_definition.table_definition().name());  // TABLE_NAME
       url_line.push_back(std::string());
@@ -618,7 +616,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       url_line.push_back(std::string());
 
       pb::meta::TableRange table_range;
-      controller_->GetTableRange(schema_id, table_id, table_range);
+      coordinator_controller_->GetTableRange(schema_id, table_id, table_range);
 
       line.push_back(std::to_string(table_range.range_distribution_size()));  // REGIONS
       url_line.push_back(std::string());
@@ -647,7 +645,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       auto table_id = index_entry.entity_id();
 
       pb::meta::TableDefinitionWithId table_definition;
-      controller_->GetIndex(schema_id, table_id, false, table_definition);
+      coordinator_controller_->GetIndex(schema_id, table_id, false, table_definition);
 
       line.push_back(table_definition.table_definition().name());  // TABLE_NAME
       url_line.push_back(std::string());
@@ -660,7 +658,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       url_line.push_back(std::string());
 
       pb::meta::IndexRange table_range;
-      controller_->GetIndexRange(schema_id, table_id, table_range);
+      coordinator_controller_->GetIndexRange(schema_id, table_id, table_range);
 
       line.push_back(std::to_string(table_range.range_distribution_size()));  // REGIONS
       url_line.push_back(std::string());
@@ -742,7 +740,27 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
     os << "<!DOCTYPE html><html><head>\n"
        << brpc::gridtable_style() << "<script src=\"/js/sorttable\"></script>\n"
        << "<script language=\"javascript\" type=\"text/javascript\" src=\"/js/jquery_min\"></script>\n"
-       << brpc::TabsHead() << "</head><body>";
+       << brpc::TabsHead();
+
+    os << "<meta charset=\"UTF-8\">\n"
+       << "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+       << "<style>\n"
+       << "  /* Define styles for different colors */\n"
+       << "  .red-text {\n"
+       << "    color: red;\n"
+       << "  }\n"
+       << "  .blue-text {\n"
+       << "    color: blue;\n"
+       << "  }\n"
+       << "  .green-text {\n"
+       << "    color: green;\n"
+       << "  }\n"
+       << "  .bold-text {"
+       << "    font-weight: bold;"
+       << "  }"
+       << "</style>\n";
+
+    os << brpc::TabsHead() << "</head><body>";
     server->PrintTabsBody(os, "dingo");
   }
 
@@ -750,16 +768,22 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   int64_t epoch = 0;
   pb::common::Location coordinator_leader_location;
   std::vector<pb::common::Location> locations;
-  controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
+  coordinator_controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
 
-  os << "dingo-store version: " << std::string(GIT_VERSION) << '\n';
-  if (controller_->IsLeader()) {
+  pb::common::Location kv_leader_location;
+  kv_controller_->GetLeaderLocation(kv_leader_location);
+
+  pb::common::Location tso_leader_location;
+  tso_controller_->GetLeaderLocation(tso_leader_location);
+
+  pb::common::Location auto_increment_leader_location;
+  auto_increment_controller_->GetLeaderLocation(auto_increment_leader_location);
+
+  os << "DINGO_STORE VERSION: " << std::string(GIT_VERSION) << '\n';
+
+  if (coordinator_controller_->IsLeader()) {
     os << (use_html ? "<br>\n" : "\n");
-    os << "dingo-store role: " << '\n';
-    os << "<a href=\"/CoordinatorService/Hello/"
-       << "\">"
-       << "LEADER"
-       << "</a>" << '\n';
+    os << "Coordinator role: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
 
     // add url for task_list
     os << (use_html ? "<br>\n" : "\n");
@@ -768,42 +792,93 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
        << "GET_TASK_LIST"
        << "</a>" << '\n';
 
+    os << (use_html ? "<br>CoordinatorMap:\n" : "\n");
     for (const auto& location : locations) {
-      os << (use_html ? "<br>\n" : "\n");
-      os << "Follower is <a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" +
-                location.host() + ":" + std::to_string(location.port()) + "</a>"
+      os << "<a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" + location.host() +
+                ":" + std::to_string(location.port()) + "</a>"
          << '\n';
     }
   } else {
     os << (use_html ? "<br>\n" : "\n");
-    os << "dingo-store role: " << '\n';
-    os << "<a href=\"/CoordinatorService/Hello/"
-       << "\">"
-       << "FOLLOWER"
-       << "</a>" << '\n';
+    os << "Coordinator role: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
 
     os << (use_html ? "<br>\n" : "\n");
-    os << "Leader is <a href=http://" + coordinator_leader_location.host() + ":" +
-              std::to_string(coordinator_leader_location.port()) + "/dingo>" + coordinator_leader_location.host() +
-              ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
+    os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" + coordinator_leader_location.host() +
+              ":" + std::to_string(coordinator_leader_location.port()) + "/dingo>" +
+              coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
        << '\n';
   }
 
   os << (use_html ? "<br>\n" : "\n");
   os << (use_html ? "<br>\n" : "\n");
-  os << "STORE AND INDEX: " << '\n';
+
+  std::vector<std::string> table_header;
+  table_header.push_back("CONTROLLER");
+  table_header.push_back("URL");
+  std::vector<int32_t> min_widths;
+  min_widths.push_back(10);
+  min_widths.push_back(10);
+  std::vector<std::vector<std::string>> table_contents;
+  std::vector<std::vector<std::string>> table_urls;
+
+  std::vector<std::string> line;
+  std::vector<std::string> url_line;
+
+  line.push_back("coordinator_control");
+  url_line.push_back(std::string());
+  line.push_back(coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()));
+  url_line.push_back("http://" + coordinator_leader_location.host() + ":" +
+                     std::to_string(coordinator_leader_location.port()) + "/CoordinatorService/GetMemoryInfo/");
+  table_contents.push_back(line);
+  table_urls.push_back(url_line);
+
+  line.clear();
+  url_line.clear();
+  line.push_back("kv_control");
+  url_line.push_back(std::string());
+  line.push_back(kv_leader_location.host() + ":" + std::to_string(kv_leader_location.port()));
+  url_line.push_back("http://" + kv_leader_location.host() + ":" + std::to_string(kv_leader_location.port()) +
+                     "/VersionService/GetMemoryInfo/");
+  table_contents.push_back(line);
+  table_urls.push_back(url_line);
+
+  line.clear();
+  url_line.clear();
+  line.push_back("tso_control");
+  url_line.push_back(std::string());
+  line.push_back(tso_leader_location.host() + ":" + std::to_string(tso_leader_location.port()));
+  url_line.push_back("http://" + tso_leader_location.host() + ":" + std::to_string(tso_leader_location.port()) +
+                     "/MetaService/GetTsoInfo/");
+  table_contents.push_back(line);
+  table_urls.push_back(url_line);
+
+  line.clear();
+  url_line.clear();
+  line.push_back("auto_increment_control");
+  url_line.push_back(std::string());
+  line.push_back(auto_increment_leader_location.host() + ":" + std::to_string(auto_increment_leader_location.port()));
+  url_line.push_back("http://" + auto_increment_leader_location.host() + ":" +
+                     std::to_string(auto_increment_leader_location.port()) + "/MetaService/GetMemoryInfo/");
+  table_contents.push_back(line);
+  table_urls.push_back(url_line);
+
+  PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+
+  os << (use_html ? "<br>\n" : "\n");
+  os << (use_html ? "<br>\n" : "\n");
+  os << "<span class=\"bold-text\">STORE: </span>" << '\n';
   PrintStores(os, use_html);
 
   os << (use_html ? "<br>\n" : "\n");
-  os << "EXECUTOR: " << '\n';
+  os << "<span class=\"bold-text\">EXECUTOR: </span>" << '\n';
   PrintExecutors(os, use_html);
 
   os << (use_html ? "<br>\n" : "\n");
-  os << "TABLE AND INDEX: " << '\n';
+  os << "<span class=\"bold-text\">TABLE: </span>" << '\n';
   PrintSchemaTables(os, use_html);
 
   os << (use_html ? "<br>\n" : "\n");
-  os << "REGION: " << '\n';
+  os << "<span class=\"bold-text\">REGION: </span>" << '\n';
   PrintRegions(os, use_html);
 
   if (use_html) {
@@ -812,6 +887,15 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   os.move_to(cntl->response_attachment());
   cntl->set_response_compress_type(brpc::COMPRESS_TYPE_GZIP);
+}
+
+void ClusterStatImpl::SetControl(std::shared_ptr<CoordinatorControl> coordinator_controller,
+                                 std::shared_ptr<KvControl> kv_controller, std::shared_ptr<TsoControl> tso_controller,
+                                 std::shared_ptr<AutoIncrementControl> auto_increment_controller) {
+  coordinator_controller_ = coordinator_controller;
+  kv_controller_ = kv_controller;
+  tso_controller_ = tso_controller;
+  auto_increment_controller_ = auto_increment_controller;
 }
 
 }  // namespace dingodb

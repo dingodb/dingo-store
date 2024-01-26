@@ -49,9 +49,10 @@ DEFINE_int32(max_create_id_count, 2048, "max create id count");
 DEFINE_bool(async_hello, true, "async hello");
 DEFINE_int32(hello_latency_ms, 0, "hello latency seconds");
 
-void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
-             pb::coordinator::HelloResponse *response, TrackClosure *done,
-             std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+void DoCoordinatorHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
+                        pb::coordinator::HelloResponse *response, TrackClosure *done,
+                        std::shared_ptr<CoordinatorControl> coordinator_control,
+                        std::shared_ptr<Engine> /*raft_engine*/, bool get_memory_info) {
   brpc::ClosureGuard done_guard(done);
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
@@ -62,13 +63,13 @@ void DoHello(google::protobuf::RpcController * /*controller*/, const pb::coordin
   }
 
   if (!coordinator_control->IsLeader()) {
-    return coordinator_control->RedirectResponse(response);
+    coordinator_control->RedirectResponse(response);
   }
 
   response->set_state(static_cast<pb::common::CoordinatorState>(0));
   response->set_status_detail("OK");
 
-  if (request->get_memory_info()) {
+  if (get_memory_info) {
     auto *memory_info = response->mutable_memory_info();
     coordinator_control->GetMemoryInfo(*memory_info);
   }
@@ -94,15 +95,12 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
                                    pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
   if (FLAGS_async_hello) {
     brpc::ClosureGuard done_guard(done);
-    auto is_leader = coordinator_control_->IsLeader();
-    if (!is_leader) {
-      return coordinator_control_->RedirectResponse(response);
-    }
 
     // Run in queue.
     auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
     auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-      DoHello(controller, request, response, svr_done, coordinator_control_, engine_);
+      DoCoordinatorHello(controller, request, response, svr_done, coordinator_control_, engine_,
+                         request->get_memory_info());
     });
     bool ret = worker_set_->ExecuteRR(task);
     if (!ret) {
@@ -114,7 +112,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
     DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
     if (!this->IsCoordinatorControlLeader()) {
-      return coordinator_control_->RedirectResponse(response);
+      coordinator_control_->RedirectResponse(response);
     }
 
     response->set_state(static_cast<pb::common::CoordinatorState>(0));
@@ -139,6 +137,23 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
     if (FLAGS_hello_latency_ms > 0) {
       bthread_usleep(FLAGS_hello_latency_ms * 1000);
     }
+  }
+}
+
+void CoordinatorServiceImpl::GetMemoryInfo(google::protobuf::RpcController *controller,
+                                           const pb::coordinator::HelloRequest *request,
+                                           pb::coordinator::HelloResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCoordinatorHello(controller, request, response, svr_done, coordinator_control_, engine_, true);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 

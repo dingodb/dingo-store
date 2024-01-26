@@ -1936,7 +1936,7 @@ void DoSwitchAutoSplit(google::protobuf::RpcController * /*controller*/,
   DINGO_LOG(INFO) << "SwitchAutoSplit Success.";
 }
 
-void DoTsoService(google::protobuf::RpcController *controller, const ::dingodb::pb::meta::TsoRequest *request,
+void DoTsoService(google::protobuf::RpcController *controller, const pb::meta::TsoRequest *request,
                   pb::meta::TsoResponse *response, TrackClosure *done, std::shared_ptr<TsoControl> tso_control,
                   std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
@@ -1953,6 +1953,20 @@ void DoTsoService(google::protobuf::RpcController *controller, const ::dingodb::
   }
 
   tso_control->Process(controller, request, response, done_guard.release());
+}
+
+void DoGetTsoInfo(google::protobuf::RpcController *controller, pb::meta::TsoResponse *response, TrackClosure *done,
+                  std::shared_ptr<TsoControl> tso_control) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!tso_control->IsLeader()) {
+    tso_control->RedirectResponse(response);
+  }
+
+  pb::meta::TsoRequest request;
+  request.set_op_type(pb::meta::TsoOpType::OP_QUERY_TSO_INFO);
+
+  tso_control->Process(controller, &request, response, done_guard.release());
 }
 
 void DoGetDeletedTable(google::protobuf::RpcController * /*controller*/,
@@ -2059,17 +2073,18 @@ void DoCleanDeletedIndex(google::protobuf::RpcController * /*controller*/,
   DINGO_LOG(INFO) << "CleanDeletedIndex Success.";
 }
 
-void DoHello(google::protobuf::RpcController * /*controller*/, const pb::meta::HelloRequest *request,
-             pb::meta::HelloResponse *response, TrackClosure *done,
-             std::shared_ptr<AutoIncrementControl> auto_increment_control, std::shared_ptr<Engine> /*raft_engine*/) {
+void DoAutoIncrementHello(google::protobuf::RpcController * /*controller*/, const pb::meta::HelloRequest *request,
+                          pb::meta::HelloResponse *response, TrackClosure *done,
+                          std::shared_ptr<AutoIncrementControl> auto_increment_control,
+                          std::shared_ptr<Engine> /*raft_engine*/, bool get_memory_info) {
   brpc::ClosureGuard const done_guard(done);
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
   if (!auto_increment_control->IsLeader()) {
-    return auto_increment_control->RedirectResponse(response);
+    auto_increment_control->RedirectResponse(response);
   }
 
-  if (request->get_memory_info()) {
+  if (get_memory_info) {
     auto *memory_info = response->mutable_memory_info();
     auto_increment_control->GetMemoryInfo(*memory_info);
   }
@@ -3304,15 +3319,44 @@ void MetaServiceImpl::Hello(google::protobuf::RpcController *controller, const p
   brpc::ClosureGuard done_guard(done);
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
-  if (!this->auto_increment_control_->IsLeader()) {
-    return RedirectResponse(response);
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoAutoIncrementHello(controller, request, response, svr_done, auto_increment_control_, engine_,
+                         request->get_memory_info());
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
+}
+
+void MetaServiceImpl::GetMemoryInfo(google::protobuf::RpcController *controller, const pb::meta::HelloRequest *request,
+                                    pb::meta::HelloResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoHello(controller, request, response, svr_done, auto_increment_control_, engine_);
+    DoAutoIncrementHello(controller, request, response, svr_done, auto_increment_control_, engine_, true);
   });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void MetaServiceImpl::GetTsoInfo(google::protobuf::RpcController *controller, const pb::meta::TsoRequest *request,
+                                 pb::meta::TsoResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>(
+      [this, controller, response, svr_done]() { DoGetTsoInfo(controller, response, svr_done, tso_control_); });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);

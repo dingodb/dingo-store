@@ -28,6 +28,7 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/logging.h"
+#include "coordinator/kv_control.h"
 #include "engine/engine.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -1074,19 +1075,57 @@ void VersionServiceProtoImpl::Watch(google::protobuf::RpcController* controller,
   }
 }
 
-void VersionServiceProtoImpl::Hello(google::protobuf::RpcController* /*controller*/,
-                                    const pb::version::HelloRequest* request, pb::version::HelloResponse* response,
-                                    google::protobuf::Closure* done) {
+void DoKvHello(google::protobuf::RpcController* /*controller*/, const pb::version::HelloRequest* request,
+               pb::version::HelloResponse* response, TrackClosure* done, std::shared_ptr<KvControl> kv_control,
+               std::shared_ptr<Engine> /*raft_engine*/, bool get_memory_info) {
   brpc::ClosureGuard const done_guard(done);
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
-  if (!this->IsKvControlLeader()) {
-    return RedirectResponse(response);
+  if (!kv_control->IsLeader()) {
+    kv_control->RedirectResponse(response);
   }
 
-  if (request->get_memory_info()) {
+  if (get_memory_info) {
     auto* memory_info = response->mutable_memory_info();
-    this->kv_control_->GetMemoryInfo(*memory_info);
+    kv_control->GetMemoryInfo(*memory_info);
+  }
+}
+
+void VersionServiceProtoImpl::Hello(google::protobuf::RpcController* controller,
+                                    const pb::version::HelloRequest* request, pb::version::HelloResponse* response,
+                                    google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
+
+  auto* svr_done = new CoordinatorServiceClosure("Hello", done_guard.release(), request, response);
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoKvHello(controller, request, response, svr_done, kv_control_, engine_, request->get_memory_info());
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void VersionServiceProtoImpl::GetMemoryInfo(google::protobuf::RpcController* controller,
+                                            const pb::version::HelloRequest* request,
+                                            pb::version::HelloResponse* response, google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
+
+  auto* svr_done = new CoordinatorServiceClosure("Hello", done_guard.release(), request, response);
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoKvHello(controller, request, response, svr_done, kv_control_, engine_, true);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
   }
 }
 

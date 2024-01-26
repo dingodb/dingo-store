@@ -186,6 +186,10 @@ class MetaServiceImpl : public pb::meta::MetaService {
   // hello
   void Hello(google::protobuf::RpcController* controller, const pb::meta::HelloRequest* request,
              pb::meta::HelloResponse* response, google::protobuf::Closure* done) override;
+  void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::meta::HelloRequest* request,
+                     pb::meta::HelloResponse* response, google::protobuf::Closure* done) override;
+  void GetTsoInfo(google::protobuf::RpcController* controller, const pb::meta::TsoRequest* request,
+                  pb::meta::TsoResponse* response, google::protobuf::Closure* done) override;
 
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 

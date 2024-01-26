@@ -177,6 +177,10 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   void Hello(google::protobuf::RpcController* controller, const pb::version::HelloRequest* request,
              pb::version::HelloResponse* response, google::protobuf::Closure* done) override;
 
+  // get memory info
+  void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::version::HelloRequest* request,
+                     pb::version::HelloResponse* response, google::protobuf::Closure* done) override;
+
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:
