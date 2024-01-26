@@ -150,7 +150,7 @@ class SegmentLogStorage {
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
   explicit SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
-                             bool enable_sync = true);
+                             int64_t init_vector_index_first_log_index, bool enable_sync = true);
 
   SegmentLogStorage();
 
@@ -160,6 +160,7 @@ class SegmentLogStorage {
   int Init(braft::ConfigurationManager* configuration_manager);
 
   int64_t RegionId() const { return region_id_; }
+  int64_t InitVectorIndexFirstLogIndex() const;
 
   // first log index in log
   int64_t FirstLogIndex();
@@ -230,6 +231,7 @@ class SegmentLogStorage {
   butil::atomic<int64_t> last_log_index_;
 
   // Control truncate log.
+  int64_t init_vector_index_first_log_index_;
   std::atomic<int64_t> vector_index_first_log_index_;
 
   bthread::Mutex mutex_;
@@ -287,7 +289,8 @@ class SegmentLogStorageWrapper : public braft::LogStorage {
 
   LogStorage* new_instance(const std::string& uri) const {
     DINGO_LOG(INFO) << "New segment log storage instance " << region_id_;
-    auto log_storage = std::make_shared<SegmentLogStorage>(uri, region_id_, log_storage_->MaxSegmentSize());
+    auto log_storage = std::make_shared<SegmentLogStorage>(uri, region_id_, log_storage_->MaxSegmentSize(),
+                                                           log_storage_->InitVectorIndexFirstLogIndex());
     return new SegmentLogStorageWrapper(log_storage);
   }
 
