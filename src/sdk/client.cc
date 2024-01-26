@@ -160,6 +160,10 @@ Status Client::NewVectorIndexCreator(VectorIndexCreator** index_creator) {
   return Status::OK();
 }
 
+Status Client::DropIndex(int64_t index_id) { return Status::NotSupported("not supported"); }
+
+Status Client::DropIndexByName(const std::string& index_name) { return Status::NotSupported("not supported"); }
+
 RawKV::RawKV(Data* data) : data_(data) {}
 
 RawKV::~RawKV() { data_.reset(nullptr); }
