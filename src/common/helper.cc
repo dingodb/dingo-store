@@ -413,6 +413,11 @@ bool Helper::IsContainRange(const pb::common::Range& range1, const pb::common::R
   return range2.start_key() >= range1.start_key() && range2.end_key() <= range1.end_key();
 }
 
+bool Helper::IsConflictRange(const pb::common::Range& range1, const pb::common::Range& range2) {
+  // check if range1 and range2 is intersect
+  return !(range1.start_key() >= range2.end_key() || range1.end_key() <= range2.start_key());
+}
+
 bool Helper::InvalidRange(const pb::common::Range& range) { return range.start_key() >= range.end_key(); }
 
 butil::Status Helper::CheckRange(const pb::common::Range& range) {

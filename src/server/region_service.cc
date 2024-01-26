@@ -46,7 +46,7 @@ void RegionImpl::default_method(google::protobuf::RpcController* controller,
       if (region.id() == 0) {
         os << "Region is not found" << '\n';
       } else {
-        os << "Region: " << '\n';
+        os << "================ Region: ================" << '\n';
         os << region.DebugString() << '\n';
       }
 

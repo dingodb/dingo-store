@@ -39,10 +39,16 @@ void TaskListImpl::default_method(google::protobuf::RpcController* controller,
     task_lists.init(100);
     controller_->GetTaskListAll(task_lists);
 
+    for (auto& [id, task_list] : task_lists) {
+      for (int i = 0; i < task_list.tasks_size(); ++i) {
+        task_list.mutable_tasks(i)->set_step(i);
+      }
+    }
+
     if (task_lists.empty()) {
       os << "No TaskList now" << '\n';
     } else {
-      os << "TaskList: " << '\n';
+      os << "================ TaskList: ================" << '\n';
       for (const auto& task_list : task_lists) {
         os << task_list.second.DebugString() << '\n';
       }
@@ -57,10 +63,14 @@ void TaskListImpl::default_method(google::protobuf::RpcController* controller,
       pb::coordinator::TaskList task_list;
       controller_->GetTaskList(task_list_id, task_list);
 
+      for (int i = 0; i < task_list.tasks_size(); ++i) {
+        task_list.mutable_tasks(i)->set_step(i);
+      }
+
       if (task_list.id() == 0) {
         os << "TaskList is not found" << '\n';
       } else {
-        os << "TaskList: " << '\n';
+        os << "================ TaskList: ================" << '\n';
         os << task_list.DebugString() << '\n';
       }
 

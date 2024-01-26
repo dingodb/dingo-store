@@ -50,10 +50,10 @@ void TableImpl::default_method(google::protobuf::RpcController* controller,
       if (table_definition.table_id().entity_id() == 0) {
         controller_->GetIndex(schema_id, table_id, false, table_definition);
         is_index = true;
-        os << "(Index) TableDefinition: " << '\n';
+        os << "================ (Index) TableDefinition: ================" << '\n';
         os << table_definition.DebugString() << '\n';
       } else {
-        os << "(Table) TableDefinition: " << '\n';
+        os << "================ (Table) TableDefinition: ================" << '\n';
         os << table_definition.DebugString() << '\n';
       }
 
@@ -62,13 +62,13 @@ void TableImpl::default_method(google::protobuf::RpcController* controller,
           pb::meta::TableRange table_range;
           controller_->GetTableRange(schema_id, table_id, table_range);
 
-          os << "TableRange: " << '\n';
+          os << "================ TableRange: ================" << '\n';
           os << table_range.DebugString() << '\n';
         } else {
           pb::meta::IndexRange index_range;
           controller_->GetIndexRange(schema_id, table_id, index_range);
 
-          os << "IndexRange: " << '\n';
+          os << "================ IndexRange: ================" << '\n';
           os << index_range.DebugString() << '\n';
         }
       } else {
