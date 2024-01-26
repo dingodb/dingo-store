@@ -499,8 +499,9 @@ message HelloResponse {
 }
 
 service VersionService {
-  // Hello
+  // Hello, this is for kv_control
   rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
 
   rpc GetCurrVersion(GetCurrVersionRequest) returns (GetCurrVersionResponse) {}
 

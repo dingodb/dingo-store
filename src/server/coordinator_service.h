@@ -125,6 +125,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
 
   void Hello(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
              pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
+
+  void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::coordinator::HelloRequest* request,
+                     pb::coordinator::HelloResponse* response, google::protobuf::Closure* done) override;
+
   void StoreHeartbeat(google::protobuf::RpcController* controller,
                       const pb::coordinator::StoreHeartbeatRequest* request,
                       pb::coordinator::StoreHeartbeatResponse* response, google::protobuf::Closure* done) override;

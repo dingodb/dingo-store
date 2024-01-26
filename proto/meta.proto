@@ -829,8 +829,10 @@ message HelloResponse {
 }
 
 service MetaService {
-  // Hello
+  // Hello, this is for auto_increment
   rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
+  rpc GetTsoInfo(TsoRequest) returns (TsoResponse);
 
   // GetSchemas
   // in: schema_id

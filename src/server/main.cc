@@ -959,7 +959,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Add Cluster Stat Service to get meta information from dingodb cluster
-    cluster_stat_service.SetControl(dingo_server.GetCoordinatorControl());
+    cluster_stat_service.SetControl(dingo_server.GetCoordinatorControl(), dingo_server.GetKvControl(),
+                                    dingo_server.GetTsoControl(), dingo_server.GetAutoIncrementControl());
     if (0 != brpc_server.AddService(&cluster_stat_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add cluster stat service";
       return -1;

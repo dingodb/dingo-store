@@ -1010,8 +1010,9 @@ message GetGCSafePointResponse {
 }
 
 service CoordinatorService {
-  // Hello
+  // Hello, this is for coordinator and meta
   rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
 
   // Store
   rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
