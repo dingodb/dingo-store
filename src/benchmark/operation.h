@@ -22,12 +22,16 @@
 
 #include "sdk/client.h"
 #include "sdk/status.h"
+#include "sdk/vector.h"
 
 namespace dingodb {
 namespace benchmark {
 
 class RegionEntry;
 using RegionEntryPtr = std::shared_ptr<RegionEntry>;
+
+class VectorIndexEntry;
+using VectorIndexEntryPtr = std::shared_ptr<VectorIndexEntry>;
 
 // Abstract interface class
 class Operation {
@@ -49,6 +53,9 @@ class Operation {
   virtual Result Execute(RegionEntryPtr region_entry) = 0;
   // RPC invoke, return execute result, for transaction access multiple region
   virtual Result Execute(std::vector<RegionEntryPtr>& region_entries) = 0;
+
+  // RPC invoke, return execute result, for vector index
+  virtual Result Execute(VectorIndexEntryPtr entry) = 0;
 };
 using OperationPtr = std::shared_ptr<Operation>;
 
@@ -65,6 +72,8 @@ class BaseOperation : public Operation {
 
   Result Execute(std::vector<RegionEntryPtr>&) override { return {}; }
 
+  Result Execute(VectorIndexEntryPtr) override { return {}; }
+
  protected:
   Result KvPut(RegionEntryPtr region_entry, bool is_random);
   Result KvBatchPut(RegionEntryPtr region_entry, bool is_random);
@@ -79,6 +88,10 @@ class BaseOperation : public Operation {
 
   Result KvTxnGet(const std::vector<std::string>& keys);
   Result KvTxnBatchGet(const std::vector<std::vector<std::string>>& keys);
+
+  Result VectorPut(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids);
+  Result VectorSearch(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids,
+                      const sdk::SearchParameter& search_param);
 
   std::shared_ptr<sdk::Client> client;
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -195,6 +208,30 @@ class TxnReadMissingOperation : public TxnReadOperation {
 
   Result Execute(RegionEntryPtr region_entry) override;
   Result Execute(std::vector<RegionEntryPtr>& region_entries) override;
+};
+
+class VectorFillSeqOperation : public BaseOperation {
+ public:
+  VectorFillSeqOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
+  ~VectorFillSeqOperation() override = default;
+
+  Result Execute(VectorIndexEntryPtr entry) override;
+};
+
+class VectorFillRandomOperation : public BaseOperation {
+ public:
+  VectorFillRandomOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
+  ~VectorFillRandomOperation() override = default;
+
+  Result Execute(VectorIndexEntryPtr entry) override;
+};
+
+class VectorSearchOperation : public BaseOperation {
+ public:
+  VectorSearchOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
+  ~VectorSearchOperation() override = default;
+
+  Result Execute(VectorIndexEntryPtr entry) override;
 };
 
 bool IsSupportBenchmarkType(const std::string& benchmark);

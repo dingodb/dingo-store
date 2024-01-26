@@ -24,6 +24,9 @@
 #include "benchmark/benchmark.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
+#include "gflags/gflags_declare.h"
+#include "glog/logging.h"
 
 DEFINE_string(benchmark, "fillseq", "Benchmark type");
 DEFINE_validator(benchmark, [](const char*, const std::string& value) -> bool {
@@ -43,6 +46,18 @@ DEFINE_validator(txn_isolation_level, [](const char*, const std::string& value) 
   auto isolation_level = dingodb::Helper::ToUpper(value);
   return isolation_level == "SI" || isolation_level == "RC";
 });
+
+// vector search
+DEFINE_uint32(vector_search_topk, 10, "Vector search flag topk");
+DEFINE_bool(vector_search_with_vector_data, true, "Vector search flag with_vector_data");
+DEFINE_bool(vector_search_with_scalar_data, false, "Vector search flag with_scalar_data");
+DEFINE_bool(vector_search_with_table_data, false, "Vector search flag with_table_data");
+DEFINE_bool(vector_search_use_brute_force, false, "Vector search flag use_brute_force");
+DEFINE_bool(vector_search_enable_range_search, false, "Vector search flag enable_range_search");
+DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
+
+DECLARE_uint32(vector_dimension);
+DECLARE_string(vector_value_type);
 
 namespace dingodb {
 namespace benchmark {
@@ -84,6 +99,18 @@ static OperationBuilderMap support_operations = {
     {"readtxnmissing",
      [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
        return std::make_shared<TxnReadMissingOperation>(client);
+     }},
+    {"fillvectorseq",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<VectorFillSeqOperation>(client);
+     }},
+    {"fillvectorrandom",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<VectorFillRandomOperation>(client);
+     }},
+    {"searchvector",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<VectorSearchOperation>(client);
      }},
 };
 
@@ -404,6 +431,56 @@ end:
   return result;
 }
 
+Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
+                                           const std::vector<sdk::VectorWithId>& vector_with_ids) {
+  Operation::Result result;
+
+  for (const auto& vector_with_id : vector_with_ids) {
+    result.write_bytes += vector_with_id.vector.Size();
+  }
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::VectorClient* vector_client = nullptr;
+  result.status = client->NewVectorClient(&vector_client);
+  if (!result.status.IsOK()) {
+    return result;
+  }
+  result.status = vector_client->Add(entry->index_id, vector_with_ids);
+
+  result.eplased_time = Helper::TimestampUs() - start_time;
+
+  delete vector_client;
+
+  return result;
+}
+
+Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
+                                              const std::vector<sdk::VectorWithId>& vector_with_ids,
+                                              const sdk::SearchParameter& search_param) {
+  Operation::Result result;
+
+  for (const auto& vector_with_id : vector_with_ids) {
+    result.write_bytes += vector_with_id.vector.Size();
+  }
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::VectorClient* vector_client = nullptr;
+  result.status = client->NewVectorClient(&vector_client);
+  if (!result.status.IsOK()) {
+    return result;
+  }
+  std::vector<sdk::SearchResult> out_result;
+  result.status = vector_client->Search(entry->index_id, search_param, vector_with_ids, out_result);
+
+  result.eplased_time = Helper::TimestampUs() - start_time;
+
+  delete vector_client;
+
+  return result;
+}
+
 Operation::Result FillSeqOperation::Execute(RegionEntryPtr region_entry) {
   return FLAGS_batch_size == 1 ? KvPut(region_entry, false) : KvBatchPut(region_entry, false);
 }
@@ -450,12 +527,12 @@ Operation::Result ReadSeqOperation::Execute(RegionEntryPtr region_entry) {
   if (FLAGS_batch_size <= 1) {
     return KvGet(keys[region_entry->read_index++ % keys.size()]);
   } else {
-    std::vector<std::string> keys;
-    keys.reserve(FLAGS_batch_size);
+    std::vector<std::string> batch_keys;
+    batch_keys.reserve(FLAGS_batch_size);
     for (int i = 0; i < FLAGS_batch_size; ++i) {
-      keys.push_back(keys[region_entry->read_index++ % keys.size()]);
+      batch_keys.push_back(keys[region_entry->read_index++ % keys.size()]);
     }
-    return KvBatchGet(keys);
+    return KvBatchGet(batch_keys);
   }
 }
 
@@ -682,6 +759,78 @@ Operation::Result TxnReadMissingOperation::Execute(std::vector<RegionEntryPtr>& 
 
     return KvTxnBatchGet(tmp_keys);
   }
+}
+
+sdk::VectorWithId GenVectorWithId(int64_t vector_id) {
+  sdk::VectorWithId vector_with_id;
+
+  vector_with_id.id = vector_id;
+  vector_with_id.vector.dimension = FLAGS_vector_dimension;
+  vector_with_id.vector.value_type =
+      FLAGS_vector_value_type == "FLOAT" ? sdk::ValueType::kFloat : sdk::ValueType::kUinT8;
+  vector_with_id.vector.float_values = Helper::GenerateFloatVector(256);
+  vector_with_id.vector.binary_values = Helper::GenerateInt8Vector(256);
+
+  return vector_with_id;
+}
+
+Operation::Result VectorFillSeqOperation::Execute(VectorIndexEntryPtr entry) {
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  vector_with_ids.reserve(FLAGS_batch_size);
+  if (FLAGS_batch_size <= 1) {
+    vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
+
+  } else {
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
+    }
+  }
+
+  return VectorPut(entry, vector_with_ids);
+}
+
+Operation::Result VectorFillRandomOperation::Execute(VectorIndexEntryPtr entry) {
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  vector_with_ids.reserve(FLAGS_batch_size);
+  if (FLAGS_batch_size <= 1) {
+    int64_t vector_id = Helper::GenerateRealRandomInteger(0, 100000000);
+    vector_with_ids.push_back(GenVectorWithId(vector_id));
+
+  } else {
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      int64_t vector_id = Helper::GenerateRealRandomInteger(0, 100000000);
+      vector_with_ids.push_back(GenVectorWithId(vector_id));
+    }
+  }
+
+  return VectorPut(entry, vector_with_ids);
+}
+
+Operation::Result VectorSearchOperation::Execute(VectorIndexEntryPtr entry) {
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  vector_with_ids.reserve(FLAGS_batch_size);
+
+  sdk::SearchParameter search_param;
+  search_param.with_vector_data = FLAGS_vector_search_with_vector_data;
+  search_param.with_scalar_data = FLAGS_vector_search_with_scalar_data;
+  search_param.with_table_data = FLAGS_vector_search_with_table_data;
+  search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
+
+  if (FLAGS_vector_search_enable_range_search) {
+    search_param.radius = FLAGS_vector_search_radius;
+  } else {
+    search_param.topk = FLAGS_vector_search_topk;
+  }
+
+  if (FLAGS_batch_size <= 1) {
+    vector_with_ids.push_back(GenVectorWithId(0));
+  } else {
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      vector_with_ids.push_back(GenVectorWithId(0));
+    }
+  }
+
+  return VectorSearch(entry, vector_with_ids, search_param);
 }
 
 bool IsSupportBenchmarkType(const std::string& benchmark) {

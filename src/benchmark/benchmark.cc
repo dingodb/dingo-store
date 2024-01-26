@@ -30,6 +30,7 @@
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "sdk/client.h"
+#include "sdk/vector.h"
 
 DEFINE_string(coordinator_url, "file://./coor_list", "Coordinator url");
 DEFINE_bool(show_version, false, "Show dingo-store version info");
@@ -42,6 +43,7 @@ DEFINE_validator(raw_engine, [](const char*, const std::string& value) -> bool {
 });
 
 DEFINE_uint32(region_num, 1, "Region number");
+DEFINE_uint32(vector_index_num, 1, "Vector index number");
 DEFINE_uint32(concurrency, 1, "Concurrency of request");
 DEFINE_uint32(arrange_region_threads, 16, "Threads number of arrange region");
 
@@ -52,6 +54,36 @@ DEFINE_uint32(delay, 2, "Interval in seconds between intermediate reports");
 
 DEFINE_bool(is_single_region_txn, true, "Is single region txn");
 DEFINE_uint32(replica, 3, "Replica number");
+
+DEFINE_string(vector_index_type, "HNSW", "Vector index type");
+DEFINE_validator(vector_index_type, [](const char*, const std::string& value) -> bool {
+  auto vector_index_type = dingodb::Helper::ToUpper(value);
+  return vector_index_type == "HNSW" || vector_index_type == "FLAT" || vector_index_type == "IVF_FLAT" ||
+         vector_index_type == "IVF_PQ";
+});
+
+// vector
+DEFINE_uint32(vector_dimension, 256, "Vector dimension");
+DEFINE_string(vector_value_type, "FLOAT", "Vector value type");
+DEFINE_validator(vector_value_type, [](const char*, const std::string& value) -> bool {
+  auto value_type = dingodb::Helper::ToUpper(value);
+  return value_type == "FLOAT" || value_type == "UINT8";
+});
+DEFINE_uint32(vector_max_element_num, 100000, "Vector index contain max element number");
+DEFINE_string(vector_metric_type, "L2", "Calcute vector distance method");
+DEFINE_validator(vector_metric_type, [](const char*, const std::string& value) -> bool {
+  auto metric_type = dingodb::Helper::ToUpper(value);
+  return metric_type == "NONE" || metric_type == "L2" || metric_type == "IP" || metric_type == "COSINE";
+});
+
+DEFINE_uint32(hnsw_ef_construction, true, "HNSW ef construction");
+DEFINE_uint32(hnsw_nlink_num, 32, "HNSW nlink number");
+
+DEFINE_uint32(ivf_ncentroids, 2048, "IVF ncentroids");
+DEFINE_uint32(ivf_nsubvector, 64, "IVF nsubvector");
+DEFINE_uint32(ivf_bucket_init_size, 1000, "IVF bucket init size");
+DEFINE_uint32(ivf_bucket_max_size, 1280000, "IVF bucket max size");
+DEFINE_uint32(ivf_nbits_per_idx, 8, "IVF nbits per idx");
 
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);
@@ -81,6 +113,16 @@ sdk::EngineType GetRawEngineType() {
 
   LOG(FATAL) << fmt::format("Not support raw_engine: {}", FLAGS_raw_engine);
   return sdk::EngineType::kLSM;
+}
+
+static bool IsTransactionBenchmark() {
+  return (FLAGS_benchmark == "filltxnseq" || FLAGS_benchmark == "filltxnrandom" || FLAGS_benchmark == "readtxnseq" ||
+          FLAGS_benchmark == "readtxnrandom" || FLAGS_benchmark == "readtxnmissing");
+}
+
+static bool IsVectorBenchmark() {
+  return FLAGS_benchmark == "fillvectorseq" || FLAGS_benchmark == "fillvectorrandom" ||
+         FLAGS_benchmark == "searchvector";
 }
 
 Stats::Stats() { latency_recorder_ = std::make_shared<bvar::LatencyRecorder>(); }
@@ -173,12 +215,16 @@ bool Benchmark::Run() {
 bool Benchmark::Arrange() {
   std::cout << COLOR_GREEN << "Arrange: " << COLOR_RESET << '\n';
 
-  region_entries_ = ArrangeRegion(FLAGS_region_num);
-  if (region_entries_.size() != FLAGS_region_num) {
-    DINGO_LOG(ERROR) << fmt::format("Arrange region failed, expect: {}, actual: {}", FLAGS_region_num,
-                                    region_entries_.size());
-    sleep(300);
-    return false;
+  if (IsVectorBenchmark()) {
+    vector_index_entries_ = ArrangeVectorIndex(FLAGS_vector_index_num);
+    if (vector_index_entries_.size() != FLAGS_region_num) {
+      return false;
+    }
+  } else {
+    region_entries_ = ArrangeRegion(FLAGS_region_num);
+    if (region_entries_.size() != FLAGS_region_num) {
+      return false;
+    }
   }
 
   if (!ArrangeOperation()) {
@@ -254,6 +300,26 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
   return region_entries;
 }
 
+std::vector<VectorIndexEntryPtr> Benchmark::ArrangeVectorIndex(int num) {
+  std::vector<VectorIndexEntryPtr> vector_index_entries;
+
+  for (int i = 0; i < num; ++i) {
+    auto index_id = CreateVectorIndex(kRegionNamePrefix + std::to_string(i + 1), FLAGS_vector_index_type);
+    if (index_id == 0) {
+      return vector_index_entries;
+    }
+
+    std::cout << fmt::format("Create vector index({}) {} done", FLAGS_vector_index_type, index_id) << '\n';
+
+    auto entry = std::make_shared<VectorIndexEntry>();
+    entry->index_id = index_id;
+
+    vector_index_entries.push_back(entry);
+  }
+
+  return vector_index_entries;
+}
+
 bool Benchmark::ArrangeOperation() {
   operation_ = NewOperation(client_);
 
@@ -292,6 +358,11 @@ void Benchmark::Clean() {
   // Drop region
   for (auto& region_entry : region_entries_) {
     DropRegion(region_entry->region_id);
+  }
+
+  // Drop vector index
+  for (auto& vector_index_entry : vector_index_entries_) {
+    DropVectorIndex(vector_index_entry->index_id);
   }
 }
 
@@ -335,6 +406,96 @@ void Benchmark::DropRegion(int64_t region_id) {
   CHECK(status.IsOK()) << fmt::format("Drop region failed, {}", status.ToString());
 }
 
+sdk::MetricType GetMetricType(const std::string& metric_type) {
+  if (metric_type == "L2") {
+    return sdk::MetricType::kL2;
+  } else if (metric_type == "IP") {
+    return sdk::MetricType::kInnerProduct;
+  } else if (metric_type == "COSINE") {
+    return sdk::MetricType::kCosine;
+  }
+
+  return sdk::MetricType::kNoneMetricType;
+}
+
+sdk::FlatParam GenFlatParam() {
+  sdk::FlatParam param(FLAGS_vector_dimension, GetMetricType(FLAGS_vector_metric_type));
+  return param;
+}
+
+sdk::IvfFlatParam GenIvfFlatParam() {
+  sdk::IvfFlatParam param(FLAGS_vector_dimension, GetMetricType(FLAGS_vector_metric_type));
+  param.ncentroids = FLAGS_ivf_ncentroids;
+  return param;
+}
+
+sdk::IvfPqParam GenIvfPqParam() {
+  sdk::IvfPqParam param(FLAGS_vector_dimension, GetMetricType(FLAGS_vector_metric_type));
+  param.ncentroids = FLAGS_ivf_ncentroids;
+  param.nsubvector = FLAGS_ivf_nsubvector;
+  param.bucket_init_size = FLAGS_ivf_bucket_init_size;
+  param.bucket_max_size = FLAGS_ivf_bucket_max_size;
+  param.nbits_per_idx = FLAGS_ivf_nbits_per_idx;
+  return param;
+}
+
+sdk::HnswParam GenHnswParam() {
+  sdk::HnswParam param(FLAGS_vector_dimension, GetMetricType(FLAGS_vector_metric_type), FLAGS_vector_max_element_num);
+  param.ef_construction = FLAGS_hnsw_ef_construction;
+  param.nlinks = FLAGS_hnsw_nlink_num;
+
+  return param;
+}
+
+sdk::BruteForceParam GenBruteForceParam() {
+  sdk::BruteForceParam param(FLAGS_vector_dimension, GetMetricType(FLAGS_vector_metric_type));
+  return param;
+}
+
+int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string& vector_index_type) {
+  sdk::VectorIndexCreator* creator = nullptr;
+  auto status = client_->NewVectorIndexCreator(&creator);
+  CHECK(status.ok()) << fmt::format("new vector index creator failed, {}", status.ToString());
+
+  int64_t vector_index_id = 0;
+  std::vector<int64_t> separator_id = {1};
+
+  creator->SetName(name).SetSchemaId(1).SetRangePartitions(separator_id).SetReplicaNum(3);
+
+  if (vector_index_type == "HNSW") {
+    creator->SetHnswParam(GenHnswParam());
+
+  } else if (vector_index_type == "FLAT") {
+    creator->SetFlatParam(GenFlatParam());
+
+  } else if (vector_index_type == "IVF_FLAT") {
+    creator->SetIvfFlatParam(GenIvfFlatParam());
+
+  } else if (vector_index_type == "IVF_PQ") {
+    creator->SetIvfPqParam(GenIvfPqParam());
+  } else {
+    LOG(ERROR) << fmt::format("Not support vector index type {}", vector_index_type);
+    return 0;
+  }
+
+  status = creator->Create(vector_index_id);
+  if (!status.IsOK()) {
+    LOG(ERROR) << fmt::format("Create vector index failed, {}", status.ToString());
+    return 0;
+  }
+  if (vector_index_id == 0) {
+    LOG(ERROR) << "vector_index_id is 0, invalid";
+  }
+
+  return vector_index_id;
+}
+
+void Benchmark::DropVectorIndex(int64_t vector_index_id) {
+  CHECK(vector_index_id != 0) << "vector_index_id is invalid";
+  auto status = client_->DropIndex(vector_index_id);
+  CHECK(status.IsOK()) << fmt::format("Drop vector index failed, {}", status.ToString());
+}
+
 static std::vector<std::string> ExtractPrefixs(const std::vector<RegionEntryPtr>& region_entries) {
   std::vector<std::string> prefixes;
   prefixes.reserve(region_entries.size());
@@ -343,11 +504,6 @@ static std::vector<std::string> ExtractPrefixs(const std::vector<RegionEntryPtr>
   }
 
   return prefixes;
-}
-
-static bool IsTransactionBenchmark() {
-  return (FLAGS_benchmark == "filltxnseq" || FLAGS_benchmark == "filltxnrandom" || FLAGS_benchmark == "readtxnseq" ||
-          FLAGS_benchmark == "readtxnrandom" || FLAGS_benchmark == "readtxnmissing");
 }
 
 void Benchmark::ThreadRoutine(ThreadEntryPtr thread_entry) {
