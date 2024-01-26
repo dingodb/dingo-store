@@ -142,7 +142,6 @@ message TableDefinition {
   map<string, string> properties = 40;
   dingodb.pb.common.IndexParameter index_parameter = 41;  // for index
 
-
   int64 create_timestamp = 51;
   int64 update_timestamp = 52;
   int64 delete_timestamp = 53;

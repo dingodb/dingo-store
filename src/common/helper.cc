@@ -1764,4 +1764,23 @@ std::string Helper::PrintStatus(const butil::Status& status) {
   return fmt::format("{} {}", pb::error::Errno_Name(status.error_code()), status.error_str());
 }
 
+bool Helper::IsContinuous(const std::set<int64_t>& numbers) {
+  if (numbers.empty()) {
+    return true;
+  }
+
+  auto it = numbers.begin();
+  int previous = *it;
+  ++it;
+
+  for (; it != numbers.end(); ++it) {
+    if (*it != previous + 1) {
+      return false;
+    }
+    previous = *it;
+  }
+
+  return true;
+}
+
 }  // namespace dingodb

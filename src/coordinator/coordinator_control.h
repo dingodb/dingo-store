@@ -601,6 +601,10 @@ class CoordinatorControl : public MetaControl {
   // out: repeated parts
   butil::Status GetTableRange(int64_t schema_id, int64_t table_id, pb::meta::TableRange &table_range);
 
+  // get regions by table_internal
+  butil::Status GetRegionsByTableInternal(const pb::coordinator_internal::TableInternal &table_internal,
+                                          std::vector<pb::coordinator_internal::RegionInternal> &region_internals);
+
   // get table metrics
   // in: schema_id
   // in: table_id

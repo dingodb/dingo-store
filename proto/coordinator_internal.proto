@@ -44,6 +44,9 @@ message TableInternal {
   dingodb.pb.meta.TableDefinition definition = 2;
   int64 schema_id = 3;
   int64 table_id = 4;
+
+  // if the partition_is is continuous, this field will be set, else this field will be empty.
+  // if this field is empty, we will do ScanRegions for each partition to get the region list.
   dingodb.pb.common.Range range = 5;
 }
 
