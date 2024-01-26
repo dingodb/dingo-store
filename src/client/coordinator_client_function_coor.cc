@@ -508,10 +508,15 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 
   DINGO_LOG(INFO) << response.DebugString();
 
+  std::map<std::string, dingodb::pb::common::Store> store_map_by_type_id;
+  for (const auto& store : response.storemap().stores()) {
+    store_map_by_type_id[std::to_string(store.store_type()) + "-" + std::to_string(store.id())] = store;
+  }
+
   // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
   int32_t store_count_available = 0;
   int32_t index_count_available = 0;
-  for (auto const& store : response.storemap().stores()) {
+  for (auto const& [first, store] : store_map_by_type_id) {
     if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
         store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_STORE) {
       store_count_available++;

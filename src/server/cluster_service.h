@@ -35,7 +35,6 @@ class ClusterStatImpl : public pb::cluster::dingo, public brpc::Tabbed {
 
  private:
   std::shared_ptr<CoordinatorControl> controller_;
-  static std::string GetTabHead();
   static void PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
                              const std::vector<int32_t>& min_widths,
                              const std::vector<std::vector<std::string>>& table_contents,
@@ -45,18 +44,6 @@ class ClusterStatImpl : public pb::cluster::dingo, public brpc::Tabbed {
   void PrintExecutors(std::ostream& os, bool use_html);
   void PrintRegions(std::ostream& os, bool use_html);
   void PrintSchemaTables(std::ostream& os, bool use_html);
-
-  // deprecated functions, will be removed in the future
-  static bool GetRegionInfo(int64_t region_id, const pb::common::RegionMap& region_map, pb::common::Region& result);
-  static void PrintSchema(std::ostream& os, const std::string& schema_name);
-  static void PrintRegionNode(std::ostream& os, const pb::common::Region& region);
-  static void PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition);
-  static void PrintTableRegions(std::ostream& os, const pb::common::RegionMap& region_map,
-                                const pb::meta::TableRange& table_range);
-
-  static void PrintIndexDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition);
-  static void PrintIndexRegions(std::ostream& os, const pb::common::RegionMap& region_map,
-                                const pb::meta::IndexRange& index_range);
 };
 
 }  // namespace dingodb

@@ -953,11 +953,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
-      DINGO_LOG(ERROR) << "Fail to add raft service!";
-      return -1;
-    }
-
     if (brpc_server.AddService(&version_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       LOG(ERROR) << "Fail to add node service to brpc_server!";
       return -1;
@@ -965,33 +960,62 @@ int main(int argc, char *argv[]) {
 
     // Add Cluster Stat Service to get meta information from dingodb cluster
     cluster_stat_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&cluster_stat_service, brpc::SERVER_OWNS_SERVICE)) {
+    if (0 != brpc_server.AddService(&cluster_stat_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add cluster stat service";
+      return -1;
+    }
+    if (0 != raft_server.AddService(&cluster_stat_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add cluster stat service";
       return -1;
     }
     table_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&table_service, brpc::SERVER_OWNS_SERVICE)) {
+    if (0 != brpc_server.AddService(&table_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add table service";
+      return -1;
+    }
+    if (0 != raft_server.AddService(&table_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add table service";
       return -1;
     }
     region_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&region_service, brpc::SERVER_OWNS_SERVICE)) {
+    if (0 != brpc_server.AddService(&region_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add region service";
+      return -1;
+    }
+    if (0 != raft_server.AddService(&region_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add region service";
       return -1;
     }
     store_metrics_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&store_metrics_service, brpc::SERVER_OWNS_SERVICE)) {
+    if (0 != brpc_server.AddService(&store_metrics_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add store metrics service";
+      return -1;
+    }
+    if (0 != raft_server.AddService(&store_metrics_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add store metrics service";
       return -1;
     }
     task_list_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&task_list_service, brpc::SERVER_OWNS_SERVICE)) {
+    if (0 != brpc_server.AddService(&task_list_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add task list service";
+      return -1;
+    }
+    if (0 != raft_server.AddService(&task_list_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add task list service";
       return -1;
     }
     store_operation_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&store_operation_service, brpc::SERVER_OWNS_SERVICE)) {
+    if (0 != brpc_server.AddService(&store_operation_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add store operation service";
+      return -1;
+    }
+    if (0 != raft_server.AddService(&store_operation_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+      DINGO_LOG(ERROR) << "Fail to add store operation service";
+      return -1;
+    }
+
+    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 

@@ -23,6 +23,7 @@
 #include "brpc/closure_guard.h"
 #include "brpc/controller.h"
 #include "brpc/server.h"
+#include "butil/compiler_specific.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -50,7 +51,21 @@ void ClusterStatImpl::PrintHtmlTable(std::ostream& os, bool use_html, const std:
                                      const std::vector<int32_t>& min_widths,
                                      const std::vector<std::vector<std::string>>& table_contents,
                                      const std::vector<std::vector<std::string>>& table_urls) {
-  if (use_html) {
+  if (BAIDU_UNLIKELY(table_header.size() != min_widths.size())) {
+    os << "! table_header.size(" << table_header.size() << ") == min_widths.size(" << min_widths.size() << ")";
+    return;
+  }
+  if (BAIDU_UNLIKELY(!table_contents.empty() && table_header.size() != table_contents[0].size())) {
+    os << "! table_header.size(" << table_header.size() << ") == table_contents[0].size(" << table_contents[0].size()
+       << ")";
+    return;
+  }
+  if (BAIDU_UNLIKELY(!table_urls.empty() && table_header.size() != table_urls[0].size())) {
+    os << "! table_header.size(" << table_header.size() << ") == table_urls[0].size(" << table_urls[0].size() << ")";
+    return;
+  }
+
+  if (BAIDU_LIKELY(use_html)) {
     // os << "<table class=\"gridtable sortable\" border=\"1\"><tr>";
     os << R"(<table class="gridtable sortable" border="1"><tr>)";
     for (const auto& header : table_header) {
@@ -142,7 +157,12 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
   pb::common::StoreMap store_map;
   controller_->GetStoreMap(store_map);
 
+  std::map<std::string, pb::common::Store> store_map_by_type_id;
   for (const auto& store : store_map.stores()) {
+    store_map_by_type_id[std::to_string(store.store_type()) + "-" + std::to_string(store.id())] = store;
+  }
+
+  for (const auto& [key, store] : store_map_by_type_id) {
     std::vector<std::string> line;
     std::vector<std::string> url_line;
 
@@ -263,8 +283,32 @@ void ClusterStatImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("ENGINE");
   table_header.push_back("CREATE_TIME");
   table_header.push_back("UPDATE_TIME");
+  table_header.push_back("REGION_ID");
+  table_header.push_back("RAFT_STATE");
+  table_header.push_back("READONLY");
+  table_header.push_back("TERM");
   table_header.push_back("APPLIED_INDEX");
+  table_header.push_back("COMITTED_INDEX");
+  table_header.push_back("FIRST_INDEX");
+  table_header.push_back("LAST_INDEX");
+  table_header.push_back("DISK_INDEX");
+  table_header.push_back("PENDING_INDEX");
+  table_header.push_back("PENDING_QUEUE_SIZE");
+  table_header.push_back("STABLE_FOLLOWERS");
+  table_header.push_back("UNSTABLE_FOLLOWERS");
+  table_header.push_back("REGION_ID");
+  table_header.push_back("METIRCS_INDEX");
+  table_header.push_back("REGION_SIZE");
   table_header.push_back("VECTOR_TYPE");
+  table_header.push_back("VECTOR_SNAPSHOT_LOG_ID");
+  table_header.push_back("VECTOR_APPLY_LOG_ID");
+  table_header.push_back("VECTOR_BUILD_EPOCH");
+  table_header.push_back("IS_STOP");
+  table_header.push_back("IS_READY");
+  table_header.push_back("IS_OWN_READY");
+  table_header.push_back("IS_SWITCHING");
+  table_header.push_back("BUILD_ERROR");
+  table_header.push_back("REBUILD_ERROR");
 
   std::vector<int32_t> min_widths;
 
@@ -287,8 +331,32 @@ void ClusterStatImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // ENGINE
   min_widths.push_back(20);  // CREATE_TIME
   min_widths.push_back(20);  // UPDATE_TIME
+  min_widths.push_back(10);  // REGION_ID
+  min_widths.push_back(10);  // RAFT_STATE
+  min_widths.push_back(10);  // READONLY
+  min_widths.push_back(10);  // TERM
   min_widths.push_back(10);  // APPLIED_INDEX
+  min_widths.push_back(10);  // COMITTED_INDEX
+  min_widths.push_back(10);  // FIRST_INDEX
+  min_widths.push_back(10);  // LAST_INDEX
+  min_widths.push_back(10);  // DISK_INDEX
+  min_widths.push_back(10);  // PENDING_INDEX
+  min_widths.push_back(10);  // PENDING_QUEUE_SIZE
+  min_widths.push_back(10);  // STABLE_FOLLOWERS
+  min_widths.push_back(10);  // UNSTABLE_FOLLOWERS
+  min_widths.push_back(10);  // REGION_ID
+  min_widths.push_back(10);  // METIRCS_INDEX
+  min_widths.push_back(10);  // REGION_SIZE
   min_widths.push_back(10);  // VECTOR_TYPE
+  min_widths.push_back(10);  // VECTOR_SNAPSHOT_LOG_ID
+  min_widths.push_back(10);  // VECTOR_APPLY_LOG_ID
+  min_widths.push_back(10);  // VECTOR_BUILD_EPOCH
+  min_widths.push_back(10);  // IS_STOP
+  min_widths.push_back(10);  // IS_READY
+  min_widths.push_back(10);  // IS_OWN_READY
+  min_widths.push_back(10);  // IS_SWITCHING
+  min_widths.push_back(10);  // BUILD_ERROR
+  min_widths.push_back(10);  // REBUILD_ERROR
 
   std::vector<std::vector<std::string>> table_contents;
   std::vector<std::vector<std::string>> table_urls;
@@ -300,74 +368,178 @@ void ClusterStatImpl::PrintRegions(std::ostream& os, bool use_html) {
     std::vector<std::string> line;
     std::vector<std::string> url_line;
 
-    line.push_back(std::to_string(region.id()));
+    line.push_back(std::to_string(region.id()));  // REGION_ID
     url_line.push_back(std::string("/region/"));
 
-    line.push_back(region.definition().name());
+    line.push_back(region.definition().name());  // REGION_NAME
     url_line.push_back(std::string());
 
     line.push_back(std::to_string(region.definition().epoch().conf_version()) + "-" +
-                   std::to_string(region.definition().epoch().version()));
+                   std::to_string(region.definition().epoch().version()));  // EPOCH
     url_line.push_back(std::string());
 
-    line.push_back(pb::common::RegionType_Name(region.region_type()));
+    line.push_back(pb::common::RegionType_Name(region.region_type()));  // REGION_TYPE
     url_line.push_back(std::string());
 
-    line.push_back(pb::common::RegionState_Name(region.state()));
+    line.push_back(pb::common::RegionState_Name(region.state()));  // REGION_STATE
     url_line.push_back(std::string());
 
-    line.push_back(pb::common::RegionRaftStatus_Name(region.status().raft_status()));
+    line.push_back(pb::common::RegionRaftStatus_Name(region.status().raft_status()));  // BRAFT_STATUS
     url_line.push_back(std::string());
 
-    line.push_back(pb::common::ReplicaStatus_Name(region.status().replica_status()));
+    line.push_back(pb::common::ReplicaStatus_Name(region.status().replica_status()));  // REPLICA_STATUS
     url_line.push_back(std::string());
 
-    line.push_back(pb::common::StoreRegionState_Name(region.metrics().store_region_state()));
+    line.push_back(pb::common::StoreRegionState_Name(region.metrics().store_region_state()));  // STORE_REGION_STATE
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.leader_store_id()));
+    line.push_back(std::to_string(region.leader_store_id()));  // LEADER_ID
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.definition().peers_size()));
+    line.push_back(std::to_string(region.definition().peers_size()));  // REPLICA
     url_line.push_back(std::string());
 
-    line.push_back(Helper::StringToHex(region.definition().range().start_key()));
+    line.push_back(Helper::StringToHex(region.definition().range().start_key()));  // START_KEY
     url_line.push_back(std::string());
 
-    line.push_back(Helper::StringToHex(region.definition().range().end_key()));
+    line.push_back(Helper::StringToHex(region.definition().range().end_key()));  // END_KEY
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.definition().schema_id()));
+    line.push_back(std::to_string(region.definition().schema_id()));  // SCHEMA_ID
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.definition().table_id()));
+    line.push_back(std::to_string(region.definition().table_id()));  // TABLE_ID
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.definition().index_id()));
+    line.push_back(std::to_string(region.definition().index_id()));  // INDEX_ID
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.definition().part_id()));
+    line.push_back(std::to_string(region.definition().part_id()));  // PART_ID
     url_line.push_back(std::string());
 
-    line.push_back(pb::common::RawEngine_Name(region.definition().raw_engine()));
+    line.push_back(pb::common::RawEngine_Name(region.definition().raw_engine()));  // ENGINE
     url_line.push_back(std::string());
 
-    line.push_back(Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));
+    line.push_back(Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));  // CREATE_TIME
     url_line.push_back(std::string());
 
-    line.push_back(Helper::FormatMsTime(region.metrics().last_update_metrics_timestamp(), "%Y-%m-%d %H:%M:%S"));
+    line.push_back(
+        Helper::FormatMsTime(region.metrics().last_update_metrics_timestamp(), "%Y-%m-%d %H:%M:%S"));  // UPDATE_TIME
     url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().last_update_metrics_log_index()));
+    line.push_back(std::to_string(region.id()));  // REGION_ID
+    url_line.push_back(std::string("/region/"));
+
+    line.push_back(pb::common::RaftNodeState_Name(region.metrics().braft_status().raft_state()));  // RAFT_STATE
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().readonly()));  // READONLY
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().term()));  // TERM
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().known_applied_index()));  // APPLIED_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().committed_index()));  // COMITTED_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().first_index()));  // FIRST_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().last_index()));  // LAST_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().disk_index()));  // DISK_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().pending_index()));  // PENDING_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().pending_queue_size()));  // PENDING_QUEUE_SIZE
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().stable_followers().size()));  // STABLE_FOLLOWERS
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().braft_status().unstable_followers().size()));  // UNSTABLE_FOLLOWERS
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.id()));  // REGION_ID
+    url_line.push_back(std::string("/region/"));
+
+    line.push_back(std::to_string(region.metrics().last_update_metrics_log_index()));  // METIRCS_INDEX
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.metrics().region_size()));  // REGION_SIZE
     url_line.push_back(std::string());
 
     auto vector_index_type = region.definition().index_parameter().vector_index_parameter().vector_index_type();
     if (vector_index_type != pb::common::VECTOR_INDEX_TYPE_NONE) {
-      line.push_back(pb::common::VectorIndexType_Name(vector_index_type));
+      line.push_back(pb::common::VectorIndexType_Name(vector_index_type));  // VECTOR_TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(
+          std::to_string(region.metrics().vector_index_status().snapshot_log_id()));  // VECTOR_SNAPSHOT_LOG_ID
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().apply_log_id()));  // VECTOR_APPLY_LOG_ID
+      url_line.push_back(std::string());
+
+      line.push_back(
+          std::to_string(region.metrics().vector_index_status().last_build_epoch_version()));  // VECTOR_BUILD_EPOCH
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().is_stop()));  // IS_STOP
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().is_ready()));  // IS_READY
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().is_own_ready()));  // IS_OWN_READY
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().is_switching()));  // IS_SWITCHING
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().is_build_error()));  // BUILD_ERROR
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().vector_index_status().is_rebuild_error()));  // REBUILD_ERROR
+      url_line.push_back(std::string());
+
     } else {
-      line.push_back("N/A");
+      line.push_back("N/A");  // VECTOR_TYPE
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // VECTOR_SNAPSHOT_LOG_ID
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // VECTOR_APPLY_LOG_ID
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // VECTOR_BUILD_EPOCH
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // IS_STOP
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // IS_READY
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // IS_OWN_READY
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // IS_SWITCHING
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // BUILD_ERROR
+      url_line.push_back(std::string());
+
+      line.push_back("N/A");  // REBUILD_ERROR
+      url_line.push_back(std::string());
     }
-    url_line.push_back(std::string());
 
     table_contents.push_back(line);
     table_urls.push_back(url_line);
@@ -640,187 +812,6 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   os.move_to(cntl->response_attachment());
   cntl->set_response_compress_type(brpc::COMPRESS_TYPE_GZIP);
-}
-
-bool ClusterStatImpl::GetRegionInfo(int64_t region_id, const pb::common::RegionMap& region_map,
-                                    pb::common::Region& result) {
-  bool is_found = false;
-  for (const auto& region : region_map.regions()) {
-    if (region.id() == region_id) {
-      is_found = true;
-      result = region;
-    }
-  }
-  DINGO_LOG(WARNING) << "Get Region Id From RegionMap Failed. Input RegionID:" << region_id;
-  return is_found;
-}
-
-void ClusterStatImpl::PrintSchema(std::ostream& os, const std::string& schema_name) {
-  os << "<p style=\"text-align: center;\">Schema:" + schema_name + "</p>";
-}
-
-void ClusterStatImpl::PrintRegionNode(std::ostream& os, const pb::common::Region& region) {
-  DINGO_LOG(INFO) << "Region:" << region.ShortDebugString();
-  std::string epoch_info = fmt::format("<li>epoch: {}-{}</li>", region.definition().epoch().conf_version(),
-                                       region.definition().epoch().version());
-  std::string create_time_info =
-      fmt::format("<li>create_time: {}", Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));
-  std::string leader_info = "<li>Leader:";
-  std::string follower_info = "<li>Follower:";
-  int64_t const leader_store_id = region.leader_store_id();
-  for (const auto& peer : region.definition().peers()) {
-    std::string ip_port;
-    ip_port += peer.raft_location().host();
-    ip_port += ":";
-    ip_port += std::to_string(peer.raft_location().port());
-    if (peer.store_id() == leader_store_id) {
-      leader_info += "<a href=\"http://";
-      leader_info += ip_port;
-      leader_info += "/status\"";
-      leader_info += ">";
-      leader_info += ip_port;
-      leader_info += "</a>";
-    } else {
-      follower_info += "<a href=\"http://";
-      follower_info += ip_port;
-      follower_info += "/status\"";
-      follower_info += ">";
-      follower_info += ip_port;
-      follower_info += "</a>";
-      follower_info += " ";
-    }
-  }
-  leader_info += "</li>";
-  follower_info += "</li>";
-
-  std::string range_info;
-  if (region.definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
-    range_info = fmt::format("<li>Range:[{}, {}); [{}/{}, {}/{})</li>",
-                             Helper::StringToHex(region.definition().range().start_key()),
-                             Helper::StringToHex(region.definition().range().end_key()),
-                             VectorCodec::DecodePartitionId(region.definition().range().start_key()),
-                             VectorCodec::DecodeVectorId(region.definition().range().start_key()),
-                             VectorCodec::DecodePartitionId(region.definition().range().end_key()),
-                             VectorCodec::DecodeVectorId(region.definition().range().end_key()));
-  } else {
-    range_info = fmt::format("<li>Range:[{}, {})</li>", Helper::StringToHex(region.definition().range().start_key()),
-                             Helper::StringToHex(region.definition().range().end_key()));
-  }
-
-  os << "<li>RegionID:";
-  os << std::to_string(region.id());
-  os << "<ul>";
-  os << epoch_info;
-  os << create_time_info;
-  os << leader_info;
-  os << follower_info;
-  os << range_info;
-  os << "</ul>";
-  os << "</li>";
-}
-
-void ClusterStatImpl::PrintTableRegions(std::ostream& os, const pb::common::RegionMap& region_map,
-                                        const pb::meta::TableRange& table_range) {
-  os << "<li> Regions: ";
-  os << "<ul>";
-  for (const auto& range_distribution : table_range.range_distribution()) {
-    int64_t const region_id = range_distribution.id().entity_id();
-    DINGO_LOG(INFO) << "RangeID:" << region_id << "," << range_distribution.ShortDebugString();
-    pb::common::Region found_region;
-    bool const is_found = GetRegionInfo(region_id, region_map, found_region);
-    if (!is_found) {
-      DINGO_LOG(WARNING) << "Cannot Found Region:" << region_id << " on RegionMap";
-      continue;
-    }
-
-    // Append Region Info to HTML
-    PrintRegionNode(os, found_region);
-  }
-  // End Append Region Information
-  os << "</ul>";
-  os << "</li>";
-}
-
-std::string ClusterStatImpl::GetTabHead() {
-  std::string source_str(brpc::TabsHead());
-  const std::string substr_to_replace = "ol,ul { list-style:none; }\n";
-  const std::string replace_str = "ul { font-size: 18px; }";
-  size_t pos = 0;
-  while ((pos = source_str.find(substr_to_replace, pos)) != std::string::npos) {
-    source_str.replace(pos, substr_to_replace.length(), replace_str);
-    break;
-  }
-  return source_str;
-}
-
-void ClusterStatImpl::PrintTableDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition) {
-  /*
-   * <li>Columns
-   *  <ul>
-   *   <li>ID:INT</li>
-   *   <li>NAME:varchar</li>
-   *   <li>AGE:int</li>
-   *   </ul>
-   * </li>
-   * */
-  os << "<li> Columns:";
-  os << "<ul>";
-  for (const auto& column : table_definition.columns()) {
-    os << "<li>" << column.name() << ":" << column.sql_type() << "</li>";
-  }
-  os << "</ul>";
-  os << "</li>";
-
-  os << "<li> Engine:";
-  os << "<ul>";
-  os << "<li>" << pb::common::Engine_Name(table_definition.engine()) << "</li>";
-  os << "</ul>";
-  os << "</li>";
-}
-
-void ClusterStatImpl::PrintIndexDefinition(std::ostream& os, const pb::meta::TableDefinition& table_definition) {
-  /*
-   * <li>Columns
-   *  <ul>
-   *   <li>ID:INT</li>
-   *   <li>NAME:varchar</li>
-   *   <li>AGE:int</li>
-   *   </ul>
-   * </li>
-   * */
-  os << "<li> IndexDefinition:";
-  os << "<ul>";
-  os << "<li>" << table_definition.ShortDebugString() << "</li>";
-  os << "</ul>";
-  os << "</li>";
-
-  os << "<li> Engine:";
-  os << "<ul>";
-  os << "<li>" << pb::common::Engine_Name(table_definition.engine()) << "</li>";
-  os << "</ul>";
-  os << "</li>";
-}
-
-void ClusterStatImpl::PrintIndexRegions(std::ostream& os, const pb::common::RegionMap& region_map,
-                                        const pb::meta::IndexRange& index_range) {
-  os << "<li> Regions: ";
-  os << "<ul>";
-  for (const auto& range_distribution : index_range.range_distribution()) {
-    int64_t const region_id = range_distribution.id().entity_id();
-    DINGO_LOG(INFO) << "RangeID:" << region_id << "," << range_distribution.ShortDebugString();
-    pb::common::Region found_region;
-    bool const is_found = GetRegionInfo(region_id, region_map, found_region);
-    if (!is_found) {
-      DINGO_LOG(WARNING) << "Cannot Found Region:" << region_id << " on RegionMap";
-      continue;
-    }
-
-    // Append Region Info to HTML
-    PrintRegionNode(os, found_region);
-  }
-  // End Append Region Information
-  os << "</ul>";
-  os << "</li>";
 }
 
 }  // namespace dingodb
