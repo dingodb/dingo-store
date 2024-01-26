@@ -15,9 +15,9 @@
 #ifndef DINGODB_SDK_TEST_MOCK_STORE_RPC_CONTROLLER_H_
 #define DINGODB_SDK_TEST_MOCK_STORE_RPC_CONTROLLER_H_
 
-#include "client_stub.h"
+#include "sdk/client_stub.h"
 #include "gmock/gmock.h"
-#include "store/store_rpc_controller.h"
+#include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

@@ -179,6 +179,9 @@ bool VectorIndexCache::CheckIndexDefinitionWithId(const pb::meta::IndexDefinitio
   if (index_def_with_id.index_definition().name().empty()) {
     return false;
   }
+  if (!(index_def_with_id.index_definition().index_partition().partitions_size() > 0)) {
+    return false;
+  }
   return true;
 }
 }  // namespace sdk

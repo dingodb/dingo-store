@@ -17,22 +17,22 @@
 
 #include <memory>
 
-#include "admin_tool.h"
-#include "client.h"
-#include "client_internal_data.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "meta_cache.h"
 #include "mock_client_stub.h"
 #include "mock_coordinator_proxy.h"
 #include "mock_region_scanner.h"
 #include "mock_rpc_interaction.h"
+#include "sdk/admin_tool.h"
+#include "sdk/client.h"
+#include "sdk/client_internal_data.h"
+#include "sdk/meta_cache.h"
+#include "sdk/transaction/txn_impl.h"
+#include "sdk/utils/actuator.h"
+#include "sdk/utils/thread_pool_actuator.h"
 #include "test_common.h"
 #include "transaction/mock_txn_lock_resolver.h"
-#include "transaction/txn_impl.h"
-#include "utils/actuator.h"
-#include "utils/thread_pool_actuator.h"
 
 namespace dingodb {
 namespace sdk {

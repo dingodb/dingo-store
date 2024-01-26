@@ -15,10 +15,10 @@
 #ifndef DINGODB_SDK_TEST_MOCK_TXN_RESOLVER_H_
 #define DINGODB_SDK_TEST_MOCK_TXN_RESOLVER_H_
 
-#include "client_stub.h"
+#include "sdk/client_stub.h"
 #include "gmock/gmock.h"
-#include "status.h"
-#include "transaction/txn_lock_resolver.h"
+#include "sdk/status.h"
+#include "sdk/transaction/txn_lock_resolver.h"
 
 namespace dingodb {
 namespace sdk {

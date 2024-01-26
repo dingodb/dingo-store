@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "coordinator_proxy.h"
 #include "gtest/gtest.h"
-#include "meta_cache.h"
 #include "mock_coordinator_proxy.h"
+#include "sdk/coordinator_proxy.h"
+#include "sdk/meta_cache.h"
 #include "test_common.h"
 
 namespace dingodb {

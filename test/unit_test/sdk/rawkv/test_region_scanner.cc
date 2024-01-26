@@ -16,15 +16,15 @@
 #include <memory>
 #include <string>
 
-#include "client.h"
-#include "common/common.h"
-#include "common/param_config.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "mock_region_scanner.h"
 #include "proto/error.pb.h"
-#include "rawkv/region_scanner_impl.h"
-#include "store/store_rpc.h"
+#include "sdk/client.h"
+#include "sdk/common/common.h"
+#include "sdk/common/param_config.h"
+#include "sdk/rawkv/region_scanner_impl.h"
+#include "sdk/store/store_rpc.h"
 #include "test_base.h"
 #include "test_common.h"
 

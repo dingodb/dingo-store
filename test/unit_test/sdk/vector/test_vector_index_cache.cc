@@ -19,9 +19,9 @@
 #include "gtest/gtest.h"
 #include "mock_coordinator_proxy.h"
 #include "test_common.h"
-#include "vector.h"
-#include "vector/vector_common.h"
-#include "vector/vector_index_cache.h"
+#include "sdk/vector.h"
+#include "sdk/vector/vector_common.h"
+#include "sdk/vector/vector_index_cache.h"
 
 namespace dingodb {
 namespace sdk {

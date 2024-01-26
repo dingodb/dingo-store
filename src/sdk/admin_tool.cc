@@ -101,5 +101,21 @@ Status AdminTool::CreateTableIds(int64_t count, std::vector<int64_t>& out_table_
   return Status::OK();
 }
 
+Status AdminTool::DropIndex(int64_t index_id) {
+  if (index_id <= 0) {
+    return Status::InvalidArgument("index_id must greater than 0");
+  }
+
+  pb::meta::DropIndexRequest request;
+  pb::meta::DropIndexResponse response;
+
+  auto* index_pb = request.mutable_index_id();
+  index_pb->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_pb->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  index_pb->set_entity_id(index_id);
+
+  return coordinator_proxy_->DropIndex(request, response);
+}
+
 }  // namespace sdk
 }  // namespace dingodb

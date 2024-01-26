@@ -20,7 +20,7 @@
 #include <mutex>
 
 #include "gtest/gtest.h"
-#include "utils/thread_pool_actuator.h"
+#include "sdk/utils/thread_pool_actuator.h"
 
 namespace dingodb {
 namespace sdk {

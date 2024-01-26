@@ -16,7 +16,7 @@
 #include <set>
 
 #include "gtest/gtest.h"
-#include "transaction/txn_buffer.h"
+#include "sdk/transaction/txn_buffer.h"
 
 namespace dingodb {
 namespace sdk {

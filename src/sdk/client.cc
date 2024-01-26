@@ -160,7 +160,10 @@ Status Client::NewVectorIndexCreator(VectorIndexCreator** index_creator) {
   return Status::OK();
 }
 
-Status Client::DropIndex(int64_t index_id) { return Status::NotSupported("not supported"); }
+Status Client::DropIndex(int64_t index_id) {
+  data_->stub->GetVectorIndexCache()->RemoveVectorIndexById(index_id);
+  return data_->stub->GetAdminTool()->DropIndex(index_id);
+}
 
 Status Client::DropIndexByName(const std::string& index_name) { return Status::NotSupported("not supported"); }
 
