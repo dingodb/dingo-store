@@ -34,7 +34,8 @@ static int64_t g_schema_id{2};
 static int64_t g_index_id{0};
 static std::string g_index_name = "example01";
 static std::vector<int64_t> g_range_partition_seperator_ids{5, 10, 20};
-static dingodb::sdk::FlatParam g_flat_param(1000, dingodb::sdk::MetricType::kL2);
+static int32_t g_dimension = 2;
+static dingodb::sdk::FlatParam g_flat_param(g_dimension, dingodb::sdk::MetricType::kL2);
 
 static void PrepareVectorIndex() {
   dingodb::sdk::VectorIndexCreator* creator;
@@ -50,6 +51,7 @@ static void PrepareVectorIndex() {
                       .SetFlatParam(g_flat_param)
                       .Create(g_index_id);
   DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
+  sleep(3);
 }
 
 void PostClean() {
@@ -102,6 +104,28 @@ static void VectorIndexCacheSearch() {
   }
 }
 
+static void VectorAdd() {
+  dingodb::sdk::VectorClient* client;
+  Status built = g_client->NewVectorClient(&client);
+  CHECK(built.IsOK()) << "dingo vector client build fail:" << built.ToString();
+  CHECK_NOTNULL(client);
+  dingodb::ScopeGuard guard([&]() { delete client; });
+
+  std::vector<dingodb::sdk::VectorWithId> vectors;
+
+  for (const auto& id : g_range_partition_seperator_ids) {
+    dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
+    tmp_vector.float_values.push_back(1.0);
+    tmp_vector.float_values.push_back(2.0);
+    dingodb::sdk::VectorWithId tmp(id, std::move(tmp_vector));
+
+    vectors.push_back(std::move(tmp));
+  }
+
+  Status add = client->Add(g_index_id, vectors, false, false);
+  DINGO_LOG(INFO) << "vector add:" << add.ToString();
+}
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = true;
@@ -128,5 +152,6 @@ int main(int argc, char* argv[]) {
 
   PrepareVectorIndex();
   VectorIndexCacheSearch();
+  VectorAdd();
   PostClean();
 }

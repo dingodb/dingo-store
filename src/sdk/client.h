@@ -32,6 +32,7 @@ class TestBase;
 class TransactionOptions;
 class Transaction;
 class VectorIndexCreator;
+class VectorClient;
 
 /// @brief Callers must keep client valid in it's lifetime in order to interact with the cluster,
 class Client : public std::enable_shared_from_this<Client> {
@@ -62,6 +63,9 @@ class Client : public std::enable_shared_from_this<Client> {
   Status IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress);
 
   Status DropRegion(int64_t region_id);
+
+  // NOTE:: Caller must delete *client when it is no longer needed.
+  Status NewVectorClient(VectorClient** client);
 
   // NOTE:: Caller must delete *index_creator when it is no longer needed.
   Status NewVectorIndexCreator(VectorIndexCreator** index_creator);
