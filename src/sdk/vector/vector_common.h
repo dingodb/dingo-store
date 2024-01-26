@@ -172,6 +172,29 @@ static void DecodeVectorIndexCacheKey(const VectorIndexCacheKey& key, int64_t& s
   index_name = std::string(key.data() + sizeof(schema_id), key.size() - sizeof(schema_id));
 }
 
+static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type) {
+  switch (value_type) {
+    case ValueType::kFloat:
+      return pb::common::ValueType::FLOAT;
+    case ValueType::kUinT8:
+      return pb::common::ValueType::UINT8;
+    default:
+      CHECK(false) << "unsupported value type:" << value_type;
+  }
+}
+
+static void VectorIndexType2InternalVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId& vector_with_id) {
+  pb->set_id(vector_with_id.id);
+  auto* vector_pb = pb->mutable_vector();
+  const auto& vector = vector_with_id.vector;
+  vector_pb->set_dimension(vector.dimension);
+  vector_pb->set_value_type(ValueType2InternalValueTypePB(vector.value_type));
+  // TODO: support uint
+  for (const auto& float_value : vector.float_values) {
+    vector_pb->add_float_values(float_value);
+  }
+}
+
 }  // namespace sdk
 }  // namespace dingodb
 #endif  // DINGODB_SDK_VECTOR_COMMON_H_

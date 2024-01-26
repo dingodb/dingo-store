@@ -25,6 +25,8 @@
 namespace dingodb {
 namespace sdk {
 
+class ClientStub;
+
 enum VectorIndexType : uint8_t { kNoneIndexType, kFlat, kIvfFlat, kIvfPq, kHnsw, kDiskAnn, kBruteForce };
 
 enum MetricType : uint8_t { kNoneMetricType, kL2, kInnerProduct, kCosine };
@@ -122,6 +124,8 @@ struct Vector {
   std::vector<float> float_values;
   std::vector<std::string> binary_values;
 
+  explicit Vector(ValueType p_value_type, int32_t p_dimension) : value_type(p_value_type), dimension(p_dimension) {}
+
   Vector(Vector&& other) noexcept
       : dimension(other.dimension),
         value_type(other.value_type),
@@ -144,6 +148,8 @@ struct VectorWithId {
   int64_t id;
   Vector vector;
   //  TODO: scalar data and table data
+
+  explicit VectorWithId(int64_t p_id, Vector p_vector) : id(p_id), vector(std::move(p_vector)) {}
 
   VectorWithId(VectorWithId&& other) noexcept : id(other.id), vector(std::move(other.vector)) {}
 
@@ -306,30 +312,28 @@ class VectorClient : public std::enable_shared_from_this<VectorClient> {
   VectorClient(const VectorClient&) = delete;
   const VectorClient& operator=(const VectorClient&) = delete;
 
-  ~VectorClient();
+  ~VectorClient() = default;
 
   Status Add(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
              bool is_update = false);
-  Status Add(const std::string& index_name, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
-             bool is_update = false);
+  Status Add(int64_t schema_id, const std::string& index_name, const std::vector<VectorWithId>& vectors,
+             bool replace_deleted = false, bool is_update = false);
 
   Status Search(int64_t index_id, const SearchParameter& search_param, const std::vector<VectorWithId>& target_vectors,
                 std::vector<SearchResult>& out_result);
-  Status Search(const std::string& index_name, const SearchParameter& search_param,
+  Status Search(int64_t schema_id, const std::string& index_name, const SearchParameter& search_param,
                 const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result);
 
   Status Delete(int64_t index_id, const std::vector<int64_t>& vector_ids, std::vector<DeleteResult>& out_result);
-  Status Delete(const std::string& index_name, const std::vector<int64_t>& vector_ids,
+  Status Delete(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,
                 std::vector<DeleteResult>& out_result);
 
  private:
   friend class Client;
 
-  // own
-  class Data;
-  std::unique_ptr<Data> data_;
+  const ClientStub& stub_;
 
-  explicit VectorClient(Data* data);
+  explicit VectorClient(const ClientStub& stub);
 };
 }  // namespace sdk
 

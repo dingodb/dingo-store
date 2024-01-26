@@ -135,7 +135,6 @@ Status Client::NewRegionCreator(std::shared_ptr<RegionCreator>& creator) {
   return Status::OK();
 }
 
-// NOTE:: Caller must delete *raw_kv when it is no longer needed.
 Status Client::NewRegionCreator(RegionCreator** creator) {
   std::shared_ptr<RegionCreator> tmp;
   Status s = NewRegionCreator(tmp);
@@ -153,6 +152,11 @@ Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_p
 Status Client::DropRegion(int64_t region_id) {
   data_->stub->GetMetaCache()->RemoveRegion(region_id);
   return data_->stub->GetAdminTool()->DropRegion(region_id);
+}
+
+Status Client::NewVectorClient(VectorClient** client) {
+  *client = new VectorClient(*data_->stub);
+  return Status::OK();
 }
 
 Status Client::NewVectorIndexCreator(VectorIndexCreator** index_creator) {

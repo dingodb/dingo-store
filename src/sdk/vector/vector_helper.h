@@ -12,33 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_VECTOR_CLIENT_DATA_H_
-#define DINGODB_SDK_VECTOR_CLIENT_DATA_H_
+#ifndef DINGODB_SDK_VECTOR_HELPER_H_
+#define DINGODB_SDK_VECTOR_HELPER_H_
 
-#include <optional>
-#include <utility>
-
-#include "proto/common.pb.h"
-#include "sdk/client_stub.h"
-#include "sdk/vector.h"
+#include "glog/logging.h"
 #include "sdk/vector/vector_common.h"
+#include "sdk/vector/vector_index.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 namespace sdk {
+namespace vector_helper {
+static std::string VectorIdToRangeKey(const VectorIndex& vector_index, int64_t vector_id) {
+  int64_t part_id = vector_index.GetPartitionId(vector_id);
+  CHECK_GT(part_id, 0);
+  CHECK_GT(vector_id, 0);
 
-class VectorClient::Data {
- public:
-  Data(const Data&) = delete;
-  const Data& operator=(const Data&) = delete;
-
-  explicit Data(const ClientStub& stub) : stub(stub) {}
-
-  ~Data() = default;
-
-  const ClientStub& stub;
-};
+  std::string tmp_key;
+  VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, vector_id, tmp_key);
+  return std::move(tmp_key);
+}
+}  // namespace vector_helper
 
 }  // namespace sdk
 }  // namespace dingodb
-
-#endif  // DINGODB_SDK_VECTOR_CLIENT_DATA_H_
+#endif  // DINGODB_SDK_VECTOR_HELPER_H_
