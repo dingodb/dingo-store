@@ -663,13 +663,14 @@ int Segment::Truncate(int64_t last_index_kept) {
 }
 
 SegmentLogStorage::SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
-                                     bool enable_sync)
+                                     int64_t init_vector_index_first_log_index, bool enable_sync)
     : path_(path),
       region_id_(region_id),
       max_segment_size_(max_segment_size),
       first_log_index_(1),
       last_log_index_(0),
-      vector_index_first_log_index_(INT64_MAX),
+      init_vector_index_first_log_index_(init_vector_index_first_log_index),
+      vector_index_first_log_index_(init_vector_index_first_log_index),
       checksum_type_(0),
       enable_sync_(enable_sync) {
   DINGO_LOG(DEBUG) << fmt::format("[new.SegmentLogStorage][id({})]", region_id_);
@@ -733,6 +734,8 @@ int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) 
   }
   return ret;
 }
+
+int64_t SegmentLogStorage::InitVectorIndexFirstLogIndex() const { return init_vector_index_first_log_index_; }
 
 int64_t SegmentLogStorage::FirstLogIndex() { return first_log_index_.load(butil::memory_order_acquire); };
 
