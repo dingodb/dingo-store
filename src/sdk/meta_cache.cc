@@ -114,7 +114,7 @@ void MetaCache::ClearRange(const std::shared_ptr<Region>& region) {
   std::unique_lock<std::shared_mutex> w(rw_lock_);
   auto iter = region_by_id_.find(region->RegionId());
   if (region->IsStale()) {
-    CHECK(iter == region_by_id_.end());
+    DINGO_LOG(DEBUG) << "region is stale, no need clear, region:" << region->ToString();
     return;
   } else {
     CHECK(iter != region_by_id_.end());
