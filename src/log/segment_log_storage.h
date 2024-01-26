@@ -24,11 +24,8 @@
 
 #include "braft/log_entry.h"
 #include "braft/storage.h"
-#include "braft/util.h"
 #include "butil/atomicops.h"
 #include "butil/iobuf.h"
-#include "butil/logging.h"
-#include "common/helper.h"
 #include "common/logging.h"
 
 namespace dingodb {
@@ -150,7 +147,10 @@ class SegmentLogStorage {
   using SegmentMap = std::map<int64_t, std::shared_ptr<Segment>>;
 
   explicit SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
-                             int64_t init_vector_index_first_log_index, bool enable_sync = true);
+                             int64_t init_vector_index_first_log_index, bool enable_sync);
+
+  explicit SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
+                             int64_t init_vector_index_first_log_index);
 
   SegmentLogStorage();
 

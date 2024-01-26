@@ -28,6 +28,7 @@
 #include "benchmark/color.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "sdk/client.h"
 
 DEFINE_string(coordinator_url, "file://./coor_list", "Coordinator url");
@@ -49,6 +50,7 @@ DEFINE_uint32(timelimit, 0, "Time limit in seconds");
 DEFINE_uint32(delay, 2, "Interval in seconds between intermediate reports");
 
 DEFINE_bool(is_single_region_txn, true, "Is single region txn");
+DEFINE_uint32(replica, 3, "Replica number");
 
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);
@@ -192,8 +194,8 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
 
   for (int i = 0; i < num; ++i) {
     std::string prefix = fmt::format("{}{:06}", FLAGS_prefix, i);
-    auto region_id =
-        CreateRegion(kRegionNamePrefix + std::to_string(i + 1), prefix, Helper::PrefixNext(prefix), GetRawEngineType());
+    auto region_id = CreateRegion(kRegionNamePrefix + std::to_string(i + 1), prefix, Helper::PrefixNext(prefix),
+                                  GetRawEngineType(), FLAGS_replica);
     if (region_id == 0) {
       return region_entries;
     }
