@@ -12,43 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_SDK_VECTOR_INDEX_CACHE_H_
+#define DINGODB_SDK_VECTOR_INDEX_CACHE_H_
+
 #include <cstdint>
+#include <functional>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 
-#include "proto/meta.pb.h"
 #include "sdk/coordinator_proxy.h"
 #include "sdk/vector.h"
-#include "vector/vector_index.h"
+#include "sdk/vector/vector_common.h"
+#include "sdk/vector/vector_index.h"
 
 namespace dingodb {
 namespace sdk {
-
-class VectorIndex {
- public:
-  VectorIndex(const VectorIndex&) = delete;
-  const VectorIndex& operator=(const VectorIndex&) = delete;
-
-  explicit VectorIndex(int64_t id, pb::meta::IndexDefinition definition);
-
-  ~VectorIndex() = default;
-
-  int64_t GetId() const { return id_; }
-
-  bool IsStale() { return stale_.load(std::memory_order_relaxed); }
-
-  std::string GetName() const;
-
-  VectorIndexType GetIndexType() const;
-
-  int64_t GetPartitionId(int64_t vector_id) const;
-
- private:
-  int64_t id_{-1};
-  std::atomic<bool> stale_{true};
-  pb::meta::IndexDefinition index_definition_;
-};
 
 class VectorIndexCache {
  public:
@@ -57,23 +36,50 @@ class VectorIndexCache {
 
   explicit VectorIndexCache(CoordinatorProxy& coordinator_proxy);
 
-  ~VectorIndexCache();
+  ~VectorIndexCache() = default;
 
-  Status GetIndexIdByName(std::string_view index_name, int64_t& index_id);
+  Status GetIndexIdByKey(const VectorIndexCacheKey& index_key, int64_t& index_id);
 
-  Status GetVectorIndexByName(std::string_view index_name, std::shared_ptr<VectorIndex>& out_vector_index);
+  Status GetVectorIndexByKey(const VectorIndexCacheKey& index_key, std::shared_ptr<VectorIndex>& out_vector_index);
 
   Status GetVectorIndexById(int64_t index_id, std::shared_ptr<VectorIndex>& out_vector_index);
 
   void RemoveVectorIndexById(int64_t index_id);
 
-  void RemoveVectorIndexByName(std::string_view index_name);
+  void RemoveVectorIndexByKey(const VectorIndexCacheKey& index_key);
 
  private:
-  mutable std::shared_mutex rw_lck_;
-  std::unordered_map<std::string, int64_t, std::less<void>> index_name_to_id_;
-  std::unordered_map<int64_t, std::shared_ptr<VectorIndex>, std::less<void>> id_to_index_;
+  Status SlowGetVectorIndexByKey(const VectorIndexCacheKey& index_key, std::shared_ptr<VectorIndex>& out_vector_index);
+  Status SlowGetVectorIndexById(int64_t index_id, std::shared_ptr<VectorIndex>& out_vector_index);
+  Status ProcessIndexDefinitionWithId(const pb::meta::IndexDefinitionWithId& index_def_with_id,
+                                      std::shared_ptr<VectorIndex>& out_vector_index);
+
+  static bool CheckIndexDefinitionWithId(const pb::meta::IndexDefinitionWithId& index_def_with_id);
+  template <class VectorIndexResponse>
+  static bool CheckIndexResponse(const VectorIndexResponse& response);
+
+  CoordinatorProxy& coordinator_proxy_;
+  mutable std::shared_mutex rw_lock_;
+  std::unordered_map<VectorIndexCacheKey, int64_t> index_key_to_id_;
+  std::unordered_map<int64_t, std::shared_ptr<VectorIndex>> id_to_index_;
 };
+
+template <class VectorIndexResponse>
+bool VectorIndexCache::CheckIndexResponse(const VectorIndexResponse& response) {
+  bool checked = true;
+  if (!response.has_index_definition_with_id()) {
+    checked = false;
+  } else {
+    checked = CheckIndexDefinitionWithId(response.index_definition_with_id());
+  }
+
+  if (!checked) {
+    DINGO_LOG(WARNING) << "Fail checked, response:" << response.DebugString();
+  }
+
+  return checked;
+}
 
 }  // namespace sdk
 }  // namespace dingodb
+#endif  // DINGODB_SDK_VECTOR_INDEX_CACHE_H_

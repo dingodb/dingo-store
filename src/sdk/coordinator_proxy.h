@@ -55,6 +55,11 @@ class CoordinatorProxy {
 
   virtual Status CreateIndex(const pb::meta::CreateIndexRequest& request, pb::meta::CreateIndexResponse& response);
 
+  virtual Status GetIndexByName(const pb::meta::GetIndexByNameRequest& request,
+                                pb::meta::GetIndexByNameResponse& response);
+
+  virtual Status GetIndexById(const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response);
+
   virtual Status CreateTableIds(const pb::meta::CreateTableIdsRequest& request,
                                 pb::meta::CreateTableIdsResponse& response);
 

@@ -33,6 +33,8 @@ struct FlatParam {
   explicit FlatParam(int32_t p_dimension, MetricType p_metric_type)
       : dimension(p_dimension), metric_type(p_metric_type) {}
 
+  static VectorIndexType Type() { return VectorIndexType::kFlat; }
+
   // dimensions required
   int32_t dimension;
   // distance calculation method (L2 or InnerProduct) required
@@ -42,6 +44,8 @@ struct FlatParam {
 struct IvfFlatParam {
   explicit IvfFlatParam(int32_t p_dimension, MetricType p_metric_type)
       : dimension(p_dimension), metric_type(p_metric_type) {}
+
+  static VectorIndexType Type() { return VectorIndexType::kIvfFlat; }
 
   // dimensions required
   int32_t dimension;
@@ -54,6 +58,8 @@ struct IvfFlatParam {
 struct IvfPqParam {
   explicit IvfPqParam(int32_t p_dimension, MetricType p_metric_type)
       : dimension(p_dimension), metric_type(p_metric_type) {}
+
+  static VectorIndexType Type() { return VectorIndexType::kIvfPq; }
 
   // dimensions required
   int32_t dimension;
@@ -74,6 +80,8 @@ struct IvfPqParam {
 struct HnswParam {
   explicit HnswParam(int32_t p_dimension, MetricType p_metric_type, int32_t p_max_elements)
       : dimension(p_dimension), metric_type(p_metric_type), max_elements(p_max_elements) {}
+
+  static VectorIndexType Type() { return VectorIndexType::kHnsw; }
 
   // dimensions required
   int32_t dimension;
@@ -97,6 +105,8 @@ struct DiskAnnParam {
 struct BruteForceParam {
   explicit BruteForceParam(int32_t p_dimension, MetricType p_metric_type)
       : dimension(p_dimension), metric_type(p_metric_type) {}
+
+  static VectorIndexType Type() { return VectorIndexType::kBruteForce; }
 
   // dimensions required
   int32_t dimension;
