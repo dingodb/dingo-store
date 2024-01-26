@@ -36,7 +36,7 @@ class SegmentLogStorageTest : public testing::Test {
   static void SetUpTestSuite() {
     dingodb::Helper::CreateDirectories(kLogPath);
 
-    log_stroage = std::make_shared<dingodb::SegmentLogStorage>(kLogPath, 100, 8 * 1024 * 1024);
+    log_stroage = std::make_shared<dingodb::SegmentLogStorage>(kLogPath, 100, 8 * 1024 * 1024, INT64_MAX);
     static braft::ConfigurationManager configuration_manager;
     log_stroage->Init(&configuration_manager);
   }

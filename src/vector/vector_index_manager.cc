@@ -975,11 +975,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
                                  start_log_id, end_log_id);
 
   int64_t start_time = Helper::TimestampMs();
-  auto engine = Server::GetInstance().GetEngine();
-  if (engine->GetID() != pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
-    return butil::Status(pb::error::Errno::EINTERNAL, "Engine is not raft store.");
-  }
-  auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine);
+  auto raft_kv_engine = Server::GetInstance().GetRaftStoreEngine();
   auto node = raft_kv_engine->GetNode(vector_index->Id());
   if (node == nullptr) {
     return butil::Status(pb::error::Errno::ERAFT_NOT_FOUND, fmt::format("Not found node {}", vector_index->Id()));
@@ -990,12 +986,20 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
 
+  if (end_log_id < log_stroage->FirstLogIndex()) {
+    DINGO_LOG(FATAL) << fmt::format("[vector_index.replaywal][index_id({})] abnormal end_log_id({}) first_log_id({})",
+                                    vector_index->Id(), end_log_id, log_stroage->FirstLogIndex());
+    return butil::Status();
+  }
+
   int64_t min_vector_id = 0, max_vector_id = 0;
   VectorCodec::DecodeRangeToVectorId(vector_index->Range(), min_vector_id, max_vector_id);
+
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
   std::vector<int64_t> ids;
   ids.reserve(Constant::kBuildVectorIndexBatchSize);
+
   int64_t last_log_id = vector_index->ApplyLogId();
   auto log_entrys = log_stroage->GetEntrys(start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
