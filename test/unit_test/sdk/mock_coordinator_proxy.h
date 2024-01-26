@@ -45,9 +45,19 @@ class MockCoordinatorProxy final : public CoordinatorProxy {
               (const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response),
               (override));
 
-  MOCK_METHOD(Status, TsoService,
-              (const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response),
+  MOCK_METHOD(Status, TsoService, (const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response), (override));
+
+  MOCK_METHOD(Status, CreateIndex,
+              (const pb::meta::CreateIndexRequest& request, pb::meta::CreateIndexResponse& response), (override));
+
+  MOCK_METHOD(Status, GetIndexByName,
+              (const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response), (override));
+
+  MOCK_METHOD(Status, GetIndexById, (const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response),
               (override));
+
+  MOCK_METHOD(Status, CreateTableIds,
+              (const pb::meta::CreateTableIdsRequest& request, pb::meta::CreateTableIdsResponse& response), (override));
 };
 
 }  // namespace sdk

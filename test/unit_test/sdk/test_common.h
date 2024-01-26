@@ -16,6 +16,7 @@
 #ifndef DINGODB_SDK_TEST_TEST_COMMON_H_
 #define DINGODB_SDK_TEST_TEST_COMMON_H_
 
+#include <cstdint>
 #include <string>
 #include <type_traits>
 
@@ -225,6 +226,12 @@ static pb::meta::TsoTimestamp CurrentFakeTso() {
   init_logic += 10;
 
   return fake_tso;
+}
+
+static void FillVectorIndexId(pb::meta::DingoCommonId* id, int64_t index_id, int64_t schema_id) {
+  id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  id->set_parent_entity_id(schema_id);
+  id->set_entity_id(index_id);
 }
 
 }  // namespace sdk

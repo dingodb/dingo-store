@@ -42,53 +42,29 @@ class VectorIndexCreator::Data {
 
   ~Data() = default;
 
-  void BuildVectorIndexParameter(pb::common::VectorIndexParameter* parameter) {
+  void BuildIndexParameter(pb::common::IndexParameter* index_parameter) {
+    index_parameter->set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+    auto* parameter = index_parameter->mutable_vector_index_parameter();
     if (index_type == kFlat) {
       DCHECK(flat_param.has_value());
-      parameter->set_vector_index_type(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-      auto* flat = parameter->mutable_flat_parameter();
-
       auto& param = flat_param.value();
-      flat->set_dimension(param.dimension);
-      flat->set_metric_type(MetricType2InternalMetricTypePB(param.metric_type));
+      FillFlatParmeter(parameter, param);
     } else if (index_type == kIvfFlat) {
       DCHECK(ivf_flat_param.has_value());
-      parameter->set_vector_index_type(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-      auto* ivf_flat = parameter->mutable_ivf_flat_parameter();
-
       auto& param = ivf_flat_param.value();
-      ivf_flat->set_dimension(param.dimension);
-      ivf_flat->set_metric_type(MetricType2InternalMetricTypePB(param.metric_type));
-      ivf_flat->set_ncentroids(param.ncentroids);
+      FillIvfFlatParmeter(parameter, param);
     } else if (index_type == kIvfPq) {
       DCHECK(ivf_pq_param.has_value());
-      parameter->set_vector_index_type(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
-      auto* ivf_pq = parameter->mutable_ivf_pq_parameter();
-
       auto& param = ivf_pq_param.value();
-      ivf_pq->set_dimension(param.dimension);
-      ivf_pq->set_metric_type(MetricType2InternalMetricTypePB(param.metric_type));
-      ivf_pq->set_ncentroids(param.ncentroids);
-      ivf_pq->set_nsubvector(param.nsubvector);
-      ivf_pq->set_nbits_per_idx(param.nbits_per_idx);
+      FillIvfPqParmeter(parameter, param);
     } else if (index_type == kHnsw) {
       DCHECK(hnsw_param.has_value());
-      auto* hsnw = parameter->mutable_hnsw_parameter();
-
       auto& param = hnsw_param.value();
-      hsnw->set_dimension(param.dimension);
-      hsnw->set_metric_type(MetricType2InternalMetricTypePB(param.metric_type));
-      hsnw->set_efconstruction(param.ef_construction);
-      hsnw->set_nlinks(param.nlinks);
-      hsnw->set_max_elements(param.max_elements);
+      FillHnswParmeter(parameter, param);
     } else if (index_type == kBruteForce) {
       DCHECK(brute_force_param.has_value());
-      auto* hsnw = parameter->mutable_hnsw_parameter();
-
       auto& param = brute_force_param.value();
-      auto* bruteforce = parameter->mutable_bruteforce_parameter();
-      bruteforce->set_dimension(param.dimension);
-      bruteforce->set_metric_type(MetricType2InternalMetricTypePB(param.metric_type));
+      FillButeForceParmeter(parameter, param);
     } else {
       CHECK(false) << "unsupported index type, " << index_type;
     }

@@ -127,30 +127,10 @@ Status VectorIndexCreator::Create(int64_t& out_index_id) {
   // index_definition->set_auto_increment(1024);
 
   // vector index parameter
-  auto* index_paramerter_pb = index_definition_pb->mutable_index_parameter();
-  index_paramerter_pb->set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
-  data_->BuildVectorIndexParameter(index_paramerter_pb->mutable_vector_index_parameter());
+  data_->BuildIndexParameter(index_definition_pb->mutable_index_parameter());
 
   // TODO: support hash
-  // set partion
-  auto* partition_rule = index_definition_pb->mutable_index_partition();
-  for (int i = 0; i < part_count; i++) {
-    auto* part = partition_rule->add_partitions();
-    int64_t part_id = new_ids[i + 1];  // 1st use for index id
-    part->mutable_id()->set_entity_id(part_id);
-    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
-    part->mutable_id()->set_parent_entity_id(new_index_id);
-    std::string start;
-    if (i == 0) {
-      VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, start);
-    } else {
-      VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, data_->range_partition_seperator_ids[i - 1], start);
-    }
-    part->mutable_range()->set_start_key(start);
-    std::string end;
-    VectorCodec::EncodeVectorKey(kVectorPrefix, part_id + 1, end);
-    part->mutable_range()->set_end_key(end);
-  }
+  FillRangePartitionRule(index_definition_pb->mutable_index_partition(), data_->range_partition_seperator_ids, new_ids);
 
   out_index_id = new_index_id;
 

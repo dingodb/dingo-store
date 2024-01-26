@@ -54,6 +54,8 @@ Status ClientStub::Open(std::string naming_service_url) {
   actuator_.reset(new ThreadPoolActuator());
   actuator_->Start(kActuatorThreadNum);
 
+  vector_index_cache_.reset(new VectorIndexCache(*coordinator_proxy_));
+
   return Status::OK();
 }
 

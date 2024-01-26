@@ -24,6 +24,7 @@
 #include "sdk/region_scanner.h"
 #include "sdk/rpc/rpc_interaction.h"
 #include "sdk/transaction/txn_lock_resolver.h"
+#include "sdk/vector/vector_index_cache.h"
 #include "utils/actuator.h"
 
 namespace dingodb {
@@ -77,7 +78,13 @@ class ClientStub {
     return actuator_;
   }
 
+  virtual std::shared_ptr<VectorIndexCache> GetVectorIndexCache() const {
+    DCHECK_NOTNULL(vector_index_cache_.get());
+    return vector_index_cache_;
+  }
+
  private:
+  // TODO: use unique ptr
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
   std::shared_ptr<MetaCache> meta_cache_;
   std::shared_ptr<RpcInteraction> store_rpc_interaction_;
@@ -86,6 +93,7 @@ class ClientStub {
   std::shared_ptr<AdminTool> admin_tool_;
   std::shared_ptr<TxnLockResolver> txn_lock_resolver_;
   std::shared_ptr<Actuator> actuator_;
+  std::shared_ptr<VectorIndexCache> vector_index_cache_;
 };
 
 }  // namespace sdk

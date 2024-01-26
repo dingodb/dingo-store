@@ -12,11 +12,13 @@ set(TEST_SRCS
   test_region.cc
   test_store_rpc_controller.cc
   test_thread_pool_actuator.cc
+  test_vector_index_cache.cc
   rawkv/test_raw_kv.cc
   rawkv/test_region_scanner.cc
   transaction/test_txn_buffer.cc
   transaction/test_txn_impl.cc
   transaction/test_txn_lock_resolver.cc
+  vector/test_vector_common.cc
 )
 
 add_executable(sdk_unit_test
