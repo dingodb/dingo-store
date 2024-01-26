@@ -350,6 +350,9 @@ class Helper {
   static std::string RegionEpochToString(const pb::common::RegionEpoch& epoch);
 
   static std::string PrintStatus(const butil::Status& status);
+
+  // check if number in set is continuous
+  static bool IsContinuous(const std::set<int64_t>& numbers);
 };
 
 }  // namespace dingodb

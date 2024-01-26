@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
 #include "butil/time.h"
@@ -588,6 +589,12 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     }
   }
 
+  // check if part_id is continuous
+  if (!Helper::IsContinuous(part_id_set)) {
+    DINGO_LOG(ERROR) << "part_id is not continuous, table_definition:" << table_definition.ShortDebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is not continuous");
+  }
+
   // check if table_name exists
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
 
@@ -1031,6 +1038,12 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     }
   }
 
+  // check if part_id is continuous
+  if (!Helper::IsContinuous(part_id_set)) {
+    DINGO_LOG(ERROR) << "part_id is not continuous, table_definition:" << table_definition.ShortDebugString();
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "part_id is not continuous");
+  }
+
   // check if table_name exists
   std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, table_definition.name());
 
@@ -1244,21 +1257,19 @@ butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_i
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "index type not match");
   }
 
-  if (table_internal.range().start_key().empty() || table_internal.range().end_key().empty()) {
-    DINGO_LOG(ERROR) << "ERRROR: index range is empty, index_id=" << index_id;
-    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "index range is empty");
-  }
-
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
-  if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << index_id;
-    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions failed");
+
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  auto ret2 = GetRegionsByTableInternal(table_internal, region_internals);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: GetRegionsByTableInternal failed, table_id=" << index_id;
+    return ret2;
   }
 
   if (region_internals.empty()) {
-    DINGO_LOG(WARNING) << "ERRROR: ScanRegions empty, table_id=" << index_id;
-    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions empty");
+    DINGO_LOG(WARNING) << "ERRROR: GetRegionsByTableInternal empty, table_id=" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "GetRegionsByTableInternal empty");
   }
 
   if (new_table_definition.index_parameter().vector_index_parameter().vector_index_type() ==
@@ -1816,13 +1827,15 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
                   << Helper::StringToHex(table_internal.range().end_key());
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
-  if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ScanRegions failed");
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  auto ret2 = GetRegionsByTableInternal(table_internal, region_internals);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: GetRegionsByTableInternal failed, table_id=" << table_id;
+    return ret2;
   }
 
-  DINGO_LOG(INFO) << "ScanRegions table_id=" << table_id << " regions count=" << region_internals.size();
+  DINGO_LOG(INFO) << "GetRegionsByTableInternal table_id=" << table_id << " regions count=" << region_internals.size();
 
   for (const auto& part_region : region_internals) {
     if (part_region.definition().table_id() != table_id) {
@@ -1942,13 +1955,16 @@ butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index
                   << Helper::StringToHex(table_internal.range().end_key());
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
-  if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << index_id;
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ScanRegions failed");
+
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  auto ret2 = GetRegionsByTableInternal(table_internal, region_internals);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: GetRegionsByTableInternal failed, table_id=" << index_id;
+    return ret2;
   }
 
-  DINGO_LOG(INFO) << "ScanRegions found region_internals count=" << region_internals.size();
+  DINGO_LOG(INFO) << "GetRegionsByTableInternal found region_internals count=" << region_internals.size();
 
   for (const auto& part_region : region_internals) {
     if (part_region.definition().index_id() != index_id) {
@@ -2195,9 +2211,11 @@ int64_t CoordinatorControl::CalculateTableMetricsSingle(int64_t table_id, pb::me
   }
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
-  if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_id;
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  auto ret2 = GetRegionsByTableInternal(table_internal, region_internals);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: GetRegionsByTableInternal failed, table_id=" << table_internal.id();
     return -1;
   }
 
@@ -2291,9 +2309,11 @@ int64_t CoordinatorControl::CalculateIndexMetricsSingle(int64_t index_id, pb::me
   }
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
-  if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << index_id;
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  auto ret2 = GetRegionsByTableInternal(table_internal, region_internals);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: GetRegionsByTableInternal failed, table_id=" << table_internal.id();
     return -1;
   }
 
@@ -2652,15 +2672,17 @@ butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t tab
   }
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
-  auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
-  if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_id;
-    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "ScanRegions failed");
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  auto ret2 = GetRegionsByTableInternal(table_internal, region_internals);
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "ERRROR: GetRegionsByTableInternal failed, table_id=" << table_internal.id();
+    return ret2;
   }
 
   if (region_internals.empty()) {
-    DINGO_LOG(WARNING) << "ERRROR: ScanRegions empty, table_id=" << table_id;
-    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "ScanRegions empty");
+    DINGO_LOG(WARNING) << "ERRROR: GetRegionsByTableInternal empty, table_id=" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_DEFINITION_ILLEGAL, "GetRegionsByTableInternal empty");
   }
 
   for (const auto& part_region : region_internals) {
@@ -3101,6 +3123,35 @@ butil::Status CoordinatorControl::TranslateEngineToRawEngine(const pb::common::E
       break;
     default:
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "engine not support");
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetRegionsByTableInternal(
+    const pb::coordinator_internal::TableInternal& table_internal,
+    std::vector<pb::coordinator_internal::RegionInternal>& region_internals) {
+  // for continuous partitions, merge scan regions.
+  // for non-continuous partitions, scan regions one by one parition.
+  if (BAIDU_UNLIKELY(table_internal.range().start_key().empty() || table_internal.range().end_key().empty())) {
+    for (const auto& partition_range : table_internal.definition().table_partition().partitions()) {
+      std::vector<pb::coordinator_internal::RegionInternal> regions_temp;
+      auto ret1 = ScanRegions(partition_range.range().start_key(), partition_range.range().end_key(), 0, regions_temp);
+      if (!ret1.ok()) {
+        DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_internal.id();
+        return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions failed");
+      }
+
+      for (auto& region : regions_temp) {
+        region_internals.push_back(std::move(region));
+      }
+    }
+  } else {
+    auto ret1 = ScanRegions(table_internal.range().start_key(), table_internal.range().end_key(), 0, region_internals);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_internal.id();
+      return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions failed");
+    }
   }
 
   return butil::Status::OK();
