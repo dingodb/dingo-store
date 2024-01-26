@@ -359,12 +359,12 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
   }
 
   for (const auto& vector : request->vectors()) {
-    if (vector.id() == 0 || vector.id() == INT64_MAX || vector.id() < 0) {
+    if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector.id()))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                           "Param vector id is not allowed to be zero or INT64_MAX or negative");
+                           "Param vector id is not allowed to be zero, INT64_MAX or negative");
     }
 
-    if (vector.vector().float_values().empty()) {
+    if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
       return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
     }
   }
@@ -1429,7 +1429,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
 
   std::vector<std::string_view> keys;
   for (const auto& mutation : request->mutations()) {
-    if (mutation.key().empty()) {
+    if (BAIDU_UNLIKELY(mutation.key().empty())) {
       return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
     }
     keys.push_back(mutation.key());
@@ -1440,13 +1440,13 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
     return status;
   }
 
-  if (request->mutations_size() > FLAGS_vector_max_batch_count) {
+  if (BAIDU_UNLIKELY(request->mutations_size() > FLAGS_vector_max_batch_count)) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
                          fmt::format("Param vectors size {} is exceed max batch count {}", request->mutations_size(),
                                      FLAGS_vector_max_batch_count));
   }
 
-  if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {
+  if (BAIDU_UNLIKELY(request->ByteSizeLong() > FLAGS_vector_max_request_size)) {
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
                          fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_vector_max_request_size));
@@ -1479,8 +1479,11 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
   for (const auto& mutation : request->mutations()) {
     // check vector_id is correctly encoded in key of mutation
     int64_t vector_id = VectorCodec::DecodeVectorId(mutation.key());
-    if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error, please check mutation key");
+
+    if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                           "Param vector id is not allowed to be zero, INT64_MAX or negative, please check the "
+                           "vector_id encoded in mutation key");
     }
 
     vector_ids.push_back(vector_id);
@@ -1493,17 +1496,19 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
                              fmt::format("Vector index {} exceeds max elements.", region->Id()));
       }
 
-      if (vector.id() == 0 || vector.id() == INT64_MAX || vector.id() < 0) {
+      if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector id is not allowed to be zero ,INT64_MAX or NEGATIVE");
+                             "Param  ector id is not allowed to be zero, INT64_MAX or negative, please check the "
+                             "vector_id in VectorWithId");
       }
 
-      if (vector.id() != vector_id) {
+      if (BAIDU_UNLIKELY(vector.id() != vector_id)) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector id is not equal to vector_id in mutation key");
+                             "Param vector id in VectorWithId is not equal to vector_id in mutation key, please check "
+                             "the mutation key and VectorWithId");
       }
 
-      if (vector.vector().float_values().empty()) {
+      if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
         return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
       }
 
@@ -1513,22 +1518,28 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
-        if (vector.vector().float_values().size() != dimension) {
+        if (BAIDU_UNLIKELY(vector.vector().float_values().size() != dimension)) {
           return butil::Status(
               pb::error::EILLEGAL_PARAMTETERS,
               "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
         }
       } else {
-        if (vector.vector().binary_values().size() != dimension) {
+        if (BAIDU_UNLIKELY(vector.vector().binary_values().size() != dimension)) {
           return butil::Status(
               pb::error::EILLEGAL_PARAMTETERS,
               "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
         }
       }
     } else if (mutation.op() == pb::store::Op::Delete) {
+      if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector id is not allowed to be zero, INT64_MAX or negative, please check the "
+                             "vector_id encoded in mutation key");
+      }
+
       continue;
     } else {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param op is error");
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param op of mutation is error");
     }
   }
 

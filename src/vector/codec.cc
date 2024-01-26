@@ -26,7 +26,7 @@
 
 namespace dingodb {
 
-// TODO: refact 
+// TODO: refact
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string& result) {
   if (BAIDU_UNLIKELY(prefix == 0)) {
     DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "]";
@@ -112,5 +112,7 @@ bool VectorCodec::IsValidKey(const std::string& key) {
   // return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
   return (key.size() == Constant::kVectorKeyMinLenWithPrefix || key.size() == Constant::kVectorKeyMaxLenWithPrefix);
 }
+
+bool VectorCodec::IsLegalVectorId(int64_t vector_id) { return vector_id > 0 && vector_id != INT64_MAX; }
 
 }  // namespace dingodb
