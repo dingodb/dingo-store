@@ -137,7 +137,7 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
   }
 
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), node_id);
-  auto log_storage = std::make_shared<dingodb::SegmentLogStorage>(log_path, node_id, 8 * 1024 * 1024);
+  auto log_storage = std::make_shared<dingodb::SegmentLogStorage>(log_path, node_id, 8 * 1024 * 1024, INT64_MAX);
 
   // std::string init_conf = FormatPeers(region->Peers());
 
