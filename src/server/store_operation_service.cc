@@ -44,7 +44,7 @@ void StoreOperationImpl::default_method(google::protobuf::RpcController* control
       pb::coordinator::StoreOperation store_operation;
       controller_->GetStoreOperation(store.id(), store_operation);
 
-      os << "StoreOperation: " << '\n';
+      os << "================ StoreOperation: ================" << '\n';
       os << store_operation.DebugString() << '\n';
     }
 
@@ -60,7 +60,7 @@ void StoreOperationImpl::default_method(google::protobuf::RpcController* control
       if (store_operation.id() == 0) {
         os << "StoreOperation is not found" << '\n';
       } else {
-        os << "StoreOperation: " << '\n';
+        os << "================ StoreOperation: ================" << '\n';
         os << store_operation.DebugString() << '\n';
       }
 

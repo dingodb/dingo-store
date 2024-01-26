@@ -78,14 +78,34 @@ static void NotifyRegionCmdStatus(RegionCmdPtr region_cmd, butil::Status status)
 butil::Status CreateRegionTask::PreValidateCreateRegion(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
-  return ValidateCreateRegion(store_meta_manager, command.region_id());
+  return ValidateCreateRegion(store_meta_manager, command.region_id(), command.create_request().region_definition());
 }
 
 butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                                     int64_t region_id) {
+                                                     int64_t region_id,
+                                                     const pb::common::RegionDefinition& region_definiton) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
   if (region != nullptr && region->State() != pb::common::StoreRegionState::NEW) {
     return butil::Status(pb::error::EREGION_EXIST, fmt::format("Region {} already exist", region_id));
+  }
+
+  // check if there is a range conflict in the store
+  auto all_regions = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
+
+  for (const auto& r : all_regions) {
+    if (r->Id() == region_id) {
+      DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] create region, region already exist", region_id);
+      return butil::Status(pb::error::EREGION_EXIST, fmt::format("Region {} already exist", region_id));
+    }
+
+    if (Helper::IsConflictRange(r->Range(), region_definiton.range())) {
+      return butil::Status(
+          pb::error::EREGION_RANGE_CONFLICT,
+          fmt::format("CreateRegion {} range ({}-{}) conflict with local region {} range ({}-{})", region_id,
+                      Helper::StringToHex(region_definiton.range().start_key()),
+                      Helper::StringToHex(region_definiton.range().end_key()), r->Id(),
+                      Helper::StringToHex(r->Range().start_key()), Helper::StringToHex(r->Range().end_key())));
+    }
   }
 
   return butil::Status();
@@ -98,7 +118,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
                                  region->InnerRegion().ShortDebugString());
 
   // Valiate region
-  auto status = ValidateCreateRegion(store_meta_manager, region->Id());
+  auto status = ValidateCreateRegion(store_meta_manager, region->Id(), definition);
   if (!status.ok()) {
     return status;
   }
@@ -1100,6 +1120,11 @@ void UpdateDefinitionTask::Run() {
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
+  }
 }
 
 butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*ctx*/, int64_t region_id,
@@ -1283,6 +1308,11 @@ void HoldVectorIndexTask::Run() {
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
       region_cmd_,
       status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
+  }
 }
 
 butil::Status SnapshotVectorIndexTask::SaveSnapshotSync(std::shared_ptr<Context> /*ctx*/, int64_t vector_index_id) {
@@ -1389,6 +1419,11 @@ void SnapshotVectorIndexTask::Run() {
     Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
         region_cmd_,
         status.ok() ? pb::coordinator::RegionCmdStatus::STATUS_DONE : pb::coordinator::RegionCmdStatus::STATUS_FAIL);
+  }
+
+  // Notify coordinator
+  if (region_cmd_->is_notify()) {
+    Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
   }
 }
 

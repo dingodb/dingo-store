@@ -47,7 +47,7 @@ void StoreMetricsImpl::default_method(google::protobuf::RpcController* controlle
       if (store_metrics.empty()) {
         os << "StoreMetrics is not found" << '\n';
       } else {
-        os << "StoreMetrics: " << '\n';
+        os << "================ StoreMetrics: ================" << '\n';
         for (const auto& store_metric : store_metrics) {
           os << store_metric.DebugString() << '\n';
         }

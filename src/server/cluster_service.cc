@@ -791,6 +791,10 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
        << "\">"
        << "GET_TASK_LIST"
        << "</a>" << '\n';
+    os << "<a href=\"/store_operation/"
+       << "\">"
+       << "GET_STORE_OPERATION"
+       << "</a>" << '\n';
 
     os << (use_html ? "<br>CoordinatorMap:\n" : "\n");
     for (const auto& location : locations) {

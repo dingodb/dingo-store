@@ -48,7 +48,8 @@ class CreateRegionTask : public TaskRunnable {
   static butil::Status PreValidateCreateRegion(const pb::coordinator::RegionCmd& command);
 
  private:
-  static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, int64_t region_id);
+  static butil::Status ValidateCreateRegion(std::shared_ptr<StoreMetaManager> store_meta_manager, int64_t region_id,
+                                            const pb::common::RegionDefinition& region_definiton);
   static butil::Status CreateRegion(const pb::common::RegionDefinition& definition, int64_t parent_region_id);
 
   std::shared_ptr<Context> ctx_;

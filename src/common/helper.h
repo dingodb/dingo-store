@@ -180,6 +180,9 @@ class Helper {
   // range1 contain range2
   static bool IsContainRange(const pb::common::Range& range1, const pb::common::Range& range2);
 
+  // range1 and range2 has intersection
+  static bool IsConflictRange(const pb::common::Range& range1, const pb::common::Range& range2);
+
   static bool InvalidRange(const pb::common::Range& range);
 
   static butil::Status CheckRange(const pb::common::Range& range);
