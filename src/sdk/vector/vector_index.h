@@ -48,6 +48,8 @@ class VectorIndex {
 
   bool IsStale() { return stale_.load(std::memory_order_relaxed); }
 
+  std::string ToString(bool verbose=false) const;
+
  private:
   friend class VectorIndexCache;
 
@@ -59,6 +61,8 @@ class VectorIndex {
   const int64_t schema_id_{-1};
   const std::string name_;
   const pb::meta::IndexDefinitionWithId index_def_with_id_;
+  // start_key is 0 or valid vector id
+  std::map<int64_t, int64_t> start_key_to_part_id_;
 
   std::atomic<bool> stale_{true};
 };

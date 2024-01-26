@@ -18,11 +18,10 @@
 #include <memory>
 
 #include "brpc/channel.h"
-#include "common/synchronization.h"
 #include "gmock/gmock.h"
-#include "rpc/rpc_interaction.h"
-#include "status.h"
-#include "utils/callback.h"
+#include "sdk/rpc/rpc_interaction.h"
+#include "sdk/status.h"
+#include "sdk/utils/callback.h"
 
 namespace dingodb {
 namespace sdk {
@@ -32,7 +31,7 @@ class MockRpcInteraction final : public RpcInteraction {
 
   ~MockRpcInteraction() override = default;
 
-  MOCK_METHOD(void, SendRpc, (Rpc& rpc, RpcCallback cb), (override));
+  MOCK_METHOD(void, SendRpc, (Rpc & rpc, RpcCallback cb), (override));
 };
 }  // namespace sdk
 

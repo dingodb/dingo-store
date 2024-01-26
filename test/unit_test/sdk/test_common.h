@@ -21,14 +21,14 @@
 #include <type_traits>
 
 #include "butil/endpoint.h"
+#include "coordinator/tso_control.h"
 #include "fmt/core.h"
-#include "meta_cache.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
-#include "rpc/rpc.h"
-#include "tso_control.h"
+#include "sdk/meta_cache.h"
+#include "sdk/rpc/rpc.h"
 
 namespace dingodb {
 

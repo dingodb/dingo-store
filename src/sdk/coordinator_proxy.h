@@ -40,13 +40,10 @@ class CoordinatorProxy {
   // Region
   virtual Status QueryRegion(const pb::coordinator::QueryRegionRequest& request,
                              pb::coordinator::QueryRegionResponse& response);
-
   virtual Status CreateRegion(const pb::coordinator::CreateRegionRequest& request,
                               pb::coordinator::CreateRegionResponse& response);
-
   virtual Status DropRegion(const pb::coordinator::DropRegionRequest& request,
                             pb::coordinator::DropRegionResponse& response);
-
   virtual Status ScanRegions(const pb::coordinator::ScanRegionsRequest& request,
                              pb::coordinator::ScanRegionsResponse& response);
 
@@ -54,11 +51,10 @@ class CoordinatorProxy {
   virtual Status TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response);
 
   virtual Status CreateIndex(const pb::meta::CreateIndexRequest& request, pb::meta::CreateIndexResponse& response);
-
   virtual Status GetIndexByName(const pb::meta::GetIndexByNameRequest& request,
                                 pb::meta::GetIndexByNameResponse& response);
-
   virtual Status GetIndexById(const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response);
+  virtual Status DropIndex(const pb::meta::DropIndexRequest& request, pb::meta::DropIndexResponse& response);
 
   virtual Status CreateTableIds(const pb::meta::CreateTableIdsRequest& request,
                                 pb::meta::CreateTableIdsResponse& response);

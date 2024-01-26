@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "region.h"
 #include "gtest/gtest.h"
+#include "sdk/region.h"
 #include "test_common.h"
 
 namespace dingodb {

@@ -15,7 +15,7 @@
 #ifndef DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_
 #define DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_
 
-#include "coordinator_proxy.h"
+#include "sdk/coordinator_proxy.h"
 #include "gmock/gmock.h"
 
 namespace dingodb {

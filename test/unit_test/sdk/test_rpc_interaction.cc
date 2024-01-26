@@ -18,8 +18,8 @@
 #include "mock_rpc.h"
 #include "mock_rpc_interaction.h"
 #include "proto/store.pb.h"
-#include "status.h"
 #include "test_common.h"
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
@@ -33,7 +33,8 @@ class RpcInteractionTest : public testing::Test {
     interaction = std::make_shared<MockRpcInteraction>(options);
 
     ON_CALL(*interaction, SendRpc).WillByDefault(testing::Invoke(interaction.get(), &MockRpcInteraction::RealSendRpc));
-    ON_CALL(*interaction, InitChannel).WillByDefault(testing::Invoke(interaction.get(), &MockRpcInteraction::RealInitChannel));
+    ON_CALL(*interaction, InitChannel)
+        .WillByDefault(testing::Invoke(interaction.get(), &MockRpcInteraction::RealInitChannel));
   }
 
   void TearDown() override { interaction.reset(); }

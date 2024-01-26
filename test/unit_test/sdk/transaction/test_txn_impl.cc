@@ -15,18 +15,18 @@
 #include <cstdint>
 #include <memory>
 
-#include "client.h"
-#include "common/common.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
-#include "status.h"
-#include "store/store_rpc.h"
+#include "sdk/client.h"
+#include "sdk/common/common.h"
+#include "sdk/status.h"
+#include "sdk/store/store_rpc.h"
+#include "sdk/transaction/txn_impl.h"
 #include "test_base.h"
 #include "test_common.h"
-#include "transaction/txn_impl.h"
 
 static const int64_t kStep = 10;
 

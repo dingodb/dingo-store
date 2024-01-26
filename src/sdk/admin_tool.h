@@ -40,6 +40,8 @@ class AdminTool {
 
   Status CreateTableIds(int64_t count, std::vector<int64_t>& out_table_ids);
 
+  Status DropIndex(int64_t index_id);
+
  private:
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
 };

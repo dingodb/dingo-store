@@ -14,12 +14,12 @@
 
 #include <memory>
 
-#include "common/common.h"
 #include "gtest/gtest.h"
-#include "store/store_rpc.h"
+#include "sdk/common/common.h"
+#include "sdk/store/store_rpc.h"
+#include "sdk/transaction/txn_lock_resolver.h"
 #include "test_base.h"
 #include "test_common.h"
-#include "transaction/txn_lock_resolver.h"
 
 namespace dingodb {
 namespace sdk {

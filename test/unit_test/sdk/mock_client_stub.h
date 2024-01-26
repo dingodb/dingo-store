@@ -15,9 +15,9 @@
 #ifndef DINGODB_SDK_TEST_MOCK_CLIENT_STUB_H_
 #define DINGODB_SDK_TEST_MOCK_CLIENT_STUB_H_
 
-#include "client_stub.h"
 #include "gmock/gmock.h"
 #include "mock_rpc_interaction.h"
+#include "sdk/client_stub.h"
 
 namespace dingodb {
 namespace sdk {

@@ -83,32 +83,6 @@ static VectorIndexType InternalVectorIndexTypePB2VectorIndexType(pb::common::Vec
   }
 }
 
-static void FillRangePartitionRule(pb::meta::PartitionRule* partition_rule, const std::vector<int64_t>& seperator_ids,
-                                   const std::vector<int64_t>& index_and_part_ids) {
-  auto part_count = seperator_ids.size() + 1;
-  CHECK(part_count == index_and_part_ids.size() - 1);
-
-  int64_t new_index_id = index_and_part_ids[0];
-
-  for (int i = 0; i < part_count; i++) {
-    auto* part = partition_rule->add_partitions();
-    int64_t part_id = index_and_part_ids[i + 1];  // 1st use for index id
-    part->mutable_id()->set_entity_id(part_id);
-    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
-    part->mutable_id()->set_parent_entity_id(new_index_id);
-    std::string start;
-    if (i == 0) {
-      VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, start);
-    } else {
-      VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, index_and_part_ids[i - 1], start);
-    }
-    part->mutable_range()->set_start_key(start);
-    std::string end;
-    VectorCodec::EncodeVectorKey(kVectorPrefix, part_id + 1, end);
-    part->mutable_range()->set_end_key(end);
-  }
-}
-
 static void FillFlatParmeter(pb::common::VectorIndexParameter* parameter, const FlatParam& param) {
   parameter->set_vector_index_type(pb::common::VECTOR_INDEX_TYPE_FLAT);
   auto* flat = parameter->mutable_flat_parameter();
@@ -151,9 +125,35 @@ static void FillButeForceParmeter(pb::common::VectorIndexParameter* parameter, c
   bruteforce->set_metric_type(MetricType2InternalMetricTypePB(param.metric_type));
 }
 
+static void FillRangePartitionRule(pb::meta::PartitionRule* partition_rule, const std::vector<int64_t>& seperator_ids,
+                                   const std::vector<int64_t>& index_and_part_ids) {
+  auto part_count = seperator_ids.size() + 1;
+  CHECK(part_count == index_and_part_ids.size() - 1);
+
+  int64_t new_index_id = index_and_part_ids[0];
+
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    int64_t part_id = index_and_part_ids[i + 1];  // 1st use for index id
+    part->mutable_id()->set_entity_id(part_id);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_index_id);
+    std::string start;
+    if (i == 0) {
+      VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, start);
+    } else {
+      VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, seperator_ids[i - 1], start);
+    }
+    part->mutable_range()->set_start_key(start);
+    std::string end;
+    VectorCodec::EncodeVectorKey(kVectorPrefix, part_id + 1, end);
+    part->mutable_range()->set_end_key(end);
+  }
+}
+
 using VectorIndexCacheKey = std::string;
 
-static VectorIndexCacheKey GetVectorIndexCacheKey(int64_t schema_id, const std::string& index_name){
+static VectorIndexCacheKey GetVectorIndexCacheKey(int64_t schema_id, const std::string& index_name) {
   DCHECK_GT(schema_id, 0);
   DCHECK(!index_name.empty());
   auto buf_size = sizeof(schema_id) + index_name.size();
@@ -164,7 +164,7 @@ static VectorIndexCacheKey GetVectorIndexCacheKey(int64_t schema_id, const std::
   return std::move(tmp);
 }
 
-static void DecodeVectorIndexCacheKey(const VectorIndexCacheKey& key, int64_t& schema_id, std::string& index_name){
+static void DecodeVectorIndexCacheKey(const VectorIndexCacheKey& key, int64_t& schema_id, std::string& index_name) {
   DCHECK_GE(key.size(), sizeof(schema_id));
   int64_t tmp_schema_id;
   memcpy(&tmp_schema_id, key.data(), sizeof(schema_id));

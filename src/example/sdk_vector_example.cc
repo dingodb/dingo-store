@@ -128,4 +128,5 @@ int main(int argc, char* argv[]) {
 
   PrepareVectorIndex();
   VectorIndexCacheSearch();
+  PostClean();
 }
