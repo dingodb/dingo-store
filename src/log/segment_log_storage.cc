@@ -29,7 +29,6 @@
 #include "braft/log_entry.h"
 #include "braft/protobuf_file.h"
 #include "braft/util.h"
-#include "brpc/reloadable_flags.h"  //
 #include "butil/atomicops.h"
 #include "butil/errno.h"
 #include "butil/fd_utility.h"              // butil::make_close_on_exec
@@ -39,10 +38,9 @@
 #include "butil/string_printf.h"           // butil::string_appendf
 #include "butil/time.h"
 #include "common/constant.h"
-#include "common/failpoint.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
-#include "gflags/gflags.h"
 #include "proto/store_internal.pb.h"
 
 #define SEGMENT_OPEN_PATTERN "log_inprogress_%020" PRId64
@@ -50,6 +48,8 @@
 #define SEGMENT_META_FILE "log_meta"
 
 namespace dingodb {
+
+DEFINE_bool(dingo_raft_sync_log, true, "Sync log to disk or not");
 
 using ::butil::RawPacker;
 using ::butil::RawUnpacker;
@@ -677,6 +677,20 @@ SegmentLogStorage::SegmentLogStorage(const std::string& path, int64_t region_id,
   DINGO_LOG(DEBUG) << fmt::format("[new.SegmentLogStorage][id({})]", region_id_);
 }
 
+SegmentLogStorage::SegmentLogStorage(const std::string& path, int64_t region_id, uint64_t max_segment_size,
+                                     int64_t init_vector_index_first_log_index)
+    : path_(path),
+      region_id_(region_id),
+      max_segment_size_(max_segment_size),
+      first_log_index_(1),
+      last_log_index_(0),
+      init_vector_index_first_log_index_(init_vector_index_first_log_index),
+      vector_index_first_log_index_(init_vector_index_first_log_index),
+      checksum_type_(0),
+      enable_sync_(FLAGS_dingo_raft_sync_log) {
+  DINGO_LOG(DEBUG) << fmt::format("[new.SegmentLogStorage][id({})]", region_id_);
+}
+
 SegmentLogStorage::SegmentLogStorage()
     : first_log_index_(1), last_log_index_(0), checksum_type_(0), enable_sync_(true) {
   DINGO_LOG(DEBUG) << fmt::format("[new.SegmentLogStorage][id({})]", region_id_);
@@ -1157,7 +1171,7 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
     int match = 0;
     int64_t first_index = 0;
     int64_t last_index = 0;
-    match = sscanf(dir_reader.name(), SEGMENT_CLOSED_PATTERN, &first_index, &last_index);
+    match = sscanf(dir_reader.name(), SEGMENT_CLOSED_PATTERN, &first_index, &last_index);  // NOLINT
     if (match == 2) {
       DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] restore closed segment, path: {}", region_id_,
                                      first_index, last_index, path_);
@@ -1165,7 +1179,7 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
       continue;
     }
 
-    match = sscanf(dir_reader.name(), SEGMENT_OPEN_PATTERN, &first_index);
+    match = sscanf(dir_reader.name(), SEGMENT_OPEN_PATTERN, &first_index);  // NOLINT
     if (match == 1) {
       DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({})] restore open segment, first_index: {} path: {}",
                                       region_id_, first_index, path_);

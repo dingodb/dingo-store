@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "bvar/latency_recorder.h"
 #include "common/helper.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -210,6 +211,8 @@ class VectorIndexManager {
   static bvar::Adder<uint64_t> bvar_vector_index_slow_load_task_running_num;
   static bvar::Adder<uint64_t> bvar_vector_index_fast_build_task_running_num;
   static bvar::Adder<uint64_t> bvar_vector_index_slow_build_task_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_load_catchup_running_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_rebuild_catchup_running_num;
 
   static bvar::Adder<uint64_t> bvar_vector_index_task_total_num;
   static bvar::Adder<uint64_t> bvar_vector_index_rebuild_task_total_num;
@@ -219,6 +222,10 @@ class VectorIndexManager {
   static bvar::Adder<uint64_t> bvar_vector_index_slow_load_task_total_num;
   static bvar::Adder<uint64_t> bvar_vector_index_fast_build_task_total_num;
   static bvar::Adder<uint64_t> bvar_vector_index_slow_build_task_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_load_catchup_total_num;
+  static bvar::Adder<uint64_t> bvar_vector_index_rebuild_catchup_total_num;
+  static bvar::LatencyRecorder bvar_vector_index_catchup_latency_first_rounds;
+  static bvar::LatencyRecorder bvar_vector_index_catchup_latency_last_round;
 
   static std::atomic<int> vector_index_task_running_num;
   static std::atomic<int> vector_index_rebuild_task_running_num;

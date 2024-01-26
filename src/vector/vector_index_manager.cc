@@ -21,8 +21,10 @@
 #include <string>
 #include <vector>
 
+#include "braft/util.h"
 #include "bthread/bthread.h"
 #include "butil/status.h"
+#include "bvar/latency_recorder.h"
 #include "bvar/reducer.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -549,6 +551,10 @@ bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_fast_build_task_runn
     "dingo_vector_index_fast_build_task_running_num");
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_slow_build_task_running_num(
     "dingo_vector_index_slow_build_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_load_catchup_running_num(
+    "dingo_vector_index_load_catchup_task_running_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_rebuild_catchup_running_num(
+    "dingo_vector_index_rebuild_catchup_task_running_num");
 
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_task_total_num("dingo_vector_index_task_total_num");
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_rebuild_task_total_num(
@@ -565,6 +571,15 @@ bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_fast_build_task_tota
     "dingo_vector_index_fast_build_task_total_num");
 bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_slow_build_task_total_num(
     "dingo_vector_index_slow_build_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_load_catchup_total_num(
+    "dingo_vector_index_load_catchup_task_total_num");
+bvar::Adder<uint64_t> VectorIndexManager::bvar_vector_index_rebuild_catchup_total_num(
+    "dingo_vector_index_rebuild_catchup_task_total_num");
+
+bvar::LatencyRecorder VectorIndexManager::bvar_vector_index_catchup_latency_first_rounds(
+    "dingo_vector_index_catchup_latency_first_rounds");
+bvar::LatencyRecorder VectorIndexManager::bvar_vector_index_catchup_latency_last_round(
+    "dingo_vector_index_catchup_latency_last_round");
 
 std::atomic<int> VectorIndexManager::vector_index_task_running_num = 0;
 std::atomic<int> VectorIndexManager::vector_index_rebuild_task_running_num = 0;
@@ -1297,6 +1312,10 @@ butil::Status VectorIndexManager::RebuildVectorIndex(VectorIndexWrapperPtr vecto
       vector_index_id, vector_index_wrapper->Version(), trace, vector_index->ApplyLogId(),
       Helper::TimestampMs() - start_time);
 
+  bvar_vector_index_rebuild_catchup_total_num << 1;
+  bvar_vector_index_rebuild_catchup_running_num << 1;
+  DEFER(bvar_vector_index_rebuild_catchup_running_num << -1;);
+
   auto status = CatchUpLogToVectorIndex(vector_index_wrapper, vector_index, trace);
   if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] Catch up log failed, error: {}.",
@@ -1326,6 +1345,10 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
       vector_index_id, trace, Helper::RegionEpochToString(vector_index->Epoch()), Helper::TimestampMs() - start_time);
 
   // catch up wal
+  bvar_vector_index_load_catchup_total_num << 1;
+  bvar_vector_index_load_catchup_running_num << 1;
+  DEFER(bvar_vector_index_load_catchup_running_num << -1;);
+
   auto status = CatchUpLogToVectorIndex(vector_index_wrapper, vector_index, trace);
   if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.load][index_id({})][trace({})] Catch up log failed, error: {}.",
@@ -1384,13 +1407,17 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
     }
   }
 
+  bvar_vector_index_catchup_latency_first_rounds << (Helper::TimestampMs() - start_time);
+
   // switch vector index, stop write vector index.
   vector_index_wrapper->SetIsSwitchingVectorIndex(true);
 
   {
-    ON_SCOPE_EXIT([&]() { vector_index_wrapper->SetIsSwitchingVectorIndex(false); });
-
     start_time = Helper::TimestampMs();
+
+    DEFER(vector_index_wrapper->SetIsSwitchingVectorIndex(false);
+          bvar_vector_index_catchup_latency_last_round << (Helper::TimestampMs() - start_time););
+
     int64_t start_log_id = vector_index->ApplyLogId() + 1;
     int64_t end_log_id = raft_meta->AppliedId();
     // second ground replay wal
