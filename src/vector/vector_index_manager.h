@@ -273,6 +273,8 @@ class VectorIndexManager {
 
   std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
+  uint64_t GetBackgroundPendingTaskCount();
+
  private:
   static butil::Status LoadVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch,
                                        const std::string& trace);

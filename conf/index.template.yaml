@@ -38,7 +38,9 @@ log:
 vector:
   index_path: $BASE_PATH$/data/vector_index_snapshot
   enable_follower_hold_index: false
-  background_worker_num: 12 # vector index load/build/rebuild.
+  fast_background_worker_num: 8 # vector index fast load/build.
+  background_worker_num: 16 # vector index slow load/build/rebuild.
+  max_background_task_count: 16 # vector index slow load/build/rebuild max pending task count.
 store:
   path: $BASE_PATH$/data/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
