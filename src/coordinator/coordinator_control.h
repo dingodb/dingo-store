@@ -15,7 +15,6 @@
 #ifndef DINGODB_COORDINATOR_CONTROL_H_
 #define DINGODB_COORDINATOR_CONTROL_H_
 
-#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -143,6 +142,7 @@ struct StoreMetricsSlim {
   int64_t store_id;
   pb::common::StoreOwnMetrics store_own_metrics;
   int64_t region_num;
+  int64_t update_time;
 };
 
 class CoordinatorControl : public MetaControl {
@@ -562,6 +562,7 @@ class CoordinatorControl : public MetaControl {
   void GetRegionCount(int64_t &region_count);
   void GetRegionIdsInMap(std::vector<int64_t> &region_ids);
   void RecycleDeletedTableAndIndex();
+  void RecycleOutdatedStoreMetrics();
   void RecycleOrphanRegionOnStore();
   void RecycleOrphanRegionOnCoordinator();
   void DeleteRegionBvar(int64_t region_id);

@@ -45,6 +45,10 @@ DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after delet
 
 DECLARE_string(raft_snapshot_policy);
 
+DEFINE_int64(store_heartbeat_report_store_own_metrics_multiple, 10,
+             "store heartbeat report store own metrics multiple, "
+             "this defines how many times of heartbeat will "
+             "report store_metrics once to coordinator");
 DEFINE_int64(store_heartbeat_report_region_multiple, 10,
              "store heartbeat report region multiple, this defines how many times of heartbeat will report "
              "region_metrics once to coordinator");
@@ -67,28 +71,41 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   // CAUTION: may coredump here, so we cannot delete self store meta.
   *(request.mutable_store()) = (*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance().Id()));
 
+  ++heartbeat_counter;
+
+  auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
+
+  // store_metrics
+  bool need_reqport_store_own_metrics =
+      heartbeat_counter % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0;
+
+  // region metrics
   // only partial heartbeat or heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0 will report
   // region_metrics, this is for reduce heartbeat size and cpu usage.
   bool need_report_region_metrics =
-      !region_ids.empty() || (++heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0);
+      !region_ids.empty() || (heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0);
+
+  if (need_reqport_store_own_metrics || need_report_region_metrics) {
+    *(request.mutable_store_metrics()) = (*store_metrics_manager->GetStoreMetrics()->Metrics());
+    // setup id for store_metrics here, coordinator need this id to update store_metrics
+    request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
+    request.mutable_store_metrics()->set_is_update_epoch_version(is_update_epoch_version);
+
+    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] store_metrics size({}) elapsed time({} ms)",
+                                   request.mutable_store_metrics()->ByteSizeLong(), Helper::TimestampMs() - start_time)
+                    << ", metrics: " << request.mutable_store_metrics()->ShortDebugString();
+  }
+
   if (need_report_region_metrics) {
     DINGO_LOG(INFO) << fmt::format("[heartbeat.store] heartbeat_counter: {}", heartbeat_counter);
 
-    // store_metrics
-    auto metrics_manager = Server::GetInstance().GetStoreMetricsManager();
-    auto* mut_store_metrics = request.mutable_store_metrics();
-    *mut_store_metrics = (*metrics_manager->GetStoreMetrics()->Metrics());
-    // setup id for store_metrics here, coordinator need this id to update store_metrics
-    mut_store_metrics->set_id(Server::GetInstance().Id());
-    mut_store_metrics->set_is_update_epoch_version(is_update_epoch_version);
-
-    auto* mut_region_metrics_map = mut_store_metrics->mutable_region_metrics_map();
-    auto region_metrics = metrics_manager->GetStoreRegionMetrics();
+    auto* mut_region_metrics_map = request.mutable_store_metrics()->mutable_region_metrics_map();
+    auto region_metrics = store_metrics_manager->GetStoreRegionMetrics();
     std::vector<store::RegionPtr> region_metas;
     if (region_ids.empty()) {
       region_metas = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
     } else {
-      mut_store_metrics->set_is_partial_region_metrics(true);
+      request.mutable_store_metrics()->set_is_partial_region_metrics(true);
       for (auto region_id : region_ids) {
         auto region_meta = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
         if (region_meta != nullptr) {
@@ -96,6 +113,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
         }
       }
     }
+
     for (const auto& region_meta : region_metas) {
       auto inner_region = region_meta->InnerRegion();
       if (inner_region.state() == pb::common::StoreRegionState::SPLITTING ||
@@ -266,12 +284,6 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
 
 static std::atomic<bool> g_store_recycle_orphan_running(false);
 void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<CoordinatorControl> coordinator_control) {
-  if (!coordinator_control->IsLeader()) {
-    DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is follower";
-    return;
-  }
-  DINGO_LOG(DEBUG) << "CoordinatorRecycleOrphan... this is leader";
-
   if (g_store_recycle_orphan_running.load(std::memory_order_relaxed)) {
     DINGO_LOG(INFO) << "CoordinatorRecycleOrphan... g_store_recycle_orphan_running is true, return";
     return;
@@ -284,6 +296,8 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   coordinator_control->RecycleOrphanRegionOnCoordinator();
 
   coordinator_control->RecycleDeletedTableAndIndex();
+
+  coordinator_control->RecycleOutdatedStoreMetrics();
 }
 
 static std::atomic<bool> g_remove_one_time_watch_running(false);

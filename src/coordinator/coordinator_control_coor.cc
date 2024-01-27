@@ -54,6 +54,7 @@ DECLARE_bool(ip2hostname);
 
 DEFINE_int32(table_delete_after_deleted_time, 86400, "delete table after deleted time in seconds");
 DEFINE_int32(index_delete_after_deleted_time, 86400, "delete index after deleted time in seconds");
+DEFINE_int64(store_metrics_keep_time_s, 3600, "store metrics keep time in seconds");
 
 DEFINE_int32(
     region_update_timeout, 25,
@@ -143,42 +144,66 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
 }
 
 void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
-  BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+  std::vector<int64_t> store_ids_to_get;
+  std::vector<int64_t> all_store_ids;
   if (store_id == 0) {
-    for (auto& elemnt : store_region_metrics_map_) {
-      store_metrics.push_back(elemnt.second);
-    }
+    store_map_.GetAllKeys(all_store_ids);
   } else {
-    if (store_region_metrics_map_.find(store_id) != store_region_metrics_map_.end()) {
-      store_metrics.push_back(store_region_metrics_map_.at(store_id));
+    all_store_ids.push_back(store_id);
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    for (const auto& id : all_store_ids) {
+      if (store_region_metrics_map_.find(id) != store_region_metrics_map_.end()) {
+        const auto& store_metric = store_region_metrics_map_.at(id);
+        if (store_metric.region_metrics_map_size() > 0) {
+          store_metrics.push_back(store_metric);
+        } else {
+          store_ids_to_get.push_back(id);
+        }
+      } else {
+        store_ids_to_get.push_back(id);
+      }
+    }
+  }
+
+  // for store that has no regions, there is no store_own_metric in store_region_metrics_map, so we get store_own_metric
+  // from store_metrics_map
+  if (!store_ids_to_get.empty()) {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (const auto& id : store_ids_to_get) {
+      if (store_metrics_map_.find(id) != store_metrics_map_.end()) {
+        pb::common::StoreMetrics store_metric;
+        store_metric.set_id(id);
+        (*store_metric.mutable_store_own_metrics()) = store_metrics_map_.at(id).store_own_metrics;
+        store_metrics.push_back(store_metric);
+      }
     }
   }
 }
 
 void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, int64_t region_id,
                                                std::vector<pb::common::StoreMetrics>& store_metrics) {
-  BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
-  if (store_id == 0) {
-    for (auto& element : store_region_metrics_map_) {
-      if (region_id == 0) {
-        store_metrics.push_back(element.second);
-      } else {
+  if (region_id == 0) {
+    GetStoreRegionMetrics(store_id, store_metrics);
+    return;
+  } else {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    if (store_id == 0) {
+      for (auto& [id, store_metric] : store_region_metrics_map_) {
         pb::common::StoreMetrics tmp_store_metrics;
-        tmp_store_metrics.set_id(element.second.id());
+        tmp_store_metrics.set_id(id);
 
-        const auto& region_metrics_map = element.second.region_metrics_map();
+        const auto& region_metrics_map = store_metric.region_metrics_map();
         if (region_metrics_map.find(region_id) != region_metrics_map.end()) {
           tmp_store_metrics.mutable_region_metrics_map()->insert({region_id, region_metrics_map.at(region_id)});
         }
 
         store_metrics.push_back(tmp_store_metrics);
       }
-    }
-  } else {
-    if (store_region_metrics_map_.find(store_id) != store_region_metrics_map_.end()) {
-      if (region_id == 0) {
-        store_metrics.push_back(store_region_metrics_map_.at(store_id));
-      } else {
+    } else {
+      if (store_region_metrics_map_.find(store_id) != store_region_metrics_map_.end()) {
         pb::common::StoreMetrics tmp_store_metrics;
         tmp_store_metrics.set_id(store_id);
 
@@ -188,9 +213,9 @@ void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, int64_t region_
         }
 
         store_metrics.push_back(tmp_store_metrics);
+      } else {
+        DINGO_LOG(ERROR) << "GetStoreMetrics store_id=" << store_id << " not exist";
       }
-    } else {
-      DINGO_LOG(ERROR) << "GetStoreMetrics store_id=" << store_id << " not exist";
     }
   }
 }
@@ -936,8 +961,40 @@ void CoordinatorControl::GetRegionCount(int64_t& region_count) { region_count = 
 
 void CoordinatorControl::GetRegionIdsInMap(std::vector<int64_t>& region_ids) { region_map_.GetAllKeys(region_ids); }
 
+void CoordinatorControl::RecycleOutdatedStoreMetrics() {
+  std::vector<int64_t> store_ids_to_erase_metrics;
+  {
+    // check store_metrics_map_, if update_time is too old (more than 1 hour), delete it
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (const auto& [id, slim] : store_metrics_map_) {
+      if (slim.update_time + (FLAGS_store_metrics_keep_time_s * 1000) < butil::gettimeofday_ms()) {
+        DINGO_LOG(INFO) << "RecycleOutdatedStoreMetrics delete outdated store_metrics, store_id: " << id
+                        << " update_time: " << slim.update_time
+                        << " store_metrics_keep_time(s): " << FLAGS_store_metrics_keep_time_s;
+        store_ids_to_erase_metrics.push_back(id);
+      }
+    }
+
+    for (const auto& id : store_ids_to_erase_metrics) {
+      store_metrics_map_.erase(id);
+    }
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    for (const auto& id : store_ids_to_erase_metrics) {
+      store_region_metrics_map_.erase(id);
+    }
+  }
+}
+
 void CoordinatorControl::RecycleDeletedTableAndIndex() {
-  DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+  if (IsLeader()) {
+    DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+  } else {
+    DINGO_LOG(INFO) << "RecycleDeletedTableAndIndex skip because not leader";
+    return;
+  }
 
   // butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_tables;
   // butil::FlatMap<int64_t, pb::coordinator_internal::TableInternal> delete_indexes;
@@ -988,7 +1045,12 @@ void CoordinatorControl::RecycleDeletedTableAndIndex() {
 }
 
 void CoordinatorControl::RecycleOrphanRegionOnStore() {
-  DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+  if (IsLeader()) {
+    DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+  } else {
+    DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore skip because not leader";
+    return;
+  }
 
   std::map<int64_t, pb::coordinator_internal::RegionInternal> delete_regions;
   auto ret = deleted_region_meta_->GetAllIdElements(delete_regions);
@@ -1096,7 +1158,12 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 }
 
 void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
-  DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+  if (IsLeader()) {
+    DINGO_LOG(INFO) << "Start to RecycleOrphanRegionOnStore, timestamp=" << butil::gettimeofday_ms();
+  } else {
+    DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator skip because not leader";
+    return;
+  }
 
   butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> regions;
   regions.init(3000);
@@ -4168,20 +4235,24 @@ int64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& s
     return -1;
   }
 
-  if (store_metrics.region_metrics_map_size() <= 0) {
-    DINGO_LOG(DEBUG) << "UpdateStoreMetrics store_metrics.region_metrics_map_size() <= 0, store_id="
-                     << store_metrics.id() << ", do not update StoreMetrics";
-    return 0;
-  }
-
   if (!store_metrics.is_partial_region_metrics()) {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
     StoreMetricsSlim store_metrics_slim;
     store_metrics_slim.store_id = store_metrics.id();
     store_metrics_slim.store_own_metrics = store_metrics.store_own_metrics();
     store_metrics_slim.region_num = store_metrics.region_metrics_map_size();
+    store_metrics_slim.update_time = butil::gettimeofday_ms();
 
     store_metrics_map_.insert_or_assign(store_metrics.id(), std::move(store_metrics_slim));
+
+    DINGO_LOG(INFO) << "UpdateStoreMetrics store_metrics.id=" << store_metrics.id()
+                    << ", metrics: " << store_metrics.store_own_metrics().ShortDebugString();
+  }
+
+  if (store_metrics.region_metrics_map_size() <= 0) {
+    DINGO_LOG(INFO) << "UpdateStoreMetrics store_metrics.region_metrics_map_size() <= 0, store_id="
+                    << store_metrics.id() << ", do not update StoreMetrics";
+    return 0;
   }
 
   {
