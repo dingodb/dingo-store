@@ -234,7 +234,7 @@ uint64_t WorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_valu
 
 void WorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
 
-uint64_t WorkerSet::PendingTaskCount() { return pending_task_count_metrics_.get_value(); }
+uint64_t WorkerSet::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
 
 void WorkerSet::IncPendingTaskCount() {
   pending_task_count_metrics_ << 1;
