@@ -133,6 +133,7 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
   table_header.push_back("STORE_METRICS");
   table_header.push_back("STORE_OPERATION");
   table_header.push_back("INFO");
+  table_header.push_back("MEMORY_STATS");
 
   std::vector<int32_t> min_widths;
 
@@ -148,6 +149,7 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // STORE_METRICS
   min_widths.push_back(10);  // STORE_OPERATION
   min_widths.push_back(5);   // INFO
+  min_widths.push_back(10);  // MEMORY_STATS
 
   std::vector<std::vector<std::string>> table_contents;
   std::vector<std::vector<std::string>> table_urls;
@@ -193,16 +195,20 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
     url_line.push_back("/store_metrics/");
     line.push_back(std::to_string(store.id()));  // STORE_OPERATION
     url_line.push_back("/store_operation/");
-    line.push_back("Hello");  // INFO
+    line.push_back(std::to_string(store.id()) + "/Info");  // INFO
     if (store.store_type() == pb::common::StoreType::NODE_TYPE_STORE) {
       url_line.push_back("http://" + store.server_location().host() + ":" +
-                         std::to_string(store.server_location().port()) + "/StoreService/Hello/");
+                         std::to_string(store.server_location().port()) + "/StoreService/GetMemoryInfo/");
     } else if (store.store_type() == pb::common::StoreType::NODE_TYPE_INDEX) {
       url_line.push_back("http://" + store.server_location().host() + ":" +
-                         std::to_string(store.server_location().port()) + "/IndexService/Hello/");
+                         std::to_string(store.server_location().port()) + "/IndexService/GetMemoryInfo/");
     } else {
       url_line.push_back(std::string());
     }
+
+    line.push_back(std::to_string(store.id()) + "/Stats");  // MEMORY_STATS
+    url_line.push_back("http://" + store.server_location().host() + ":" +
+                       std::to_string(store.server_location().port()) + "/NodeService/GetMemoryStats/");
 
     table_contents.push_back(line);
     table_urls.push_back(url_line);

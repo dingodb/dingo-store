@@ -26,6 +26,8 @@ class IndexServiceImpl : public pb::index::IndexService {
 
   void Hello(google::protobuf::RpcController* controller, const pb::index::HelloRequest* request,
              pb::index::HelloResponse* response, google::protobuf::Closure* done) override;
+  void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::index::HelloRequest* request,
+                     pb::index::HelloResponse* response, google::protobuf::Closure* done) override;
 
   // vector read
   void VectorBatchQuery(google::protobuf::RpcController* controller, const pb::index::VectorBatchQueryRequest* request,

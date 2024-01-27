@@ -620,7 +620,8 @@ void DebugServiceImpl::GetMemoryStats(google::protobuf::RpcController* controlle
 #ifdef LINK_TCMALLOC
   std::string stat_buf(4096, '\0');
   MallocExtension::instance()->GetStats(stat_buf.data(), stat_buf.size());
-  response->set_memory_stats(stat_buf);
+
+  response->set_memory_stats(stat_buf.c_str());
 #else
   response->mutable_error()->set_errcode(pb::error::EINTERNAL);
   response->mutable_error()->set_errmsg("No use tcmalloc");
