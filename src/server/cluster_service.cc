@@ -214,6 +214,7 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
     table_urls.push_back(url_line);
   }
 
+  os << "<span class=\"bold-text\">STORE: " << table_contents.size() << "</span>" << '\n';
   PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
@@ -262,6 +263,7 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
     table_contents.push_back(line);
   }
 
+  os << "<span class=\"bold-text\">EXECUTOR: " << table_contents.size() << "</span>" << '\n';
   PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
@@ -549,22 +551,33 @@ void ClusterStatImpl::PrintRegions(std::ostream& os, bool use_html) {
     table_urls.push_back(url_line);
   }
 
+  os << "<span class=\"bold-text\">REGION: " << table_contents.size() << "</span>" << '\n';
   PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
 void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
   std::vector<std::string> table_header;
 
-  table_header.push_back("SCHEMA_NAME");
+  table_header.push_back("SCHEMA");
   table_header.push_back("TABLE_ID");
   table_header.push_back("TABLE_NAME");
   table_header.push_back("ENGINE");
-  table_header.push_back("TYPE");
   table_header.push_back("PARTITIONS");
   table_header.push_back("REGIONS");
+  table_header.push_back("COLUMNS");
+  table_header.push_back("AUTO_INCR");
+  table_header.push_back("REPLICA");
+  table_header.push_back("TYPE");
+  table_header.push_back("TABLE_ID");
   table_header.push_back("VECTOR_INDEX_TYPE");
-  table_header.push_back("VECTOR_DIMENSION");
-  table_header.push_back("VECTOR_METRIC_TYPE");
+  table_header.push_back("DIMENSION");
+  table_header.push_back("METRIC_TYPE");
+  table_header.push_back("CHARSET");
+  table_header.push_back("COLLATE");
+  table_header.push_back("TABLE_TYPE");
+  table_header.push_back("ROW_FORMAT");
+  table_header.push_back("CREATE_TIME");
+  table_header.push_back("UPDATE_TIME");
 
   std::vector<int32_t> min_widths;
 
@@ -572,12 +585,22 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // TABLE_ID
   min_widths.push_back(20);  // TABLE_NAME
   min_widths.push_back(6);   // ENGINE
-  min_widths.push_back(6);   // TYPE
   min_widths.push_back(2);   // PARTITIONS
   min_widths.push_back(2);   // REGIONS
+  min_widths.push_back(3);   // COLUMNS
+  min_widths.push_back(3);   // AUTO_INCR
+  min_widths.push_back(3);   // REPLICA
+  min_widths.push_back(6);   // TYPE
+  min_widths.push_back(10);  // TABLE_ID
   min_widths.push_back(30);  // VECTOR_INDEX_TYPE
-  min_widths.push_back(5);   // VECTOR_DIMENSION
-  min_widths.push_back(20);  // VECTOR_METRIC_TYPE
+  min_widths.push_back(5);   // DIMENSION
+  min_widths.push_back(20);  // METRIC_TYPE
+  min_widths.push_back(10);  // CHARSET
+  min_widths.push_back(10);  // COLLATE
+  min_widths.push_back(10);  // TABLE_TYPE
+  min_widths.push_back(10);  // ROW_FORMAT
+  min_widths.push_back(20);  // CREATE_TIME
+  min_widths.push_back(20);  // UPDATE_TIME
 
   std::vector<std::vector<std::string>> table_contents;
   std::vector<std::vector<std::string>> table_urls;
@@ -600,8 +623,9 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       std::vector<std::string> line;
       std::vector<std::string> url_line;
 
-      line.push_back(schema.name());  // SCHEMA_NAME
+      line.push_back(schema.name());  // SCHEMA
       url_line.push_back(std::string());
+
       line.push_back(std::to_string(table_entry.entity_id()));  // TABLE_ID
       url_line.push_back(std::string("/table/"));
 
@@ -613,10 +637,10 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
 
       line.push_back(table_definition.table_definition().name());  // TABLE_NAME
       url_line.push_back(std::string());
+
       line.push_back(pb::common::Engine_Name(table_definition.table_definition().engine()));  // ENGINE
       url_line.push_back(std::string());
-      line.push_back("TABLE");  // TYPE
-      url_line.push_back(std::string());
+
       line.push_back(
           std::to_string(table_definition.table_definition().table_partition().partitions_size()));  // PARTITIONS
       url_line.push_back(std::string());
@@ -627,11 +651,48 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       line.push_back(std::to_string(table_range.range_distribution_size()));  // REGIONS
       url_line.push_back(std::string());
 
+      line.push_back(std::to_string(table_definition.table_definition().columns_size()));  // COLUMNS
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(table_definition.table_definition().auto_increment()));  // AUTO_INCR
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(table_definition.table_definition().replica()));  // REPLICA
+      url_line.push_back(std::string());
+
+      line.push_back("TABLE");  // TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(table_entry.entity_id()));  // TABLE_ID
+      url_line.push_back(std::string("/table/"));
+
       line.push_back("N/A");  // VECTOR_INDEX_TYPE
       url_line.push_back(std::string());
-      line.push_back("N/A");  // VECTOR_DIMENSION
+
+      line.push_back("N/A");  // DIMENSION
       url_line.push_back(std::string());
-      line.push_back("N/A");  // VECTOR_METRIC_TYPE
+
+      line.push_back("N/A");  // METRIC_TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().charset());  // CHARSET
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().collate());  // COLLATE
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().table_type());  // TABLE_TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().row_format());  // ROW_FORMAT
+      url_line.push_back(std::string());
+
+      line.push_back(Helper::FormatMsTime(table_definition.table_definition().create_timestamp(),
+                                          "%Y-%m-%d %H:%M:%S"));  // CREATE_TIME
+      url_line.push_back(std::string());
+
+      line.push_back(Helper::FormatMsTime(table_definition.table_definition().update_timestamp(),
+                                          "%Y-%m-%d %H:%M:%S"));  // UPDATE_TIME
       url_line.push_back(std::string());
 
       table_contents.push_back(line);
@@ -642,7 +703,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       std::vector<std::string> line;
       std::vector<std::string> url_line;
 
-      line.push_back(schema.name());  // SCHEMA_NAME
+      line.push_back(schema.name());  // SCHEMA
       url_line.push_back(std::string());
       line.push_back(std::to_string(index_entry.entity_id()));  // INDEX_ID
       url_line.push_back(std::string("/table/"));
@@ -655,10 +716,10 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
 
       line.push_back(table_definition.table_definition().name());  // TABLE_NAME
       url_line.push_back(std::string());
+
       line.push_back(pb::common::Engine_Name(table_definition.table_definition().engine()));  // ENGINE
       url_line.push_back(std::string());
-      line.push_back("INDEX");  // TYPE
-      url_line.push_back(std::string());
+
       line.push_back(
           std::to_string(table_definition.table_definition().table_partition().partitions_size()));  // PARTITIONS
       url_line.push_back(std::string());
@@ -669,65 +730,101 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
       line.push_back(std::to_string(table_range.range_distribution_size()));  // REGIONS
       url_line.push_back(std::string());
 
+      line.push_back(std::to_string(table_definition.table_definition().columns_size()));  // COLUMNS
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(table_definition.table_definition().auto_increment()));  // AUTO_INCR
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(table_definition.table_definition().replica()));  // REPLICA
+      url_line.push_back(std::string());
+
+      line.push_back("INDEX");  // TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(index_entry.entity_id()));  // TABLE_ID
+      url_line.push_back(std::string("/table/"));
+
       if (table_definition.table_definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
         const auto& vector_index_parameter =
             table_definition.table_definition().index_parameter().vector_index_parameter();
 
-        line.push_back(pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type()));
+        line.push_back(
+            pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type()));  // VECTOR_INDEX_TYPE
         url_line.push_back(std::string());
 
         if (vector_index_parameter.has_flat_parameter()) {
-          line.push_back(std::to_string(vector_index_parameter.flat_parameter().dimension()));  // VECTOR_DIMENSION
+          line.push_back(std::to_string(vector_index_parameter.flat_parameter().dimension()));  // DIMENSION
           url_line.push_back(std::string());
-          line.push_back(pb::common::MetricType_Name(
-              vector_index_parameter.flat_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          line.push_back(
+              pb::common::MetricType_Name(vector_index_parameter.flat_parameter().metric_type()));  // METRIC_TYPE
           url_line.push_back(std::string());
         } else if (vector_index_parameter.has_bruteforce_parameter()) {
-          line.push_back(
-              std::to_string(vector_index_parameter.bruteforce_parameter().dimension()));  // VECTOR_DIMENSION
+          line.push_back(std::to_string(vector_index_parameter.bruteforce_parameter().dimension()));  // DIMENSION
           url_line.push_back(std::string());
-          line.push_back(pb::common::MetricType_Name(
-              vector_index_parameter.bruteforce_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          line.push_back(
+              pb::common::MetricType_Name(vector_index_parameter.bruteforce_parameter().metric_type()));  // METRIC_TYPE
           url_line.push_back(std::string());
         } else if (vector_index_parameter.has_ivf_flat_parameter()) {
-          line.push_back(std::to_string(vector_index_parameter.ivf_flat_parameter().dimension()));  // VECTOR_DIMENSION
+          line.push_back(std::to_string(vector_index_parameter.ivf_flat_parameter().dimension()));  // DIMENSION
           url_line.push_back(std::string());
-          line.push_back(pb::common::MetricType_Name(
-              vector_index_parameter.ivf_flat_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          line.push_back(
+              pb::common::MetricType_Name(vector_index_parameter.ivf_flat_parameter().metric_type()));  // METRIC_TYPE
           url_line.push_back(std::string());
         } else if (vector_index_parameter.has_ivf_pq_parameter()) {
-          line.push_back(std::to_string(vector_index_parameter.ivf_pq_parameter().dimension()));  // VECTOR_DIMENSION
+          line.push_back(std::to_string(vector_index_parameter.ivf_pq_parameter().dimension()));  // DIMENSION
           url_line.push_back(std::string());
-          line.push_back(pb::common::MetricType_Name(
-              vector_index_parameter.ivf_pq_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          line.push_back(
+              pb::common::MetricType_Name(vector_index_parameter.ivf_pq_parameter().metric_type()));  // METRIC_TYPE
           url_line.push_back(std::string());
         } else if (vector_index_parameter.has_hnsw_parameter()) {
-          line.push_back(std::to_string(vector_index_parameter.hnsw_parameter().dimension()));  // VECTOR_DIMENSION
+          line.push_back(std::to_string(vector_index_parameter.hnsw_parameter().dimension()));  // DIMENSION
           url_line.push_back(std::string());
-          line.push_back(pb::common::MetricType_Name(
-              vector_index_parameter.hnsw_parameter().metric_type()));  // VECTOR_METRIC_TYPE
+          line.push_back(
+              pb::common::MetricType_Name(vector_index_parameter.hnsw_parameter().metric_type()));  // METRIC_TYPE
           url_line.push_back(std::string());
         } else {
-          line.push_back("N/A");  // VECTOR_DIMENSION
+          line.push_back("N/A");  // DIMENSION
           url_line.push_back(std::string());
-          line.push_back("N/A");  // VECTOR_METRIC_TYPE
+          line.push_back("N/A");  // METRIC_TYPE
           url_line.push_back(std::string());
         }
 
       } else {
         line.push_back("N/A");  // VECTOR_INDEX_TYPE
         url_line.push_back(std::string());
-        line.push_back("N/A");  // VECTOR_DIMENSION
+        line.push_back("N/A");  // DIMENSION
         url_line.push_back(std::string());
-        line.push_back("N/A");  // VECTOR_METRIC_TYPE
+        line.push_back("N/A");  // METRIC_TYPE
         url_line.push_back(std::string());
       }
+
+      line.push_back(table_definition.table_definition().charset());  // CHARSET
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().collate());  // COLLATE
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().table_type());  // TABLE_TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(table_definition.table_definition().row_format());  // ROW_FORMAT
+      url_line.push_back(std::string());
+
+      line.push_back(Helper::FormatMsTime(table_definition.table_definition().create_timestamp(),
+                                          "%Y-%m-%d %H:%M:%S"));  // CREATE_TIME
+      url_line.push_back(std::string());
+
+      line.push_back(Helper::FormatMsTime(table_definition.table_definition().update_timestamp(),
+                                          "%Y-%m-%d %H:%M:%S"));  // UPDATE_TIME
+      url_line.push_back(std::string());
 
       table_contents.push_back(line);
       table_urls.push_back(url_line);
     }
   }
 
+  os << "<span class=\"bold-text\">TABLE: " << table_contents.size() << "</span>" << '\n';
   PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
@@ -876,19 +973,15 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   os << (use_html ? "<br>\n" : "\n");
   os << (use_html ? "<br>\n" : "\n");
-  os << "<span class=\"bold-text\">STORE: </span>" << '\n';
   PrintStores(os, use_html);
 
   os << (use_html ? "<br>\n" : "\n");
-  os << "<span class=\"bold-text\">EXECUTOR: </span>" << '\n';
   PrintExecutors(os, use_html);
 
   os << (use_html ? "<br>\n" : "\n");
-  os << "<span class=\"bold-text\">TABLE: </span>" << '\n';
   PrintSchemaTables(os, use_html);
 
   os << (use_html ? "<br>\n" : "\n");
-  os << "<span class=\"bold-text\">REGION: </span>" << '\n';
   PrintRegions(os, use_html);
 
   if (use_html) {
