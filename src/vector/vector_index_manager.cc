@@ -21,7 +21,6 @@
 #include <string>
 #include <vector>
 
-#include "braft/util.h"
 #include "bthread/bthread.h"
 #include "butil/status.h"
 #include "bvar/latency_recorder.h"
@@ -50,6 +49,7 @@ DEFINE_int32(vector_background_worker_num, 16, "vector index background worker n
 DEFINE_int32(vector_fast_background_worker_num, 8, "vector index fast background worker num");
 DEFINE_int64(vector_fast_build_log_gap, 50, "vector index fast build log gap");
 DEFINE_int64(vector_pull_snapshot_min_log_gap, 66, "vector index pull snapshot min log gap");
+DEFINE_int64(vector_max_background_task_count, 32, "vector index max background task count");
 
 std::string RebuildVectorIndexTask::Trace() {
   return fmt::format("[vector_index.rebuild][id({}).start_time({}).job_id({})] {}", vector_index_wrapper_->Id(),
@@ -1612,6 +1612,14 @@ std::vector<std::vector<std::string>> VectorIndexManager::GetPendingTaskTrace() 
   }
 
   return background_workers_->GetPendingTaskTrace();
+}
+
+uint64_t VectorIndexManager::GetBackgroundPendingTaskCount() {
+  if (background_workers_ == nullptr) {
+    return 0;
+  }
+
+  return background_workers_->PendingTaskCount();
 }
 
 }  // namespace dingodb

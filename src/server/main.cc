@@ -120,6 +120,7 @@ namespace dingodb {
 DECLARE_int32(brpc_worker_thread_num);
 DECLARE_int32(vector_background_worker_num);
 DECLARE_int32(vector_fast_background_worker_num);
+DECLARE_int64(vector_max_background_task_count);
 }  // namespace dingodb
 
 // Get server endpoint from config
@@ -548,6 +549,14 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
                        << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
       return -1;
     }
+
+    auto vector_max_background_task_count = config->GetInt("vector.max_background_task_count");
+    if (vector_max_background_task_count <= 0) {
+      vector_max_background_task_count = dingodb::FLAGS_vector_max_background_task_count;
+      DINGO_LOG(WARNING) << fmt::format("[config] vector.max_background_task_count is too small, set default value({})",
+                                        dingodb::FLAGS_vector_max_background_task_count);
+    }
+    dingodb::FLAGS_vector_max_background_task_count = vector_max_background_task_count;
   }
 
   return 0;
@@ -1228,6 +1237,7 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
       return -1;
     }
+    index_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
     if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;

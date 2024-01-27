@@ -58,6 +58,7 @@ static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
 DECLARE_int64(max_scan_lock_limit);
+DECLARE_int64(vector_max_background_task_count);
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
@@ -70,6 +71,10 @@ bool IndexServiceImpl::IsRaftApplyPendingExceed() {
   } else {
     return false;
   }
+}
+
+bool IndexServiceImpl::IsBackgroundPendingTaskCountExceed() {
+  return vector_index_manager_->GetBackgroundPendingTaskCount() > FLAGS_vector_max_background_task_count;
 }
 
 static butil::Status ValidateVectorBatchQueryRequest(StoragePtr storage,
@@ -165,7 +170,8 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -307,7 +313,8 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -453,7 +460,15 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry, please wait and retry");
+    return;
+  }
+
+  if (IsBackgroundPendingTaskCountExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Background pending task count is full, please wait and retry");
     return;
   }
 
@@ -464,7 +479,8 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -552,7 +568,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -563,7 +580,8 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -638,7 +656,8 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -745,7 +764,8 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -830,7 +850,8 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -940,7 +961,8 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1094,7 +1116,8 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1201,7 +1224,8 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1332,7 +1356,8 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1350,7 +1375,8 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -1361,7 +1387,8 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1380,7 +1407,8 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -1391,7 +1419,8 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1644,7 +1673,15 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
+    return;
+  }
+
+  if (IsBackgroundPendingTaskCountExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Background pending task count is full, please wait and retry");
     return;
   }
 
@@ -1655,7 +1692,8 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1749,7 +1787,15 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
+    return;
+  }
+
+  if (IsBackgroundPendingTaskCountExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Background pending task count is full, please wait and retry");
     return;
   }
 
@@ -1760,7 +1806,8 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1824,7 +1871,15 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
+    return;
+  }
+
+  if (IsBackgroundPendingTaskCountExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Background pending task count is full, please wait and retry");
     return;
   }
 
@@ -1850,7 +1905,8 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -1916,7 +1972,15 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
+    return;
+  }
+
+  if (IsBackgroundPendingTaskCountExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Background pending task count is full, please wait and retry");
     return;
   }
 
@@ -1942,7 +2006,8 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2061,7 +2126,8 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2113,7 +2179,8 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2124,7 +2191,8 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2186,7 +2254,8 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2232,7 +2301,8 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2243,7 +2313,8 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2279,7 +2350,8 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2304,7 +2376,8 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2346,7 +2419,8 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Raft apply queue is full");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2357,7 +2431,8 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2404,7 +2479,8 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2463,7 +2539,8 @@ void IndexServiceImpl::Hello(google::protobuf::RpcController* controller, const 
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 
@@ -2478,7 +2555,8 @@ void IndexServiceImpl::GetMemoryInfo(google::protobuf::RpcController* controller
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
   }
 }
 

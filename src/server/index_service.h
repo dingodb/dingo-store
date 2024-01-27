@@ -17,6 +17,7 @@
 
 #include "engine/storage.h"
 #include "proto/index.pb.h"
+#include "vector/vector_index_manager.h"
 
 namespace dingodb {
 
@@ -98,8 +99,12 @@ class IndexServiceImpl : public pb::index::IndexService {
   void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
   void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
   void SetRaftApplyWorkSet(WorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
+  void SetVectorIndexManager(VectorIndexManagerPtr vector_index_manager) {
+    vector_index_manager_ = vector_index_manager;
+  }
 
   bool IsRaftApplyPendingExceed();
+  bool IsBackgroundPendingTaskCountExceed();
 
  private:
   StoragePtr storage_;
@@ -107,6 +112,7 @@ class IndexServiceImpl : public pb::index::IndexService {
   WorkerSetPtr read_worker_set_;
   WorkerSetPtr write_worker_set_;
   WorkerSetPtr raft_apply_worker_set_;
+  VectorIndexManagerPtr vector_index_manager_;
 };
 
 }  // namespace dingodb

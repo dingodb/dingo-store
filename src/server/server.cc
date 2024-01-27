@@ -982,6 +982,13 @@ std::vector<std::vector<std::string>> Server::GetVectorIndexBackgroundWorkerSetT
   return vector_index_manager_->GetPendingTaskTrace();
 }
 
+uint64_t Server::GetVectorIndexManagerBackgroundPendingTaskCount() {
+  if (vector_index_manager_ == nullptr) {
+    return 0;
+  }
+  return vector_index_manager_->GetBackgroundPendingTaskCount();
+}
+
 std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {
   if (raft_apply_worker_set_ == nullptr) {
     return {};

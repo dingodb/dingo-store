@@ -187,6 +187,7 @@ class Server {
   std::vector<std::vector<std::string>> GetIndexServiceReadWorkerSetTrace();
   std::vector<std::vector<std::string>> GetIndexServiceWriteWorkerSetTrace();
   std::vector<std::vector<std::string>> GetVectorIndexBackgroundWorkerSetTrace();
+  uint64_t GetVectorIndexManagerBackgroundPendingTaskCount();
 
   std::vector<std::vector<std::string>> GetRaftApplyWorkerSetTrace();
 
