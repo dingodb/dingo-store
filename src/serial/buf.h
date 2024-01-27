@@ -15,6 +15,7 @@
 #ifndef DINGO_SERIAL_BUF_H_
 #define DINGO_SERIAL_BUF_H_
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <vector>
