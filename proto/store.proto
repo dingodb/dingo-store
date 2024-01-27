@@ -1031,6 +1031,8 @@ message HelloResponse {
 
 service StoreService {
   rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
+
   // kv
   rpc KvGet(KvGetRequest) returns (KvGetResponse);
   rpc KvBatchGet(KvBatchGetRequest) returns (KvBatchGetResponse);

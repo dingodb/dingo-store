@@ -35,6 +35,10 @@
 #include "server/service_helper.h"
 #include "vector/vector_index_snapshot_manager.h"
 
+#ifdef LINK_TCMALLOC
+#include "gperftools/malloc_extension.h"
+#endif
+
 namespace dingodb {
 using pb::error::Errno;
 using pb::node::LogDetail;
@@ -549,6 +553,44 @@ void NodeServiceImpl::CommitMerge(google::protobuf::RpcController* /*controller*
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
+}
+
+void NodeServiceImpl::GetMemoryStats(google::protobuf::RpcController* controller,
+                                     const pb::node::GetMemoryStatsRequest* request,
+                                     pb::node::GetMemoryStatsResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+#ifdef LINK_TCMALLOC
+  std::string stat_buf(4096, '\0');
+  MallocExtension::instance()->GetStats(stat_buf.data(), stat_buf.size());
+
+  response->set_memory_stats(stat_buf.c_str());
+#else
+  response->mutable_error()->set_errcode(pb::error::EINTERNAL);
+  response->mutable_error()->set_errmsg("No use tcmalloc");
+#endif
+}
+
+void NodeServiceImpl::ReleaseFreeMemory(google::protobuf::RpcController* controller,
+                                        const pb::node::ReleaseFreeMemoryRequest* request,
+                                        pb::node::ReleaseFreeMemoryResponse* response,
+                                        google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+#ifdef LINK_TCMALLOC
+  if (request->is_force()) {
+    MallocExtension::instance()->ReleaseFreeMemory();
+  } else {
+    MallocExtension::instance()->SetMemoryReleaseRate(request->rate());
+  }
+#else
+  response->mutable_error()->set_errcode(pb::error::EINTERNAL);
+  response->mutable_error()->set_errmsg("No use tcmalloc");
+#endif
 }
 
 }  // namespace dingodb

@@ -253,6 +253,8 @@ message HelloResponse {
 
 service IndexService {
   rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
+
   // vector index
   rpc VectorAdd(VectorAddRequest) returns (VectorAddResponse);
   rpc VectorBatchQuery(VectorBatchQueryRequest) returns (VectorBatchQueryResponse);

@@ -57,6 +57,12 @@ class NodeServiceImpl : public pb::node::NodeService {
 
   void CommitMerge(google::protobuf::RpcController* controller, const pb::node::CommitMergeRequest* request,
                    pb::node::CommitMergeResponse* response, google::protobuf::Closure* done) override;
+
+  void GetMemoryStats(google::protobuf::RpcController* controller, const pb::node::GetMemoryStatsRequest* request,
+                      pb::node::GetMemoryStatsResponse* response, google::protobuf::Closure* done) override;
+
+  void ReleaseFreeMemory(google::protobuf::RpcController* controller, const pb::node::ReleaseFreeMemoryRequest* request,
+                         pb::node::ReleaseFreeMemoryResponse* response, google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb

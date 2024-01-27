@@ -230,6 +230,29 @@ message CommitMergeResponse {
   dingodb.pb.error.Error error = 2;
 }
 
+message GetMemoryStatsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+}
+
+message GetMemoryStatsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  string memory_stats = 10;
+}
+
+message ReleaseFreeMemoryRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+
+  bool is_force = 2;
+  double rate = 3;
+}
+
+message ReleaseFreeMemoryResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
 service NodeService {
   // GetNodeInfo
   // in: cluster_id
@@ -265,4 +288,8 @@ service NodeService {
 
   // Launch CommitMerge command
   rpc CommitMerge(CommitMergeRequest) returns (CommitMergeResponse);
+
+  // tcmalloc
+  rpc GetMemoryStats(GetMemoryStatsRequest) returns (GetMemoryStatsResponse);
+  rpc ReleaseFreeMemory(ReleaseFreeMemoryRequest) returns (ReleaseFreeMemoryResponse);
 }

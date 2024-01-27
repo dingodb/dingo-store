@@ -27,6 +27,8 @@ class StoreServiceImpl : public pb::store::StoreService {
   // debug
   void Hello(google::protobuf::RpcController* controller, const pb::store::HelloRequest* request,
              pb::store::HelloResponse* response, google::protobuf::Closure* done) override;
+  void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::store::HelloRequest* request,
+                     pb::store::HelloResponse* response, google::protobuf::Closure* done) override;
 
   // raw kv read
   void KvGet(google::protobuf::RpcController* controller, const pb::store::KvGetRequest* request,

@@ -3402,14 +3402,14 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
 }
 
 void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::store::HelloRequest* request,
-             dingodb::pb::store::HelloResponse* response, TrackClosure* done) {
+             dingodb::pb::store::HelloResponse* response, TrackClosure* done, bool is_get_memory_info = false) {
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(done);
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
   *response->mutable_version_info() = GetVersionInfo();
-  if (request->is_just_version_info()) {
+  if (request->is_just_version_info() && !is_get_memory_info) {
     return;
   }
 
@@ -3429,7 +3429,7 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::sto
   }
   response->set_region_leader_count(leader_count);
 
-  if (request->get_region_metrics()) {
+  if (request->get_region_metrics() || is_get_memory_info) {
     auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
     if (store_metrics_manager == nullptr) {
       return;
@@ -3453,6 +3453,19 @@ void StoreServiceImpl::Hello(google::protobuf::RpcController* controller, const 
   // Run in queue.
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void StoreServiceImpl::GetMemoryInfo(google::protobuf::RpcController* controller,
+                                     const pb::store::HelloRequest* request, pb::store::HelloResponse* response,
+                                     google::protobuf::Closure* done) {
+  // Run in queue.
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
