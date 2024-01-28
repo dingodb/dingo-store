@@ -15,16 +15,12 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <filesystem>
-#include <iostream>
-#include <iterator>
 #include <memory>
 #include <random>
 #include <string>
 
 #include "braft/log_entry.h"
-#include "common/logging.h"
-#include "fmt/core.h"
+#include "common/helper.h"
 #include "log/segment_log_storage.h"
 #include "proto/raft.pb.h"
 
