@@ -63,6 +63,10 @@ public class Reader {
 
     @SneakyThrows
     public static <M extends Message> M readMessage(M message, CodedInputStream input) {
+        if (message.isDirect()) {
+            message.read(input);
+            return message;
+        }
         final int length = input.readRawVarint32();
         input.checkRecursionLimit();
         int oldLimit = input.pushLimit(length);

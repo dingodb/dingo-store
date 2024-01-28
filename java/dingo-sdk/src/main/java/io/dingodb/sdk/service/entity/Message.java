@@ -20,6 +20,11 @@ public interface Message {
     int sizeOf();
 
     @JsonIgnore
+    default boolean isDirect() {
+        return false;
+    }
+
+    @JsonIgnore
     default Object getExt$() {
         throw new UnsupportedOperationException();
     }
