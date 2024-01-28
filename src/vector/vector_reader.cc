@@ -24,6 +24,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "coprocessor/coprocessor_v2.h"
+#include "coprocessor/coprocessor_scalar.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
@@ -37,7 +38,7 @@ namespace dingodb {
 #ifndef ENABLE_SCALAR_WITH_COPROCESSOR
 #define ENABLE_SCALAR_WITH_COPROCESSOR
 #endif
-#undef ENABLE_SCALAR_WITH_COPROCESSOR
+// #undef ENABLE_SCALAR_WITH_COPROCESSOR
 
 DEFINE_int64(vector_index_max_range_search_result_count, 1024, "max range search result count");
 DEFINE_int64(vector_index_bruteforce_batch_count, 2048, "bruteforce batch count");

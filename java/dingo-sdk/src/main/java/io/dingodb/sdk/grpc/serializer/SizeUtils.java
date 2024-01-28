@@ -1,7 +1,7 @@
 package io.dingodb.sdk.grpc.serializer;
 
-import io.dingodb.sdk.service.entity.Numeric;
 import io.dingodb.sdk.service.entity.Message;
+import io.dingodb.sdk.service.entity.Numeric;
 
 import java.util.List;
 import java.util.Map;
@@ -113,8 +113,10 @@ public class SizeUtils {
     public static Integer sizeOf(Numeric numeric, Message value) {
         if (value != null) {
             int size = value.sizeOf();
-            size += computeInt32SizeNoTag(size);
-            size += computeTagSize(numeric.number());
+            if (!value.isDirect()) {
+                size += computeInt32SizeNoTag(size);
+                size += computeTagSize(numeric.number());
+            }
             return size;
         }
         return 0;

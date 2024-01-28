@@ -145,15 +145,16 @@ public class Writer {
         if (value != null) {
             out.writeTag(number, WireFormat.WIRETYPE_LENGTH_DELIMITED);
             out.writeByteArrayNoTag(value);
-            //out.writeBytes(number, ByteString.copyFrom(value));
         }
     }
 
     @SneakyThrows
     public static void write(Integer number, Message value, CodedOutputStream out) {
         if (value != null) {
-            out.writeTag(number, WireFormat.WIRETYPE_LENGTH_DELIMITED);
-            out.writeUInt32NoTag(value.sizeOf());
+            if (!value.isDirect()) {
+                out.writeTag(number, WireFormat.WIRETYPE_LENGTH_DELIMITED);
+                out.writeUInt32NoTag(value.sizeOf());
+            }
             value.write(out);
         }
     }
@@ -161,8 +162,10 @@ public class Writer {
     @SneakyThrows
     public static void write(Numeric numeric, Message value, CodedOutputStream out) {
         if (value != null) {
-            out.writeTag(numeric.number(), WireFormat.WIRETYPE_LENGTH_DELIMITED);
-            out.writeUInt32NoTag(value.sizeOf());
+            if (!value.isDirect()) {
+                out.writeTag(numeric.number(), WireFormat.WIRETYPE_LENGTH_DELIMITED);
+                out.writeUInt32NoTag(value.sizeOf());
+            }
             value.write(out);
         }
     }
