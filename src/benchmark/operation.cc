@@ -18,7 +18,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <random>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -452,6 +451,7 @@ Operation::Result ReadSeqOperation::Execute(RegionEntryPtr region_entry) {
     return KvGet(keys[region_entry->read_index++ % keys.size()]);
   } else {
     std::vector<std::string> keys;
+    keys.reserve(FLAGS_batch_size);
     for (int i = 0; i < FLAGS_batch_size; ++i) {
       keys.push_back(keys[region_entry->read_index++ % keys.size()]);
     }
