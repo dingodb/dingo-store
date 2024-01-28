@@ -15,9 +15,7 @@
 #ifndef DINGODB_BENCHMARK_OPERATION_H_
 #define DINGODB_BENCHMARK_OPERATION_H_
 
-#include <atomic>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>

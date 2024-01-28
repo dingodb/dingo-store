@@ -18,9 +18,9 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
-#include <ios>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -43,6 +43,7 @@ DEFINE_validator(raw_engine, [](const char*, const std::string& value) -> bool {
 
 DEFINE_uint32(region_num, 1, "Region number");
 DEFINE_uint32(concurrency, 1, "Concurrency of request");
+DEFINE_uint32(arrange_region_threads, 16, "Threads number of arrange region");
 
 DEFINE_uint64(req_num, 10000, "Request number");
 DEFINE_uint32(timelimit, 0, "Time limit in seconds");
@@ -174,14 +175,19 @@ bool Benchmark::Arrange() {
 
   region_entries_ = ArrangeRegion(FLAGS_region_num);
   if (region_entries_.size() != FLAGS_region_num) {
+    DINGO_LOG(ERROR) << fmt::format("Arrange region failed, expect: {}, actual: {}", FLAGS_region_num,
+                                    region_entries_.size());
+    sleep(300);
     return false;
   }
 
   if (!ArrangeOperation()) {
+    DINGO_LOG(ERROR) << "Arrange operation failed";
     return false;
   }
 
   if (!ArrangeData()) {
+    DINGO_LOG(ERROR) << "Arrange data failed";
     return false;
   }
 
@@ -190,23 +196,59 @@ bool Benchmark::Arrange() {
 }
 
 std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
+  std::mutex mutex;
   std::vector<RegionEntryPtr> region_entries;
 
+  std::vector<std::string> region_names;
+  std::vector<std::string> start_keys;
+  std::vector<std::string> end_keys;
+
   for (int i = 0; i < num; ++i) {
-    std::string prefix = fmt::format("{}{:06}", FLAGS_prefix, i);
-    auto region_id = CreateRegion(kRegionNamePrefix + std::to_string(i + 1), prefix, Helper::PrefixNext(prefix),
-                                  GetRawEngineType(), FLAGS_replica);
-    if (region_id == 0) {
-      return region_entries;
-    }
+    auto name_prefix = kRegionNamePrefix + fmt::format("{:014}_", Helper::TimestampMs());
+    auto start_prefix = name_prefix + FLAGS_prefix + fmt::format("{:010}", i);
+    auto end_prefix = name_prefix + FLAGS_prefix + fmt::format("{:010}", i + 1);
 
-    std::cout << fmt::format("Create region({}) {} done", prefix, region_id) << '\n';
+    region_names.push_back(name_prefix);
+    start_keys.push_back(start_prefix);
+    end_keys.push_back(end_prefix);
+  }
 
-    auto region_entry = std::make_shared<RegionEntry>();
-    region_entry->prefix = prefix;
-    region_entry->region_id = region_id;
+  // use multi threads to do CreateRegion
+  int thread_count = FLAGS_arrange_region_threads;
+  std::vector<std::thread> threads;
+  threads.reserve(thread_count);
 
-    region_entries.push_back(region_entry);
+  for (int thread_num = 0; thread_num < thread_count; ++thread_num) {
+    threads.emplace_back([this, thread_num, num, thread_count, &region_names, &start_keys, &end_keys, &region_entries,
+                          &mutex]() {
+      for (int i = 0; i < num; ++i) {
+        if (i % thread_count != thread_num) {
+          continue;
+        }
+
+        LOG(INFO) << fmt::format("Create region name: {}, start_key: {}, end_key: {}", region_names[i],
+                                 Helper::StringToHex(start_keys[i]), Helper::StringToHex(end_keys[i]));
+
+        auto region_id = CreateRegion(region_names[i], start_keys[i], end_keys[i], GetRawEngineType(), FLAGS_replica);
+        if (region_id == 0) {
+          LOG(ERROR) << fmt::format("Create region failed, region_name: {}", region_names[i]);
+          return;
+        }
+
+        std::cout << fmt::format("Create region({}) {} done", start_keys[i], region_id) << '\n';
+
+        auto region_entry = std::make_shared<RegionEntry>();
+        region_entry->prefix = start_keys[i];
+        region_entry->region_id = region_id;
+
+        std::lock_guard lock(mutex);
+        region_entries.push_back(region_entry);
+      }
+    });
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
   }
 
   return region_entries;
