@@ -47,22 +47,23 @@ DEFINE_int64(max_partition_num_of_table, 1024, "max partition num of table");
 DEFINE_int64(max_table_count, 10000, "max table num of dingo");
 DEFINE_int64(max_index_count, 10000, "max index num of dingo");
 
-void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
-                                                   pb::meta::EntityType entity_type,
-                                                   pb::coordinator_internal::MetaIncrement& meta_increment,
-                                                   pb::meta::TableIdWithPartIds* ids) {
+butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
+                                                            pb::meta::EntityType entity_type,
+                                                            pb::coordinator_internal::MetaIncrement& meta_increment,
+                                                            pb::meta::TableIdWithPartIds* ids) {
   std::vector<int64_t> new_ids =
       GetNextIds(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 1 + part_count, meta_increment);
 
   if (new_ids.empty()) {
     DINGO_LOG(ERROR) << "GenerateTableIdAndPartIds GetNextIds failed";
-    return;
+    return butil::Status(pb::error::Errno::EINTERNAL, "GenerateTableIdAndPartIds GetNextIds failed");
   }
 
   if (new_ids.size() != 1 + part_count) {
     DINGO_LOG(ERROR) << "GenerateTableIdAndPartIds GetNextIds failed, new_ids.size()=" << new_ids.size()
                      << " part_count=" << part_count;
-    return;
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         "GenerateTableIdAndPartIds GetNextIds failed, new_ids.size() != 1 + part_count");
   }
 
   auto* table_id = ids->mutable_table_id();
@@ -71,13 +72,13 @@ void CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t pa
   table_id->set_entity_type(entity_type);
 
   for (uint32_t i = 0; i < part_count; i++) {
-    int64_t new_part_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
-
     auto* part_id = ids->add_part_ids();
-    part_id->set_entity_id(new_part_id);
-    part_id->set_parent_entity_id(new_ids.at(i + 1));
+    part_id->set_entity_id(new_ids.at(i + 1));
+    part_id->set_parent_entity_id(new_ids.at(0));
     part_id->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_PART);
   }
+
+  return butil::Status::OK();
 }
 
 // GenerateRootSchemas
@@ -2488,11 +2489,13 @@ void CoordinatorControl::CalculateIndexMetrics() {
   }
 }
 
-butil::Status CoordinatorControl::GenerateTableIds(int64_t schema_id, const pb::meta::TableWithPartCount& count,
-                                                   pb::coordinator_internal::MetaIncrement& meta_increment,
-                                                   pb::meta::GenerateTableIdsResponse* response) {
-  if (count.index_count() != count.index_part_count_size()) {
-    DINGO_LOG(ERROR) << "index count is illegal: " << count.index_count() << " | " << count.index_part_count_size();
+butil::Status CoordinatorControl::GenerateTableWithPartIds(int64_t schema_id,
+                                                           const pb::meta::TableWithPartCount& table_with_part_count,
+                                                           pb::coordinator_internal::MetaIncrement& meta_increment,
+                                                           pb::meta::GenerateTableIdsResponse* response) {
+  if (table_with_part_count.index_count() != table_with_part_count.index_part_count_size()) {
+    DINGO_LOG(ERROR) << "index count is illegal: " << table_with_part_count.index_count() << " | "
+                     << table_with_part_count.index_part_count_size();
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index count is illegal");
   }
 
@@ -2501,15 +2504,22 @@ butil::Status CoordinatorControl::GenerateTableIds(int64_t schema_id, const pb::
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
-  if (count.has_table()) {
-    GenerateTableIdAndPartIds(schema_id, count.table_part_count(), pb::meta::EntityType::ENTITY_TYPE_TABLE,
-                              meta_increment, response->add_ids());
+  if (table_with_part_count.has_table()) {
+    auto ret = GenerateTableIdAndPartIds(schema_id, table_with_part_count.table_part_count(),
+                                         pb::meta::EntityType::ENTITY_TYPE_TABLE, meta_increment, response->add_ids());
+    if (!ret.ok()) {
+      return ret;
+    }
   }
 
-  for (uint32_t i = 0; i < count.index_count(); i++) {
-    GenerateTableIdAndPartIds(schema_id, count.index_part_count(i), pb::meta::EntityType::ENTITY_TYPE_INDEX,
-                              meta_increment, response->add_ids());
+  for (uint32_t i = 0; i < table_with_part_count.index_count(); i++) {
+    auto ret = GenerateTableIdAndPartIds(schema_id, table_with_part_count.index_part_count(i),
+                                         pb::meta::EntityType::ENTITY_TYPE_INDEX, meta_increment, response->add_ids());
+    if (!ret.ok()) {
+      return ret;
+    }
   }
+
   return butil::Status::OK();
 }
 

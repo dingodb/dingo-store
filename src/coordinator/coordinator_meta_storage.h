@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "butil/compiler_specific.h"
 #include "butil/containers/doubly_buffered_data.h"
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
@@ -37,6 +38,7 @@
 namespace dingodb {
 
 #define COORDINATOR_ID_OF_MAP_MIN 1000
+#define COORDINATOR_GET_NEXT_IDS_MAX_BATCH 100000
 
 inline std::string EncodeInt64Id(int64_t id) {
   Buf buf(sizeof(int64_t));
@@ -99,6 +101,10 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
   }
 
   int GetNextId(const int64_t &key, int64_t &value) {
+    if (BAIDU_UNLIKELY(key <= 0)) {
+      return -1;
+    }
+
     if (safe_map.Modify(InnerGetNextId, key, value) > 0) {
       return 1;
     } else {
@@ -107,7 +113,7 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
   }
 
   int GetNextIds(const int64_t &key, const int64_t &count, std::vector<int64_t> &values) {
-    if (count <= 0 || key <= 0) {
+    if (BAIDU_UNLIKELY(count <= 0 || key <= 0 || count > COORDINATOR_GET_NEXT_IDS_MAX_BATCH)) {
       return -1;
     }
 
@@ -124,6 +130,10 @@ class DingoSafeIdEpochMap : public DingoSafeIdEpochMapBase {
   // if the update value is larger than the internal value, return 1;
   // if the update value is less than the internal value, return -1;
   int UpdatePresentId(const int64_t &key, const int64_t &value) {
+    if (BAIDU_UNLIKELY(key <= 0)) {
+      return -1;
+    }
+
     int ret = safe_map.Modify(InnerUpdatePresentId, key, value);
     return ret;
   }
