@@ -46,9 +46,14 @@ class VectorIndex {
 
   int64_t GetPartitionId(int64_t vector_id) const;
 
+  std::vector<int64_t> GetPartitionIds() const;
+
+  // be sure partition id is valid
+  const pb::common::Range& GetPartitionRange(int64_t part_id) const ;
+
   bool IsStale() { return stale_.load(std::memory_order_relaxed); }
 
-  std::string ToString(bool verbose=false) const;
+  std::string ToString(bool verbose = false) const;
 
  private:
   friend class VectorIndexCache;
@@ -63,6 +68,7 @@ class VectorIndex {
   const pb::meta::IndexDefinitionWithId index_def_with_id_;
   // start_key is 0 or valid vector id
   std::map<int64_t, int64_t> start_key_to_part_id_;
+  std::map<int64_t, pb::common::Range> part_id_to_range_;
 
   std::atomic<bool> stale_{true};
 };

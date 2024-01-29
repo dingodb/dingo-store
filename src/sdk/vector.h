@@ -29,7 +29,11 @@ class ClientStub;
 
 enum VectorIndexType : uint8_t { kNoneIndexType, kFlat, kIvfFlat, kIvfPq, kHnsw, kDiskAnn, kBruteForce };
 
+std::string VectorIndexTypeToString(VectorIndexType type);
+
 enum MetricType : uint8_t { kNoneMetricType, kL2, kInnerProduct, kCosine };
+
+std::string MetricTypeToString(MetricType type);
 
 struct FlatParam {
   explicit FlatParam(int32_t p_dimension, MetricType p_metric_type)
@@ -116,13 +120,17 @@ struct BruteForceParam {
   MetricType metric_type;
 };
 
-enum ValueType : uint8_t { kFloat, kUinT8 };
+enum ValueType : uint8_t { kNoneValueType, kFloat, kUinT8 };
+
+std::string ValueTypeToString(ValueType type);
 
 struct Vector {
   int32_t dimension;
   ValueType value_type;
   std::vector<float> float_values;
   std::vector<std::string> binary_values;
+
+  explicit Vector() : value_type(kNoneValueType), dimension(0) {}
 
   explicit Vector(ValueType p_value_type, int32_t p_dimension) : value_type(p_value_type), dimension(p_dimension) {}
 
@@ -144,12 +152,18 @@ struct Vector {
   const Vector& operator=(const Vector&) = delete;
 };
 
+std::string DumpToString(const Vector& obj);
+
 struct VectorWithId {
   int64_t id;
   Vector vector;
   //  TODO: scalar data and table data
 
+  explicit VectorWithId() : id(0) {}
+
   explicit VectorWithId(int64_t p_id, Vector p_vector) : id(p_id), vector(std::move(p_vector)) {}
+
+  explicit VectorWithId(Vector p_vector) : id(0), vector(std::move(p_vector)) {}
 
   VectorWithId(VectorWithId&& other) noexcept : id(other.id), vector(std::move(other.vector)) {}
 
@@ -162,6 +176,8 @@ struct VectorWithId {
   VectorWithId(const VectorWithId&) = delete;
   const VectorWithId& operator=(const VectorWithId&) = delete;
 };
+
+std::string DumpToString(const VectorWithId& obj);
 
 enum FilterSource : uint8_t {
   kNoneFilterSource,
@@ -184,6 +200,8 @@ enum FilterType : uint8_t {
 enum SearchExtraParamType : uint8_t { kParallelOnQueries, kNprobe, kRecallNum, kEfSearch };
 
 struct SearchParameter {
+  explicit SearchParameter() = default;
+
   SearchParameter(SearchParameter&& other) noexcept
       : topk(other.topk),
         with_vector_data(other.with_vector_data),
@@ -236,7 +254,7 @@ struct SearchParameter {
   int32_t topk{0};
   bool with_vector_data{true};
   bool with_scalar_data{false};
-  //  TODO: selected keys
+  std::vector<std::string> selected_keys;
   bool with_table_data{false};      // Default false, if true, response without table data
   bool enable_range_search{false};  // if enable_range_search = true. top_n disabled.
   float radius{0.0f};
@@ -248,24 +266,48 @@ struct SearchParameter {
   std::unordered_map<SearchExtraParamType, int32_t> extra_params;  // The search method to use
 };
 
-struct SearchResult {
+struct VectorWithDistance {
   VectorWithId vector_data;
   float distance;
   MetricType metric_type;
 
-  SearchResult(SearchResult&& other) noexcept
+  explicit VectorWithDistance() : metric_type(kNoneMetricType) {}
+
+  VectorWithDistance(VectorWithDistance&& other) noexcept
       : vector_data(std::move(other.vector_data)), distance(other.distance), metric_type(other.metric_type) {}
 
-  SearchResult& operator=(SearchResult&& other) noexcept {
+  VectorWithDistance& operator=(VectorWithDistance&& other) noexcept {
     vector_data = std::move(other.vector_data);
     distance = other.distance;
     metric_type = other.metric_type;
     return *this;
   }
 
+  VectorWithDistance(const VectorWithDistance&) = delete;
+  const VectorWithDistance& operator=(const VectorWithDistance&) = delete;
+};
+
+std::string DumpToString(const VectorWithDistance& obj);
+
+struct SearchResult {
+  VectorWithId id;
+  std::vector<VectorWithDistance> vector_datas;
+
+  explicit SearchResult(VectorWithId p_id) : id(std::move(p_id)) {}
+
+  SearchResult(SearchResult&& other) noexcept : id(std::move(other.id)), vector_datas(std::move(other.vector_datas)) {}
+
+  SearchResult& operator=(SearchResult&& other) noexcept {
+    id = std::move(other.id);
+    vector_datas = std::move(other.vector_datas);
+    return *this;
+  }
+
   SearchResult(const SearchResult&) = delete;
   const SearchResult& operator=(const SearchResult&) = delete;
 };
+
+std::string DumpToString(const SearchResult& obj);
 
 struct DeleteResult {
   int64_t vector_id;

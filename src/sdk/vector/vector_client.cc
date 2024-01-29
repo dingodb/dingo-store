@@ -16,6 +16,7 @@
 #include "sdk/status.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_add_task.h"
+#include "sdk/vector/vector_search_task.h"
 
 namespace dingodb {
 namespace sdk {
@@ -33,22 +34,24 @@ Status VectorClient::Add(int64_t schema_id, const std::string& index_name, const
   return Status::NotSupported("Not supported yet");
 }
 
-Status Search(int64_t index_id, const SearchParameter& search_param, const std::vector<VectorWithId>& target_vectors,
-              std::vector<SearchResult>& out_result) {
+Status VectorClient::Search(int64_t index_id, const SearchParameter& search_param,
+                            const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result) {
+  VectorSearchTask task(stub_, index_id, search_param, target_vectors, out_result);
+  return task.Run();
+}
+
+Status VectorClient::Search(int64_t schema_id, const std::string& index_name, const SearchParameter& search_param,
+                            const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result) {
   return Status::NotSupported("Not supported yet");
 }
 
-Status Search(int64_t schema_id, const std::string& index_name, const SearchParameter& search_param,
-              const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result) {
+Status VectorClient::Delete(int64_t index_id, const std::vector<int64_t>& vector_ids,
+                            std::vector<DeleteResult>& out_result) {
   return Status::NotSupported("Not supported yet");
 }
 
-Status Delete(int64_t index_id, const std::vector<int64_t>& vector_ids, std::vector<DeleteResult>& out_result) {
-  return Status::NotSupported("Not supported yet");
-}
-
-Status Delete(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,
-              std::vector<DeleteResult>& out_result) {
+Status VectorClient::Delete(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,
+                            std::vector<DeleteResult>& out_result) {
   return Status::NotSupported("Not supported yet");
 }
 

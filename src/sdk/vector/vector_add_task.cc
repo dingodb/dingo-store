@@ -20,6 +20,7 @@
 #include "sdk/common/common.h"
 #include "sdk/status.h"
 #include "sdk/vector/index_service_rpc.h"
+#include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_helper.h"
 #include "sdk/vector/vector_index.h"
 
@@ -103,7 +104,7 @@ void VectorAddTask::DoAsync() {
                                       [&](const VectorWithId& vector_with_id) { return vector_with_id.id == id; });
       CHECK(vector_iter != vectors_.end()) << "can't find vector id:" << id;
 
-      VectorIndexType2InternalVectorWithIdPB(rpc->MutableRequest()->add_vectors(), *vector_iter);
+      FillVectorWithIdPB(rpc->MutableRequest()->add_vectors(), *vector_iter);
     }
 
     StoreRpcController controller(stub, *rpc, region);
@@ -112,8 +113,8 @@ void VectorAddTask::DoAsync() {
     rpcs_.push_back(std::move(rpc));
   }
 
-  CHECK_EQ(rpcs_.size(), region_vectors_to_ids.size());
-  CHECK_EQ(rpcs_.size(), controllers_.size());
+  DCHECK_EQ(rpcs_.size(), region_vectors_to_ids.size());
+  DCHECK_EQ(rpcs_.size(), controllers_.size());
 
   sub_tasks_count_.store(region_vectors_to_ids.size());
 
