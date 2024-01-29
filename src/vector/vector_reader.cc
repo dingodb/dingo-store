@@ -1350,8 +1350,8 @@ bool operator>(const DistanceResult& result1, const DistanceResult& result2) {
 
 // ScanData from raw engine, build vector index and search
 butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
-                                             std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                             const pb::common::Range& region_range,
+                                             const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                             uint32_t topk, const pb::common::Range& region_range,
                                              std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                              bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                              std::vector<pb::index::VectorWithDistanceResult>& results) {
@@ -1376,8 +1376,8 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   BvarLatencyGuard bvar_guard(&g_bruteforce_search_latency);
 
   // topk results
-  std::vector<std::priority_queue<DistanceResult>> top_rsults;
-  top_rsults.resize(vector_with_ids.size());
+  std::vector<std::priority_queue<DistanceResult>> top_results;
+  top_results.resize(vector_with_ids.size());
 
   int64_t count = 0;
   std::vector<pb::common::VectorWithId> vector_with_id_batch;
@@ -1427,10 +1427,10 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
 
       for (int i = 0; i < results_batch.size(); i++) {
         auto& result = results_batch[i];
-        auto& top_result = top_rsults[i];
+        auto& top_result = top_results[i];
 
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          auto& top_result = top_rsults[i];
+          auto& top_result = top_results[i];
           if (top_result.size() < topk) {
             top_result.emplace(vector_with_distance.distance(), vector_with_distance);
           } else {
@@ -1472,10 +1472,10 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
 
     for (int i = 0; i < results_batch.size(); i++) {
       auto& result = results_batch[i];
-      auto& top_result = top_rsults[i];
+      auto& top_result = top_results[i];
 
       for (const auto& vector_with_distance : result.vector_with_distances()) {
-        auto& top_result = top_rsults[i];
+        auto& top_result = top_results[i];
         if (top_result.size() < topk) {
           top_result.emplace(vector_with_distance.distance(), vector_with_distance);
         } else {
@@ -1494,9 +1494,9 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   // copy top_results to results
   // we don't do sorting by distance here
   // the client will do sorting by distance
-  results.resize(top_rsults.size());
-  for (int i = 0; i < top_rsults.size(); i++) {
-    auto& top_result = top_rsults[i];
+  results.resize(top_results.size());
+  for (int i = 0; i < top_results.size(); i++) {
+    auto& top_result = top_results[i];
     auto& result = results[i];
 
     while (!top_result.empty()) {
@@ -1511,8 +1511,8 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
 }
 
 butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_index,
-                                                  std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                                  const pb::common::Range& region_range,
+                                                  const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                  float radius, const pb::common::Range& region_range,
                                                   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                                                   bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                                   std::vector<pb::index::VectorWithDistanceResult>& results) {

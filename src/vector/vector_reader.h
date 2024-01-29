@@ -142,14 +142,14 @@ class VectorReader {
       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
 
   butil::Status BruteForceSearch(VectorIndexWrapperPtr vector_index,
-                                 std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
+                                 const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
                                  const pb::common::Range& region_range,
                                  std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool reconstruct,
                                  const pb::common::VectorSearchParameter& parameter,
                                  std::vector<pb::index::VectorWithDistanceResult>& results);
 
   butil::Status BruteForceRangeSearch(VectorIndexWrapperPtr vector_index,
-                                      std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
+                                      const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
                                       const pb::common::Range& region_range,
                                       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
                                       bool reconstruct, const pb::common::VectorSearchParameter& parameter,
