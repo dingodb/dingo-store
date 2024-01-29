@@ -843,6 +843,28 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
                            << ", write_value(hex): " << Helper::StringToHex(iter->Value());
         }
 
+        // check the op type of write_info
+        if (write_info.op() == pb::store::Op::Rollback) {
+          DINGO_LOG(INFO) << "[txn]BatchGet write_info.op() == pb::store::Op::Rollback, go to next line, key: "
+                          << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
+                          << ", write_info: " << write_info.ShortDebugString();
+          // goto next write line
+          iter->Next();
+          continue;
+        } else if (write_info.op() == pb::store::Op::Delete) {
+          // if op is delete, value is null
+          DINGO_LOG(INFO) << "[txn]BatchGet write_info.op() == pb::store::Op::Delete, so value is null, key: "
+                          << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
+                          << ", write_info: " << write_info.ShortDebugString();
+          kv.set_value(std::string());
+          break;
+        } else if (write_info.op() != pb::store::Op::Put) {
+          DINGO_LOG(ERROR) << "[txn]BatchGet meet invalid write_info.op: " << write_info.op()
+                           << ", key: " << Helper::StringToHex(key)
+                           << ", write_info: " << write_info.ShortDebugString();
+          return butil::Status(pb::error::Errno::EINTERNAL, "invalid write_info.op");
+        }
+
         if (!write_info.short_value().empty()) {
           kv.set_value(write_info.short_value());
           break;
@@ -860,9 +882,9 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
         }
         break;
       } else {
-        DINGO_LOG(ERROR) << "[txn]BatchGet write_ts: " << write_ts << " >= start_ts: " << start_ts
-                         << ", key: " << Helper::StringToHex(key)
-                         << ", write_key: " << Helper::StringToHex(iter->Key());
+        DINGO_LOG(INFO) << "[txn]BatchGet is_valid = false, go to next line, write_ts: " << write_ts
+                        << " >= start_ts: " << start_ts << ", key: " << Helper::StringToHex(key)
+                        << ", write_key: " << Helper::StringToHex(iter->Key());
       }
 
       iter->Next();
