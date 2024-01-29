@@ -1407,8 +1407,8 @@ void DoGenerateTableIds(google::protobuf::RpcController * /*controller*/,
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
-  butil::Status ret = coordinator_control->GenerateTableIds(request->schema_id().entity_id(), request->count(),
-                                                            meta_increment, response);
+  butil::Status ret = coordinator_control->GenerateTableWithPartIds(request->schema_id().entity_id(), request->count(),
+                                                                    meta_increment, response);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "GenerateTableIds failed.";
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));

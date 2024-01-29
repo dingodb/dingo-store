@@ -456,3 +456,93 @@ TEST_F(HelperTest, PaddingUserKey) {
   EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
   EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
 }
+
+TEST_F(HelperTest, IsContinuous) {
+  // Test with an empty set
+  std::set<int64_t> empty_set;
+  EXPECT_TRUE(dingodb::Helper::IsContinuous(empty_set));
+
+  // Test with a set of continuous numbers
+  std::set<int64_t> continuous_set = {1, 2, 3, 4, 5};
+  EXPECT_TRUE(dingodb::Helper::IsContinuous(continuous_set));
+
+  // Test with a set of non-continuous numbers
+  std::set<int64_t> non_continuous_set = {1, 2, 4, 5};
+  EXPECT_FALSE(dingodb::Helper::IsContinuous(non_continuous_set));
+
+  // Test with a large set of continuous numbers
+  std::set<int64_t> large_continuous_set;
+  for (int64_t i = 0; i < 10000; ++i) {
+    large_continuous_set.insert(i);
+  }
+  EXPECT_TRUE(dingodb::Helper::IsContinuous(large_continuous_set));
+
+  // Test with a large set of non-continuous numbers
+  std::set<int64_t> large_non_continuous_set;
+  for (int64_t i = 0; i < 10000; ++i) {
+    if (i != 5000) {  // Skip one number to make the set non-continuous
+      large_non_continuous_set.insert(i);
+    }
+  }
+  EXPECT_FALSE(dingodb::Helper::IsContinuous(large_non_continuous_set));
+
+  // Test with a set of continuous negative numbers
+  std::set<int64_t> negative_continuous_set = {-5, -4, -3, -2, -1, 0};
+  EXPECT_TRUE(dingodb::Helper::IsContinuous(negative_continuous_set));
+
+  // Test with a set of non-continuous negative numbers
+  std::set<int64_t> negative_non_continuous_set = {-5, -4, -2, -1, 0};
+  EXPECT_FALSE(dingodb::Helper::IsContinuous(negative_non_continuous_set));
+
+  // Test with a set of continuous numbers that includes both positive and negative numbers
+  std::set<int64_t> mixed_continuous_set = {-2, -1, 0, 1, 2};
+  EXPECT_TRUE(dingodb::Helper::IsContinuous(mixed_continuous_set));
+
+  // Test with a set of non-continuous numbers that includes both positive and negative numbers
+  std::set<int64_t> mixed_non_continuous_set = {-2, -1, 1, 2};
+  EXPECT_FALSE(dingodb::Helper::IsContinuous(mixed_non_continuous_set));
+}
+
+TEST_F(HelperTest, IsConflictRange) {
+  // Test with two ranges that do not intersect
+  dingodb::pb::common::Range range1;
+  range1.set_start_key("hello");
+  range1.set_end_key("hello0000");
+  dingodb::pb::common::Range range2;
+  range2.set_start_key("hello0000");
+  range2.set_end_key("hello00000000");
+  EXPECT_FALSE(dingodb::Helper::IsConflictRange(range1, range2));
+
+  // Test with two ranges that intersect
+  range2.set_start_key("hello000");
+  range2.set_end_key("hello000000");
+  EXPECT_TRUE(dingodb::Helper::IsConflictRange(range1, range2));
+
+  // Test with two ranges that are the same
+  range2.set_start_key("hello");
+  range2.set_end_key("hello0000");
+  EXPECT_TRUE(dingodb::Helper::IsConflictRange(range1, range2));
+
+  // Test with two ranges where one is inside the other
+  range2.set_start_key("hello0");
+  range2.set_end_key("hello000");
+  EXPECT_TRUE(dingodb::Helper::IsConflictRange(range1, range2));
+
+  // Test with a large number of ranges
+  for (int i = 0; i < 1000; ++i) {
+    range1.set_start_key("hello" + std::to_string(i));
+    range1.set_end_key("hello" + std::to_string(i + 1));
+    range2.set_start_key("hello" + std::to_string(i + 1));
+    range2.set_end_key("hello" + std::to_string(i + 2));
+    EXPECT_FALSE(dingodb::Helper::IsConflictRange(range1, range2));
+  }
+
+  // Test with a large number of ranges that intersect
+  for (int i = 900; i < 996; ++i) {
+    range1.set_start_key("hello" + std::to_string(i));
+    range1.set_end_key("hello" + std::to_string(i + 2));
+    range2.set_start_key("hello" + std::to_string(i + 1));
+    range2.set_end_key("hello" + std::to_string(i + 3));
+    EXPECT_TRUE(dingodb::Helper::IsConflictRange(range1, range2));
+  }
+}
