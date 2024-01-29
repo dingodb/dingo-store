@@ -38,6 +38,7 @@ VectorIndex::VectorIndex(pb::meta::IndexDefinitionWithId index_def_with_id)
     int64_t part_id = partition.id().entity_id();
     CHECK_GE(start_id, 0);
     CHECK(start_key_to_part_id_.insert({start_id, part_id}).second);
+    CHECK(part_id_to_range_.insert({part_id, partition.range()}).second);
   }
   DINGO_LOG(DEBUG) << "Init:" << ToString();
 }
@@ -53,6 +54,22 @@ int64_t VectorIndex::GetPartitionId(int64_t vector_id) const {
   auto iter = start_key_to_part_id_.upper_bound(vector_id);
   CHECK(iter != start_key_to_part_id_.begin());
   iter--;
+  return iter->second;
+}
+
+std::vector<int64_t> VectorIndex::GetPartitionIds() const {
+  std::vector<int64_t> part_ids;
+  part_ids.reserve(start_key_to_part_id_.size());
+  for (const auto& [start_key, part_id] : start_key_to_part_id_) {
+    part_ids.push_back(part_id);
+  }
+
+  return std::move(part_ids);
+}
+
+const pb::common::Range& VectorIndex::GetPartitionRange(int64_t part_id) const {
+  auto iter = part_id_to_range_.find(part_id);
+  CHECK(iter != part_id_to_range_.end());
   return iter->second;
 }
 

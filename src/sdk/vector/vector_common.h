@@ -30,6 +30,8 @@ static const char kVectorPrefix = 'r';
 
 static pb::common::MetricType MetricType2InternalMetricTypePB(MetricType metric_type) {
   switch (metric_type) {
+    case MetricType::kNoneMetricType:
+      return pb::common::MetricType::METRIC_TYPE_NONE;
     case MetricType::kL2:
       return pb::common::MetricType::METRIC_TYPE_L2;
     case MetricType::kInnerProduct:
@@ -38,6 +40,21 @@ static pb::common::MetricType MetricType2InternalMetricTypePB(MetricType metric_
       return pb::common::MetricType::METRIC_TYPE_COSINE;
     default:
       CHECK(false) << "unsupported metric type:" << metric_type;
+  }
+}
+
+static MetricType InternalMetricTypePB2MetricType(pb::common::MetricType metric_type) {
+  switch (metric_type) {
+    case pb::common::MetricType::METRIC_TYPE_NONE:
+      return MetricType::kNoneMetricType;
+    case pb::common::MetricType::METRIC_TYPE_L2:
+      return MetricType::kL2;
+    case pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT:
+      return MetricType::kInnerProduct;
+    case pb::common::MetricType::METRIC_TYPE_COSINE:
+      return MetricType::kCosine;
+    default:
+      CHECK(false) << "unsupported metric type:" << pb::common::MetricType_Name(metric_type);
   }
 }
 
@@ -183,7 +200,7 @@ static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type)
   }
 }
 
-static void VectorIndexType2InternalVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId& vector_with_id) {
+static void FillVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId& vector_with_id) {
   pb->set_id(vector_with_id.id);
   auto* vector_pb = pb->mutable_vector();
   const auto& vector = vector_with_id.vector;
@@ -193,6 +210,138 @@ static void VectorIndexType2InternalVectorWithIdPB(pb::common::VectorWithId* pb,
   for (const auto& float_value : vector.float_values) {
     vector_pb->add_float_values(float_value);
   }
+}
+
+static VectorWithId InternalVectorIdPB2VectorWithId(const pb::common::VectorWithId& pb) {
+  VectorWithId to_return;
+  to_return.id = pb.id();
+
+  const auto& vector_pb = pb.vector();
+  to_return.vector.dimension = vector_pb.dimension();
+  to_return.vector.value_type = ValueType::kFloat;
+  // TODO: support uint
+  for (const auto& float_value : vector_pb.float_values()) {
+    to_return.vector.float_values.push_back(float_value);
+  }
+  return std::move(to_return);
+}
+
+static VectorWithDistance InternalVectorWithDistance2VectorWithDistance(const pb::common::VectorWithDistance& pb) {
+  VectorWithDistance to_return;
+  to_return.vector_data = std::move(InternalVectorIdPB2VectorWithId(pb.vector_with_id()));
+  to_return.distance = pb.distance();
+  to_return.metric_type = InternalMetricTypePB2MetricType(pb.metric_type());
+  return std::move(to_return);
+}
+
+static void FillSearchFlatParamPB(pb::common::SearchFlatParam* pb, const SearchParameter& parameter) {
+  if (parameter.extra_params.find(SearchExtraParamType::kParallelOnQueries) != parameter.extra_params.end()) {
+    pb->set_parallel_on_queries(parameter.extra_params.at(SearchExtraParamType::kParallelOnQueries));
+  }
+}
+
+static void FillSearchIvfFlatParamPB(pb::common::SearchIvfFlatParam* pb, const SearchParameter& parameter) {
+  if (parameter.extra_params.find(SearchExtraParamType::kNprobe) != parameter.extra_params.end()) {
+    pb->set_nprobe(parameter.extra_params.at(SearchExtraParamType::kNprobe));
+  }
+  if (parameter.extra_params.find(SearchExtraParamType::kParallelOnQueries) != parameter.extra_params.end()) {
+    pb->set_parallel_on_queries(parameter.extra_params.at(SearchExtraParamType::kParallelOnQueries));
+  }
+}
+
+static void FillSearchIvfPqParamPB(pb::common::SearchIvfPqParam* pb, const SearchParameter& parameter) {
+  if (parameter.extra_params.find(SearchExtraParamType::kNprobe) != parameter.extra_params.end()) {
+    pb->set_nprobe(parameter.extra_params.at(SearchExtraParamType::kNprobe));
+  }
+  if (parameter.extra_params.find(SearchExtraParamType::kParallelOnQueries) != parameter.extra_params.end()) {
+    pb->set_parallel_on_queries(parameter.extra_params.at(SearchExtraParamType::kParallelOnQueries));
+  }
+  if (parameter.extra_params.find(SearchExtraParamType::kRecallNum) != parameter.extra_params.end()) {
+    pb->set_recall_num(parameter.extra_params.at(SearchExtraParamType::kRecallNum));
+  }
+}
+
+static void FillSearchHnswParamPB(pb::common::SearchHNSWParam* pb, const SearchParameter& parameter) {
+  if (parameter.extra_params.find(SearchExtraParamType::kEfSearch) != parameter.extra_params.end()) {
+    pb->set_efsearch(parameter.extra_params.at(SearchExtraParamType::kEfSearch));
+  }
+}
+
+// TODO: to support
+static void FillSearchDiskAnnParamPB(pb::common::SearchDiskAnnParam* pb, const SearchParameter& parameter) {}
+
+static void FillInternalSearchParams(pb::common::VectorSearchParameter* internal_parameter, VectorIndexType type,
+                                     const SearchParameter& parameter) {
+  internal_parameter->set_top_n(parameter.topk);
+  internal_parameter->set_without_vector_data(!parameter.with_vector_data);
+  internal_parameter->set_without_scalar_data(!parameter.with_scalar_data);
+  if (parameter.with_scalar_data) {
+    for (const auto& key : parameter.selected_keys) {
+      internal_parameter->add_selected_keys(key);
+    }
+  }
+
+  internal_parameter->set_without_table_data(!parameter.with_table_data);
+  internal_parameter->set_enable_range_search(parameter.enable_range_search);
+  switch (type) {
+    case VectorIndexType::kFlat:
+      FillSearchFlatParamPB(internal_parameter->mutable_flat(), parameter);
+      break;
+    case VectorIndexType::kIvfFlat:
+      FillSearchIvfFlatParamPB(internal_parameter->mutable_ivf_flat(), parameter);
+      break;
+    case VectorIndexType::kIvfPq:
+      FillSearchIvfPqParamPB(internal_parameter->mutable_ivf_pq(), parameter);
+      break;
+    case VectorIndexType::kHnsw:
+      FillSearchHnswParamPB(internal_parameter->mutable_hnsw(), parameter);
+      break;
+    case VectorIndexType::kDiskAnn:
+      FillSearchDiskAnnParamPB(internal_parameter->mutable_diskann(), parameter);
+      break;
+    default:
+      CHECK(false) << "not support index type: " << static_cast<int>(type);
+      break;
+  }
+
+  switch (parameter.filter_source) {
+    case FilterSource::kNoneFilterSource:
+      break;
+    case FilterSource::kScalarFilter:
+      internal_parameter->set_vector_filter(pb::common::VectorFilter::SCALAR_FILTER);
+      break;
+    case FilterSource::kTableFilter:
+      internal_parameter->set_vector_filter(pb::common::VectorFilter::TABLE_FILTER);
+      break;
+    case FilterSource::kVectorIdFilter:
+      internal_parameter->set_vector_filter(pb::common::VectorFilter::VECTOR_ID_FILTER);
+      break;
+    default:
+      CHECK(false) << "not support filter source: " << static_cast<int>(parameter.filter_source);
+      break;
+  }
+
+  switch (parameter.filter_type) {
+    case FilterType::kNoneFilterType:
+      break;
+    case FilterType::kQueryPre:
+      internal_parameter->set_vector_filter_type(pb::common::VectorFilterType::QUERY_PRE);
+      break;
+    case FilterType::kQueryPost:
+      internal_parameter->set_vector_filter_type(pb::common::VectorFilterType::QUERY_POST);
+      break;
+    default:
+      CHECK(false) << "not support filter type: " << static_cast<int>(parameter.filter_type);
+      break;
+  }
+
+  // TODO: support coprocessor
+  //   CoprocessorV2 vector_coprocessor = 23;
+  for (const auto id : parameter.vector_ids) {
+    internal_parameter->add_vector_ids(id);
+  }
+
+  internal_parameter->set_use_brute_force(parameter.use_brute_force);
 }
 
 }  // namespace sdk

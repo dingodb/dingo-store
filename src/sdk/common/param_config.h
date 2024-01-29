@@ -41,7 +41,7 @@ const int64_t kMaxScanBatchSize = 100;
 const int64_t kPrefetchRegionCount = 3;
 
 const int64_t kCoordinatorInteractionDelayMs = 200;
-const int64_t kCoordinatorInteractionMaxRetry = 30;
+const int64_t kCoordinatorInteractionMaxRetry = 300;
 
 const int64_t kTxnOpMaxRetry = 2;
 

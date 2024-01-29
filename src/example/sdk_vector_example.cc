@@ -51,7 +51,7 @@ static void PrepareVectorIndex() {
                       .SetFlatParam(g_flat_param)
                       .Create(g_index_id);
   DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
-  sleep(3);
+  sleep(10);
 }
 
 void PostClean() {
@@ -126,6 +126,38 @@ static void VectorAdd() {
   DINGO_LOG(INFO) << "vector add:" << add.ToString();
 }
 
+static void VectorSearch() {
+  dingodb::sdk::VectorClient* client;
+  Status built = g_client->NewVectorClient(&client);
+  CHECK(built.IsOK()) << "dingo vector client build fail:" << built.ToString();
+  CHECK_NOTNULL(client);
+  dingodb::ScopeGuard guard([&]() { delete client; });
+
+  std::vector<dingodb::sdk::VectorWithId> target_vectors;
+  {
+    dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
+    tmp_vector.float_values.push_back(1.5);
+    tmp_vector.float_values.push_back(1.5);
+
+    dingodb::sdk::VectorWithId tmp;
+    tmp.vector = std::move(tmp_vector);
+    target_vectors.push_back(std::move(tmp));
+  }
+
+  dingodb::sdk::SearchParameter param;
+  param.topk = 10;
+  // param.use_brute_force = true;
+  param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
+
+  std::vector<dingodb::sdk::SearchResult> result;
+  Status tmp = client->Search(g_index_id, param, target_vectors, result);
+
+  DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
+  for (const auto& r : result) {
+    DINGO_LOG(INFO) << "vectr search result:" << dingodb::sdk::DumpToString(r);
+  }
+}
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = true;
@@ -153,5 +185,6 @@ int main(int argc, char* argv[]) {
   PrepareVectorIndex();
   VectorIndexCacheSearch();
   VectorAdd();
+  VectorSearch();
   PostClean();
 }
