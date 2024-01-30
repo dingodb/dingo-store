@@ -925,6 +925,7 @@ public class EntityConversion {
     public static InternalStore mapping(Common.Store store) {
         return new InternalStore(store.getId(),
                 store.getStoreType().getNumber(),
+                store.getState().getNumber(),
                 mapping(store.getServerLocation()),
                 mapping(store.getRaftLocation())
         );

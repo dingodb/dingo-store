@@ -21,12 +21,14 @@ import io.dingodb.sdk.common.Location;
 public class InternalStore implements Store {
     private long id;
     private int storeType;
+    private int storeState;
     private Location serverLocation;
     private Location raftLocation;
 
-    public InternalStore(long id, int storeType, Location serverLocation, Location raftLocation) {
+    public InternalStore(long id, int storeType, int storeState, Location serverLocation, Location raftLocation) {
         this.id = id;
         this.storeType = storeType;
+        this.storeState = storeState;
         this.serverLocation = serverLocation;
         this.raftLocation = raftLocation;
     }
@@ -49,5 +51,10 @@ public class InternalStore implements Store {
     @Override
     public Location raftLocation() {
         return raftLocation;
+    }
+
+    @Override
+    public int storeState() {
+        return storeState;
     }
 }
