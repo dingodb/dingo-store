@@ -584,9 +584,9 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnBatchGet keys size : " << keys.size() << ", start_ts: " << start_ts
-                  << ", kvs size : " << kvs.size() << ", resolved_locks size: " << resolved_locks.size()
-                  << " txn_result_info : " << txn_result_info.ShortDebugString();
+  DINGO_LOG(DEBUG) << "TxnBatchGet keys size : " << keys.size() << ", start_ts: " << start_ts
+                   << ", kvs size : " << kvs.size() << ", resolved_locks size: " << resolved_locks.size()
+                   << " txn_result_info : " << txn_result_info.ShortDebugString();
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
@@ -617,13 +617,13 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnScan region_id: " << ctx->RegionId() << ", range: " << range.ShortDebugString()
-                  << ", start_key: " << Helper::StringToHex(range.start_key())
-                  << ", end_key: " << Helper::StringToHex(range.end_key()) << ", limit: " << limit
-                  << ", start_ts: " << start_ts << ", key_only: " << key_only << ", is_reverse: " << is_reverse
-                  << ", resolved_locks size: " << resolved_locks.size()
-                  << ", txn_result_info: " << txn_result_info.ShortDebugString() << ", kvs size: " << kvs.size()
-                  << ", has_more: " << has_more << ", end_key: " << Helper::StringToHex(end_key);
+  DINGO_LOG(DEBUG) << "TxnScan region_id: " << ctx->RegionId() << ", range: " << range.ShortDebugString()
+                   << ", start_key: " << Helper::StringToHex(range.start_key())
+                   << ", end_key: " << Helper::StringToHex(range.end_key()) << ", limit: " << limit
+                   << ", start_ts: " << start_ts << ", key_only: " << key_only << ", is_reverse: " << is_reverse
+                   << ", resolved_locks size: " << resolved_locks.size()
+                   << ", txn_result_info: " << txn_result_info.ShortDebugString() << ", kvs size: " << kvs.size()
+                   << ", has_more: " << has_more << ", end_key: " << Helper::StringToHex(end_key);
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
@@ -653,9 +653,9 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnPessimisticLock mutations size : " << mutations.size()
-                  << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
-                  << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
+  DINGO_LOG(DEBUG) << "TxnPessimisticLock mutations size : " << mutations.size()
+                   << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
+                   << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -677,8 +677,8 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int6
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnPessimisticRollback start_ts : " << start_ts << " for_update_ts : " << for_update_ts
-                  << " keys size : " << keys.size();
+  DINGO_LOG(DEBUG) << "TxnPessimisticRollback start_ts : " << start_ts << " for_update_ts : " << for_update_ts
+                   << " keys size : " << keys.size();
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -704,10 +704,10 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, const std::vect
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnPrewrite mutations size : " << mutations.size()
-                  << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
-                  << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size << " try_one_pc : " << try_one_pc
-                  << " max_commit_ts : " << max_commit_ts;
+  DINGO_LOG(DEBUG) << "TxnPrewrite mutations size : " << mutations.size()
+                   << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
+                   << " lock_ttl : " << lock_ttl << " txn_size : " << txn_size << " try_one_pc : " << try_one_pc
+                   << " max_commit_ts : " << max_commit_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -730,8 +730,8 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts,
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnCommit start_ts : " << start_ts << " commit_ts : " << commit_ts
-                  << " keys size : " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
+  DINGO_LOG(DEBUG) << "TxnCommit start_ts : " << start_ts << " commit_ts : " << commit_ts
+                   << " keys size : " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -753,8 +753,8 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnCheckTxnStatus primary_key : " << Helper::StringToHex(primary_key) << " lock_ts : " << lock_ts
-                  << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts;
+  DINGO_LOG(DEBUG) << "TxnCheckTxnStatus primary_key : " << Helper::StringToHex(primary_key) << " lock_ts : " << lock_ts
+                   << " caller_start_ts : " << caller_start_ts << " current_ts : " << current_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -776,8 +776,8 @@ butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t star
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
-                  << " keys size : " << keys.size();
+  DINGO_LOG(DEBUG) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
+                   << " keys size : " << keys.size();
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -799,7 +799,7 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnBatchRollback keys size : " << keys.size() << ", start_ts: " << start_ts;
+  DINGO_LOG(DEBUG) << "TxnBatchRollback keys size : " << keys.size() << ", start_ts: " << start_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -822,9 +822,9 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnScanLock max_ts : " << max_ts << " start_key : " << start_key << " limit : " << limit
-                  << " end_key : " << end_key << " txn_result_info : " << txn_result_info.ShortDebugString()
-                  << " lock_infos size : " << lock_infos.size();
+  DINGO_LOG(DEBUG) << "TxnScanLock max_ts : " << max_ts << " start_key : " << start_key << " limit : " << limit
+                   << " end_key : " << end_key << " txn_result_info : " << txn_result_info.ShortDebugString()
+                   << " lock_infos size : " << lock_infos.size();
 
   pb::common::Range range;
   range.set_start_key(start_key);
@@ -850,8 +850,8 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnHeartBeat primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
-                  << " advise_lock_ttl : " << advise_lock_ttl;
+  DINGO_LOG(DEBUG) << "TxnHeartBeat primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
+                   << " advise_lock_ttl : " << advise_lock_ttl;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -872,7 +872,7 @@ butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnGc safe_point_ts : " << safe_point_ts;
+  DINGO_LOG(DEBUG) << "TxnGc safe_point_ts : " << safe_point_ts;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -894,7 +894,7 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
     return status;
   }
 
-  DINGO_LOG(INFO) << "TxnDeleteRange start_key : " << start_key << " end_key : " << end_key;
+  DINGO_LOG(DEBUG) << "TxnDeleteRange start_key : " << start_key << " end_key : " << end_key;
 
   auto writer = engine_->NewTxnWriter(ctx->RawEngineType());
   if (writer == nullptr) {
@@ -924,8 +924,8 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
   DINGO_LOG(INFO) << "TxnDump start_key : " << Helper::StringToHex(start_key)
                   << " end_key : " << Helper::StringToHex(end_key) << ", start_ts: " << start_ts
-                  << ", end_ts: " << end_ts;
-  DINGO_LOG(INFO) << "TxnDump data start_key: " << Helper::StringToHex(Helper::EncodeTxnKey(start_key, end_ts))
+                  << ", end_ts: " << end_ts
+                  << ", TxnDump data start_key: " << Helper::StringToHex(Helper::EncodeTxnKey(start_key, end_ts))
                   << " end_key: " << Helper::StringToHex(Helper::EncodeTxnKey(end_key, start_ts));
 
   auto data_reader = engine_->NewReader(ctx->RawEngineType());
