@@ -1161,10 +1161,10 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     }
     request.set_part_id(FLAGS_part_id);
 
-    if (FLAGS_raw_engine != "rocksdb" && FLAGS_raw_engine != "bdb") {
-      DINGO_LOG(ERROR) << "raw_engine must be rocksdb or bdb";
-      return;
-    }
+    // if (FLAGS_raw_engine != "rocksdb" && FLAGS_raw_engine != "bdb") {
+    //   DINGO_LOG(ERROR) << "raw_engine must be rocksdb or bdb";
+    //   return;
+    // }
 
     std::string start_key;
     std::string end_key;
@@ -1185,7 +1185,7 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     request.mutable_range()->set_start_key(start_key);
     request.mutable_range()->set_end_key(end_key);
 
-    request.set_raw_engine(GetRawEngine(FLAGS_raw_engine));
+    // request.set_raw_engine(GetRawEngine(FLAGS_raw_engine));
 
     auto* vector_index_parameter = request.mutable_index_parameter()->mutable_vector_index_parameter();
     if (FLAGS_vector_index_type == "hnsw") {
