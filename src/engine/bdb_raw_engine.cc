@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <random>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -50,6 +51,8 @@ bvar::Adder<uint64_t> bdb_snapshot_alive_count("bdb_snapshot_alive_count");
 bvar::Adder<uint64_t> bdb_transaction_alive_count("bdb_transaction_alive_count");
 
 namespace dingodb {
+
+DEFINE_int32(bdb_base_backoff_ms, 10, "bdb dead lock backoff time(ms)");
 
 DEFINE_int32(bdb_page_size, 32 * 1024, "bdb page size");
 
@@ -88,6 +91,17 @@ std::unordered_map<std::string, char> BdbHelper::cf_name_to_id = {
 std::unordered_map<char, std::string> BdbHelper::cf_id_to_name = {
     {'0', "default"}, {'1', "meta"}, {'2', "vector_scalar"}, {'3', "vector_table"},
     {'4', "data"},    {'5', "lock"}, {'6', "write"}};
+
+static void DelayBeforeNextRetry(int32_t retry_count) {
+  if (retry_count <= (FLAGS_bdb_max_retries / 3)) {
+    return;
+  } else {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distr(retry_count, 2 * (FLAGS_bdb_max_retries + retry_count));
+    bthread_usleep(FLAGS_bdb_base_backoff_ms * 1000L * distr(gen));
+  }
+}
 
 // BdbHelper
 std::string BdbHelper::EncodeKey(const std::string& cf_name, const std::string& key) {
@@ -1062,6 +1076,7 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -1182,6 +1197,7 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -1310,6 +1326,7 @@ butil::Status Writer::KvBatchPutAndDelete(
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -1468,6 +1485,7 @@ butil::Status Writer::KvBatchDelete(const std::string& cf_name, const std::vecto
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -1555,6 +1573,7 @@ butil::Status Writer::KvDelete(const std::string& cf_name, const std::string& ke
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -1667,6 +1686,7 @@ butil::Status Writer::KvBatchDeleteRangeNormal(
         DINGO_LOG(WARNING) << fmt::format(
             "[bdb] writer got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.", retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -1737,6 +1757,7 @@ butil::Status Writer::KvBatchDeleteRangeBulk(
         DINGO_LOG(WARNING) << fmt::format("[bdb] got DB_LOCK_DEADLOCK. retrying delete operation, retry_count: {}.",
                                           retry_count);
         retry_count++;
+        DelayBeforeNextRetry(retry_count);
         retry = true;
       } else {
         // Otherwise, just give up.
@@ -2187,6 +2208,7 @@ dingodb::SnapshotPtr BdbRawEngine::GetSnapshot() {
       DINGO_LOG(WARNING) << fmt::format(
           "[bdb] get snapshot got DB_LOCK_DEADLOCK. retrying write operation, retry_count: {}.", retry_count);
       retry_count++;
+      bdb::DelayBeforeNextRetry(retry_count);
       retry = true;
     } catch (DbException& db_exception) {
       bdb::BdbHelper::PrintEnvStat(GetEnv());
