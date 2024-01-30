@@ -18,7 +18,6 @@ RUN dnf update -y  \
     && dnf clean all \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
-    && unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY \
     && wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.tar.gz \
     && tar -zxvf cmake-3.26.4-linux-x86_64.tar.gz \
     && mv cmake-3.26.4-linux-x86_64 /opt/ \
@@ -29,5 +28,5 @@ RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 
 ENV PATH="/opt/intel/oneapi:$PATH"
 ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk
-ENV PATH=/opt/rh/gcc-toolset-12/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
+ENV PATH=/opt/rh/gcc-toolset-13/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
 WORKDIR /opt
