@@ -56,8 +56,18 @@ static void PrepareVectorIndex() {
   sleep(20);
 }
 
-void PostClean() {
-  Status tmp = g_client->DropIndex(g_index_id);
+void PostClean(bool use_index_name = false) {
+  Status tmp;
+  if (use_index_name) {
+    int64_t index_id;
+    tmp = g_client->GetIndexId(g_schema_id, g_index_name, index_id);
+    if (tmp.ok()) {
+      CHECK_EQ(index_id, g_index_id);
+      tmp = g_client->DropIndexByName(g_schema_id, g_index_name);
+    }
+  } else {
+    tmp = g_client->DropIndex(g_index_id);
+  }
   DINGO_LOG(INFO) << "drop index status: " << tmp.ToString() << ", index_id:" << g_index_id;
   delete g_vector_client;
   g_vector_ids.clear();
@@ -230,6 +240,6 @@ int main(int argc, char* argv[]) {
     VectorDelete(true);
     VectorSearch(true);
 
-    PostClean();
+    PostClean(true);
   }
 }

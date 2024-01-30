@@ -16,6 +16,7 @@
 
 #include <unistd.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -46,6 +47,7 @@
 #include "sdk/status.h"
 #include "sdk/transaction/txn_impl.h"
 #include "sdk/vector.h"
+#include "sdk/vector/vector_index_cache.h"
 #include "sdk/vector/vector_index_creator_internal_data.h"
 
 namespace dingodb {
@@ -164,12 +166,24 @@ Status Client::NewVectorIndexCreator(VectorIndexCreator** index_creator) {
   return Status::OK();
 }
 
+Status Client::GetIndexId(int64_t schema_id, const std::string& index_name, int64_t& out_index_id) {
+  return data_->stub->GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name),
+                                                             out_index_id);
+}
+
 Status Client::DropIndex(int64_t index_id) {
   data_->stub->GetVectorIndexCache()->RemoveVectorIndexById(index_id);
   return data_->stub->GetAdminTool()->DropIndex(index_id);
 }
 
-Status Client::DropIndexByName(const std::string& index_name) { return Status::NotSupported("not supported"); }
+Status Client::DropIndexByName(int64_t schema_id, const std::string& index_name) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      data_->stub->GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+  data_->stub->GetVectorIndexCache()->RemoveVectorIndexById(index_id);
+  return data_->stub->GetAdminTool()->DropIndex(index_id);
+}
 
 RawKV::RawKV(Data* data) : data_(data) {}
 

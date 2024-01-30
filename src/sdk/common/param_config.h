@@ -50,6 +50,6 @@ const int64_t kTxnOpMaxRetry = 2;
 const int64_t kActuatorThreadNum = 8;
 
 const int64_t kRawkvBackoffMs = 200;
-const int64_t kRawkvMaxRetry = 5;
+const int64_t kRawkvMaxRetry = 10;
 
 #endif  // DINGODB_SDK_PARAM_CONFIG_H_
