@@ -976,6 +976,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
 
     txn_coprocessor->Close();
     txn_coprocessor.reset();
+
     return butil::Status::OK();
   }
 
@@ -1617,6 +1618,10 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       return ret;
     }
 
+    // if the mutation request is a repeated (already prewrited beforce, maybe just a retry from executor), will to do
+    // all check and setup response, but do not apply to raft to save time and I/O
+    bool is_repeated_prewrite = false;
+
     // if need to check pessimistic lock
     bool need_check_pessimistic_lock = false;
     if (!pessimistic_checks.empty() && pessimistic_checks[i] == 1) {
@@ -1634,14 +1639,16 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
 
       if (!prev_lock_info.primary_lock().empty()) {
+        // for optimistic prewrite, if the key is locked by same start_ts, this is a repeated prewrite, will skip write
+        // to raft state machine
         if (prev_lock_info.lock_ts() == start_ts) {
           DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
                           << ", key: " << Helper::StringToHex(mutation.key())
                           << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
                           << prev_lock_info.ShortDebugString();
 
-          // go to next key
-          continue;
+          // this is a repeated prewrite, will skip write to raft state machine
+          is_repeated_prewrite = true;
         } else {
           DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
                           << ", key: " << Helper::StringToHex(mutation.key())
@@ -1668,16 +1675,18 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                           << ", key: " << Helper::StringToHex(mutation.key())
                           << " is locked by same start_ts, lock_info: " << prev_lock_info.ShortDebugString();
 
+          // if this is not a PessimisticLock, it is a repeated prewrite, will skip write to raft state machine
           if (prev_lock_info.lock_type() != pb::store::Op::Lock) {
             DINGO_LOG(INFO)
                 << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
                 << ", pessimistic prewrite meet optimistic lock, this is a repeated prewrite, skip it, key: "
                 << Helper::StringToHex(mutation.key()) << ", lock_info: " << prev_lock_info.ShortDebugString();
-            continue;
-          }
 
+            // this is a repeated prewrite, will skip write to raft state machine
+            is_repeated_prewrite = true;
+          }
           // do pessimistic check
-          if (for_update_ts_checks.find(i) != for_update_ts_checks.end()) {
+          else if (for_update_ts_checks.find(i) != for_update_ts_checks.end()) {
             if (prev_lock_info.for_update_ts() != for_update_ts_checks.at(i)) {
               DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
                               << ", key: " << Helper::StringToHex(mutation.key())
@@ -1801,6 +1810,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
     // 3.do Put/Delete/PutIfAbsent
     if (mutation.op() == pb::store::Op::Put) {
+      if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                        << ", key: " << Helper::StringToHex(mutation.key())
+                        << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+                        << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+        continue;
+      }
+
       // put data
       if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
         pb::common::KeyValue kv;
@@ -1848,6 +1865,15 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       // check if key is exist
       if (write_info.op() == pb::store::Op::Put) {
         response->add_keys_already_exist()->set_key(mutation.key());
+
+        if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", key: " << Helper::StringToHex(mutation.key())
+                          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+                          << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+          continue;
+        }
+
         // this mutation is success with key_exist, go to next mutation
         // put lock with op=PutIfAbsent
         // CAUTION: we do nothing in commit if lock.lock_type is PutIfAbsent, this is just a placeholder of a lock
@@ -1870,9 +1896,18 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
           kv_puts_lock.push_back(kv);
         }
+
         continue;
 
       } else {
+        if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                          << ", key: " << Helper::StringToHex(mutation.key())
+                          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+                          << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+          continue;
+        }
+
         // put data
         if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
           pb::common::KeyValue kv;
@@ -1912,6 +1947,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         }
       }
     } else if (mutation.op() == pb::store::Op::Delete) {
+      if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                        << ", key: " << Helper::StringToHex(mutation.key())
+                        << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+                        << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+        continue;
+      }
+
       // put data
       // for delete, we don't write anything to kTxnDataCf.
       // when doing commit, we read op from lock_info, and write op to kTxnWriteCf with write_info.
@@ -2651,6 +2694,11 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
   DINGO_LOG(INFO) << "[txn]Rollback start_ts: " << start_ts
                   << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
                   << ", keys_count_without_data: " << keys_to_rollback_without_data.size();
+
+  if (keys_to_rollback_without_data.empty() && keys_to_rollback_with_data.empty()) {
+    DINGO_LOG(INFO) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
+    return butil::Status::OK();
+  }
 
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
