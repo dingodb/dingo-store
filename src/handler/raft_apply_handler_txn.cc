@@ -124,6 +124,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
       *new_vector = vector;
     }
+    raft_request_for_vector_add.mutable_vector_add()->set_cf_name(Constant::kVectorDataCF);
 
     handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
     if (!add_ctx->Status().ok() && ctx != nullptr) {
@@ -153,6 +154,8 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
     for (const auto &id : vector_del.ids()) {
       raft_request_for_vector_del.mutable_vector_delete()->add_ids(id);
     }
+    raft_request_for_vector_del.mutable_vector_delete()->set_cf_name(Constant::kVectorDataCF);
+
     handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id, log_id);
     if (!del_ctx->Status().ok() && ctx != nullptr) {
       ctx->SetStatus(del_ctx->Status());
