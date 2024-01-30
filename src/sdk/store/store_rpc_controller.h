@@ -35,6 +35,7 @@ class StoreRpcController {
 
   virtual ~StoreRpcController();
 
+  // TODO: to remove
   Status Call();
 
   void AsyncCall(StatusCallback cb);

@@ -94,9 +94,15 @@ void RawKvScanTask::ScanNext() {
   ScannerOptions options(stub, region, scanner_start_key, scanner_end_key);
 
   std::shared_ptr<RegionScanner> scanner;
-  CHECK(stub.GetRegionScannerFactory()->NewRegionScanner(options, scanner).IsOK());
+  CHECK(stub.GetRawKvRegionScannerFactory()->NewRegionScanner(options, scanner).IsOK());
 
-  status_ = scanner->Open();
+  scanner->AsyncOpen(
+      [this, scanner, region](auto&& s) { ScannerOpenCallback(std::forward<decltype(s)>(s), scanner, region); });
+}
+
+void RawKvScanTask::ScannerOpenCallback(Status status, std::shared_ptr<RegionScanner> scanner,
+                                        std::shared_ptr<Region> region) {
+  status_ = status;
   if (!status_.ok()) {
     DINGO_LOG(WARNING) << fmt::format("region scanner open fail, region:{}, status:{}", region->RegionId(),
                                       status_.ToString());

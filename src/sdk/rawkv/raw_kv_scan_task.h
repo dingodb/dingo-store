@@ -37,6 +37,7 @@ class RawKvScanTask : public RawKvTask {
   void PostProcess() override;
 
   void ScanNext();
+  void ScannerOpenCallback(Status status, std::shared_ptr<RegionScanner> scanner, std::shared_ptr<Region> region);
   void ScanNextWithScanner(std::shared_ptr<RegionScanner> scanner);
   void NextBatchCallback(const Status& status, std::shared_ptr<RegionScanner> scanner);
 

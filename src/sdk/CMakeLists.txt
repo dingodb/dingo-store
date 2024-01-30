@@ -19,7 +19,7 @@ add_library(sdk
   rawkv/raw_kv_batch_compare_and_set_task.cc
   rawkv/raw_kv_delete_range_task.cc
   rawkv/raw_kv_scan_task.cc
-  rawkv/region_scanner_impl.cc
+  rawkv/raw_kv_region_scanner_impl.cc
   rpc/rpc_interaction.cc
   store/store_rpc_controller.cc
   store/store_rpc.cc

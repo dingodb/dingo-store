@@ -59,8 +59,8 @@ class TestBase : public ::testing::Test {
     EXPECT_CALL(*stub, GetStoreRpcInteraction).Times(testing::AnyNumber());
 
     region_scanner_factory = std::make_shared<MockRegionScannerFactory>();
-    ON_CALL(*stub, GetRegionScannerFactory).WillByDefault(testing::Return(region_scanner_factory));
-    EXPECT_CALL(*stub, GetRegionScannerFactory).Times(testing::AnyNumber());
+    ON_CALL(*stub, GetRawKvRegionScannerFactory).WillByDefault(testing::Return(region_scanner_factory));
+    EXPECT_CALL(*stub, GetRawKvRegionScannerFactory).Times(testing::AnyNumber());
 
     admin_tool = std::make_shared<AdminTool>(coordinator_proxy);
     ON_CALL(*stub, GetAdminTool).WillByDefault(testing::Return(admin_tool));

@@ -36,7 +36,11 @@ class MockRegionScanner final : public RegionScanner {
 
   MOCK_METHOD(Status, Open, (), (override));
 
+  MOCK_METHOD(void, AsyncOpen, (StatusCallback cb), (override));
+
   MOCK_METHOD(void, Close, (), (override));
+
+  MOCK_METHOD(void, AsyncClose, (StatusCallback cb), (override));
 
   MOCK_METHOD(Status, NextBatch, (std::vector<KVPair> & kvs), (override));
 

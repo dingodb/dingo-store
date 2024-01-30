@@ -30,7 +30,7 @@ class MockClientStub final : public ClientStub {
   MOCK_METHOD(std::shared_ptr<CoordinatorProxy>, GetCoordinatorProxy, (), (const, override));
   MOCK_METHOD(std::shared_ptr<MetaCache>, GetMetaCache, (), (const, override));
   MOCK_METHOD(std::shared_ptr<RpcInteraction>, GetStoreRpcInteraction, (), (const, override));
-  MOCK_METHOD(std::shared_ptr<RegionScannerFactory>, GetRegionScannerFactory, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<RegionScannerFactory>, GetRawKvRegionScannerFactory, (), (const, override));
   MOCK_METHOD(std::shared_ptr<AdminTool>, GetAdminTool, (), (const, override));
   MOCK_METHOD(std::shared_ptr<TxnLockResolver>, GetTxnLockResolver, (), (const, override));
   MOCK_METHOD(std::shared_ptr<Actuator>, GetActuator, (), (const, override));

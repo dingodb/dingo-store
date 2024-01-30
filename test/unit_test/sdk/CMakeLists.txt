@@ -11,7 +11,7 @@ set(TEST_SRCS
   test_store_rpc_controller.cc
   test_thread_pool_actuator.cc
   rawkv/test_raw_kv.cc
-  rawkv/test_region_scanner.cc
+  rawkv/test_raw_kv_region_scanner.cc
   transaction/test_txn_buffer.cc
   transaction/test_txn_impl.cc
   transaction/test_txn_lock_resolver.cc
