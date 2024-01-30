@@ -30,6 +30,7 @@
 #include "sdk/common/common.h"
 #include "sdk/status.h"
 #include "sdk/store/store_rpc.h"
+#include "sdk/utils/callback.h"
 #include "test_base.h"
 #include "test_common.h"
 
@@ -982,7 +983,7 @@ TEST_F(RawKVTest, ScanOpenFail) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::Aborted("init fail")));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::Aborted("init fail")); });
 
         scanner = std::move(mock_scanner);
         return Status::OK();
@@ -1001,7 +1002,7 @@ TEST_F(RawKVTest, ScanNoData) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
         // CHECK will call scanner HasMore
         EXPECT_CALL(*mock_scanner, HasMore)
             .WillOnce(testing::Return(true))
@@ -1034,7 +1035,7 @@ TEST_F(RawKVTest, ScanOneRegion) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return iter < fake_datas.size(); });
 
@@ -1072,7 +1073,7 @@ TEST_F(RawKVTest, ScanOneRegionWithStart) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return iter < fake_datas.size(); });
 
@@ -1109,7 +1110,7 @@ TEST_F(RawKVTest, ScanOneRegionWithLimit) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
@@ -1150,7 +1151,7 @@ TEST_F(RawKVTest, ScanTwoRegion) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
@@ -1169,7 +1170,7 @@ TEST_F(RawKVTest, ScanTwoRegion) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
@@ -1209,7 +1210,7 @@ TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
@@ -1228,7 +1229,7 @@ TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
@@ -1272,7 +1273,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
@@ -1291,7 +1292,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
@@ -1310,7 +1311,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return l2n_iter < l2n_fake_datas.size(); });
 
@@ -1353,7 +1354,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return a2c_iter < a2c_fake_datas.size(); });
 
@@ -1372,7 +1373,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return c2e_iter < c2e_fake_datas.size(); });
 
@@ -1391,7 +1392,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
         auto mock_scanner =
             std::make_shared<MockRegionScanner>(options.stub, options.region, options.start_key, options.end_key);
 
-        EXPECT_CALL(*mock_scanner, Open).WillOnce(testing::Return(Status::OK()));
+        EXPECT_CALL(*mock_scanner, AsyncOpen).WillOnce([&](StatusCallback cb) { cb(Status::OK()); });
 
         EXPECT_CALL(*mock_scanner, HasMore).WillRepeatedly([&]() { return l2n_iter < l2n_fake_datas.size(); });
 

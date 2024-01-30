@@ -16,7 +16,7 @@
 
 #include "sdk/common/param_config.h"
 #include "sdk/meta_cache.h"
-#include "sdk/rawkv/region_scanner_impl.h"
+#include "sdk/rawkv/raw_kv_region_scanner_impl.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 #include "sdk/transaction/txn_region_scanner_impl.h"
@@ -27,7 +27,7 @@ namespace dingodb {
 namespace sdk {
 
 ClientStub::ClientStub()
-    : coordinator_proxy_(nullptr), region_scanner_factory_(nullptr), meta_cache_(nullptr), admin_tool_(nullptr) {}
+    : coordinator_proxy_(nullptr), raw_kv_region_scanner_factory_(nullptr), meta_cache_(nullptr), admin_tool_(nullptr) {}
 
 ClientStub::~ClientStub() = default;
 
@@ -43,7 +43,7 @@ Status ClientStub::Open(std::string naming_service_url) {
 
   meta_cache_.reset(new MetaCache(coordinator_proxy_));
 
-  region_scanner_factory_.reset(new RegionScannerFactoryImpl());
+  raw_kv_region_scanner_factory_.reset(new RawKvRegionScannerFactoryImpl());
 
   txn_region_scanner_factory_.reset(new TxnRegionScannerFactoryImpl());
 

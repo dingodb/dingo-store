@@ -95,8 +95,9 @@ void VectorSearchTask::SubTaskCallback(Status status, std::shared_ptr<VectorSear
       auto iter = tmp_out_result_.find(result.first);
       if (iter != tmp_out_result_.cend()) {
         auto& origin = iter->second;
-        origin.reserve(origin.size() + result.second.size());
-        std::move(result.second.begin(), result.second.end(), std::back_inserter(origin));
+        auto& to_put = result.second;
+        origin.reserve(origin.size() + to_put.size());
+        std::move(to_put.begin(), to_put.end(), std::back_inserter(origin));
       } else {
         CHECK(tmp_out_result_.insert({result.first, std::move(result.second)}).second);
       }
@@ -118,7 +119,7 @@ void VectorSearchTask::ConstructResultUnlocked() {
   for (auto& iter : tmp_out_result_) {
     auto& vec = iter.second;
     std::sort(vec.begin(), vec.end(),
-              [](const VectorWithDistance& a, const VectorWithDistance& b) { return a.distance > b.distance; });
+              [](const VectorWithDistance& a, const VectorWithDistance& b) { return a.distance < b.distance; });
   }
 
   for (auto& iter : tmp_out_result_) {
@@ -209,10 +210,10 @@ void VectorSearchPartTask::VectorSearchRpcCallback(const Status& status, VectorS
       status_ = status;
     }
   } else {
-  VLOG(kSdkVlogLevel) << Name() << ", rpc: " << rpc->Method()
-                      << " send to region: " << rpc->Request()->context().region_id()
-                      << " status: " << status.ToString() << " request: " << rpc->Request()->DebugString()
-                      << " response: " << rpc->Response()->DebugString();
+    VLOG(kSdkVlogLevel) << Name() << ", rpc: " << rpc->Method()
+                        << " send to region: " << rpc->Request()->context().region_id()
+                        << " status: " << status.ToString() << " request: " << rpc->Request()->DebugString()
+                        << " response: " << rpc->Response()->DebugString();
     for (auto i = 0; i < rpc->Response()->batch_results_size(); i++) {
       int64_t vector_id = rpc->Request()->vector_with_ids(i).id();
       for (const auto& distancepb : rpc->Response()->batch_results(i).vector_with_distances()) {

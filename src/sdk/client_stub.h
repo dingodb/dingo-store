@@ -53,9 +53,9 @@ class ClientStub {
     return store_rpc_interaction_;
   }
 
-  virtual std::shared_ptr<RegionScannerFactory> GetRegionScannerFactory() const {
-    DCHECK_NOTNULL(region_scanner_factory_.get());
-    return region_scanner_factory_;
+  virtual std::shared_ptr<RegionScannerFactory> GetRawKvRegionScannerFactory() const {
+    DCHECK_NOTNULL(raw_kv_region_scanner_factory_.get());
+    return raw_kv_region_scanner_factory_;
   }
 
   virtual std::shared_ptr<RegionScannerFactory> GetTxnRegionScannerFactory() const {
@@ -88,7 +88,7 @@ class ClientStub {
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
   std::shared_ptr<MetaCache> meta_cache_;
   std::shared_ptr<RpcInteraction> store_rpc_interaction_;
-  std::shared_ptr<RegionScannerFactory> region_scanner_factory_;
+  std::shared_ptr<RegionScannerFactory> raw_kv_region_scanner_factory_;
   std::shared_ptr<RegionScannerFactory> txn_region_scanner_factory_;
   std::shared_ptr<AdminTool> admin_tool_;
   std::shared_ptr<TxnLockResolver> txn_lock_resolver_;

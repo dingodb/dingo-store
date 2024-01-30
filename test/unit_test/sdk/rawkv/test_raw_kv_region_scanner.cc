@@ -23,19 +23,21 @@
 #include "sdk/client.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
-#include "sdk/rawkv/region_scanner_impl.h"
+#include "sdk/rawkv/raw_kv_region_scanner_impl.h"
+#include "sdk/status.h"
 #include "sdk/store/store_rpc.h"
+#include "sdk/utils/async_util.h"
 #include "test_base.h"
 #include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
 
-class RegionScannerImplTest : public TestBase {
+class RawKvRegionScannerImplTest : public TestBase {
  public:
-  RegionScannerImplTest() = default;
+  RawKvRegionScannerImplTest() = default;
 
-  ~RegionScannerImplTest() override = default;
+  ~RawKvRegionScannerImplTest() override = default;
 
   void SetUp() override {
     meta_cache->MaybeAddRegion(RegionA2C());
@@ -43,11 +45,27 @@ class RegionScannerImplTest : public TestBase {
   }
 };
 
-TEST_F(RegionScannerImplTest, OpenCloseSuccess) {
+static Status OpenScanner(RawKvRegionScannerImpl& scanner) {
+  Status open;
+  Synchronizer sync;
+  scanner.AsyncOpen(sync.AsStatusCallBack(open));
+  sync.Wait();
+  return open;
+}
+
+static Status CloseScanner(RawKvRegionScannerImpl& scanner) {
+  Status close;
+  Synchronizer sync;
+  scanner.AsyncClose(sync.AsStatusCallBack(close));
+  sync.Wait();
+  return close;
+}
+
+TEST_F(RawKvRegionScannerImplTest, OpenCloseSuccess) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
@@ -101,18 +119,17 @@ TEST_F(RegionScannerImplTest, OpenCloseSuccess) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
-  Status open = scanner.Open();
-  EXPECT_TRUE(open.IsOK());
-
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  Status open = OpenScanner(scanner);
+  EXPECT_TRUE(open.ok());
   EXPECT_TRUE(scanner.HasMore());
 
-  scanner.Close();
+  CloseScanner(scanner);
 }
 
-TEST_F(RegionScannerImplTest, OpenFail) {
+TEST_F(RawKvRegionScannerImplTest, OpenFail) {
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
@@ -127,19 +144,19 @@ TEST_F(RegionScannerImplTest, OpenFail) {
     cb();
   });
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
-  Status open = scanner.Open();
-  EXPECT_FALSE(open.IsOK());
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  Status open = OpenScanner(scanner);
+  EXPECT_FALSE(open.ok());
 
   EXPECT_FALSE(scanner.HasMore());
   EXPECT_FALSE(scanner.TEST_IsOpen());
 }
 
-TEST_F(RegionScannerImplTest, OpenSuccessCloseFail) {
+TEST_F(RawKvRegionScannerImplTest, OpenSuccessCloseFail) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
@@ -164,23 +181,22 @@ TEST_F(RegionScannerImplTest, OpenSuccessCloseFail) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
-  Status open = scanner.Open();
-  EXPECT_TRUE(open.IsOK());
-
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  Status open = OpenScanner(scanner);
+  EXPECT_TRUE(open.ok());
   EXPECT_TRUE(scanner.HasMore());
 
-  scanner.Close();
+  CloseScanner(scanner);
 
   EXPECT_FALSE(scanner.TEST_IsOpen());
 }
 
-TEST_F(RegionScannerImplTest, SetBatchSize) {
+TEST_F(RawKvRegionScannerImplTest, SetBatchSize) {
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
 
   EXPECT_EQ(scanner.GetBatchSize(), kScanBatchSize);
 
@@ -194,11 +210,11 @@ TEST_F(RegionScannerImplTest, SetBatchSize) {
   EXPECT_EQ(scanner.GetBatchSize(), 20);
 }
 
-TEST_F(RegionScannerImplTest, NextBatchFail) {
+TEST_F(RawKvRegionScannerImplTest, NextBatchFail) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
@@ -232,24 +248,23 @@ TEST_F(RegionScannerImplTest, NextBatchFail) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
-  Status ret = scanner.Open();
-  EXPECT_TRUE(ret.IsOK());
-
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  Status open = OpenScanner(scanner);
+  EXPECT_TRUE(open.ok());
   EXPECT_TRUE(scanner.HasMore());
 
   std::vector<KVPair> kvs;
-  ret = scanner.NextBatch(kvs);
-  EXPECT_FALSE(ret.IsOK());
+  Status ret = scanner.NextBatch(kvs);
+  EXPECT_FALSE(ret.ok());
 
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST_F(RegionScannerImplTest, NextBatchNoData) {
+TEST_F(RawKvRegionScannerImplTest, NextBatchNoData) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
@@ -280,26 +295,25 @@ TEST_F(RegionScannerImplTest, NextBatchNoData) {
         cb();
       });
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
-  Status ret = scanner.Open();
-  EXPECT_TRUE(ret.IsOK());
-
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  Status open = OpenScanner(scanner);
+  EXPECT_TRUE(open.ok());
   EXPECT_TRUE(scanner.HasMore());
 
   std::vector<KVPair> kvs;
-  ret = scanner.NextBatch(kvs);
-  EXPECT_TRUE(ret.IsOK());
+  Status ret = scanner.NextBatch(kvs);
+  EXPECT_TRUE(ret.ok());
 
   EXPECT_EQ(kvs.size(), 0);
 
   EXPECT_FALSE(scanner.HasMore());
 }
 
-TEST_F(RegionScannerImplTest, NextBatchWithData) {
+TEST_F(RawKvRegionScannerImplTest, NextBatchWithData) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
-  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).IsOK());
+  CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
@@ -349,20 +363,20 @@ TEST_F(RegionScannerImplTest, NextBatchWithData) {
         }
       });
 
-  RegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
-  Status ret = scanner.Open();
-  EXPECT_TRUE(ret.IsOK());
-
+  RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
+  Status open = OpenScanner(scanner);
+  EXPECT_TRUE(open.ok());
   EXPECT_TRUE(scanner.HasMore());
 
   scanner.SetBatchSize(batch_size);
   EXPECT_EQ(scanner.GetBatchSize(), batch_size);
 
+  Status ret;
   while (iter < fake_datas.size()) {
     EXPECT_TRUE(scanner.HasMore());
     std::vector<KVPair> kvs;
     ret = scanner.NextBatch(kvs);
-    EXPECT_TRUE(ret.IsOK());
+    EXPECT_TRUE(ret.ok());
     EXPECT_EQ(kvs.size(), batch_size);
     EXPECT_EQ(kvs.front().key, fake_datas.at(iter_before));
     EXPECT_EQ(kvs.front().value, fake_datas.at(iter_before));
@@ -375,7 +389,7 @@ TEST_F(RegionScannerImplTest, NextBatchWithData) {
     EXPECT_TRUE(scanner.HasMore());
     std::vector<KVPair> kvs;
     ret = scanner.NextBatch(kvs);
-    EXPECT_TRUE(ret.IsOK());
+    EXPECT_TRUE(ret.ok());
     EXPECT_EQ(kvs.size(), 0);
     EXPECT_FALSE(scanner.HasMore());
   }

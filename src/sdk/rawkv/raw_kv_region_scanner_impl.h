@@ -29,19 +29,24 @@
 
 namespace dingodb {
 namespace sdk {
-class RegionScannerFactoryImpl;
+class RawKvRegionScannerFactoryImpl;
 class TestBase;
 
-class RegionScannerImpl : public RegionScanner {
+class RawKvRegionScannerImpl : public RegionScanner {
  public:
-  explicit RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
+  explicit RawKvRegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
                              std::string end_key);
 
-  ~RegionScannerImpl() override;
+  ~RawKvRegionScannerImpl() override;
+
+  void AsyncOpen(StatusCallback cb) override;
 
   Status Open() override;
 
   void Close() override;
+
+  void AsyncClose(StatusCallback cb) override;
+
 
   Status NextBatch(std::vector<KVPair>& kvs) override;
 
@@ -59,6 +64,7 @@ class RegionScannerImpl : public RegionScanner {
 
  private:
   void PrepareScanBegionRpc(KvScanBeginRpc& rpc);
+  void AsyncOpenCallback(Status status, StoreRpcController* controller, KvScanBeginRpc* rpc, StatusCallback cb);
 
   void PrepareScanContinueRpc(KvScanContinueRpc& rpc);
 
@@ -66,6 +72,8 @@ class RegionScannerImpl : public RegionScanner {
                                  std::vector<KVPair>& kvs, StatusCallback cb);
 
   void PrepareScanReleaseRpc(KvScanReleaseRpc& rpc);
+  static void AsyncCloseCallback(Status status, std::string scan_id, StoreRpcController* controller,
+                                 KvScanReleaseRpc* rpc, StatusCallback cb);
 
   std::string start_key_;
   std::string end_key_;
@@ -75,11 +83,11 @@ class RegionScannerImpl : public RegionScanner {
   bool has_more_;
 };
 
-class RegionScannerFactoryImpl final : public RegionScannerFactory {
+class RawKvRegionScannerFactoryImpl final : public RegionScannerFactory {
  public:
-  RegionScannerFactoryImpl();
+  RawKvRegionScannerFactoryImpl();
 
-  ~RegionScannerFactoryImpl() override;
+  ~RawKvRegionScannerFactoryImpl() override;
 
   Status NewRegionScanner(const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) override;
 };

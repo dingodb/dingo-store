@@ -38,7 +38,11 @@ class RegionScanner {
 
   virtual Status Open() = 0;
 
+  virtual void AsyncOpen(StatusCallback cb) = 0;
+
   virtual void Close() = 0;
+
+  virtual void AsyncClose(StatusCallback cb) = 0;
 
   virtual Status NextBatch(std::vector<KVPair>& kvs) = 0;
 

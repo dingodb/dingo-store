@@ -11,20 +11,26 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "sdk/rawkv/region_scanner_impl.h"
+#include "sdk/rawkv/raw_kv_region_scanner_impl.h"
 
+#include <functional>
 #include <memory>
+#include <string>
 
+#include "common/logging.h"
+#include "common/synchronization.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
+#include "sdk/store/store_rpc.h"
 #include "sdk/store/store_rpc_controller.h"
 #include "sdk/utils/async_util.h"
 
 namespace dingodb {
 namespace sdk {
 
-RegionScannerImpl::RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
+RawKvRegionScannerImpl::RawKvRegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
                                      std::string end_key)
     : RegionScanner(stub, std::move(region)),
       start_key_(std::move(start_key)),
@@ -33,9 +39,16 @@ RegionScannerImpl::RegionScannerImpl(const ClientStub& stub, std::shared_ptr<Reg
       has_more_(false),
       batch_size_(kScanBatchSize) {}
 
-RegionScannerImpl::~RegionScannerImpl() { Close(); }
+static void RawKvRegionScannerImplDeleted(Status status, std::string scan_id) {
+  VLOG(kSdkVlogLevel) << "RawKvRegionScannerImpl deleted, scanner id: " << scan_id << " status:" << status.ToString();
+}
 
-void RegionScannerImpl::PrepareScanBegionRpc(KvScanBeginRpc& rpc) {
+RawKvRegionScannerImpl::~RawKvRegionScannerImpl() {
+  std::string scan_id = scan_id_;
+  AsyncClose([scan_id](auto&& s) { return RawKvRegionScannerImplDeleted(std::forward<decltype(s)>(s), scan_id); });
+}
+
+void RawKvRegionScannerImpl::PrepareScanBegionRpc(KvScanBeginRpc& rpc) {
   auto* request = rpc.MutableRequest();
   FillRpcContext(*request->mutable_context(), region->RegionId(), region->Epoch());
   auto* range_with_option = request->mutable_range();
@@ -51,58 +64,93 @@ void RegionScannerImpl::PrepareScanBegionRpc(KvScanBeginRpc& rpc) {
   request->set_disable_coprocessor(true);
 }
 
-Status RegionScannerImpl::Open() {
+void RawKvRegionScannerImpl::AsyncOpen(StatusCallback cb) {
   CHECK(!opened_);
-  KvScanBeginRpc rpc;
-  PrepareScanBegionRpc(rpc);
+  auto* rpc = new KvScanBeginRpc();
+  PrepareScanBegionRpc(*rpc);
 
-  StoreRpcController controller(stub, rpc, region);
-  Status call = controller.Call();
-  if (call.IsOK()) {
-    CHECK_EQ(0, rpc.Response()->kvs_size());
-    scan_id_ = rpc.Response()->scan_id();
+  auto* controller = new StoreRpcController(stub, *rpc, region);
+  controller->AsyncCall(
+      [this, controller, rpc, cb](auto&& s) { AsyncOpenCallback(std::forward<decltype(s)>(s), controller, rpc, cb); });
+}
+
+void RawKvRegionScannerImpl::AsyncOpenCallback(Status status, StoreRpcController* controller, KvScanBeginRpc* rpc,
+                                          StatusCallback cb) {
+  ScopeGuard sg([controller, rpc] {
+    delete controller;
+    delete rpc;
+  });
+
+  if (status.ok()) {
+    CHECK_EQ(0, rpc->Response()->kvs_size());
+    scan_id_ = rpc->Response()->scan_id();
     has_more_ = true;
     opened_ = true;
   } else {
-    DINGO_LOG(WARNING) << "open scanner for region:" << region->RegionId() << ", fail:" << call.ToString();
+    DINGO_LOG(WARNING) << "open scanner for region:" << region->RegionId() << ", fail:" << status.ToString();
   }
-
-  return call;
+  cb(status);
 }
 
-void RegionScannerImpl::PrepareScanReleaseRpc(KvScanReleaseRpc& rpc) {
+Status RawKvRegionScannerImpl::Open() {
+  CHECK(false) << "Not supported. Use AsyncOpen to Open scanner for region:" << region->RegionId();
+  return Status::OK();
+}
+
+void RawKvRegionScannerImpl::PrepareScanReleaseRpc(KvScanReleaseRpc& rpc) {
   auto* request = rpc.MutableRequest();
   FillRpcContext(*request->mutable_context(), region->RegionId(), region->Epoch());
   request->set_scan_id(scan_id_);
 }
 
-void RegionScannerImpl::Close() {
+void RawKvRegionScannerImpl::AsyncClose(StatusCallback cb) {
   if (opened_) {
     CHECK(!scan_id_.empty());
-    KvScanReleaseRpc rpc;
-    PrepareScanReleaseRpc(rpc);
+    auto* rpc = new KvScanReleaseRpc();
+    PrepareScanReleaseRpc(*rpc);
 
-    StoreRpcController controller(stub, rpc, region);
-    Status call = controller.Call();
-    if (!call.IsOK()) {
-      DINGO_LOG(WARNING) << "release scan fail, scan_id:" << scan_id_ << ", status:" << call.ToString();
-    }
+    auto* controller = new StoreRpcController(stub, *rpc, region);
 
-    // TODO: we should support scan keep alive in case release scan fail
     opened_ = false;
+    std::string scan_id = scan_id_;
+    controller->AsyncCall([scan_id, controller, rpc, cb](auto&& s) {
+      return RawKvRegionScannerImpl::AsyncCloseCallback(std::forward<decltype(s)>(s), scan_id, controller, rpc, cb);
+    });
   }
 }
 
-bool RegionScannerImpl::HasMore() const { return has_more_; }
+void RawKvRegionScannerImpl::AsyncCloseCallback(Status status, std::string scan_id, StoreRpcController* controller,
+                                           KvScanReleaseRpc* rpc, StatusCallback cb) {
+  ScopeGuard sg([controller, rpc] {
+    delete controller;
+    delete rpc;
+  });
 
-void RegionScannerImpl::PrepareScanContinueRpc(KvScanContinueRpc& rpc) {
+  if (!status.IsOK()) {
+    DINGO_LOG(WARNING) << "Fail release scanner, scan_id:" << scan_id << ", status:" << status.ToString();
+  } else {
+    VLOG(kSdkVlogLevel) << "Success release scanner, scan_id:" << scan_id << ", status:" << status.ToString();
+  }
+
+  // TODO: we should support scan keep alive in case release scan fail
+  cb(status);
+}
+
+void RawKvRegionScannerImpl::Close() {
+  CHECK(false) << "Not supported. Use AsyncClose to Close scanner for region:" << region->RegionId()
+               << ", scan_id:" << scan_id_;
+}
+
+bool RawKvRegionScannerImpl::HasMore() const { return has_more_; }
+
+void RawKvRegionScannerImpl::PrepareScanContinueRpc(KvScanContinueRpc& rpc) {
   auto* request = rpc.MutableRequest();
   FillRpcContext(*request->mutable_context(), region->RegionId(), region->Epoch());
   request->set_scan_id(scan_id_);
   request->set_max_fetch_cnt(batch_size_);
 }
 
-void RegionScannerImpl::AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb) {
+void RawKvRegionScannerImpl::AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback cb) {
   CHECK(opened_);
   CHECK(!scan_id_.empty());
   auto rpc = std::make_unique<KvScanContinueRpc>();
@@ -114,8 +162,13 @@ void RegionScannerImpl::AsyncNextBatch(std::vector<KVPair>& kvs, StatusCallback 
   });
 }
 
-void RegionScannerImpl::KvScanContinueRpcCallback(Status status, StoreRpcController* controller, KvScanContinueRpc* rpc,
+void RawKvRegionScannerImpl::KvScanContinueRpcCallback(Status status, StoreRpcController* controller, KvScanContinueRpc* rpc,
                                                   std::vector<KVPair>& kvs, StatusCallback cb) {
+  ScopeGuard sg([controller, rpc] {
+    delete controller;
+    delete rpc;
+  });
+
   if (status.ok()) {
     const auto* response = rpc->Response();
     std::vector<KVPair> tmp_kvs;
@@ -138,13 +191,10 @@ void RegionScannerImpl::KvScanContinueRpcCallback(Status status, StoreRpcControl
                        << ", fail:" << status.ToString();
   }
 
-  delete controller;
-  delete rpc;
-
-  stub.GetActuator()->Execute([status, cb] { cb(status); });
+  cb(status);
 }
 
-Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
+Status RawKvRegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
   Synchronizer sync;
   Status status;
   AsyncNextBatch(kvs, sync.AsStatusCallBack(status));
@@ -152,7 +202,7 @@ Status RegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
   return status;
 }
 
-Status RegionScannerImpl::SetBatchSize(int64_t size) {
+Status RawKvRegionScannerImpl::SetBatchSize(int64_t size) {
   uint64_t to_size = size;
   if (size <= kMinScanBatchSize) {
     to_size = kMinScanBatchSize;
@@ -166,11 +216,11 @@ Status RegionScannerImpl::SetBatchSize(int64_t size) {
   return Status::OK();
 }
 
-RegionScannerFactoryImpl::RegionScannerFactoryImpl() = default;
+RawKvRegionScannerFactoryImpl::RawKvRegionScannerFactoryImpl() = default;
 
-RegionScannerFactoryImpl::~RegionScannerFactoryImpl() = default;
+RawKvRegionScannerFactoryImpl::~RawKvRegionScannerFactoryImpl() = default;
 
-Status RegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
+Status RawKvRegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
                                                   std::shared_ptr<RegionScanner>& scanner) {
   CHECK(options.start_key < options.end_key);
   CHECK(options.start_key >= options.region->Range().start_key())
@@ -180,7 +230,7 @@ Status RegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
       "end_key:{} should little than region range end_key:{}", options.end_key, options.region->Range().end_key());
 
   std::shared_ptr<RegionScanner> tmp(
-      new RegionScannerImpl(options.stub, options.region, options.start_key, options.end_key));
+      new RawKvRegionScannerImpl(options.stub, options.region, options.start_key, options.end_key));
   scanner = std::move(tmp);
 
   return Status::OK();

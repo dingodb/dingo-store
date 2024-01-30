@@ -38,7 +38,11 @@ class TxnRegionScannerImpl : public RegionScanner {
 
   Status Open() override;
 
+  void AsyncOpen(StatusCallback cb) override { cb(Status::NotSupported("AsyncOpen is not supported")); }
+
   void Close() override;
+
+  void AsyncClose(StatusCallback cb) override { cb(Status::NotSupported("AsyncClose is not supported")); }
 
   Status NextBatch(std::vector<KVPair>& kvs) override;
 
