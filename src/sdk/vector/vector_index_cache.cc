@@ -81,7 +81,7 @@ void VectorIndexCache::RemoveVectorIndexById(int64_t index_id) {
   auto id_iter = id_to_index_.find(index_id);
   if (id_iter != id_to_index_.end()) {
     auto vector_index = id_iter->second;
-    auto name_iter = index_key_to_id_.find(vector_index->GetCacheKey());
+    auto name_iter = index_key_to_id_.find(GetVectorIndexCacheKey(*vector_index));
     CHECK(name_iter != index_key_to_id_.end());
 
     id_to_index_.erase(id_iter);
@@ -155,7 +155,7 @@ Status VectorIndexCache::ProcessIndexDefinitionWithId(const pb::meta::IndexDefin
   } else {
     // becareful change CHECK to DCHECK
     auto vector_index = std::make_shared<VectorIndex>(index_def_with_id);
-    CHECK(index_key_to_id_.insert({vector_index->GetCacheKey(), index_id}).second);
+    CHECK(index_key_to_id_.insert({GetVectorIndexCacheKey(*vector_index), index_id}).second);
     CHECK(id_to_index_.insert({index_id, vector_index}).second);
     vector_index->UnMarkStale();
     out_vector_index = vector_index;

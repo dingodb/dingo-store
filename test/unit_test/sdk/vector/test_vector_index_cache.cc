@@ -18,13 +18,28 @@
 #include "common/logging.h"
 #include "gtest/gtest.h"
 #include "mock_coordinator_proxy.h"
-#include "test_common.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_index_cache.h"
+#include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
+
+TEST(VectorIndexCacheKeyTest, TestEncodeDecodeVectorIndexCacheKey) {
+  int64_t schema_id = 123;
+  std::string index_name = "test_index";
+
+  VectorIndexCacheKey key = EncodeVectorIndexCacheKey(schema_id, index_name);
+
+  int64_t decoded_schema_id;
+  std::string decoded_index_name;
+  DecodeVectorIndexCacheKey(key, decoded_schema_id, decoded_index_name);
+
+  EXPECT_EQ(decoded_schema_id, schema_id);
+  EXPECT_EQ(decoded_index_name, index_name);
+}
+
 class VectorIndexCacheTest : public testing::Test {
  protected:
   void SetUp() override { cache = std::make_shared<VectorIndexCache>(cooridnator_proxy); }
@@ -46,7 +61,7 @@ TEST_F(VectorIndexCacheTest, GetIndexIdByNameNotOK) {
       });
 
   int64_t id = -1;
-  Status status = cache->GetIndexIdByKey(GetVectorIndexCacheKey(schema_id, index_name), id);
+  Status status = cache->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), id);
 
   EXPECT_TRUE(!status.ok());
   EXPECT_EQ(id, -1);
@@ -62,7 +77,7 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyNotOK) {
       });
 
   std::shared_ptr<VectorIndex> index;
-  Status status = cache->GetVectorIndexByKey(GetVectorIndexCacheKey(schema_id, index_name), index);
+  Status status = cache->GetVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index);
 
   EXPECT_TRUE(!status.ok());
 }
@@ -114,7 +129,7 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyOK) {
 
   {
     std::shared_ptr<VectorIndex> index;
-    Status status = cache->GetVectorIndexByKey(GetVectorIndexCacheKey(schema_id, index_name), index);
+    Status status = cache->GetVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index);
 
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(index->GetId(), index_id);
@@ -145,11 +160,11 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyOK) {
       });
 
   {
-    cache->RemoveVectorIndexByKey(GetVectorIndexCacheKey(schema_id, index_name));
+    cache->RemoveVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name));
 
     {
       std::shared_ptr<VectorIndex> index;
-      Status status = cache->GetVectorIndexByKey(GetVectorIndexCacheKey(schema_id, index_name), index);
+      Status status = cache->GetVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index);
       EXPECT_TRUE(!status.ok());
     }
 
@@ -207,7 +222,7 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByIdOK) {
 
   {
     std::shared_ptr<VectorIndex> index;
-    Status status = cache->GetVectorIndexByKey(GetVectorIndexCacheKey(schema_id, index_name), index);
+    Status status = cache->GetVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index);
 
     EXPECT_TRUE(status.ok());
     EXPECT_EQ(index->GetId(), index_id);
@@ -234,7 +249,7 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByIdOK) {
 
     {
       std::shared_ptr<VectorIndex> index;
-      Status status = cache->GetVectorIndexByKey(GetVectorIndexCacheKey(schema_id, index_name), index);
+      Status status = cache->GetVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index);
       EXPECT_TRUE(!status.ok());
     }
   }

@@ -19,7 +19,6 @@
 
 #include "proto/meta.pb.h"
 #include "sdk/vector.h"
-#include "sdk/vector/vector_common.h"
 
 namespace dingodb {
 namespace sdk {
@@ -40,8 +39,6 @@ class VectorIndex {
 
   std::string GetName() const { return name_; }
 
-  VectorIndexCacheKey GetCacheKey() const { return GetVectorIndexCacheKey(schema_id_, name_); }
-
   VectorIndexType GetVectorIndexType() const;
 
   int64_t GetPartitionId(int64_t vector_id) const;
@@ -49,7 +46,7 @@ class VectorIndex {
   std::vector<int64_t> GetPartitionIds() const;
 
   // be sure partition id is valid
-  const pb::common::Range& GetPartitionRange(int64_t part_id) const ;
+  const pb::common::Range& GetPartitionRange(int64_t part_id) const;
 
   bool IsStale() { return stale_.load(std::memory_order_relaxed); }
 
