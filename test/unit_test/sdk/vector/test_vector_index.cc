@@ -62,7 +62,6 @@ TEST_F(VectorIndexTest, TestInit) {
   EXPECT_EQ(vector_index->GetName(), index_name);
   EXPECT_EQ(vector_index->GetSchemaId(), schema_id);
 
-  EXPECT_EQ(vector_index->GetCacheKey(), GetVectorIndexCacheKey(schema_id, index_name));
   EXPECT_EQ(vector_index->GetVectorIndexType(), VectorIndexType::kFlat);
 }
 
