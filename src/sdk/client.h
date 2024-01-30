@@ -70,11 +70,11 @@ class Client : public std::enable_shared_from_this<Client> {
   // NOTE:: Caller must delete *index_creator when it is no longer needed.
   Status NewVectorIndexCreator(VectorIndexCreator** index_creator);
 
-  Status GetIndexId(const std::string& index_name, int64_t& out_index_id);
+  Status GetIndexId(int64_t schema_id, const std::string& index_name, int64_t& out_index_id);
 
   Status DropIndex(int64_t index_id);
 
-  Status DropIndexByName(const std::string& index_name);
+  Status DropIndexByName(int64_t schema_id, const std::string& index_name);
 
   // TODO：list index/ GetIndexes 
 
