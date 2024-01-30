@@ -26,7 +26,6 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "coprocessor/rel_expr_helper.h"
 #include "coprocessor/utils.h"
 #include "fmt/core.h"
 #include "proto/error.pb.h"
@@ -40,7 +39,26 @@ namespace dingodb {
 DECLARE_int64(max_scan_memory_size);
 DECLARE_int64(max_scan_line_limit);
 
-CoprocessorV2::CoprocessorV2() = default;
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_running_num("dingo_coprocessor_v2_object_running_num");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_total_num("dingo_coprocessor_v2_object_total_num");
+bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_latency("dingo_coprocessor_v2_latency");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_execute_running_num(
+    "dingo_coprocessor_v2_execute_running_num");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_execute_total_num("dingo_coprocessor_v2_execute_total_num");
+bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_execute_latency("dingo_coprocessor_v2_execute_latency");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_execute_txn_running_num(
+    "dingo_coprocessor_v2_execute_txn_running_num");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_execute_txn_total_num(
+    "bvar_coprocessor_v2_execute_txn_total_num");
+bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_execute_txn_latency("dingo_coprocessor_v2_execute_txn_latency");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_filter_running_num("dingo_coprocessor_v2_filter_running_num");
+bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_filter_total_num("dingo_coprocessor_v2_filter_total_num");
+bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_filter_latency("dingo_coprocessor_v2_filter_latency");
+
+CoprocessorV2::CoprocessorV2() : bvar_guard_for_coprocessor_v2_latency_(&coprocessor_v2_latency) {
+  bvar_coprocessor_v2_object_running_num << 1;
+  bvar_coprocessor_v2_object_total_num << 1;
+};
 CoprocessorV2::~CoprocessorV2() { Close(); }
 
 butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
@@ -151,6 +169,10 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
 
 butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                      std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
+  BvarLatencyGuard bvar_guard(&coprocessor_v2_execute_latency);
+  CoprocessorV2::bvar_coprocessor_v2_execute_running_num << 1;
+  CoprocessorV2::bvar_coprocessor_v2_execute_total_num << 1;
+  ON_SCOPE_EXIT([&]() { CoprocessorV2::bvar_coprocessor_v2_execute_running_num << -1; });
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute IteratorPtr Enter");
   ScanFilter scan_filter = ScanFilter(false, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;
@@ -199,6 +221,10 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
 butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool /*is_reverse*/,
                                      pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
                                      bool& has_more, std::string& end_key) {
+  BvarLatencyGuard bvar_guard(&coprocessor_v2_execute_txn_latency);
+  CoprocessorV2::bvar_coprocessor_v2_execute_txn_running_num << 1;
+  CoprocessorV2::bvar_coprocessor_v2_execute_txn_total_num << 1;
+  ON_SCOPE_EXIT([&]() { CoprocessorV2::bvar_coprocessor_v2_execute_txn_running_num << -1; });
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute  TxnIteratorPtr Enter");
 
   butil::Status status;
@@ -251,6 +277,10 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool ke
 }
 
 butil::Status CoprocessorV2::Filter(const std::string& key, const std::string& value, bool& is_reserved) {
+  BvarLatencyGuard bvar_guard(&coprocessor_v2_filter_latency);
+  CoprocessorV2::bvar_coprocessor_v2_filter_running_num << 1;
+  CoprocessorV2::bvar_coprocessor_v2_filter_total_num << 1;
+  ON_SCOPE_EXIT([&]() { CoprocessorV2::bvar_coprocessor_v2_filter_running_num << -1; });
   return DoFilter(key, value, &is_reserved);
 }
 
@@ -268,6 +298,7 @@ void CoprocessorV2::Close() {
   original_record_decoder_.reset();
   result_column_indexes_.clear();
   rel_runner_.reset();
+  bvar_coprocessor_v2_object_running_num << -1;
 }
 
 butil::Status CoprocessorV2::DoExecute(const std::string& key, const std::string& value, bool* has_result_kv,

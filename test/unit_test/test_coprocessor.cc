@@ -22,11 +22,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <iostream>
-#include <iterator>
+
 #include <memory>
-#include <numeric>
+
 #include <optional>
 #include <random>
 #include <string>
@@ -107,6 +106,13 @@ static std::string GenRandomString(int len) {
 class CoprocessorTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
+    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
+
+    // Set whether log messages go to stderr in addition to logfiles.
+    FLAGS_alsologtostderr = true;
+
+    // If set this flag to true, the log will show in the terminal
+    FLAGS_logtostderr = true;
     dingodb::Helper::CreateDirectories(kStorePath);
     std::srand(std::time(nullptr));
 
@@ -3898,6 +3904,8 @@ TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
       std::cout << kv.key() << ":" << kv.value() << '\n';
     }
   }
+
+  coprocessor.reset();
 }
 
 }  // namespace dingodb

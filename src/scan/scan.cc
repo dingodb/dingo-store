@@ -41,7 +41,7 @@
 
 namespace dingodb {
 
-ScanContext::ScanContext()
+ScanContext::ScanContext(bvar::LatencyRecorder* scan_latency)
     : region_id_(0),
       max_fetch_cnt_(0),
       key_only_(false),
@@ -58,7 +58,9 @@ ScanContext::ScanContext()
       disable_coprocessor_(true),
       timeout_ms_(0),
       max_bytes_rpc_(0),
-      max_fetch_cnt_by_server_(0) {
+      max_fetch_cnt_by_server_(0),
+      scan_latency_(scan_latency),
+      bvar_guard_(scan_latency_) {
   bthread_mutex_init(&mutex_, nullptr);
 }
 ScanContext::~ScanContext() { Close(); }
@@ -343,6 +345,16 @@ const char* ScanContext::GetSeekState(SeekState state) {
   return state_str;
 }
 #endif
+
+ScanContextV1::ScanContextV1(bvar::LatencyRecorder* scan_latency) : ScanContext(scan_latency) {}
+ScanContextV1::~ScanContextV1() = default;
+bvar::LatencyRecorder* ScanContextV1::GetScanLatency() { return &scan_context_v1_latency; }
+bvar::LatencyRecorder ScanContextV1::scan_context_v1_latency("dingo_scan_context_v1_latency");
+
+ScanContextV2::ScanContextV2(bvar::LatencyRecorder* scan_latency) : ScanContext(scan_latency) {}
+ScanContextV2::~ScanContextV2() = default;
+bvar::LatencyRecorder* ScanContextV2::GetScanLatency() { return &scan_context_v2_latency; }
+bvar::LatencyRecorder ScanContextV2::scan_context_v2_latency("dingo_scan_context_v2_latency");
 
 butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64_t region_id,
                                      const pb::common::Range& range, int64_t max_fetch_cnt, bool key_only,

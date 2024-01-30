@@ -30,6 +30,13 @@
 
 namespace dingodb {
 
+bvar::Adder<uint64_t> CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_running_num(
+    "dingo_coprocessor_v2_filter_scalar_running_num");
+bvar::Adder<uint64_t> CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_total_num(
+    "dingo_coprocessor_v2_filter_scalar_total_num");
+bvar::LatencyRecorder CoprocessorScalar::coprocessor_v2_filter_scalar_latency(
+    "dingo_coprocessor_v2_filter_scalar_latency");
+
 CoprocessorScalar::CoprocessorScalar() = default;
 CoprocessorScalar::~CoprocessorScalar() { Close(); }
 
@@ -52,6 +59,10 @@ butil::Status CoprocessorScalar::Filter(const std::string& key, const std::strin
 }
 
 butil::Status CoprocessorScalar::Filter(const pb::common::VectorScalardata& scalar_data, bool& is_reserved) {
+  BvarLatencyGuard bvar_guard(&coprocessor_v2_filter_scalar_latency);
+  CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_running_num << 1;
+  CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_total_num << 1;
+  ON_SCOPE_EXIT([&]() { CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_running_num << -1; });
   butil::Status status;
 
   std::vector<std::any> original_record;

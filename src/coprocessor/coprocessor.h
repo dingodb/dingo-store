@@ -93,6 +93,15 @@ class Coprocessor : public RawCoprocessor {
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> original_serial_schemas_sorted_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> selection_serial_schemas_sorted_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas_sorted_;
+
+  static bvar::Adder<uint64_t> bvar_coprocessor_v1_object_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v1_object_total_num;
+  static bvar::LatencyRecorder coprocessor_v1_latency;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v1_execute_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v1_execute_total_num;
+  static bvar::LatencyRecorder coprocessor_v1_execute_latency;
+
+  BvarLatencyGuard bvar_guard_for_coprocessor_v1_latency_;
 };
 
 }  // namespace dingodb

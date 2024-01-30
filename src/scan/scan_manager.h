@@ -97,6 +97,8 @@ class ScanManager : public RawScanManager, public RawScanManagerSingleton<ScanMa
  private:
   std::map<std::string, std::shared_ptr<ScanContext>> alive_scans_;
   std::map<std::string, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;
+  bvar::Adder<uint64_t> bvar_scan_v1_object_running_num_;
+  bvar::Adder<uint64_t> bvar_scan_v1_object_total_num_;
 };
 
 class ScanManagerV2 : public RawScanManager, public RawScanManagerSingleton<ScanManagerV2> {
@@ -121,6 +123,8 @@ class ScanManagerV2 : public RawScanManager, public RawScanManagerSingleton<Scan
  private:
   std::map<int64_t, std::shared_ptr<ScanContext>> alive_scans_;
   std::map<int64_t, std::shared_ptr<ScanContext>> waiting_destroyed_scans_;
+  bvar::Adder<uint64_t> bvar_scan_v2_object_running_num_;
+  bvar::Adder<uint64_t> bvar_scan_v2_object_total_num_;
 };
 
 }  // namespace dingodb
