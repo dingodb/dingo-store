@@ -14,15 +14,22 @@
 
 #include "benchmark/operation.h"
 
+#include <unistd.h>
+
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "benchmark/benchmark.h"
+#include "benchmark/dataset.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "gflags/gflags_declare.h"
@@ -48,16 +55,19 @@ DEFINE_validator(txn_isolation_level, [](const char*, const std::string& value) 
 });
 
 // vector search
-DEFINE_uint32(vector_search_topk, 10, "Vector search flag topk");
-DEFINE_bool(vector_search_with_vector_data, true, "Vector search flag with_vector_data");
-DEFINE_bool(vector_search_with_scalar_data, false, "Vector search flag with_scalar_data");
-DEFINE_bool(vector_search_with_table_data, false, "Vector search flag with_table_data");
-DEFINE_bool(vector_search_use_brute_force, false, "Vector search flag use_brute_force");
-DEFINE_bool(vector_search_enable_range_search, false, "Vector search flag enable_range_search");
-DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
+DECLARE_string(vector_dataset);
+DECLARE_uint32(vector_search_topk);
+DECLARE_bool(vector_search_with_vector_data);
+DECLARE_bool(vector_search_with_scalar_data);
+DECLARE_bool(vector_search_with_table_data);
+DECLARE_bool(vector_search_use_brute_force);
+DECLARE_bool(vector_search_enable_range_search);
+DECLARE_double(vector_search_radius);
 
 DECLARE_uint32(vector_dimension);
 DECLARE_string(vector_value_type);
+
+DEFINE_uint32(vector_put_batch_size, 512, "Vector put batch size");
 
 namespace dingodb {
 namespace benchmark {
@@ -471,8 +481,8 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
   if (!result.status.IsOK()) {
     return result;
   }
-  std::vector<sdk::SearchResult> out_result;
-  result.status = vector_client->Search(entry->index_id, search_param, vector_with_ids, out_result);
+
+  result.status = vector_client->Search(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
 
   result.eplased_time = Helper::TimestampUs() - start_time;
 
@@ -511,7 +521,9 @@ bool ReadOperation::Arrange(RegionEntryPtr region_entry) {
         return false;
       }
       kvs.clear();
-      std::cout << '\r' << fmt::format("Region({}) put progress [{}%]", prefix, i * 100 / FLAGS_arrange_kv_num)
+      std::cout << '\r'
+                << fmt::format("Region({}) put data({}) progress [{}%]", FLAGS_arrange_kv_num, prefix,
+                               i * 100 / FLAGS_arrange_kv_num)
                 << std::flush;
     }
   }
@@ -612,7 +624,9 @@ bool TxnReadOperation::Arrange(RegionEntryPtr region_entry) {
         return false;
       }
       kvs.clear();
-      std::cout << '\r' << fmt::format("Region({}) put progress [{}%]", prefix, i * 100 / FLAGS_arrange_kv_num)
+      std::cout << '\r'
+                << fmt::format("Region({}) put data({}) progress [{}%]", FLAGS_arrange_kv_num, prefix,
+                               i * 100 / FLAGS_arrange_kv_num)
                 << std::flush;
     }
   }
@@ -761,15 +775,30 @@ Operation::Result TxnReadMissingOperation::Execute(std::vector<RegionEntryPtr>& 
   }
 }
 
+template <typename T>
+static void PrintVector(const std::vector<T>& vec) {
+  for (const auto& v : vec) {
+    std::cout << v << " ";
+  }
+
+  std::cout << std::endl;
+}
+
 sdk::VectorWithId GenVectorWithId(int64_t vector_id) {
   sdk::VectorWithId vector_with_id;
 
   vector_with_id.id = vector_id;
   vector_with_id.vector.dimension = FLAGS_vector_dimension;
-  vector_with_id.vector.value_type =
-      FLAGS_vector_value_type == "FLOAT" ? sdk::ValueType::kFloat : sdk::ValueType::kUinT8;
-  vector_with_id.vector.float_values = Helper::GenerateFloatVector(256);
-  vector_with_id.vector.binary_values = Helper::GenerateInt8Vector(256);
+
+  if (FLAGS_vector_value_type == "FLOAT") {
+    vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+    vector_with_id.vector.float_values = Helper::GenerateFloatVector(FLAGS_vector_dimension);
+    // PrintVector(vector_with_id.vector.float_values);
+  } else {
+    vector_with_id.vector.value_type = sdk::ValueType::kUint8;
+    vector_with_id.vector.binary_values = Helper::GenerateInt8Vector(FLAGS_vector_dimension);
+    // PrintVector(vector_with_id.vector.float_values);
+  }
 
   return vector_with_id;
 }
@@ -793,20 +822,90 @@ Operation::Result VectorFillRandomOperation::Execute(VectorIndexEntryPtr entry) 
   std::vector<sdk::VectorWithId> vector_with_ids;
   vector_with_ids.reserve(FLAGS_batch_size);
   if (FLAGS_batch_size <= 1) {
-    int64_t vector_id = Helper::GenerateRealRandomInteger(0, 100000000);
+    int64_t vector_id = Helper::GenerateRealRandomInteger(1, 100000000);
     vector_with_ids.push_back(GenVectorWithId(vector_id));
 
   } else {
-    for (int i = 0; i < FLAGS_batch_size; ++i) {
-      int64_t vector_id = Helper::GenerateRealRandomInteger(0, 100000000);
-      vector_with_ids.push_back(GenVectorWithId(vector_id));
+    std::set<int64_t> vector_id_set;
+    for (int i = 0; i < FLAGS_batch_size;) {
+      int64_t vector_id = Helper::GenerateRealRandomInteger(1, 100000000);
+      if (vector_id_set.count(vector_id) == 0) {
+        vector_with_ids.push_back(GenVectorWithId(vector_id));
+        vector_id_set.insert(vector_id);
+        ++i;
+      }
     }
   }
 
   return VectorPut(entry, vector_with_ids);
 }
 
+bool VectorSearchOperation::Arrange(VectorIndexEntryPtr entry, DatasetPtr dataset) {
+  return FLAGS_vector_dataset.empty() ? ArrangeAutoData(entry) : ArrangeManualData(entry, dataset);
+}
+
+bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  vector_with_ids.reserve(FLAGS_vector_put_batch_size);
+  for (int i = 0; i < FLAGS_arrange_kv_num; ++i) {
+    vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
+
+    if (vector_with_ids.size() == FLAGS_vector_put_batch_size || i + 1 == FLAGS_arrange_kv_num) {
+      auto result = VectorPut(entry, vector_with_ids);
+      if (!result.status.IsOK()) {
+        return false;
+      }
+      vector_with_ids.clear();
+
+      std::cout << '\r'
+                << fmt::format("Vector index({}) put data progress [{} / {} {}%]", entry->index_id, i,
+                               FLAGS_arrange_kv_num, i * 100 / FLAGS_arrange_kv_num)
+                << std::flush;
+    }
+  }
+
+  std::cout << "\r" << fmt::format("Vector index({}) put data({}) done", entry->index_id, FLAGS_arrange_kv_num) << '\n';
+
+  return true;
+}
+
+bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, DatasetPtr dataset) {
+  uint32_t total_vector_count = dataset->GetTrainDataCount();
+
+  uint32_t count = 0;
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  for (int batch_num = 0;; ++batch_num) {
+    bool is_eof = false;
+    dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
+    auto result = VectorPut(entry, vector_with_ids);
+    if (!result.status.IsOK()) {
+      return false;
+    }
+
+    count += vector_with_ids.size();
+    vector_with_ids.clear();
+
+    std::cout << '\r'
+              << fmt::format("Vector index({}) put data progress [{} / {} {}%]", entry->index_id, count,
+                             total_vector_count, count * 100 / total_vector_count)
+              << std::flush;
+    if (is_eof) {
+      break;
+    }
+  }
+
+  entry->test_entries = dataset->GetTestData();
+
+  std::cout << "\r" << fmt::format("Vector index({}) put data({}) done", entry->index_id, total_vector_count) << '\n';
+
+  return true;
+}
+
 Operation::Result VectorSearchOperation::Execute(VectorIndexEntryPtr entry) {
+  return FLAGS_vector_dataset.empty() ? ExecuteAutoData(entry) : ExecuteManualData(entry);
+}
+
+Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr entry) {
   std::vector<sdk::VectorWithId> vector_with_ids;
   vector_with_ids.reserve(FLAGS_batch_size);
 
@@ -831,6 +930,63 @@ Operation::Result VectorSearchOperation::Execute(VectorIndexEntryPtr entry) {
   }
 
   return VectorSearch(entry, vector_with_ids, search_param);
+}
+
+uint32_t CalculateRecallRate(const std::unordered_map<int64_t, float>& neighbors,
+                             const std::vector<sdk::VectorWithDistance>& vector_with_distances) {
+  uint32_t hit_count = 0;
+  for (const auto& vector_with_distance : vector_with_distances) {
+    if (neighbors.find(vector_with_distance.vector_data.id) != neighbors.end()) {
+      ++hit_count;
+    }
+  }
+
+  return (hit_count * 10000) / vector_with_distances.size();
+}
+
+Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr entry) {
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  vector_with_ids.reserve(FLAGS_batch_size);
+
+  sdk::SearchParameter search_param;
+  search_param.with_vector_data = FLAGS_vector_search_with_vector_data;
+  search_param.with_scalar_data = FLAGS_vector_search_with_scalar_data;
+  search_param.with_table_data = FLAGS_vector_search_with_table_data;
+  search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
+  search_param.topk = FLAGS_vector_search_topk;
+  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 800));
+
+  auto offset = entry->GenId();
+  auto& all_test_entries = entry->test_entries;
+
+  std::vector<Dataset::TestEntryPtr> batch_test_entries;
+  if (FLAGS_batch_size <= 1) {
+    auto& test_entry = all_test_entries[offset % all_test_entries.size()];
+    vector_with_ids.push_back(test_entry->vector_with_id);
+    batch_test_entries.push_back(test_entry);
+  } else {
+    for (size_t i = offset; i < FLAGS_batch_size; ++i) {
+      auto& test_entry = all_test_entries[i % all_test_entries.size()];
+      vector_with_ids.push_back(test_entry->vector_with_id);
+      batch_test_entries.push_back(test_entry);
+    }
+  }
+
+  auto result = VectorSearch(entry, vector_with_ids, search_param);
+  if (!result.status.IsOK()) {
+    return result;
+  }
+
+  assert(batch_test_entries.size() == result.vector_search_results.size());
+
+  for (uint32_t i = 0; i < batch_test_entries.size(); ++i) {
+    auto& entry = batch_test_entries[i];
+    auto& search_result = result.vector_search_results[i];
+
+    result.recalls.push_back(CalculateRecallRate(entry->neighbors, search_result.vector_datas));
+  }
+
+  return result;
 }
 
 bool IsSupportBenchmarkType(const std::string& benchmark) {

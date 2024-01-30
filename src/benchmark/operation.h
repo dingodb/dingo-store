@@ -16,10 +16,12 @@
 #define DINGODB_BENCHMARK_OPERATION_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "benchmark/dataset.h"
 #include "sdk/client.h"
 #include "sdk/status.h"
 #include "sdk/vector.h"
@@ -44,10 +46,14 @@ class Operation {
     size_t eplased_time{0};
     size_t write_bytes{0};
     size_t read_bytes{0};
+
+    std::vector<uint32_t> recalls;
+    std::vector<sdk::SearchResult> vector_search_results;
   };
 
   // Do some ready work at arrange stage
   virtual bool Arrange(RegionEntryPtr region_entry) = 0;
+  virtual bool Arrange(VectorIndexEntryPtr entry, DatasetPtr dataset) = 0;
 
   // RPC invoke, return execute result
   virtual Result Execute(RegionEntryPtr region_entry) = 0;
@@ -67,6 +73,7 @@ class BaseOperation : public Operation {
   ~BaseOperation() override = default;
 
   bool Arrange(RegionEntryPtr) override { return true; }
+  bool Arrange(VectorIndexEntryPtr, DatasetPtr) override { return true; }
 
   Result Execute(RegionEntryPtr) override { return {}; }
 
@@ -231,7 +238,16 @@ class VectorSearchOperation : public BaseOperation {
   VectorSearchOperation(std::shared_ptr<sdk::Client> client) : BaseOperation(client) {}
   ~VectorSearchOperation() override = default;
 
+  bool Arrange(VectorIndexEntryPtr entry, DatasetPtr dataset) override;
+
   Result Execute(VectorIndexEntryPtr entry) override;
+
+ private:
+  bool ArrangeAutoData(VectorIndexEntryPtr entry);
+  bool ArrangeManualData(VectorIndexEntryPtr entry, DatasetPtr dataset);
+
+  Result ExecuteAutoData(VectorIndexEntryPtr entry);
+  Result ExecuteManualData(VectorIndexEntryPtr entry);
 };
 
 bool IsSupportBenchmarkType(const std::string& benchmark);

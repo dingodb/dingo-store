@@ -12,10 +12,12 @@ add_executable(${BENCHMARK_BIN}
                 ${BENCHMARK_SRCS}
                 )
 
-add_dependencies(${BENCHMARK_BIN} sdk fmt glog)
+add_dependencies(${BENCHMARK_BIN} sdk fmt glog hdf5 hdf5_cpp)
 
 target_link_libraries(${BENCHMARK_BIN}
                       PRIVATE
                       $<TARGET_OBJECTS:PROTO_OBJS>
                       sdk
+                      hdf5_cpp
+                      hdf5
                       )

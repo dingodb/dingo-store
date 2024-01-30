@@ -23,6 +23,7 @@
 #include <thread>
 #include <vector>
 
+#include "benchmark/dataset.h"
 #include "benchmark/operation.h"
 #include "bvar/latency_recorder.h"
 #include "sdk/client.h"
@@ -37,6 +38,7 @@ class Stats {
   ~Stats() = default;
 
   void Add(size_t duration, size_t write_bytes, size_t read_bytes);
+  void Add(size_t duration, size_t write_bytes, size_t read_bytes, const std::vector<uint32_t>& recalls);
   void AddError();
 
   void Clear();
@@ -52,6 +54,7 @@ class Stats {
   size_t read_bytes_{0};
   size_t error_count_{0};
   std::shared_ptr<bvar::LatencyRecorder> latency_recorder_;
+  std::shared_ptr<bvar::LatencyRecorder> recall_recorder_;
 };
 
 using StatsPtr = std::shared_ptr<Stats>;
@@ -78,8 +81,10 @@ using RegionEntryPtr = std::shared_ptr<RegionEntry>;
 struct VectorIndexEntry {
   int64_t index_id;
 
+  std::vector<Dataset::TestEntryPtr> test_entries;
+
   // generate auto-increment id
-  std::atomic<size_t> counter{0};
+  std::atomic<size_t> counter{1};
   size_t GenId() { return counter.fetch_add(1, std::memory_order_relaxed); }
 };
 using VectorIndexEntryPtr = std::shared_ptr<VectorIndexEntry>;
@@ -91,6 +96,7 @@ struct ThreadEntry {
 
   std::shared_ptr<sdk::Client> client;
   std::vector<RegionEntryPtr> region_entries;
+  std::vector<VectorIndexEntryPtr> vector_index_entries;
 };
 using ThreadEntryPtr = std::shared_ptr<ThreadEntry>;
 
@@ -130,6 +136,7 @@ class Benchmark {
 
   void ExecutePerRegion(ThreadEntryPtr thread_entry);
   void ExecuteMultiRegion(ThreadEntryPtr thread_entry);
+  void ExecutePerVectorIndex(ThreadEntryPtr thread_entry);
 
   bool IsStop();
 
@@ -139,6 +146,8 @@ class Benchmark {
   std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
   std::shared_ptr<sdk::Client> client_;
   OperationPtr operation_;
+
+  DatasetPtr dataset_;
 
   std::vector<RegionEntryPtr> region_entries_;
   std::vector<VectorIndexEntryPtr> vector_index_entries_;
