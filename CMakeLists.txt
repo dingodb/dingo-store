@@ -163,6 +163,7 @@ include(rocksdb)
 include(bdb)
 include(brpc)
 include(braft)
+include(hdf5)
 
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
 message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")
@@ -233,6 +234,7 @@ include_directories(${FMT_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
+include_directories(${HDF5_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # CAUTION: the order of the libraries is important, please do not change it.

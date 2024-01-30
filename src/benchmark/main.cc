@@ -13,9 +13,11 @@
 // limitations under the License.
 
 #include <csignal>
+#include <cstdint>
 #include <string>
 
 #include "benchmark/benchmark.h"
+#include "benchmark/dataset.h"
 #include "gflags/gflags.h"
 
 const std::string kVersion = "0.1.0";

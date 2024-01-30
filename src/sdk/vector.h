@@ -140,6 +140,8 @@ struct Vector {
         float_values(std::move(other.float_values)),
         binary_values(std::move(other.binary_values)) {}
 
+  Vector(const Vector& other) noexcept = default;
+
   Vector& operator=(Vector&& other) noexcept {
     dimension = other.dimension;
     value_type = other.value_type;
@@ -148,7 +150,7 @@ struct Vector {
     return *this;
   }
 
-  Vector(const Vector&) = delete;
+  // Vector(const Vector&) = delete;
   const Vector& operator=(const Vector&) = delete;
 
   uint32_t Size() const { return float_values.size() * 4 + binary_values.size() + 4; }
@@ -168,6 +170,7 @@ struct VectorWithId {
   explicit VectorWithId(Vector p_vector) : id(0), vector(std::move(p_vector)) {}
 
   VectorWithId(VectorWithId&& other) noexcept : id(other.id), vector(std::move(other.vector)) {}
+  VectorWithId(const VectorWithId& other) = default;
 
   VectorWithId& operator=(VectorWithId&& other) noexcept {
     id = other.id;
@@ -175,7 +178,7 @@ struct VectorWithId {
     return *this;
   }
 
-  VectorWithId(const VectorWithId&) = delete;
+  // VectorWithId(const VectorWithId&) = delete;
   const VectorWithId& operator=(const VectorWithId&) = delete;
 };
 
