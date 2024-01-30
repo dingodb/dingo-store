@@ -19,9 +19,11 @@
 #include <memory>
 
 #include "common/logging.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "sdk/common/common.h"
+#include "sdk/common/param_config.h"
 #include "sdk/vector.h"
 #include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_common.h"
@@ -113,7 +115,6 @@ void VectorSearchTask::SubTaskCallback(Status status, std::shared_ptr<VectorSear
 }
 
 void VectorSearchTask::ConstructResultUnlocked() {
-  CHECK_EQ(tmp_out_result_.size(), vector_id_idx_.size());
   for (auto& iter : tmp_out_result_) {
     auto& vec = iter.second;
     std::sort(vec.begin(), vec.end(),
@@ -208,13 +209,10 @@ void VectorSearchPartTask::VectorSearchRpcCallback(const Status& status, VectorS
       status_ = status;
     }
   } else {
-    if (rpc->Request()->vector_with_ids_size() != rpc->Response()->batch_results_size()) {
-      DINGO_LOG(WARNING) << Name() << ", request vectr_with_ids_size not equal response batch_results_size, rpc: "
-                         << rpc->Method() << " send to region: " << rpc->Request()->context().region_id()
-                         << " request: " << rpc->Request()->DebugString()
-                         << " response: " << rpc->Response()->DebugString();
-    }
-
+  VLOG(kSdkVlogLevel) << Name() << ", rpc: " << rpc->Method()
+                      << " send to region: " << rpc->Request()->context().region_id()
+                      << " status: " << status.ToString() << " request: " << rpc->Request()->DebugString()
+                      << " response: " << rpc->Response()->DebugString();
     for (auto i = 0; i < rpc->Response()->batch_results_size(); i++) {
       int64_t vector_id = rpc->Request()->vector_with_ids(i).id();
       for (const auto& distancepb : rpc->Response()->batch_results(i).vector_with_distances()) {

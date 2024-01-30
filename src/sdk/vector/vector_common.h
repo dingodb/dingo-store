@@ -193,7 +193,7 @@ static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type)
   switch (value_type) {
     case ValueType::kFloat:
       return pb::common::ValueType::FLOAT;
-    case ValueType::kUinT8:
+    case ValueType::kUint8:
       return pb::common::ValueType::UINT8;
     default:
       CHECK(false) << "unsupported value type:" << value_type;

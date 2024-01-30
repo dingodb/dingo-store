@@ -21,6 +21,7 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/meta.pb.h"
+#include "sdk/common/param_config.h"
 #include "sdk/vector/vector_common.h"
 #include "vector/codec.h"
 
@@ -40,7 +41,7 @@ VectorIndex::VectorIndex(pb::meta::IndexDefinitionWithId index_def_with_id)
     CHECK(start_key_to_part_id_.insert({start_id, part_id}).second);
     CHECK(part_id_to_range_.insert({part_id, partition.range()}).second);
   }
-  DINGO_LOG(DEBUG) << "Init:" << ToString();
+  VLOG(kSdkVlogLevel) << "Init:" << ToString();
 }
 
 VectorIndexType VectorIndex::GetVectorIndexType() const {
@@ -50,7 +51,7 @@ VectorIndexType VectorIndex::GetVectorIndexType() const {
 
 int64_t VectorIndex::GetPartitionId(int64_t vector_id) const {
   CHECK_GT(vector_id, 0);
-  DINGO_LOG(DEBUG) << "query  vector_id:" << vector_id << ", cache:" << ToString();
+  VLOG(kSdkVlogLevel) << "query  vector_id:" << vector_id << ", cache:" << ToString();
   auto iter = start_key_to_part_id_.upper_bound(vector_id);
   CHECK(iter != start_key_to_part_id_.begin());
   iter--;

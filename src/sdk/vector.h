@@ -120,7 +120,7 @@ struct BruteForceParam {
   MetricType metric_type;
 };
 
-enum ValueType : uint8_t { kNoneValueType, kFloat, kUinT8 };
+enum ValueType : uint8_t { kNoneValueType, kFloat, kUint8 };
 
 std::string ValueTypeToString(ValueType type);
 
@@ -313,6 +313,8 @@ struct DeleteResult {
   int64_t vector_id;
   bool deleted;
 };
+
+std::string DumpToString(const DeleteResult& obj);
 
 class VectorIndexCreator {
  public:

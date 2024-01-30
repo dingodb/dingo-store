@@ -19,6 +19,8 @@
 
 // TODO: make params in this file use glfags
 
+const int64_t kSdkVlogLevel = 60;
+
 // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
 const int64_t kRpcChannelTimeOutMs = 5000;
 const int64_t kRpcChannelConnectTimeOutMs  = 3000;

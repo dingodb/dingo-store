@@ -53,6 +53,10 @@ std::string DumpToString(const SearchResult& obj) {
   return oss.str();
 }
 
+std::string DumpToString(const DeleteResult& obj) {
+  return fmt::format("DeleteResult {{ vector_id: {}, deleted: {} }}", obj.vector_id, (obj.deleted ? "true" : "false"));
+}
+
 std::string VectorIndexTypeToString(VectorIndexType type) {
   switch (type) {
     case VectorIndexType::kNoneIndexType:
@@ -95,7 +99,7 @@ std::string ValueTypeToString(ValueType type) {
       return "NoneValueType";
     case ValueType::kFloat:
       return "Float";
-    case ValueType::kUinT8:
+    case ValueType::kUint8:
       return "UinT8";
     default:
       return "Unknown";

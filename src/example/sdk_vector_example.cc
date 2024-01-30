@@ -36,6 +36,8 @@ static std::string g_index_name = "example01";
 static std::vector<int64_t> g_range_partition_seperator_ids{5, 10, 20};
 static int32_t g_dimension = 2;
 static dingodb::sdk::FlatParam g_flat_param(g_dimension, dingodb::sdk::MetricType::kL2);
+static std::vector<int64_t> g_vector_ids;
+static dingodb::sdk::VectorClient* g_vector_client;
 
 static void PrepareVectorIndex() {
   dingodb::sdk::VectorIndexCreator* creator;
@@ -57,6 +59,7 @@ static void PrepareVectorIndex() {
 void PostClean() {
   Status tmp = g_client->DropIndex(g_index_id);
   DINGO_LOG(INFO) << "drop index status: " << tmp.ToString() << ", index_id:" << g_index_id;
+  delete g_vector_client;
 }
 
 // TODO: remove
@@ -104,13 +107,16 @@ static void VectorIndexCacheSearch() {
   }
 }
 
-static void VectorAdd() {
+static void PrepareVectorClient() {
   dingodb::sdk::VectorClient* client;
   Status built = g_client->NewVectorClient(&client);
   CHECK(built.IsOK()) << "dingo vector client build fail:" << built.ToString();
   CHECK_NOTNULL(client);
-  dingodb::ScopeGuard guard([&]() { delete client; });
+  g_vector_client = client;
+  CHECK_NOTNULL(g_vector_client);
+}
 
+static void VectorAdd() {
   std::vector<dingodb::sdk::VectorWithId> vectors;
 
   for (const auto& id : g_range_partition_seperator_ids) {
@@ -118,21 +124,16 @@ static void VectorAdd() {
     tmp_vector.float_values.push_back(1.0);
     tmp_vector.float_values.push_back(2.0);
     dingodb::sdk::VectorWithId tmp(id, std::move(tmp_vector));
-
     vectors.push_back(std::move(tmp));
+
+    g_vector_ids.push_back(id);
   }
 
-  Status add = client->Add(g_index_id, vectors, false, false);
+  Status add = g_vector_client->Add(g_index_id, vectors, false, false);
   DINGO_LOG(INFO) << "vector add:" << add.ToString();
 }
 
 static void VectorSearch() {
-  dingodb::sdk::VectorClient* client;
-  Status built = g_client->NewVectorClient(&client);
-  CHECK(built.IsOK()) << "dingo vector client build fail:" << built.ToString();
-  CHECK_NOTNULL(client);
-  dingodb::ScopeGuard guard([&]() { delete client; });
-
   std::vector<dingodb::sdk::VectorWithId> target_vectors;
   {
     dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
@@ -150,11 +151,20 @@ static void VectorSearch() {
   param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
 
   std::vector<dingodb::sdk::SearchResult> result;
-  Status tmp = client->Search(g_index_id, param, target_vectors, result);
+  Status tmp = g_vector_client->Search(g_index_id, param, target_vectors, result);
 
   DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
   for (const auto& r : result) {
-    DINGO_LOG(INFO) << "vectr search result:" << dingodb::sdk::DumpToString(r);
+    DINGO_LOG(INFO) << "vector search result:" << dingodb::sdk::DumpToString(r);
+  }
+}
+
+static void VectorDelete() {
+  std::vector<dingodb::sdk::DeleteResult> result;
+  Status tmp = g_vector_client->Delete(g_index_id, g_vector_ids, result);
+  DINGO_LOG(INFO) << "vector delete status: " << tmp.ToString();
+  for (const auto& r : result) {
+    DINGO_LOG(INFO) << "vector delete result:" << dingodb::sdk::DumpToString(r);
   }
 }
 
@@ -163,7 +173,7 @@ int main(int argc, char* argv[]) {
   FLAGS_logtostdout = true;
   FLAGS_colorlogtostdout = true;
   FLAGS_logbufsecs = 0;
-  FLAGS_v = dingodb::kGlobalValueOfDebug;
+  // FLAGS_v = dingodb::kGlobalValueOfDebug;
 
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
@@ -184,7 +194,14 @@ int main(int argc, char* argv[]) {
 
   PrepareVectorIndex();
   VectorIndexCacheSearch();
-  VectorAdd();
-  VectorSearch();
+  PrepareVectorClient();
+
+  {
+    VectorAdd();
+    VectorSearch();
+    VectorDelete();
+    VectorSearch();
+  }
+
   PostClean();
 }
