@@ -23,11 +23,12 @@
 
 #include "sdk/coordinator_proxy.h"
 #include "sdk/vector.h"
-#include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_index.h"
 
 namespace dingodb {
 namespace sdk {
+
+using VectorIndexCacheKey = std::string;
 
 class VectorIndexCache {
  public:
@@ -78,6 +79,29 @@ bool VectorIndexCache::CheckIndexResponse(const VectorIndexResponse& response) {
   }
 
   return checked;
+}
+
+static VectorIndexCacheKey EncodeVectorIndexCacheKey(int64_t schema_id, const std::string& index_name) {
+  DCHECK_GT(schema_id, 0);
+  DCHECK(!index_name.empty());
+  auto buf_size = sizeof(schema_id) + index_name.size();
+  char buf[buf_size];
+  memcpy(buf, &schema_id, sizeof(schema_id));
+  memcpy(buf + sizeof(schema_id), index_name.data(), index_name.size());
+  std::string tmp(buf, buf_size);
+  return std::move(tmp);
+}
+
+static void DecodeVectorIndexCacheKey(const VectorIndexCacheKey& key, int64_t& schema_id, std::string& index_name) {
+  DCHECK_GE(key.size(), sizeof(schema_id));
+  int64_t tmp_schema_id;
+  memcpy(&tmp_schema_id, key.data(), sizeof(schema_id));
+  schema_id = tmp_schema_id;
+  index_name = std::string(key.data() + sizeof(schema_id), key.size() - sizeof(schema_id));
+}
+
+static VectorIndexCacheKey GetVectorIndexCacheKey(const VectorIndex& index) {
+  return std::move(EncodeVectorIndexCacheKey(index.GetSchemaId(), index.GetName()));
 }
 
 }  // namespace sdk

@@ -53,13 +53,14 @@ static void PrepareVectorIndex() {
                       .SetFlatParam(g_flat_param)
                       .Create(g_index_id);
   DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
-  sleep(10);
+  sleep(20);
 }
 
 void PostClean() {
   Status tmp = g_client->DropIndex(g_index_id);
   DINGO_LOG(INFO) << "drop index status: " << tmp.ToString() << ", index_id:" << g_index_id;
   delete g_vector_client;
+  g_vector_ids.clear();
 }
 
 // TODO: remove
@@ -80,7 +81,7 @@ static void VectorIndexCacheSearch() {
 
   {
     std::shared_ptr<dingodb::sdk::VectorIndex> index;
-    Status got = cache.GetVectorIndexByKey(dingodb::sdk::GetVectorIndexCacheKey(g_schema_id, g_index_name), index);
+    Status got = cache.GetVectorIndexByKey(dingodb::sdk::EncodeVectorIndexCacheKey(g_schema_id, g_index_name), index);
     CHECK(got.ok()) << "Fail to get vector index, index_name:" << g_index_name << ", status:" << got.ToString();
     CHECK(index.get() != nullptr);
     CHECK_EQ(index->GetId(), g_index_id);
@@ -89,7 +90,7 @@ static void VectorIndexCacheSearch() {
 
   {
     int64_t index_id{0};
-    Status got = cache.GetIndexIdByKey(dingodb::sdk::GetVectorIndexCacheKey(g_schema_id, g_index_name), index_id);
+    Status got = cache.GetIndexIdByKey(dingodb::sdk::EncodeVectorIndexCacheKey(g_schema_id, g_index_name), index_id);
     CHECK(got.ok()) << "Fail to get index_id, index_name" << g_index_name << ", status:" << got.ToString();
     CHECK_EQ(index_id, g_index_id);
   }
@@ -98,7 +99,7 @@ static void VectorIndexCacheSearch() {
     cache.RemoveVectorIndexById(g_index_id);
     {
       std::shared_ptr<dingodb::sdk::VectorIndex> index;
-      Status got = cache.GetVectorIndexByKey(dingodb::sdk::GetVectorIndexCacheKey(g_schema_id, g_index_name), index);
+      Status got = cache.GetVectorIndexByKey(dingodb::sdk::EncodeVectorIndexCacheKey(g_schema_id, g_index_name), index);
       CHECK(got.ok()) << "Fail to get vector index, index_name:" << g_index_name << ", status:" << got.ToString();
       CHECK(index.get() != nullptr);
       CHECK_EQ(index->GetId(), g_index_id);
@@ -116,7 +117,7 @@ static void PrepareVectorClient() {
   CHECK_NOTNULL(g_vector_client);
 }
 
-static void VectorAdd() {
+static void VectorAdd(bool use_index_name = false) {
   std::vector<dingodb::sdk::VectorWithId> vectors;
 
   for (const auto& id : g_range_partition_seperator_ids) {
@@ -128,12 +129,17 @@ static void VectorAdd() {
 
     g_vector_ids.push_back(id);
   }
+  Status add;
+  if (use_index_name) {
+    add = g_vector_client->Add(g_index_id, vectors, false, false);
+  } else {
+    add = g_vector_client->Add(g_schema_id, g_index_name, vectors, false, false);
+  }
 
-  Status add = g_vector_client->Add(g_index_id, vectors, false, false);
   DINGO_LOG(INFO) << "vector add:" << add.ToString();
 }
 
-static void VectorSearch() {
+static void VectorSearch(bool use_index_name = false) {
   std::vector<dingodb::sdk::VectorWithId> target_vectors;
   {
     dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
@@ -150,8 +156,13 @@ static void VectorSearch() {
   // param.use_brute_force = true;
   param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
 
+  Status tmp;
   std::vector<dingodb::sdk::SearchResult> result;
-  Status tmp = g_vector_client->Search(g_index_id, param, target_vectors, result);
+  if (use_index_name) {
+    tmp = g_vector_client->Search(g_schema_id, g_index_name, param, target_vectors, result);
+  } else {
+    tmp = g_vector_client->Search(g_index_id, param, target_vectors, result);
+  }
 
   DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
   for (const auto& r : result) {
@@ -159,9 +170,14 @@ static void VectorSearch() {
   }
 }
 
-static void VectorDelete() {
+static void VectorDelete(bool use_index_name = false) {
+  Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
-  Status tmp = g_vector_client->Delete(g_index_id, g_vector_ids, result);
+  if (use_index_name) {
+    tmp = g_vector_client->Delete(g_schema_id, g_index_name, g_vector_ids, result);
+  } else {
+    tmp = g_vector_client->Delete(g_index_id, g_vector_ids, result);
+  }
   DINGO_LOG(INFO) << "vector delete status: " << tmp.ToString();
   for (const auto& r : result) {
     DINGO_LOG(INFO) << "vector delete result:" << dingodb::sdk::DumpToString(r);
@@ -192,16 +208,28 @@ int main(int argc, char* argv[]) {
   CHECK_NOTNULL(client.get());
   g_client = std::move(client);
 
-  PrepareVectorIndex();
-  VectorIndexCacheSearch();
-  PrepareVectorClient();
-
   {
+    PrepareVectorIndex();
+    VectorIndexCacheSearch();
+    PrepareVectorClient();
+
     VectorAdd();
     VectorSearch();
     VectorDelete();
     VectorSearch();
+
+    PostClean();
   }
 
-  PostClean();
+  {
+    PrepareVectorIndex();
+    PrepareVectorClient();
+
+    VectorAdd(true);
+    VectorSearch(true);
+    VectorDelete(true);
+    VectorSearch(true);
+
+    PostClean();
+  }
 }
