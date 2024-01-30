@@ -16,6 +16,7 @@
 #include "sdk/status.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_add_task.h"
+#include "sdk/vector/vector_delete_task.h"
 #include "sdk/vector/vector_search_task.h"
 
 namespace dingodb {
@@ -47,7 +48,8 @@ Status VectorClient::Search(int64_t schema_id, const std::string& index_name, co
 
 Status VectorClient::Delete(int64_t index_id, const std::vector<int64_t>& vector_ids,
                             std::vector<DeleteResult>& out_result) {
-  return Status::NotSupported("Not supported yet");
+  VectorDeleteTask task(stub_, index_id, vector_ids, out_result);
+  return task.Run();
 }
 
 Status VectorClient::Delete(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,

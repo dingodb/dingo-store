@@ -109,16 +109,17 @@ class ClientRpc : public Rpc {
 
   void OnClientRpcDone(RpcCallback cb) {
     if (controller.Failed()) {
-      DINGO_LOG(WARNING) << "Fail send rpc, log_id:" << controller.log_id() << " method:" << Method()
+      DINGO_LOG(WARNING) << "Fail send rpc: " << Method() << ", log_id:" << controller.log_id()
                          << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str()
                          << " error_code:" << controller.ErrorCode() << " error_text:" << controller.ErrorText();
 
       Status err = Status::NetworkError(controller.ErrorCode(), controller.ErrorText());
       SetStatus(err);
     } else {
-      DINGO_LOG(DEBUG) << "Success send rpc, log_id:" << controller.log_id() << " method:" << Method()
-                       << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str()
-                       << ", request:" << request->DebugString() << ", response:" << response->DebugString();
+      DINGO_LOG(DEBUG) << "Success send rpc: " << Method() << ", log_id:" << controller.log_id()
+                       << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str() << ", request: \n"
+                       << request->DebugString() << ", response:\n"
+                       << response->DebugString();
     }
 
     cb();

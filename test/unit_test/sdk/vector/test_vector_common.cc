@@ -29,6 +29,14 @@ TEST(VectorCommonTest, TestMetricType2InternalMetricTypePB) {
   EXPECT_EQ(MetricType2InternalMetricTypePB(MetricType::kCosine), pb::common::MetricType::METRIC_TYPE_COSINE);
 }
 
+TEST(VectorCommonTest, TestInternalMetricTypePB2MetricType) {
+  EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_NONE), MetricType::kNoneMetricType);
+  EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_L2), MetricType::kL2);
+  EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT),
+            MetricType::kInnerProduct);
+  EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_COSINE), MetricType::kCosine);
+}
+
 TEST(VectorCommonTest, TestVectorIndexType2InternalVectorIndexTypePB) {
   EXPECT_EQ(VectorIndexType2InternalVectorIndexTypePB(VectorIndexType::kNoneIndexType),
             pb::common::VECTOR_INDEX_TYPE_NONE);
@@ -168,7 +176,7 @@ TEST(VectorCommonTest, TestFillRangePartitionRule) {
   }
 }
 
-TEST(VectorCommonTest, EncodeDecodeVectorIndexCacheKey) {
+TEST(VectorCommonTest, TestEncodeDecodeVectorIndexCacheKey) {
   int64_t schema_id = 123;
   std::string index_name = "test_index";
 
@@ -180,6 +188,57 @@ TEST(VectorCommonTest, EncodeDecodeVectorIndexCacheKey) {
 
   EXPECT_EQ(decoded_schema_id, schema_id);
   EXPECT_EQ(decoded_index_name, index_name);
+}
+
+TEST(VectorCommonTest, TestReturnsCorrectValueType) {
+  EXPECT_EQ(ValueType2InternalValueTypePB(ValueType::kFloat), pb::common::ValueType::FLOAT);
+  EXPECT_EQ(ValueType2InternalValueTypePB(ValueType::kUint8), pb::common::ValueType::UINT8);
+}
+
+TEST(VectorCommonTest, TestFillSearchFlatParamPB) {
+  SearchParameter parameter;
+  parameter.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
+
+  pb::common::SearchFlatParam pb;
+  FillSearchFlatParamPB(&pb, parameter);
+
+  EXPECT_EQ(pb.parallel_on_queries(), 1);
+}
+
+TEST(VectorCommonTest, TestFillsSearchIvfFlatParamPB) {
+  SearchParameter parameter;
+  parameter.extra_params[SearchExtraParamType::kNprobe] = 10;
+  parameter.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
+
+  pb::common::SearchIvfFlatParam pb;
+  FillSearchIvfFlatParamPB(&pb, parameter);
+
+  EXPECT_EQ(pb.nprobe(), 10);
+  EXPECT_EQ(pb.parallel_on_queries(), 1);
+}
+
+TEST(VectorCommonTest, TestFillsSearchIvfPqParamPB) {
+  SearchParameter parameter;
+  parameter.extra_params[SearchExtraParamType::kNprobe] = 10;
+  parameter.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
+  parameter.extra_params[SearchExtraParamType::kRecallNum] = 5;
+
+  pb::common::SearchIvfPqParam pb;
+  FillSearchIvfPqParamPB(&pb, parameter);
+
+  EXPECT_EQ(pb.nprobe(), 10);
+  EXPECT_EQ(pb.parallel_on_queries(), 1);
+  EXPECT_EQ(pb.recall_num(), 5);
+}
+
+TEST(FillSearchHnswParamPBTest, FillsSearchHnswParamPB) {
+  SearchParameter parameter;
+  parameter.extra_params[SearchExtraParamType::kEfSearch] = 20;
+
+  pb::common::SearchHNSWParam pb;
+  FillSearchHnswParamPB(&pb, parameter);
+
+  EXPECT_EQ(pb.efsearch(), 20);
 }
 
 }  // namespace sdk

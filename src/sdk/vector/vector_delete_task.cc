@@ -12,45 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/vector/vector_add_task.h"
+#include "sdk/vector/vector_delete_task.h"
 
 #include <cstdint>
-#include <unordered_map>
 
-#include "glog/logging.h"
 #include "sdk/common/common.h"
-#include "sdk/status.h"
 #include "sdk/vector/index_service_rpc.h"
-#include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_helper.h"
-#include "sdk/vector/vector_index.h"
 
 namespace dingodb {
 namespace sdk {
 
-Status VectorAddTask::Init() {
+Status VectorDeleteTask::Init() {
   std::shared_ptr<VectorIndex> tmp;
   DINGO_RETURN_NOT_OK(stub.GetVectorIndexCache()->GetVectorIndexById(index_id_, tmp));
   DCHECK_NOTNULL(tmp);
   vector_index_ = std::move(tmp);
 
   std::unique_lock<std::shared_mutex> w(rw_lock_);
-  vector_id_to_idx_.clear();
+  next_vector_ids_.clear();
 
-  for (int64_t i = 0; i < vectors_.size(); i++) {
-    int64_t id = vectors_[i].id;
-    CHECK(vector_id_to_idx_.insert(std::make_pair(id, i)).second) << "duplicate vector id: " << id;
+  for (const auto& id : vector_ids_) {
+    CHECK(next_vector_ids_.insert(id).second) << "duplicate vector id: " << id;
   }
 
   return Status::OK();
 }
 
-void VectorAddTask::DoAsync() {
-  std::unordered_map<int64_t, int64_t> next_batch;
+void VectorDeleteTask::DoAsync() {
+  std::set<int64_t> next_batch;
   Status tmp;
   {
     std::shared_lock<std::shared_mutex> r(rw_lock_);
-    next_batch = vector_id_to_idx_;
+    next_batch = next_vector_ids_;
     tmp = status_;
   }
 
@@ -64,7 +58,7 @@ void VectorAddTask::DoAsync() {
 
   auto meta_cache = stub.GetMetaCache();
 
-  for (const auto& [id, idx] : next_batch) {
+  for (const auto& id : next_batch) {
     std::shared_ptr<Region> tmp;
     Status s = meta_cache->LookupRegionByKey(vector_helper::VectorIdToRangeKey(*vector_index_, id), tmp);
     if (!s.ok()) {
@@ -91,14 +85,11 @@ void VectorAddTask::DoAsync() {
     CHECK(iter != region_id_to_region.end());
     auto region = iter->second;
 
-    auto rpc = std::make_unique<VectorAddRpc>();
+    auto rpc = std::make_unique<VectorDeleteRpc>();
     FillRpcContext(*rpc->MutableRequest()->mutable_context(), region_id, region->Epoch());
-    rpc->MutableRequest()->set_is_update(is_update_);
-    rpc->MutableRequest()->set_replace_deleted(replace_deleted_);
 
     for (const auto& id : entry.second) {
-      int64_t idx = vector_id_to_idx_[id];
-      FillVectorWithIdPB(rpc->MutableRequest()->add_vectors(), vectors_[idx]);
+      rpc->MutableRequest()->add_ids(id);
     }
 
     StoreRpcController controller(stub, *rpc, region);
@@ -116,11 +107,11 @@ void VectorAddTask::DoAsync() {
     auto& controller = controllers_[i];
 
     controller.AsyncCall(
-        [this, rpc = rpcs_[i].get()](auto&& s) { VectorAddRpcCallback(std::forward<decltype(s)>(s), rpc); });
+        [this, rpc = rpcs_[i].get()](auto&& s) { VectorDeleteRpcCallback(std::forward<decltype(s)>(s), rpc); });
   }
 }
 
-void VectorAddTask::VectorAddRpcCallback(const Status& status, VectorAddRpc* rpc) {
+void VectorDeleteTask::VectorDeleteRpcCallback(const Status& status, VectorDeleteRpc* rpc) {
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "rpc: " << rpc->Method() << " send to region: " << rpc->Request()->context().region_id()
                        << " fail: " << status.ToString();
@@ -132,8 +123,10 @@ void VectorAddTask::VectorAddRpcCallback(const Status& status, VectorAddRpc* rpc
     }
   } else {
     std::unique_lock<std::shared_mutex> w(rw_lock_);
-    for (const auto& vector : rpc->Request()->vectors()) {
-      vector_id_to_idx_.erase(vector.id());
+    CHECK_EQ(rpc->Request()->ids_size(), rpc->Response()->key_states_size());
+    for (auto i = 0; i < rpc->Response()->key_states_size(); i++) {
+      int64_t id = rpc->Request()->ids(i);
+      out_result_.push_back({id, rpc->Response()->key_states(i)});
     }
   }
 
