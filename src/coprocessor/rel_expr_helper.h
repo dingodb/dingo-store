@@ -18,6 +18,7 @@
 #include <serial/schema/base_schema.h>
 
 #include <any>
+#include <deque>  // IWYU pragma: keep
 #include <memory>
 #include <vector>
 
@@ -33,12 +34,15 @@ namespace dingodb {
 #undef TEST_COPROCESSOR_V2_MOCK
 
 #if defined(TEST_COPROCESSOR_V2_MOCK)
+
 namespace rel::mock {
 
 class RelRunner {
  public:
   RelRunner() = default;
   virtual ~RelRunner() = default;
+
+  RelRunner& operator=(const RelRunner&) = default;
 
   const expr::Byte* Decode(const expr::Byte* /*code*/, size_t /*len*/) { return nullptr; }
 

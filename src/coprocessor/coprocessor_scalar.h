@@ -56,6 +56,9 @@ class CoprocessorScalar : public CoprocessorV2 {
  private:
   butil::Status TransToAnyRecord(const pb::common::VectorScalardata& scalar_data,
                                  std::vector<std::any>& original_record);  // NOLINT
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_filter_scalar_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_filter_scalar_total_num;
+  static bvar::LatencyRecorder coprocessor_v2_filter_scalar_latency;
 };
 
 }  // namespace dingodb

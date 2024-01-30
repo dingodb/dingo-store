@@ -60,20 +60,20 @@ class ScanHandler;
 
 class ScanContext {
  public:
-  ScanContext();
-  ~ScanContext();
+  explicit ScanContext(bvar::LatencyRecorder* scan_latency);
+  virtual ~ScanContext();
 
   ScanContext(const ScanContext& rhs) = delete;
   ScanContext& operator=(const ScanContext& rhs) = delete;
   ScanContext(ScanContext&& rhs) = delete;
   ScanContext& operator=(ScanContext&& rhs) = delete;
 
-  void Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server);
+  virtual void Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server);
 
-  butil::Status Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine, const std::string& cf_name);
+  virtual butil::Status Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine, const std::string& cf_name);
 
   // Is it possible to delete this object
-  bool IsRecyclable();
+  virtual bool IsRecyclable();
 
   static const char* GetScanState(ScanState state);
 
@@ -139,6 +139,30 @@ class ScanContext {
 
   // kv count per transfer specified by the server
   int64_t max_fetch_cnt_by_server_;
+
+  bvar::LatencyRecorder* scan_latency_;
+  BvarLatencyGuard bvar_guard_;
+};
+
+class ScanContextV1 : public ScanContext {
+ public:
+  explicit ScanContextV1(bvar::LatencyRecorder* scan_latency);
+  ~ScanContextV1() override;
+
+  static bvar::LatencyRecorder* GetScanLatency();
+
+ private:
+  static bvar::LatencyRecorder scan_context_v1_latency;
+};
+class ScanContextV2 : public ScanContext {
+ public:
+  explicit ScanContextV2(bvar::LatencyRecorder* scan_latency);
+  ~ScanContextV2() override;
+
+  static bvar::LatencyRecorder* GetScanLatency();
+
+ private:
+  static bvar::LatencyRecorder scan_context_v2_latency;
 };
 
 class ScanHandler {

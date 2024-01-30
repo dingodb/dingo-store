@@ -955,6 +955,8 @@ TEST_F(ScanTest, KvDeleteRange) {
       std::cout << kv.key() << ":" << kv.value() << '\n';
     }
   }
+
+  DeleteScan();
 }
 
 }  // namespace dingodb

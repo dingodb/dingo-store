@@ -24,8 +24,9 @@
 
 #include "butil/status.h"
 #include "coprocessor/raw_coprocessor.h"
+#include "coprocessor/rel_expr_helper.h"  // IWYU pragma: keep
 #include "engine/iterator.h"
-#include "libexpr/src/rel/rel_runner.h"
+#include "libexpr/src/rel/rel_runner.h"  // IWYU pragma: keep
 #include "proto/common.pb.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
@@ -96,6 +97,21 @@ class CoprocessorV2 : public RawCoprocessor {
 #else
   std::shared_ptr<rel::RelRunner> rel_runner_;  // NOLINT
 #endif
+
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_object_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_object_total_num;
+  static bvar::LatencyRecorder coprocessor_v2_latency;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_execute_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_execute_total_num;
+  static bvar::LatencyRecorder coprocessor_v2_execute_latency;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_execute_txn_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_execute_txn_total_num;
+  static bvar::LatencyRecorder coprocessor_v2_execute_txn_latency;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_filter_running_num;
+  static bvar::Adder<uint64_t> bvar_coprocessor_v2_filter_total_num;
+  static bvar::LatencyRecorder coprocessor_v2_filter_latency;
+
+  BvarLatencyGuard bvar_guard_for_coprocessor_v2_latency_;  // NOLINT
 };
 
 }  // namespace dingodb

@@ -2067,6 +2067,9 @@ TEST_F(CoprocessorTestV2, FilterScalarDisorder) {
   }
 }
 
-TEST_F(CoprocessorTestV2, KvDeleteRangeDisorder) { DeleteRange(); }
+TEST_F(CoprocessorTestV2, KvDeleteRangeDisorder) {
+    DeleteRange();
+    coprocessor.reset();
+    coprocessor_scalar.reset(); }
 
 }  // namespace dingodb

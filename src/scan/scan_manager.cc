@@ -18,7 +18,6 @@
 #include "butil/guid.h"
 #include "common/constant.h"
 #include "common/logging.h"
-#include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 
 namespace dingodb {
@@ -53,7 +52,9 @@ std::shared_ptr<ScanContext> RawScanManager::FindScan(int64_t /*scan_id*/) { ret
 void RawScanManager::DeleteScan(int64_t scan_id) {}
 void RawScanManager::TryDeleteScan(int64_t scan_id) {}
 
-ScanManager::ScanManager() = default;
+ScanManager::ScanManager()
+    : bvar_scan_v1_object_running_num_("dingo_scan_v1_object_running_num"),
+      bvar_scan_v1_object_total_num_("dingo_scan_v1_object_total_num") {}
 ScanManager::~ScanManager() {
   alive_scans_.clear();
   waiting_destroyed_scans_.clear();
@@ -109,9 +110,11 @@ std::shared_ptr<ScanContext> ScanManager::CreateScan(std::string* scan_id) {
     }
   }
 
-  auto scan = std::make_shared<ScanContext>();
+  auto scan = std::make_shared<ScanContextV1>(ScanContextV1::GetScanLatency());
   scan->Init(timeout_ms, max_bytes_rpc, max_fetch_cnt_by_server);
   alive_scans_[*scan_id] = scan;
+  bvar_scan_v1_object_running_num_ << 1;
+  bvar_scan_v1_object_total_num_ << 1;
 
   return scan;
 }
@@ -132,6 +135,7 @@ void ScanManager::DeleteScan(const std::string& scan_id) {
     // free memory directly
     iter->second.reset();
     alive_scans_.erase(iter);
+    bvar_scan_v1_object_running_num_ << -1;
     return;
   }
 }
@@ -144,6 +148,7 @@ void ScanManager::TryDeleteScan(const std::string& scan_id) {
       // free memory directly
       iter->second.reset();
       alive_scans_.erase(iter);
+      bvar_scan_v1_object_running_num_ << -1;
     }
   }
 }
@@ -166,6 +171,7 @@ void ScanManager::RegularCleaningHandler(void*) {
     if (iter->second->IsRecyclable()) {
       manager.waiting_destroyed_scans_[iter->first] = iter->second;
       manager.alive_scans_.erase(iter++);
+      manager.bvar_scan_v1_object_running_num_ << -1;
     } else {
       iter++;
     }
@@ -173,7 +179,9 @@ void ScanManager::RegularCleaningHandler(void*) {
   manager.waiting_destroyed_scans_.clear();
 }
 
-ScanManagerV2::ScanManagerV2() = default;
+ScanManagerV2::ScanManagerV2()
+    : bvar_scan_v2_object_running_num_("dingo_scan_v2_object_running_num"),
+      bvar_scan_v2_object_total_num_("dingo_scan_v2_object_total_num") {}
 ScanManagerV2::~ScanManagerV2() {
   alive_scans_.clear();
   waiting_destroyed_scans_.clear();
@@ -223,9 +231,11 @@ std::shared_ptr<ScanContext> ScanManagerV2::CreateScan(int64_t scan_id) {
     return nullptr;
   }
 
-  auto scan = std::make_shared<ScanContext>();
+  auto scan = std::make_shared<ScanContextV2>(ScanContextV2::GetScanLatency());
   scan->Init(timeout_ms, max_bytes_rpc, max_fetch_cnt_by_server);
   alive_scans_[scan_id] = scan;
+  bvar_scan_v2_object_running_num_ << 1;
+  bvar_scan_v2_object_total_num_ << 1;
 
   return scan;
 }
@@ -246,6 +256,7 @@ void ScanManagerV2::DeleteScan(int64_t scan_id) {
     // free memory directly
     iter->second.reset();
     alive_scans_.erase(iter);
+    bvar_scan_v2_object_running_num_ << -1;
     return;
   }
 }
@@ -258,6 +269,7 @@ void ScanManagerV2::TryDeleteScan(int64_t scan_id) {
       // free memory directly
       iter->second.reset();
       alive_scans_.erase(iter);
+      bvar_scan_v2_object_running_num_ << -1;
     }
   }
 }
@@ -280,6 +292,7 @@ void ScanManagerV2::RegularCleaningHandler(void* /*arg*/) {
     if (iter->second->IsRecyclable()) {
       manager.waiting_destroyed_scans_[iter->first] = iter->second;
       manager.alive_scans_.erase(iter++);
+      manager.bvar_scan_v2_object_running_num_ << -1;
     } else {
       iter++;
     }

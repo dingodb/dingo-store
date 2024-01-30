@@ -36,7 +36,20 @@
 
 namespace dingodb {
 
-Coprocessor::Coprocessor() : enable_expression_(true), end_of_group_by_(true) {}
+bvar::Adder<uint64_t> Coprocessor::bvar_coprocessor_v1_object_running_num("dingo_coprocessor_v1_object_running_num");
+bvar::Adder<uint64_t> Coprocessor::bvar_coprocessor_v1_object_total_num("dingo_coprocessor_v1_object_total_num");
+bvar::LatencyRecorder Coprocessor::coprocessor_v1_latency("dingo_coprocessor_v1_latency");
+bvar::Adder<uint64_t> Coprocessor::bvar_coprocessor_v1_execute_running_num("dingo_coprocessor_v1_execute_running_num");
+bvar::Adder<uint64_t> Coprocessor::bvar_coprocessor_v1_execute_total_num("dingo_coprocessor_v1_execute_total_num");
+bvar::LatencyRecorder Coprocessor::coprocessor_v1_execute_latency("dingo_coprocessor_v1_execute_latency");
+
+Coprocessor::Coprocessor()
+    : enable_expression_(true),
+      end_of_group_by_(true),
+      bvar_guard_for_coprocessor_v1_latency_(&coprocessor_v1_latency) {
+  bvar_coprocessor_v1_object_running_num << 1;
+  bvar_coprocessor_v1_object_total_num << 1;
+}
 Coprocessor::~Coprocessor() { Close(); }
 
 butil::Status Coprocessor::Open(const std::any& coprocessor) {
@@ -206,6 +219,10 @@ butil::Status Coprocessor::Open(const std::any& coprocessor) {
 
 butil::Status Coprocessor::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                    std::vector<pb::common::KeyValue>* kvs, bool& /*has_more*/) {
+  BvarLatencyGuard bvar_guard(&coprocessor_v1_execute_latency);
+  Coprocessor::bvar_coprocessor_v1_execute_running_num << 1;
+  Coprocessor::bvar_coprocessor_v1_execute_total_num << 1;
+  ON_SCOPE_EXIT([&]() { Coprocessor::bvar_coprocessor_v1_execute_running_num << -1; });
   DINGO_LOG(DEBUG) << fmt::format("Coprocessor::Execute Enter");
   ScanFilter scan_filter = ScanFilter(key_only, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;
@@ -640,6 +657,8 @@ void Coprocessor::Close() {
   if (result_serial_schemas_sorted_) {
     result_serial_schemas_sorted_.reset();
   }
+
+  bvar_coprocessor_v1_object_running_num << -1;
 }
 
 butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& coprocessor) {
