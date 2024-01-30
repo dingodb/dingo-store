@@ -96,6 +96,8 @@ dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
     return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
   } else if (engine_name == "bdb") {
     return dingodb::pb::common::RawEngine::RAW_ENG_BDB;
+  } else if (engine_name == "xdp") {
+    return dingodb::pb::common::RawEngine::RAW_ENG_XDPROCKS;
   } else {
     DINGO_LOG(FATAL) << "raw_engine_name is illegal, please input -raw-engine=[rocksdb, bdb]";
   }
@@ -1115,6 +1117,13 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   //   return;
   // }
 
+  if (FLAGS_raw_engine != "rocksdb" && FLAGS_raw_engine != "bdb" && FLAGS_raw_engine != "xdp") {
+    DINGO_LOG(ERROR) << "raw_engine must be rocksdb, bdb or xdp";
+    return;
+  }
+
+  request.set_raw_engine(GetRawEngine(FLAGS_raw_engine));
+
   if (FLAGS_vector_index_type.empty()) {
     DINGO_LOG(WARNING) << "vector_index_type is empty, so create a store region";
     if (FLAGS_start_key.empty()) {
@@ -1161,11 +1170,6 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     }
     request.set_part_id(FLAGS_part_id);
 
-    // if (FLAGS_raw_engine != "rocksdb" && FLAGS_raw_engine != "bdb") {
-    //   DINGO_LOG(ERROR) << "raw_engine must be rocksdb or bdb";
-    //   return;
-    // }
-
     std::string start_key;
     std::string end_key;
 
@@ -1184,8 +1188,6 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
     request.mutable_range()->set_start_key(start_key);
     request.mutable_range()->set_end_key(end_key);
-
-    // request.set_raw_engine(GetRawEngine(FLAGS_raw_engine));
 
     auto* vector_index_parameter = request.mutable_index_parameter()->mutable_vector_index_parameter();
     if (FLAGS_vector_index_type == "hnsw") {
