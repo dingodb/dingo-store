@@ -23,4 +23,6 @@ public interface Store {
     public int storeType();
     public Location serverLocation();
     public Location raftLocation();
+
+    public int storeState();
 }
