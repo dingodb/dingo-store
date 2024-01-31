@@ -4446,6 +4446,14 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_common_mem_map_size(common_mem_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.common_mem_map_size());
   }
+  {
+    int64_t meta_watch_count = meta_watch_node_map_.Size();
+    memory_info.set_meta_watch_count(meta_watch_count);
+  }
+  {
+    int64_t meta_event_count = meta_event_map_.Size();
+    memory_info.set_meta_event_count(meta_event_count);
+  }
 }
 
 int CoordinatorControl::GetStoreOperation(int64_t store_id, pb::coordinator::StoreOperation& store_operation) {
