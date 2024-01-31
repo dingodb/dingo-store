@@ -864,31 +864,51 @@ enum MetaEventType {
 message MetaEventSchema {
   int64 id = 1;
   string name = 2;
+
+  // the revision is the version of the schema
   int64 revision = 3;
 }
 
+// the revision of table is inside the definition
 message MetaEventTable {
+  // table id, this the table_id of the table
   int64 id = 1;
   TableDefinition definition = 2;
   int64 schema_id = 3;
+
+  // for a table, the parent_table_id is always 0, sdk could ignore this field
   int64 parent_table_id = 4;
 }
 
+// the revision of index is inside the definition
 message MetaEventIndex {
+  // index id, this the index_id of the index
   int64 id = 1;
   TableDefinition definition = 2;
   int64 schema_id = 3;
+
+  // if the index is belongs to a table ,the parent_table_id is the table_id of the parent table.
+  // if this field is zero, the index should be create by create index, such as c++ sdk or python sdk.
   int64 parent_table_id = 4;
 }
 
+// the revision of table_index is the version of the table_index
 message MetaEventTableIndex {
+  // table_index id, this the table_id of the table_index
   int64 id = 1;
+
+  // the table_ids is the indexes of this table_index
   repeated DingoCommonId table_ids = 2;
   int64 revision = 3;
 }
 
+// the revision of region is inside the definition
+// if the region's epoch is changed, such as split/merge, the will be a region update event.
+// the sdk should check if the region's version is changed, and check if the revision in the definition newer than the
+// old one in the sdk's cache. if region's epoch change, the region's range may change, the sdk should update the range
+// distribution.
 message MetaEventRegion {
-  // store info
+  // region id
   int64 id = 1;
   // region conf version & version
   int64 epoch = 2;
@@ -919,9 +939,9 @@ message WatchRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   // request_union is a request to either create a new watcher or cancel an existing watcher.
   oneof request_union {
-    WatchCreateRequest create_request = 2;      // NOT IMPLEMENTED
-    WatchCancelRequest cancel_request = 3;      // NOT IMPLEMENTED
-    WatchProgressRequest progress_request = 4;  // NOT IMPLEMENTED
+    WatchCreateRequest create_request = 2;
+    WatchCancelRequest cancel_request = 3;
+    WatchProgressRequest progress_request = 4;
   }
 }
 
@@ -929,10 +949,11 @@ message WatchCreateRequest {
   // start_revision is an optional revision to watch from (inclusive). No start_revision is "now".
   int64 start_revision = 1;
 
-  // the event_types at server side before it sends back to the watcher.
+  // the event_types than client want to get from coordinator
   repeated MetaEventType event_types = 2;
 
   // If watch_id is provided and non-zero, it will be assigned to this watcher.
+  // For Executor, this field can be set to 0 to let coordinator assign a new ID.
   // Since creating a watcher in coordinator is not a synchronous operation,
   // this can be used ensure that ordering is correct when creating multiple
   // watchers on the same stream. Creating a watcher with an ID already in
@@ -948,6 +969,7 @@ message WatchCancelRequest {
 // Requests the a watch stream progress status be sent in the watch response stream as soon as
 // possible.
 message WatchProgressRequest {
+  // the watch_id is the watcher id to request progress for.
   int64 watch_id = 1;
 }
 
@@ -975,11 +997,15 @@ message WatchResponse {
   //
   // The client should treat the watcher as canceled and should not try to create any
   // watcher with the same start_revision again.
-  int64 compact_revision = 7;
+  int64 compact_revision = 7;  // NOT IMPLEMENTED
 
   // cancel_reason indicates the reason for canceling the watcher.
   string cancel_reason = 8;
 
+  // the events may be empty or more than one, the client should handle the events
+  // if the events is empty, this means the response may be a probe response
+  // client can ignore the response if the events is empty, and continue to progress watch until
+  // the watch_id is canceled ( EWATCH_NOT_EXIST will be returned if the watch_id is canceled)
   repeated MetaEvent events = 11;
 }
 
@@ -990,12 +1016,12 @@ message ListWatchRequest {
 
 message WatchNode {
   int64 watch_id = 3;
-  int64 start_revision = 4;
-  int64 watched_revision = 5;
-  int64 is_watching = 6;
+  int64 start_revision = 4;    // the start revision of this watch_id want to watch
+  int64 watched_revision = 5;  // the last revision than coordinator pushed back to this watch_id
+  int64 is_watching = 6;       // the count that how many client is watching this watch_id
   repeated MetaEventType event_types = 7;
-  repeated MetaEvent pending_events = 8;
-  int64 last_send_timestamp_ms = 9;
+  repeated MetaEvent pending_events = 8;  // the pending events that coordinator want to push to this watch_id
+  int64 last_send_timestamp_ms = 9;       // the last send timestamp in ms
 }
 
 message ListWatchResponse {
@@ -1208,6 +1234,7 @@ service MetaService {
   // client need to do loop rpc calls for continuous watch until it encounters an error.
   rpc Watch(WatchRequest) returns (WatchResponse) {}
 
+  // List all or one of the watch node info
   rpc ListWatch(ListWatchRequest) returns (ListWatchResponse) {}
 
   // Operation about Metrics

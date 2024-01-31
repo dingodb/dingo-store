@@ -1030,11 +1030,20 @@ class CoordinatorControl : public MetaControl {
   CoordinatorBvarMetricsTable coordinator_bvar_metrics_table_;
   CoordinatorBvarMetricsIndex coordinator_bvar_metrics_index_;
 
-  // meta watch
+  // for meta watch
+  // meta_event_map_: all meta event stores in this map, ApplyMetaIncrement will generate events and async write
+  // into this map
   DingoSafeStdMap<int64_t, std::shared_ptr<std::vector<pb::meta::MetaEvent>>> meta_event_map_;
 
-  DingoSafeStdMap<int64_t, std::shared_ptr<MetaWatchNode>> watch_node_map_;
+  // meta_watch_node_map_: all meta watch node stores in this map, watch create request will generate watch node and
+  // insert into this map. Also the progress watch request will update the watch node in this map, the
+  // google::protobuf::Closure and response ptr are stored in this map and will be used when the watch event is ready to
+  // send
+  DingoSafeStdMap<int64_t, std::shared_ptr<MetaWatchNode>> meta_watch_node_map_;
 
+  // meta_watch_bitmap_: this is a bitmap to store the watch event type, the watch create request will set the
+  // corresponding bit in this bitmap, and ApplyMetaIncrement will check if the bitset is matched with the event type,
+  // if matched, will push_back the meta revision into the watch node's meta revision list
   bthread_mutex_t meta_watch_bitmap_mutex_;
   std::map<int64_t, std::bitset<WATCH_BITSET_SIZE>> meta_watch_bitmap_;
 

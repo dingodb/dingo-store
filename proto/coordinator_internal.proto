@@ -87,7 +87,7 @@ message CoordinatorInternal {
 
 // RegionInternal
 message RegionInternal {
-  // store info
+  // region id
   int64 id = 1;
   // region conf version & version
   int64 epoch = 2;

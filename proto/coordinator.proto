@@ -351,6 +351,10 @@ message CoordinatorMemoryInfo {
 
   int64 kv_watch_count = 97;
 
+  // meta watch
+  int64 meta_watch_count = 101;
+  int64 meta_event_count = 102;
+
   // auto increment
   int64 auto_increment_map_count = 111;
   int64 auto_increment_map_size = 112;

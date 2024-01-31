@@ -37,6 +37,7 @@ namespace dingodb {
 
 DEFINE_int64(meta_watch_outdate_time_ms, 300 * 1000, "meta watch outdate time in ms");
 DEFINE_int64(meta_watch_max_event_list_count, 10000, "meta watch max event list count");
+DEFINE_int64(meta_watch_max_watchers, 40000, "meta watch max watchers");
 
 butil::Status CoordinatorControl::MetaWatchGetEventsForRevisions(const std::vector<int64_t> &event_revisions,
                                                                  pb::meta::WatchResponse &event_response) {
@@ -109,7 +110,7 @@ butil::Status CoordinatorControl::MetaWatchProgress(const pb::meta::WatchRequest
   // find watch node
   auto watch_id = request->progress_request().watch_id();
   std::shared_ptr<MetaWatchNode> node;
-  auto ret = watch_node_map_.Get(watch_id, node);
+  auto ret = meta_watch_node_map_.Get(watch_id, node);
   if (ret < 0) {
     ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EWATCH_NOT_EXIST, "Get watch node failed");
     return butil::Status(pb::error::Errno::EWATCH_NOT_EXIST, "Get watch node failed");
@@ -185,17 +186,25 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "event_types size is too large, the max is 64");
   }
 
-  if (request->create_request().start_revision() <= 0) {
+  if (request->create_request().start_revision() < 0) {
     ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EILLEGAL_PARAMTETERS,
-                            "start_revision is less than 0 or equal to 0");
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "start_revision is less than 0 or equal to 0");
+                            "start_revision is less than 0");
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "start_revision is less than 0");
+  }
+
+  if (meta_watch_node_map_.Size() > FLAGS_meta_watch_max_watchers) {
+    ServiceHelper::SetError(
+        response->mutable_error(), pb::error::Errno::EINTERNAL,
+        "watch_node_map_ size is too large, the max is " + std::to_string(FLAGS_meta_watch_max_watchers));
+    return butil::Status(pb::error::Errno::EINTERNAL, "watch_node_map_ size is too large, the max is " +
+                                                          std::to_string(FLAGS_meta_watch_max_watchers));
   }
 
   auto watch_id = request->create_request().watch_id();
 
   if (watch_id != 0) {
     std::shared_ptr<MetaWatchNode> node;
-    auto ret = watch_node_map_.Get(watch_id, node);
+    auto ret = meta_watch_node_map_.Get(watch_id, node);
     if (ret > 0) {
       return butil::Status(pb::error::Errno::EWATCH_EXIST, "watch_id is already exists, cannot create again");
     } else if (node != nullptr) {
@@ -216,7 +225,7 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
   auto watch_bitset = GenWatchBitSet(request->create_request());
   node->watch_bitset = watch_bitset;
 
-  watch_node_map_.Put(watch_id, node);
+  meta_watch_node_map_.Put(watch_id, node);
   {
     BAIDU_SCOPED_LOCK(meta_watch_bitmap_mutex_);
     meta_watch_bitmap_.insert_or_assign(watch_id, watch_bitset);
@@ -237,13 +246,13 @@ butil::Status CoordinatorControl::MetaWatchCancel(int64_t watch_id) {
   }
 
   std::shared_ptr<MetaWatchNode> node;
-  auto ret = watch_node_map_.Get(watch_id, node);
+  auto ret = meta_watch_node_map_.Get(watch_id, node);
   if (ret < 0) {
     return butil::Status(pb::error::Errno::EWATCH_NOT_EXIST, "Get watch node failed");
   } else if (node == nullptr) {
     return butil::Status(pb::error::Errno::EINTERNAL, "Get watch node failed, get nullptr");
   }
-  watch_node_map_.Erase(watch_id);
+  meta_watch_node_map_.Erase(watch_id);
 
   std::vector<MetaWatchInstance> watch_instances;
   {
@@ -271,7 +280,7 @@ butil::Status CoordinatorControl::MetaWatchCancel(int64_t watch_id) {
 butil::Status CoordinatorControl::ListWatch(int64_t watch_id, pb::meta::ListWatchResponse *response) {
   if (watch_id == 0) {
     std::map<int64_t, std::shared_ptr<MetaWatchNode>> temp_watch_node_map;
-    watch_node_map_.GetRawMapCopy(temp_watch_node_map);
+    meta_watch_node_map_.GetRawMapCopy(temp_watch_node_map);
 
     if (temp_watch_node_map.empty()) {
       return butil::Status::OK();
@@ -313,7 +322,7 @@ butil::Status CoordinatorControl::ListWatch(int64_t watch_id, pb::meta::ListWatc
     }
   } else {
     std::shared_ptr<MetaWatchNode> node;
-    auto ret = watch_node_map_.Get(watch_id, node);
+    auto ret = meta_watch_node_map_.Get(watch_id, node);
     if (ret < 0) {
       return butil::Status(pb::error::Errno::EWATCH_NOT_EXIST, "Get watch node failed");
     } else if (node == nullptr) {
@@ -395,7 +404,7 @@ void CoordinatorControl::AddEventList(int64_t meta_revision,
       auto bit_set_result = bit_set & watch_bitset;
       if (!bit_set_result.none()) {
         std::shared_ptr<MetaWatchNode> node;
-        auto ret = watch_node_map_.Get(watch_id, node);
+        auto ret = meta_watch_node_map_.Get(watch_id, node);
         if (ret < 0) {
           DINGO_LOG(WARNING) << "Get watch node failed, watch_id: " << watch_id;
           continue;
@@ -457,7 +466,7 @@ void CoordinatorControl::RecycleOutdatedMetaWatcher() {
   {
     for (const auto &[watch_id, bit_set] : temp_meta_watch_bitmap) {
       std::shared_ptr<MetaWatchNode> node;
-      auto ret = watch_node_map_.Get(watch_id, node);
+      auto ret = meta_watch_node_map_.Get(watch_id, node);
       if (ret < 0) {
         DINGO_LOG(WARNING) << "Get watch node failed, watch_id: " << watch_id;
         continue;

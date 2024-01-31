@@ -23,7 +23,7 @@
 #include "fmt/core.h"
 #include "server/service_helper.h"
 
-class CoordinatorTest : public testing::Test {
+class HelperTest : public testing::Test {
  protected:
   void SetUp() override {}
   void TearDown() override {}
@@ -37,7 +37,7 @@ class CoordinatorTest : public testing::Test {
 //   std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << '\n';
 // }
 
-TEST_F(CoordinatorTest, FormatTime) {
+TEST_F(HelperTest, FormatTime) {
   auto format_time = dingodb::Helper::FormatTime(1681970908, "%Y-%m-%d %H:%M:%S");
   std::cout << format_time << '\n';
 
@@ -51,14 +51,14 @@ TEST_F(CoordinatorTest, FormatTime) {
   std::cout << dingodb::Helper::GetNowFormatMsTime();
 }
 
-TEST_F(CoordinatorTest, TimestampNs) {
+TEST_F(HelperTest, TimestampNs) {
   std::shared_ptr<int> abc;
   if (abc == nullptr) {
     std::cout << dingodb::Helper::TimestampNs() << '\n';
   }
 }
 
-TEST_F(CoordinatorTest, TransformRangeWithOptions) {
+TEST_F(HelperTest, TransformRangeWithOptions) {
   dingodb::pb::common::Range region_range;
   char start_key[] = {0x61, 0x64};
   char end_key[] = {0x78, 0x65};
@@ -352,17 +352,17 @@ TEST_F(CoordinatorTest, TransformRangeWithOptions) {
   }
 }
 
-TEST_F(CoordinatorTest, ToUpper) {
+TEST_F(HelperTest, ToUpper) {
   std::string value = "hello world";
   EXPECT_EQ("HELLO WORLD", dingodb::Helper::ToUpper(value));
 }
 
-TEST_F(CoordinatorTest, ToLower) {
+TEST_F(HelperTest, ToLower) {
   std::string value = "HELLO WORLD";
   EXPECT_EQ("hello world", dingodb::Helper::ToLower(value));
 }
 
-TEST_F(CoordinatorTest, TraverseDirectory) {
+TEST_F(HelperTest, TraverseDirectory) {
   std::string path = "/tmp/unit_test_traverse_directory";
 
   std::filesystem::create_directories(path);
@@ -381,7 +381,7 @@ TEST_F(CoordinatorTest, TraverseDirectory) {
   EXPECT_EQ(2, filenames.size());
 }
 
-TEST_F(CoordinatorTest, GetSystemMemoryInfo) {
+TEST_F(HelperTest, GetSystemMemoryInfo) {
   std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetSystemMemoryInfo(output);
   EXPECT_EQ(true, ret);
@@ -391,7 +391,7 @@ TEST_F(CoordinatorTest, GetSystemMemoryInfo) {
   }
 }
 
-TEST_F(CoordinatorTest, GetSystemCpuUsage) {
+TEST_F(HelperTest, GetSystemCpuUsage) {
   std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetSystemCpuUsage(output);
   EXPECT_EQ(true, ret);
@@ -401,7 +401,7 @@ TEST_F(CoordinatorTest, GetSystemCpuUsage) {
   }
 }
 
-TEST_F(CoordinatorTest, GetSystemDiskIoUtil) {
+TEST_F(HelperTest, GetSystemDiskIoUtil) {
   GTEST_SKIP() << "Skip GetSystemDiskIoUtil...";
 
   std::map<std::string, int64_t> output;
@@ -414,7 +414,7 @@ TEST_F(CoordinatorTest, GetSystemDiskIoUtil) {
   }
 }
 
-TEST_F(CoordinatorTest, GetProcessMemoryInfo) {
+TEST_F(HelperTest, GetProcessMemoryInfo) {
   std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetProcessMemoryInfo(output);
   EXPECT_EQ(true, ret);
@@ -430,7 +430,7 @@ TEST_F(CoordinatorTest, GetProcessMemoryInfo) {
 //   EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
 // }
 
-TEST_F(CoordinatorTest, PaddingUserKey) {
+TEST_F(HelperTest, PaddingUserKey) {
   std::string a = "abc";
   std::string pa = dingodb::Helper::HexToString("6162630000000000FA");
 
@@ -456,7 +456,7 @@ TEST_F(CoordinatorTest, PaddingUserKey) {
   EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
 }
 
-TEST_F(CoordinatorTest, IsContinuous) {
+TEST_F(HelperTest, IsContinuous) {
   // Test with an empty set
   std::set<int64_t> empty_set;
   EXPECT_TRUE(dingodb::Helper::IsContinuous(empty_set));
@@ -502,7 +502,7 @@ TEST_F(CoordinatorTest, IsContinuous) {
   EXPECT_FALSE(dingodb::Helper::IsContinuous(mixed_non_continuous_set));
 }
 
-TEST_F(CoordinatorTest, IsConflictRange) {
+TEST_F(HelperTest, IsConflictRange) {
   // Test with two ranges that do not intersect
   dingodb::pb::common::Range range1;
   range1.set_start_key("hello");
