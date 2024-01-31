@@ -310,6 +310,8 @@ message RegionDefinition {
   int64 part_id = 14;  // the partition is of this region, each partion contains one or more regions
 
   IndexParameter index_parameter = 20;
+
+  int64 revision = 50;
 }
 
 enum RegionType {
