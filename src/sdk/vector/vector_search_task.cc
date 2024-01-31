@@ -142,6 +142,11 @@ void VectorSearchTask::ConstructResultUnlocked() {
     SearchResult search(std::move(tmp));
     search.vector_datas = std::move(vec_distance);
 
+    if (!search_param_.enable_range_search && search_param_.topk > 0 &&
+        search_param_.topk < search.vector_datas.size()) {
+      search.vector_datas.resize(search_param_.topk);
+    }
+
     out_result_.push_back(std::move(search));
   }
 }
