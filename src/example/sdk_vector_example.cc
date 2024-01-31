@@ -130,14 +130,16 @@ static void PrepareVectorClient() {
 static void VectorAdd(bool use_index_name = false) {
   std::vector<dingodb::sdk::VectorWithId> vectors;
 
+  float delta = 0.1;
   for (const auto& id : g_range_partition_seperator_ids) {
     dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
-    tmp_vector.float_values.push_back(1.0);
-    tmp_vector.float_values.push_back(2.0);
+    tmp_vector.float_values.push_back(1.0 + delta);
+    tmp_vector.float_values.push_back(2.0 + delta);
     dingodb::sdk::VectorWithId tmp(id, std::move(tmp_vector));
     vectors.push_back(std::move(tmp));
 
     g_vector_ids.push_back(id);
+    delta++;
   }
   Status add;
   if (use_index_name) {
@@ -162,7 +164,7 @@ static void VectorSearch(bool use_index_name = false) {
   }
 
   dingodb::sdk::SearchParameter param;
-  param.topk = 10;
+  param.topk = 2;
   // param.use_brute_force = true;
   param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
 
@@ -177,6 +179,11 @@ static void VectorSearch(bool use_index_name = false) {
   DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
   for (const auto& r : result) {
     DINGO_LOG(INFO) << "vector search result:" << dingodb::sdk::DumpToString(r);
+  }
+
+  if (!result.empty()) {
+    CHECK_EQ(result.size(), 1);
+    CHECK_EQ(result[0].vector_datas.size(), 2);
   }
 }
 
