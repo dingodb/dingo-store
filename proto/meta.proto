@@ -149,6 +149,8 @@ message TableDefinition {
   string comment = 60;
   string table_type = 61;
   string row_format = 62;
+
+  int64 revision = 100;
 }
 
 // IndexDefinition is for vector/scalar index
@@ -161,6 +163,8 @@ message IndexDefinition {
   bool with_auto_incrment = 6;  // if true, the index create a auto increment
   int64 auto_increment = 7;     // auto increment start id
   dingodb.pb.common.Engine engine = 8;
+
+  int64 revision = 20;
 }
 
 message RegionStatus {
@@ -828,6 +832,178 @@ message HelloResponse {
   dingodb.pb.coordinator.CoordinatorMemoryInfo memory_info = 3;
 }
 
+enum MetaEventType {
+  META_EVENT_NONE = 0;
+
+  // for schema
+  META_EVENT_SCHEMA_CREATE = 1;
+  META_EVENT_SCHEMA_UPDATE = 2;
+  META_EVENT_SCHEMA_DELETE = 3;
+
+  // for table, only for main table
+  META_EVENT_TABLE_CREATE = 4;
+  META_EVENT_TABLE_UPDATE = 5;
+  META_EVENT_TABLE_DELETE = 6;
+
+  // for index, both vector index and scalar index
+  META_EVENT_INDEX_CREATE = 7;
+  META_EVENT_INDEX_UPDATE = 8;
+  META_EVENT_INDEX_DELETE = 9;
+
+  // for tables with index
+  META_EVENT_TABLE_INDEX_CREATE = 10;
+  META_EVENT_TABLE_INDEX_UPDATE = 11;
+  META_EVENT_TABLE_INDEX_DELETE = 12;
+
+  // for region
+  META_EVENT_REGION_CREATE = 13;
+  META_EVENT_REGION_UPDATE = 14;
+  META_EVENT_REGION_DELETE = 15;
+}
+
+message MetaEventSchema {
+  int64 id = 1;
+  string name = 2;
+  int64 revision = 3;
+}
+
+message MetaEventTable {
+  int64 id = 1;
+  TableDefinition definition = 2;
+  int64 schema_id = 3;
+  int64 parent_table_id = 4;
+}
+
+message MetaEventIndex {
+  int64 id = 1;
+  TableDefinition definition = 2;
+  int64 schema_id = 3;
+  int64 parent_table_id = 4;
+}
+
+message MetaEventTableIndex {
+  int64 id = 1;
+  repeated DingoCommonId table_ids = 2;
+  int64 revision = 3;
+}
+
+message MetaEventRegion {
+  // store info
+  int64 id = 1;
+  // region conf version & version
+  int64 epoch = 2;
+  // region type
+  dingodb.pb.common.RegionType region_type = 3;
+  // region definition
+  dingodb.pb.common.RegionDefinition definition = 4;
+
+  dingodb.pb.common.RegionState state = 10;
+
+  // timestamp
+  int64 create_timestamp = 20;
+  int64 deleted_timestamp = 21;
+}
+
+message MetaEvent {
+  MetaEventType event_type = 1;
+  oneof event {
+    MetaEventSchema schema = 2;
+    MetaEventTable table = 3;
+    MetaEventIndex index = 4;
+    MetaEventTableIndex table_index = 5;
+    MetaEventRegion region = 6;
+  }
+}
+
+message WatchRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  // request_union is a request to either create a new watcher or cancel an existing watcher.
+  oneof request_union {
+    WatchCreateRequest create_request = 2;      // NOT IMPLEMENTED
+    WatchCancelRequest cancel_request = 3;      // NOT IMPLEMENTED
+    WatchProgressRequest progress_request = 4;  // NOT IMPLEMENTED
+  }
+}
+
+message WatchCreateRequest {
+  // start_revision is an optional revision to watch from (inclusive). No start_revision is "now".
+  int64 start_revision = 1;
+
+  // the event_types at server side before it sends back to the watcher.
+  repeated MetaEventType event_types = 2;
+
+  // If watch_id is provided and non-zero, it will be assigned to this watcher.
+  // Since creating a watcher in coordinator is not a synchronous operation,
+  // this can be used ensure that ordering is correct when creating multiple
+  // watchers on the same stream. Creating a watcher with an ID already in
+  // use on the stream will cause an error to be returned.
+  int64 watch_id = 7;
+}
+
+message WatchCancelRequest {
+  // watch_id is the watcher id to cancel so that no more events are transmitted.
+  int64 watch_id = 1;
+}
+
+// Requests the a watch stream progress status be sent in the watch response stream as soon as
+// possible.
+message WatchProgressRequest {
+  int64 watch_id = 1;
+}
+
+message WatchResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  // watch_id is the ID of the watcher that corresponds to the response.
+  int64 watch_id = 4;
+
+  // created is set to true if the response is for a create watch request.
+  // The client should record the watch_id and expect to receive events for
+  // the created watcher from the same stream.
+  // All events sent to the created watcher will attach with the same watch_id.
+  bool created = 5;
+
+  // canceled is set to true if the response is for a cancel watch request.
+  // No further events will be sent to the canceled watcher.
+  bool canceled = 6;
+
+  // compact_revision is set to the minimum index if a watcher tries to watch
+  // at a compacted index.
+  //
+  // This happens when creating a watcher at a compacted revision or the watcher cannot
+  // catch up with the progress of the key-value store.
+  //
+  // The client should treat the watcher as canceled and should not try to create any
+  // watcher with the same start_revision again.
+  int64 compact_revision = 7;
+
+  // cancel_reason indicates the reason for canceling the watcher.
+  string cancel_reason = 8;
+
+  repeated MetaEvent events = 11;
+}
+
+message ListWatchRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 watch_id = 2;
+}
+
+message WatchNode {
+  int64 watch_id = 3;
+  int64 start_revision = 4;
+  int64 watched_revision = 5;
+  int64 is_watching = 6;
+  repeated MetaEventType event_types = 7;
+  repeated MetaEvent pending_events = 8;
+  int64 last_send_timestamp_ms = 9;
+}
+
+message ListWatchResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated WatchNode watch_nodes = 3;
+}
+
 service MetaService {
   // Hello, this is for auto_increment
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -1027,6 +1203,12 @@ service MetaService {
   // DeletedIndex
   rpc GetDeletedIndex(GetDeletedIndexRequest) returns (GetDeletedIndexResponse);
   rpc CleanDeletedIndex(CleanDeletedIndexRequest) returns (CleanDeletedIndexResponse);
+
+  // Watch watches for events happening or that have happened.
+  // client need to do loop rpc calls for continuous watch until it encounters an error.
+  rpc Watch(WatchRequest) returns (WatchResponse) {}
+
+  rpc ListWatch(ListWatchRequest) returns (ListWatchResponse) {}
 
   // Operation about Metrics
 }

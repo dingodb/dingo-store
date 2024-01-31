@@ -60,6 +60,7 @@ message TableMetricsInternal {
 message TableIndexInternal {
   int64 id = 1;
   repeated dingodb.pb.meta.DingoCommonId table_ids = 2;
+  int64 revision = 3;
 }
 
 // IndexMetricsInternal is storage structure for index_metrics
@@ -74,6 +75,7 @@ message SchemaInternal {
   string name = 2;
   repeated int64 table_ids = 3;
   repeated int64 index_ids = 4;
+  int64 revision = 5;
 }
 
 // CoordinatorInteral stores coordinator info for SDK & stores.
@@ -134,6 +136,8 @@ enum IdEpochType {
 
   ID_NEXT_LEASE = 40;
   ID_NEXT_REVISION = 41;
+
+  ID_NEXT_META_WATCH = 42;
 
   ID_GC_SAFE_POINT = 50;
 }
