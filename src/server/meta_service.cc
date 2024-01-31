@@ -3379,7 +3379,6 @@ void DoMetaWatch(google::protobuf::RpcController * /*controller*/, const pb::met
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "MetaWatchProgress failed, errno: " << pb::error::Errno_Name(ret.error_code())
                        << ", errmsg: " << ret.error_str();
-      ServiceHelper::SetError(response->mutable_error(), ret.error_code(), ret.error_str());
     }
   } else if (request->has_create_request()) {
     auto ret = coordinator_control->MetaWatchCreate(request, response);
@@ -3407,8 +3406,6 @@ void DoMetaWatch(google::protobuf::RpcController * /*controller*/, const pb::met
       DINGO_LOG(INFO) << "DoMetaWatch Success, watch_id: " << watch_id;
     }
   }
-
-  DINGO_LOG(INFO) << request->ShortDebugString();
 
   DINGO_LOG(INFO) << "DoMetaWatch Success.";
 }

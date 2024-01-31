@@ -176,6 +176,12 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 // set force_read_only
 void SendUpdateForceReadOnly(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// meta watch
+void SendListWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCancelWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendProgressWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // debug
 void SendDebug();
 std::string EncodeUint64(int64_t value);

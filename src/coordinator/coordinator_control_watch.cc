@@ -72,12 +72,29 @@ butil::Status CoordinatorControl::MetaWatchGetEventsForRevisions(const std::vect
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::MetaWatchSendEvents(int64_t watch_id, const pb::meta::WatchResponse &event_response,
+butil::Status CoordinatorControl::MetaWatchSendEvents(int64_t watch_id, std::bitset<WATCH_BITSET_SIZE> watch_bitset,
+                                                      const pb::meta::WatchResponse &event_response,
                                                       pb::meta::WatchResponse *response,
                                                       google::protobuf::Closure *done) {
+  DINGO_LOG(INFO) << "MetaWatchSendEvents, watch_id: " << watch_id << ", event_size: " << event_response.events_size();
+
   brpc::ClosureGuard done_guard(done);
 
-  *response = event_response;
+  for (const auto &event : event_response.events()) {
+    if (watch_bitset.test(event.event_type())) {
+      auto *meta_event = response->add_events();
+      *meta_event = event;
+    }
+  }
+
+  if (event_response.canceled()) {
+    response->set_canceled(true);
+    response->set_cancel_reason(event_response.cancel_reason());
+  }
+
+  if (event_response.error().errcode() != 0) {
+    *response->mutable_error() = event_response.error();
+  }
 
   response->set_watch_id(watch_id);
 
@@ -94,14 +111,18 @@ butil::Status CoordinatorControl::MetaWatchProgress(const pb::meta::WatchRequest
   std::shared_ptr<MetaWatchNode> node;
   auto ret = watch_node_map_.Get(watch_id, node);
   if (ret < 0) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EWATCH_NOT_EXIST, "Get watch node failed");
     return butil::Status(pb::error::Errno::EWATCH_NOT_EXIST, "Get watch node failed");
   } else if (node == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EINTERNAL,
+                            "Get watch node failed, get nullptr");
     return butil::Status(pb::error::Errno::EINTERNAL, "Get watch node failed, get nullptr");
   }
 
   // swap pending event revisions
   std::vector<int64_t> event_revisions;
   std::vector<MetaWatchInstance> watch_instances;
+  std::bitset<WATCH_BITSET_SIZE> watch_bitset;
   {
     BAIDU_SCOPED_LOCK(node->node_mutex);
     event_revisions.swap(node->pending_event_revisions);
@@ -132,23 +153,24 @@ butil::Status CoordinatorControl::MetaWatchProgress(const pb::meta::WatchRequest
                   << ", event_size: " << event_response.events_size();
 
   // send this response to caller
-  auto ret2 = MetaWatchSendEvents(watch_id, event_response, response, nullptr);
+  auto ret2 = MetaWatchSendEvents(watch_id, node->watch_bitset, event_response, response, nullptr);
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "Send event list failed, watch_id: " << watch_id;
-    return ret2;
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EINTERNAL, "Send event list failed");
   }
 
   // send previous response to all watch_instances
   for (auto &watch_instance : watch_instances) {
-    auto ret3 = MetaWatchSendEvents(watch_id, event_response, watch_instance.response, watch_instance.done);
+    auto ret3 =
+        MetaWatchSendEvents(watch_id, node->watch_bitset, event_response, watch_instance.response, watch_instance.done);
     if (!ret3.ok()) {
       DINGO_LOG(ERROR) << "Send event list failed, watch_id: " << watch_id;
-      return ret3;
     }
   }
 
   if (event_response.canceled()) {
     DINGO_LOG(INFO) << "Watch canceled, watch_id: " << watch_id;
+    response->set_canceled(true);
     MetaWatchCancel(watch_id);
   }
 
@@ -191,15 +213,17 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
   std::shared_ptr<MetaWatchNode> node = std::make_shared<MetaWatchNode>();
   node->watch_id = watch_id;
   node->start_revision = request->create_request().start_revision();
+  auto watch_bitset = GenWatchBitSet(request->create_request());
+  node->watch_bitset = watch_bitset;
 
   watch_node_map_.Put(watch_id, node);
   {
     BAIDU_SCOPED_LOCK(meta_watch_bitmap_mutex_);
-    auto watch_bitset = GenWatchBitSet(request->create_request());
     meta_watch_bitmap_.insert_or_assign(watch_id, watch_bitset);
   }
 
   response->set_watch_id(watch_id);
+  response->set_created(true);
 
   DINGO_LOG(INFO) << "Create meta_watch success, watch_id: " << watch_id;
 
@@ -232,7 +256,8 @@ butil::Status CoordinatorControl::MetaWatchCancel(int64_t watch_id) {
   for (const auto &watch_instance : watch_instances) {
     event_response.set_canceled(true);
     event_response.set_cancel_reason("Watch canceled by coordinator");
-    auto ret = MetaWatchSendEvents(watch_id, event_response, watch_instance.response, watch_instance.done);
+    auto ret =
+        MetaWatchSendEvents(watch_id, node->watch_bitset, event_response, watch_instance.response, watch_instance.done);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "Send event list failed, watch_id: " << watch_id;
     }
@@ -259,7 +284,7 @@ butil::Status CoordinatorControl::ListWatch(int64_t watch_id, pb::meta::ListWatc
       {
         BAIDU_SCOPED_LOCK(node->node_mutex);
         watch_node->set_watch_id(watch_id);
-        watch_node->set_is_watching(node->is_watching);
+        watch_node->set_is_watching(node->watch_instances.size());
         watch_node->set_start_revision(node->start_revision);
         watch_node->set_watched_revision(node->watched_revision);
         for (const auto &event_type : node->event_types) {
@@ -301,7 +326,7 @@ butil::Status CoordinatorControl::ListWatch(int64_t watch_id, pb::meta::ListWatc
     {
       BAIDU_SCOPED_LOCK(node->node_mutex);
       watch_node->set_watch_id(watch_id);
-      watch_node->set_is_watching(node->is_watching);
+      watch_node->set_is_watching(node->watch_instances.size());
       watch_node->set_start_revision(node->start_revision);
       watch_node->set_watched_revision(node->watched_revision);
       for (const auto &event_type : node->event_types) {
@@ -383,8 +408,12 @@ void CoordinatorControl::AddEventList(int64_t meta_revision,
         std::vector<MetaWatchInstance> watch_instances;
         {
           BAIDU_SCOPED_LOCK(node->node_mutex);
+          node->watched_revision = meta_revision;
+
           if (node->watch_instances.empty()) {
-            node->pending_event_revisions.push_back(meta_revision);
+            if (node->start_revision < meta_revision) {
+              node->pending_event_revisions.push_back(meta_revision);
+            }
           } else {
             watch_instances.swap(node->watch_instances);
             node->last_send_timestamp_ms = Helper::TimestampMs();
@@ -402,7 +431,8 @@ void CoordinatorControl::AddEventList(int64_t meta_revision,
           }
 
           for (auto &watch_instance : watch_instances) {
-            auto ret = MetaWatchSendEvents(watch_id, event_response, watch_instance.response, watch_instance.done);
+            auto ret = MetaWatchSendEvents(watch_id, node->watch_bitset, event_response, watch_instance.response,
+                                           watch_instance.done);
             if (!ret.ok()) {
               DINGO_LOG(ERROR) << "Send event list failed, watch_id: " << watch_id;
             }
@@ -470,7 +500,8 @@ void CoordinatorControl::RecycleOutdatedMetaWatcher() {
                         << ", send event list to watch_instances";
 
         for (auto &watch_instance : watch_instances) {
-          auto ret = MetaWatchSendEvents(watch_id, event_response, watch_instance.response, watch_instance.done);
+          auto ret = MetaWatchSendEvents(watch_id, node->watch_bitset, event_response, watch_instance.response,
+                                         watch_instance.done);
           if (!ret.ok()) {
             DINGO_LOG(ERROR) << "Send event list failed, watch_id: " << watch_id;
           }
