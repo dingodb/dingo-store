@@ -89,9 +89,9 @@ Status VectorIndexCreator::Create(int64_t& out_index_id) {
     return Status::InvalidArgument("Missing index name");
   }
   // TODO: support hash region
-  if (data_->range_partition_seperator_ids.empty()) {
-    return Status::InvalidArgument("Missing Range Partition");
-  }
+  // if (data_->range_partition_seperator_ids.empty()) {
+  //   return Status::InvalidArgument("Missing Range Partition");
+  // }
   if (data_->version <= 0) {
     return Status::InvalidArgument("index version must greater 0");
   }

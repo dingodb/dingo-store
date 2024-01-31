@@ -163,7 +163,10 @@ include(rocksdb)
 include(bdb)
 include(brpc)
 include(braft)
-include(hdf5)
+
+if(BUILD_BENCHMARK)
+    include(hdf5)
+endif()
 
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
 message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")

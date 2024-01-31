@@ -1820,4 +1820,20 @@ bool Helper::IsContinuous(const std::set<int64_t>& numbers) {
   return true;
 }
 
+void Helper::SplitString(const std::string& str, char c, std::vector<std::string>& vec) {
+  butil::SplitString(str, c, &vec);
+}
+
+void Helper::SplitString(const std::string& str, char c, std::vector<int64_t>& vec) {
+  std::vector<std::string> strs;
+  SplitString(str, c, strs);
+  for (auto& s : strs) {
+    try {
+      vec.push_back(std::stoll(s));
+    } catch (const std::exception& e) {
+      DINGO_LOG(ERROR) << "stoll exception: " << e.what();
+    }
+  }
+}
+
 }  // namespace dingodb

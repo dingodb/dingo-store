@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -89,6 +90,7 @@ class BaseDataset : public Dataset {
   uint32_t test_row_count_{0};
 
   uint32_t dimension_{0};
+  std::mutex mutex_;
 };
 
 // sift/glove/gist/mnist is same

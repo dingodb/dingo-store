@@ -358,6 +358,9 @@ class Helper {
 
   // check if number in set is continuous
   static bool IsContinuous(const std::set<int64_t>& numbers);
+
+  static void SplitString(const std::string& str, char c, std::vector<std::string>& vec);
+  static void SplitString(const std::string& str, char c, std::vector<int64_t>& vec);
 };
 
 }  // namespace dingodb

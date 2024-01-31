@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <random>
 #include <string>
@@ -68,6 +69,8 @@ DECLARE_uint32(vector_dimension);
 DECLARE_string(vector_value_type);
 
 DEFINE_uint32(vector_put_batch_size, 512, "Vector put batch size");
+
+DEFINE_uint32(vector_arrange_concurrency, 10, "Vector arrange put concurrency");
 
 namespace dingodb {
 namespace benchmark {
@@ -522,13 +525,13 @@ bool ReadOperation::Arrange(RegionEntryPtr region_entry) {
       }
       kvs.clear();
       std::cout << '\r'
-                << fmt::format("Region({}) put data({}) progress [{}%]", FLAGS_arrange_kv_num, prefix,
+                << fmt::format("region({}) put data({}) progress [{}%]", FLAGS_arrange_kv_num, prefix,
                                i * 100 / FLAGS_arrange_kv_num)
                 << std::flush;
     }
   }
 
-  std::cout << "\r" << fmt::format("Region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
+  std::cout << "\r" << fmt::format("region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
 
   return true;
 }
@@ -625,13 +628,13 @@ bool TxnReadOperation::Arrange(RegionEntryPtr region_entry) {
       }
       kvs.clear();
       std::cout << '\r'
-                << fmt::format("Region({}) put data({}) progress [{}%]", FLAGS_arrange_kv_num, prefix,
+                << fmt::format("region({}) put data({}) progress [{}%]", FLAGS_arrange_kv_num, prefix,
                                i * 100 / FLAGS_arrange_kv_num)
                 << std::flush;
     }
   }
 
-  std::cout << "\r" << fmt::format("Region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
+  std::cout << "\r" << fmt::format("region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
 
   return true;
 }
@@ -845,53 +848,102 @@ bool VectorSearchOperation::Arrange(VectorIndexEntryPtr entry, DatasetPtr datase
 }
 
 bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
-  std::vector<sdk::VectorWithId> vector_with_ids;
-  vector_with_ids.reserve(FLAGS_vector_put_batch_size);
-  for (int i = 0; i < FLAGS_arrange_kv_num; ++i) {
-    vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_vector_arrange_concurrency);
 
-    if (vector_with_ids.size() == FLAGS_vector_put_batch_size || i + 1 == FLAGS_arrange_kv_num) {
-      auto result = VectorPut(entry, vector_with_ids);
-      if (!result.status.IsOK()) {
-        return false;
+  std::atomic<int> stop_count = 0;
+  std::atomic<uint32_t> count = 0;
+  for (int thread_no = 0; thread_no < FLAGS_vector_arrange_concurrency; ++thread_no) {
+    threads.emplace_back([this, thread_no, entry, &stop_count, &count]() {
+      std::vector<sdk::VectorWithId> vector_with_ids;
+      vector_with_ids.reserve(FLAGS_vector_put_batch_size);
+      for (;;) {
+        vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
+
+        if (vector_with_ids.size() == FLAGS_vector_put_batch_size) {
+          auto result = VectorPut(entry, vector_with_ids);
+          if (!result.status.IsOK()) {
+            break;
+          }
+          count.fetch_add(vector_with_ids.size());
+          if (count.load() >= FLAGS_arrange_kv_num) {
+            break;
+          }
+          vector_with_ids.clear();
+        }
       }
-      vector_with_ids.clear();
 
-      std::cout << '\r'
-                << fmt::format("Vector index({}) put data progress [{} / {} {}%]", entry->index_id, i,
-                               FLAGS_arrange_kv_num, i * 100 / FLAGS_arrange_kv_num)
-                << std::flush;
-    }
+      stop_count.fetch_add(1);
+    });
   }
 
-  std::cout << "\r" << fmt::format("Vector index({}) put data({}) done", entry->index_id, FLAGS_arrange_kv_num) << '\n';
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    if (stop_count.load() == FLAGS_vector_arrange_concurrency) {
+      break;
+    }
+
+    uint32_t cur_count = count.load();
+    std::cout << '\r'
+              << fmt::format("vector index({}) put data progress [{} / {} {}%]", entry->index_id, cur_count,
+                             FLAGS_arrange_kv_num, cur_count * 100 / FLAGS_arrange_kv_num)
+              << std::flush;
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  std::cout << "\r" << fmt::format("vector index({}) put data({}) done", entry->index_id, count.load()) << '\n';
 
   return true;
 }
-
+// parallel put
 bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, DatasetPtr dataset) {
   uint32_t total_vector_count = dataset->GetTrainDataCount();
 
-  uint32_t count = 0;
-  std::vector<sdk::VectorWithId> vector_with_ids;
-  for (int batch_num = 0;; ++batch_num) {
-    bool is_eof = false;
-    dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
-    auto result = VectorPut(entry, vector_with_ids);
-    if (!result.status.IsOK()) {
-      return false;
-    }
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_vector_arrange_concurrency);
 
-    count += vector_with_ids.size();
-    vector_with_ids.clear();
+  std::atomic<int> stop_count = 0;
+  std::atomic<uint32_t> count = 0;
+  for (int thread_no = 0; thread_no < FLAGS_vector_arrange_concurrency; ++thread_no) {
+    threads.emplace_back([this, thread_no, entry, dataset, &stop_count, &count]() {
+      std::vector<sdk::VectorWithId> vector_with_ids;
+      for (int batch_num = thread_no;; batch_num += FLAGS_vector_arrange_concurrency) {
+        bool is_eof = false;
+        dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
+        auto result = VectorPut(entry, vector_with_ids);
+        if (!result.status.IsOK()) {
+          break;
+        }
 
-    std::cout << '\r'
-              << fmt::format("Vector index({}) put data progress [{} / {} {}%]", entry->index_id, count,
-                             total_vector_count, count * 100 / total_vector_count)
-              << std::flush;
-    if (is_eof) {
+        count.fetch_add(vector_with_ids.size());
+        vector_with_ids.clear();
+        if (is_eof) {
+          break;
+        }
+      }
+
+      stop_count.fetch_add(1);
+    });
+  }
+
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    if (stop_count.load() == FLAGS_vector_arrange_concurrency) {
       break;
     }
+
+    uint32_t cur_count = count.load();
+    std::cout << '\r'
+              << fmt::format("Vector index({}) put data progress [{} / {} {}%]", entry->index_id, cur_count,
+                             total_vector_count, cur_count * 100 / total_vector_count)
+              << std::flush;
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
   }
 
   entry->test_entries = dataset->GetTestData();
@@ -941,7 +993,7 @@ uint32_t CalculateRecallRate(const std::unordered_map<int64_t, float>& neighbors
     }
   }
 
-  return (hit_count * 10000) / vector_with_distances.size();
+  return (hit_count * 10000) / neighbors.size();
 }
 
 Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr entry) {
@@ -954,7 +1006,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   search_param.with_table_data = FLAGS_vector_search_with_table_data;
   search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
   search_param.topk = FLAGS_vector_search_topk;
-  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 800));
+  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 300));
 
   auto offset = entry->GenId();
   auto& all_test_entries = entry->test_entries;
@@ -977,13 +1029,15 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
     return result;
   }
 
-  assert(batch_test_entries.size() == result.vector_search_results.size());
-
   for (uint32_t i = 0; i < batch_test_entries.size(); ++i) {
     auto& entry = batch_test_entries[i];
-    auto& search_result = result.vector_search_results[i];
+    if (i < result.vector_search_results.size()) {
+      auto& search_result = result.vector_search_results[i];
 
-    result.recalls.push_back(CalculateRecallRate(entry->neighbors, search_result.vector_datas));
+      result.recalls.push_back(CalculateRecallRate(entry->neighbors, search_result.vector_datas));
+    } else {
+      result.recalls.push_back(0);
+    }
   }
 
   return result;

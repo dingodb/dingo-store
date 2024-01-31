@@ -15,6 +15,7 @@
 #include "benchmark/dataset.h"
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
@@ -29,6 +30,7 @@
 #include "gflags/gflags_declare.h"
 
 DECLARE_uint32(vector_put_batch_size);
+DECLARE_uint32(vector_search_topk);
 
 namespace dingodb {
 namespace benchmark {
@@ -44,16 +46,11 @@ std::shared_ptr<Dataset> Dataset::New(std::string filepath) {
     return std::make_shared<GistDataset>(filepath);
 
   } else if (filepath.find("kosarak") == std::string::npos) {
-    return std::make_shared<KosarakDataset>(filepath);
-
   } else if (filepath.find("lastfm") == std::string::npos) {
-    return std::make_shared<LastfmDataset>(filepath);
-
   } else if (filepath.find("mnist") == std::string::npos) {
     return std::make_shared<MnistDataset>(filepath);
 
   } else if (filepath.find("movielens10m") == std::string::npos) {
-    return std::make_shared<Movielens10mDataset>(filepath);
   }
 
   std::cout << "Not support dataset, path: " << filepath << std::endl;
@@ -66,6 +63,8 @@ BaseDataset::BaseDataset(std::string filepath) : filepath_(filepath) {}
 BaseDataset::~BaseDataset() { h5file_->close(); }
 
 bool BaseDataset::Init() {
+  std::lock_guard lock(mutex_);
+
   try {
     h5file_ = std::make_shared<H5::H5File>(filepath_, H5F_ACC_RDONLY);
     {
@@ -140,6 +139,8 @@ uint32_t BaseDataset::GetTrainDataCount() const { return train_row_count_; }
 uint32_t BaseDataset::GetTestDataCount() const { return test_row_count_; }
 
 void BaseDataset::GetBatchTrainData(uint32_t batch_num, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) {
+  std::lock_guard lock(mutex_);
+
   is_eof = false;
   H5::DataSet dataset = h5file_->openDataSet("train");
   H5::DataSpace dataspace = dataset.getSpace();
@@ -204,6 +205,8 @@ static void PrintVector(const std::vector<T>& vec) {
 }
 
 std::vector<BaseDataset::TestEntryPtr> BaseDataset::GetTestData() {
+  std::lock_guard lock(mutex_);
+
   H5::DataSet dataset = h5file_->openDataSet("test");
   H5::DataSpace dataspace = dataset.getSpace();
 
@@ -228,7 +231,7 @@ std::vector<BaseDataset::TestEntryPtr> BaseDataset::GetTestData() {
 
   // gernerate test entries
   std::vector<BaseDataset::TestEntryPtr> test_entries;
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < row_count; ++i) {
     auto test_entry = std::make_shared<BaseDataset::TestEntry>();
     test_entry->vector_with_id.id = 0;
     test_entry->vector_with_id.vector.dimension = dimension;
@@ -238,7 +241,6 @@ std::vector<BaseDataset::TestEntryPtr> BaseDataset::GetTestData() {
     vec.resize(dimension);
     memcpy(vec.data(), buf.data() + i * dimension, dimension * sizeof(float));
     test_entry->vector_with_id.vector.float_values.swap(vec);
-    // PrintVector(test_entry->vector_with_id.vector.float_values);
 
     test_entry->neighbors = GetTestVectorNeighbors(i);
 
@@ -257,8 +259,9 @@ std::unordered_map<int64_t, float> BaseDataset::GetTestVectorNeighbors(uint32_t 
   auto distances = GetDistances(index);
   assert(vector_ids.size() == distances.size());
 
+  uint32_t size = std::min(static_cast<uint32_t>(vector_ids.size()), FLAGS_vector_search_topk);
   std::unordered_map<int64_t, float> neighbors;
-  for (int i = 0; i < vector_ids.size(); ++i) {
+  for (uint32_t i = 0; i < size; ++i) {
     neighbors.insert(std::make_pair(vector_ids[i] + 1, distances[i]));
   }
 
