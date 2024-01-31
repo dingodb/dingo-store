@@ -19,6 +19,7 @@
 #include "benchmark/benchmark.h"
 #include "benchmark/dataset.h"
 #include "gflags/gflags.h"
+#include "glog/logging.h"
 
 const std::string kVersion = "0.1.0";
 
@@ -48,6 +49,9 @@ static std::string GetUsageMessage() {
   message += "\n  --vector_value_type vector value type float/uint8, default(float)";
   message += "\n  --vector_max_element_num vector index contain max element number, default(100000)";
   message += "\n  --vector_metric_type calcute vector distance method L2/IP/COSINE, default(L2)";
+  message += "\n  --vector_partition_vector_ids vector id used by partition, default()";
+  message += "\n  --vector_arrange_concurrency vector arrange concurrency, default(10)";
+  message += "\n  --vector_put_batch_size vector put batch size, default(512)";
   message += "\n  --hnsw_ef_construction HNSW ef construction, default(true)";
   message += "\n  --hnsw_nlink_num HNSW nlink number, default(32)";
   message += "\n  --ivf_ncentroids IVF ncentroids, default(2048)";

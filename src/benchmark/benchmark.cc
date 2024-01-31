@@ -74,6 +74,7 @@ DEFINE_validator(vector_metric_type, [](const char*, const std::string& value) -
   auto metric_type = dingodb::Helper::ToUpper(value);
   return metric_type == "NONE" || metric_type == "L2" || metric_type == "IP" || metric_type == "COSINE";
 });
+DEFINE_string(vector_partition_vector_ids, "", "Vector id used by partition");
 
 DEFINE_uint32(hnsw_ef_construction, 500, "HNSW ef construction");
 DEFINE_uint32(hnsw_nlink_num, 64, "HNSW nlink number");
@@ -98,6 +99,9 @@ DEFINE_bool(vector_search_use_brute_force, false, "Vector search flag use_brute_
 DEFINE_bool(vector_search_enable_range_search, false, "Vector search flag enable_range_search");
 DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
 
+DECLARE_uint32(vector_put_batch_size);
+DECLARE_uint32(vector_arrange_concurrency);
+
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);
 DECLARE_uint32(value_size);
@@ -110,7 +114,7 @@ namespace benchmark {
 
 static const std::string kClientRaw = "w";
 
-static const std::string kNamePrefix = "Benchmark_";
+static const std::string kNamePrefix = "Benchmark";
 
 static std::string EncodeRawKey(const std::string& str) { return kClientRaw + str; }
 
@@ -194,7 +198,7 @@ void Stats::Report(bool is_cumulative, size_t milliseconds) const {
                              latency_recorder_->latency_percentile(0.99))
               << '\n';
   } else {
-    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>16}{:>16}{:>16}{:>16}{:>12.2f}", epoch_, req_num_,
+    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>16}{:>16}{:>16}{:>16}{:>16.2f}", epoch_, req_num_,
                              error_count_, (req_num_ / seconds), (write_bytes_ / seconds / 1048576),
                              latency_recorder_->latency(), latency_recorder_->max_latency(),
                              latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
@@ -209,7 +213,7 @@ std::string Stats::Header() {
                        "MB/s", "LATENCY_AVG(us)", "LATENCY_MAX(us)", "LATENCY_P50(us)", "LATENCY_P95(us)",
                        "LATENCY_P99(us)");
   } else {
-    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>16}{:>16}{:>16}{:>16}{:>12}", "EPOCH", "REQ_NUM", "ERRORS",
+    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>16}{:>16}{:>16}{:>16}{:>16}", "EPOCH", "REQ_NUM", "ERRORS",
                        "QPS", "MB/s", "LATENCY_AVG(us)", "LATENCY_MAX(us)", "LATENCY_P50(us)", "LATENCY_P95(us)",
                        "LATENCY_P99(us)", "RECALL_AVG(%)");
   }
@@ -266,7 +270,7 @@ bool Benchmark::Arrange() {
       FLAGS_vector_dimension = dataset_->GetDimension();
     }
     vector_index_entries_ = ArrangeVectorIndex(FLAGS_vector_index_num);
-    if (vector_index_entries_.size() != FLAGS_region_num) {
+    if (vector_index_entries_.size() != FLAGS_vector_index_num) {
       return false;
     }
   } else {
@@ -298,15 +302,15 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
   threads.reserve(num);
   for (int thread_no = 0; thread_no < num; ++thread_no) {
     threads.emplace_back([this, thread_no, &region_entries, &mutex]() {
-      auto name = fmt::format("{}{:014}_{}", kNamePrefix, Helper::TimestampMs(), thread_no);
+      auto name = fmt::format("{}_{}_{}", kNamePrefix, Helper::TimestampMs(), thread_no + 1);
       std::string prefix = fmt::format("{}{:06}", FLAGS_prefix, thread_no);
       auto region_id = CreateRegion(name, prefix, Helper::PrefixNext(prefix), GetRawEngineType(), FLAGS_replica);
       if (region_id == 0) {
-        LOG(ERROR) << fmt::format("Create region failed, region_name: {}", name);
+        LOG(ERROR) << fmt::format("create region failed, name: {}", name);
         return;
       }
 
-      std::cout << fmt::format("Create region name({}) id({}) prefix({}) done", name, region_id, prefix) << '\n';
+      std::cout << fmt::format("create region name({}) id({}) prefix({}) done", name, region_id, prefix) << '\n';
 
       auto region_entry = std::make_shared<RegionEntry>();
       region_entry->prefix = prefix;
@@ -325,23 +329,34 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
 }
 
 std::vector<VectorIndexEntryPtr> Benchmark::ArrangeVectorIndex(int num) {
+  std::mutex mutex;
   std::vector<VectorIndexEntryPtr> vector_index_entries;
 
-  for (int i = 0; i < num; ++i) {
-    std::string name = kNamePrefix + fmt::format("{:014}_{}", Helper::TimestampMs(), i + 1);
-    auto index_id = CreateVectorIndex(name, FLAGS_vector_index_type);
-    if (index_id == 0) {
-      return vector_index_entries;
-    }
+  std::vector<std::thread> threads;
+  threads.reserve(num);
+  for (int thread_no = 0; thread_no < num; ++thread_no) {
+    threads.emplace_back([this, thread_no, &vector_index_entries, &mutex]() {
+      std::string name = fmt::format("{}_{}_{}", kNamePrefix, Helper::TimestampMs(), thread_no + 1);
+      auto index_id = CreateVectorIndex(name, FLAGS_vector_index_type);
+      if (index_id == 0) {
+        LOG(ERROR) << fmt::format("create vector index failed, name: {}", name);
+        return;
+      }
 
-    std::cout << fmt::format("Create vector index name({}) id({}) type({}) done", name, index_id,
-                             FLAGS_vector_index_type)
-              << '\n';
+      std::cout << fmt::format("create vector index name({}) id({}) type({}) done", name, index_id,
+                               FLAGS_vector_index_type)
+                << '\n';
 
-    auto entry = std::make_shared<VectorIndexEntry>();
-    entry->index_id = index_id;
+      auto entry = std::make_shared<VectorIndexEntry>();
+      entry->index_id = index_id;
 
-    vector_index_entries.push_back(entry);
+      std::lock_guard lock(mutex);
+      vector_index_entries.push_back(entry);
+    });
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
   }
 
   return vector_index_entries;
@@ -393,9 +408,9 @@ void Benchmark::Clean() {
   }
 
   // Drop vector index
-  // for (auto& vector_index_entry : vector_index_entries_) {
-  //   DropVectorIndex(vector_index_entry->index_id);
-  // }
+  for (auto& vector_index_entry : vector_index_entries_) {
+    DropVectorIndex(vector_index_entry->index_id);
+  }
 }
 
 int64_t Benchmark::CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
@@ -411,7 +426,7 @@ int64_t Benchmark::CreateRegion(const std::string& name, const std::string& star
                .SetRange(EncodeRawKey(start_key), EncodeRawKey(end_key))
                .Create(region_id);
   if (!status.IsOK()) {
-    LOG(ERROR) << fmt::format("Create region failed, {}", status.ToString());
+    LOG(ERROR) << fmt::format("create region failed, {}", status.ToString());
     return 0;
   }
   if (region_id == 0) {
@@ -490,7 +505,10 @@ int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string&
   CHECK(status.ok()) << fmt::format("new vector index creator failed, {}", status.ToString());
 
   int64_t vector_index_id = 0;
-  std::vector<int64_t> separator_id = {70001};
+  std::vector<int64_t> separator_id;
+  if (!FLAGS_vector_partition_vector_ids.empty()) {
+    Helper::SplitString(FLAGS_vector_partition_vector_ids, ',', separator_id);
+  }
 
   creator->SetName(name).SetSchemaId(1).SetRangePartitions(separator_id).SetReplicaNum(3);
 
@@ -512,7 +530,7 @@ int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string&
 
   status = creator->Create(vector_index_id);
   if (!status.IsOK()) {
-    LOG(ERROR) << fmt::format("Create vector index failed, {}", status.ToString());
+    LOG(ERROR) << fmt::format("create vector index failed, {}", status.ToString());
     return 0;
   }
   if (vector_index_id == 0) {
@@ -527,7 +545,7 @@ int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string&
 void Benchmark::DropVectorIndex(int64_t vector_index_id) {
   CHECK(vector_index_id != 0) << "vector_index_id is invalid";
   auto status = client_->DropIndex(vector_index_id);
-  CHECK(status.IsOK()) << fmt::format("Drop vector index failed, {}", status.ToString());
+  CHECK(status.IsOK()) << fmt::format("drop vector index failed, {}", status.ToString());
 }
 
 static std::vector<std::string> ExtractPrefixs(const std::vector<RegionEntryPtr>& region_entries) {
@@ -769,7 +787,10 @@ void Environment::PrintParam() {
   std::cout << fmt::format("{:<34}: {:>32}", "vector_value_type", FLAGS_vector_value_type) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "vector_max_element_num", FLAGS_vector_max_element_num) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "vector_metric_type", FLAGS_vector_metric_type) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "vector_partition_vector_ids", FLAGS_vector_partition_vector_ids) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "vector_dataset", FLAGS_vector_dataset) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "vector_arrange_concurrency", FLAGS_vector_arrange_concurrency) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "vector_put_batch_size", FLAGS_vector_put_batch_size) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "hnsw_ef_construction", FLAGS_hnsw_ef_construction) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "hnsw_nlink_num", FLAGS_hnsw_nlink_num) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "ivf_ncentroids", FLAGS_ivf_ncentroids) << '\n';
