@@ -15,6 +15,7 @@
 #ifndef DINGODB_COORDINATOR_CONTROL_H_
 #define DINGODB_COORDINATOR_CONTROL_H_
 
+#include <bitset>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -45,6 +46,8 @@
 
 namespace dingodb {
 
+#define WATCH_BITSET_SIZE 64
+
 struct WatchNode {
   WatchNode(google::protobuf::Closure *done, pb::version::WatchResponse *response)
       : done(done),
@@ -69,6 +72,50 @@ struct WatchNode {
   bool no_put_event;
   bool no_delete_event;
   bool need_prev_kv;
+};
+
+class MetaWatchInstance {
+ public:
+  MetaWatchInstance(google::protobuf::Closure *done, const pb::meta::WatchRequest *request,
+                    pb::meta::WatchResponse *response) {
+    done = done;
+    request = request;
+    response = response;
+  }
+
+  google::protobuf::Closure *done;
+  pb::meta::WatchRequest *request;
+  pb::meta::WatchResponse *response;
+};
+
+class MetaWatchNode {
+ public:
+  MetaWatchNode() {
+    bthread_mutex_init(&node_mutex, nullptr);
+    bthread_cond_init(&node_cond, nullptr);
+    is_watching = 0;
+    is_canceled = false;
+    start_revision = 0;
+    watched_revision = 0;
+    last_send_timestamp_ms = 0;
+  }
+
+  ~MetaWatchNode() {
+    bthread_mutex_destroy(&node_mutex);
+    bthread_cond_destroy(&node_cond);
+  }
+
+  bthread_mutex_t node_mutex;
+  bthread_cond_t node_cond;
+  int64_t watch_id;
+  uint32_t is_watching;
+  bool is_canceled;
+  int64_t start_revision;
+  int64_t watched_revision;
+  std::vector<int64_t> pending_event_revisions;
+  std::set<pb::meta::MetaEventType> event_types;
+  int64_t last_send_timestamp_ms;
+  std::vector<MetaWatchInstance> watch_instances;
 };
 
 class MetaBvarCoordinator {
@@ -832,6 +879,31 @@ class CoordinatorControl : public MetaControl {
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetGCSafePoint(int64_t &safe_point, bool &gc_stop);
 
+  // meta watch
+  static butil::Status MetaWatchSendEvents(int64_t watch_id, const pb::meta::WatchResponse &event_response,
+                                           pb::meta::WatchResponse *response, google::protobuf::Closure *done);
+
+  butil::Status MetaWatchGetEventsForRevisions(const std::vector<int64_t> &event_revisions,
+                                               pb::meta::WatchResponse &event_response);
+
+  butil::Status MetaWatchCancel(int64_t watch_id);
+
+  butil::Status MetaWatchProgress(const pb::meta::WatchRequest *request, pb::meta::WatchResponse *response,
+                                  google::protobuf::Closure *done);
+
+  butil::Status MetaWatchCreate(const pb::meta::WatchRequest *request, pb::meta::WatchResponse *response);
+
+  butil::Status ListWatch(int64_t watch_id, pb::meta::ListWatchResponse *response);
+
+  static std::bitset<WATCH_BITSET_SIZE> GenWatchBitSet(const pb::meta::WatchCreateRequest &create_request);
+  static std::bitset<WATCH_BITSET_SIZE> GenWatchBitSet(const std::set<pb::meta::MetaEventType> &event_types);
+
+  void AddEventList(int64_t meta_revision, std::shared_ptr<std::vector<pb::meta::MetaEvent>> event_list,
+                    std::bitset<WATCH_BITSET_SIZE> watch_bitset);
+
+  void RecycleOutdatedMetaWatcher();
+  void TrimMetaWatchEventList();
+
  private:
   butil::Status ValidateTaskListConflict(int64_t region_id, int64_t second_region_id);
 
@@ -964,6 +1036,41 @@ class CoordinatorControl : public MetaControl {
   CoordinatorBvarMetricsRegion coordinator_bvar_metrics_region_;
   CoordinatorBvarMetricsTable coordinator_bvar_metrics_table_;
   CoordinatorBvarMetricsIndex coordinator_bvar_metrics_index_;
+
+  // meta watch
+  DingoSafeStdMap<int64_t, std::shared_ptr<std::vector<pb::meta::MetaEvent>>> meta_event_map_;
+
+  DingoSafeStdMap<int64_t, std::shared_ptr<MetaWatchNode>> watch_node_map_;
+
+  bthread_mutex_t meta_watch_bitmap_mutex_;
+  std::map<int64_t, std::bitset<WATCH_BITSET_SIZE>> meta_watch_bitmap_;
+
+  WorkerSetPtr meta_watch_worker_set_;
+};
+
+class MetaWatchSendTask : public TaskRunnable {
+ public:
+  MetaWatchSendTask(CoordinatorControl *coordinator_control, int64_t meta_revision,
+                    std::shared_ptr<std::vector<pb::meta::MetaEvent>> event_list,
+                    std::bitset<WATCH_BITSET_SIZE> watch_bitset)
+      : coordinator_control_(coordinator_control),
+        meta_revision_(meta_revision),
+        event_list_(event_list),
+        watch_bitset_(watch_bitset) {}
+  ~MetaWatchSendTask() override = default;
+
+  std::string Type() override { return "META_WATCH_SEND"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "start process MetaWatchSendTask";
+    coordinator_control_->AddEventList(meta_revision_, event_list_, watch_bitset_);
+  }
+
+ private:
+  CoordinatorControl *coordinator_control_;
+  int64_t meta_revision_;
+  std::shared_ptr<std::vector<pb::meta::MetaEvent>> event_list_;
+  std::bitset<WATCH_BITSET_SIZE> watch_bitset_;
 };
 
 }  // namespace dingodb

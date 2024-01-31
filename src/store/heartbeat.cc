@@ -300,6 +300,20 @@ void CoordinatorRecycleOrphanTask::CoordinatorRecycleOrphan(std::shared_ptr<Coor
   coordinator_control->RecycleOutdatedStoreMetrics();
 }
 
+static std::atomic<bool> g_store_meta_watch_clean_running(false);
+void CoordinatorMetaWatchCleanTask::CoordinatorMetaWatchClean(std::shared_ptr<CoordinatorControl> coordinator_control) {
+  if (g_store_meta_watch_clean_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "CoordinatorMetaWatchClean... g_store_meta_watch_clean_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_store_meta_watch_clean_running);
+
+  coordinator_control->RecycleOutdatedMetaWatcher();
+
+  coordinator_control->TrimMetaWatchEventList();
+}
+
 static std::atomic<bool> g_remove_one_time_watch_running(false);
 void KvRemoveOneTimeWatchTask::KvRemoveOneTimeWatch(std::shared_ptr<KvControl> kv_control) {
   if (!kv_control->IsLeader()) {
@@ -533,6 +547,12 @@ void Heartbeat::TriggerCoordinatorTaskListProcess(void*) {
 void Heartbeat::TriggerCoordinatorRecycleOrphan(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<CoordinatorRecycleOrphanTask>(Server::GetInstance().GetCoordinatorControl());
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerCoordinatorMetaWatchClean(void*) {
+  // Free at ExecuteRoutine()
+  auto task = std::make_shared<CoordinatorMetaWatchCleanTask>(Server::GetInstance().GetCoordinatorControl());
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 

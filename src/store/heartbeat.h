@@ -128,6 +128,24 @@ class CoordinatorRecycleOrphanTask : public TaskRunnable {
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
+class CoordinatorMetaWatchCleanTask : public TaskRunnable {
+ public:
+  CoordinatorMetaWatchCleanTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+      : coordinator_control_(coordinator_control) {}
+  ~CoordinatorMetaWatchCleanTask() override = default;
+
+  std::string Type() override { return "COORDINATOR_META_WATCH_CLEAN"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "start process CoordinatorMetaWatchClean";
+    CoordinatorMetaWatchClean(coordinator_control_);
+  }
+
+ private:
+  static void CoordinatorMetaWatchClean(std::shared_ptr<CoordinatorControl> coordinator_control);
+  std::shared_ptr<CoordinatorControl> coordinator_control_;
+};
+
 class KvRemoveOneTimeWatchTask : public TaskRunnable {
  public:
   KvRemoveOneTimeWatchTask(std::shared_ptr<KvControl> kv_control) : kv_control_(kv_control) {}
@@ -225,6 +243,7 @@ class Heartbeat {
   static void TriggerCoordinatorUpdateState(void*);
   static void TriggerCoordinatorTaskListProcess(void*);
   static void TriggerCoordinatorRecycleOrphan(void*);
+  static void TriggerCoordinatorMetaWatchClean(void*);
   static void TriggerKvRemoveOneTimeWatch(void*);
   static void TriggerCalculateTableMetrics(void*);
   static void TriggerScrubVectorIndex(void*);

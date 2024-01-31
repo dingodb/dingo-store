@@ -25,6 +25,7 @@
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
+#include "coordinator/coordinator_control.h"
 #include "coordinator/tso_control.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
@@ -3357,6 +3358,111 @@ void MetaServiceImpl::GetTsoInfo(google::protobuf::RpcController *controller, co
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>(
       [this, controller, response, svr_done]() { DoGetTsoInfo(controller, response, svr_done, tso_control_); });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoMetaWatch(google::protobuf::RpcController * /*controller*/, const pb::meta::WatchRequest *request,
+                 pb::meta::WatchResponse *response, TrackClosure *done,
+                 std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  if (request->has_progress_request()) {
+    auto ret = coordinator_control->MetaWatchProgress(request, response, done_guard.release());
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "MetaWatchProgress failed, errno: " << pb::error::Errno_Name(ret.error_code())
+                       << ", errmsg: " << ret.error_str();
+      ServiceHelper::SetError(response->mutable_error(), ret.error_code(), ret.error_str());
+    }
+  } else if (request->has_create_request()) {
+    auto ret = coordinator_control->MetaWatchCreate(request, response);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "MetaWatchCreate failed, errno: " << pb::error::Errno_Name(ret.error_code())
+                       << ", errmsg: " << ret.error_str();
+      ServiceHelper::SetError(response->mutable_error(), ret.error_code(), ret.error_str());
+    } else {
+      DINGO_LOG(INFO) << "DoMetaWatch Success, watch_id: " << response->watch_id();
+    }
+  } else if (request->has_cancel_request()) {
+    auto watch_id = request->cancel_request().watch_id();
+    if (watch_id <= 0) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EILLEGAL_PARAMTETERS,
+                              "watch_id is less than 0 or equal to 0");
+      return;
+    }
+
+    auto ret = coordinator_control->MetaWatchCancel(watch_id);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "MetaWatchCancel failed, watch_id: " << watch_id
+                       << ", errno: " << pb::error::Errno_Name(ret.error_code()) << ", errmsg: " << ret.error_str();
+      ServiceHelper::SetError(response->mutable_error(), ret.error_code(), ret.error_str());
+    } else {
+      DINGO_LOG(INFO) << "DoMetaWatch Success, watch_id: " << watch_id;
+    }
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  DINGO_LOG(INFO) << "DoMetaWatch Success.";
+}
+
+void MetaServiceImpl::Watch(google::protobuf::RpcController *controller, const pb::meta::WatchRequest *request,
+                            pb::meta::WatchResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoMetaWatch(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoListWatch(google::protobuf::RpcController * /*controller*/, const pb::meta::ListWatchRequest *request,
+                 pb::meta::ListWatchResponse *response, TrackClosure *done,
+                 std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  auto ret = coordinator_control->ListWatch(request->watch_id(), response);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "ListWatch failed, watch_id: " << request->watch_id()
+                     << ", errno: " << pb::error::Errno_Name(ret.error_code()) << ", errmsg: " << ret.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret.error_code(), ret.error_str());
+  } else {
+    DINGO_LOG(INFO) << "DoListWatch Success.";
+  }
+}
+
+void MetaServiceImpl::ListWatch(google::protobuf::RpcController *controller, const pb::meta::ListWatchRequest *request,
+                                pb::meta::ListWatchResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoListWatch(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);

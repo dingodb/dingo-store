@@ -23,6 +23,7 @@
 
 #include "braft/configuration.h"
 #include "bthread/mutex.h"
+#include "bthread/types.h"
 #include "butil/compiler_specific.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -45,6 +46,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&store_operation_map_mutex_, nullptr);
   // bthread_mutex_init(&lease_to_key_map_temp_mutex_, nullptr);
   // bthread_mutex_init(&one_time_watch_map_mutex_, nullptr);
+  bthread_mutex_init(&meta_watch_bitmap_mutex_, nullptr);
+
   root_schema_writed_to_raft_ = false;
   is_processing_task_list_.store(false);
   leader_term_.store(-1, butil::memory_order_release);
@@ -108,6 +111,11 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
 
   // table index
   table_index_map_.Init(10000);
+
+  meta_watch_worker_set_ = WorkerSet::New("CoordinatorMetaWatchWorkerSet", 1, 0);
+  if (!meta_watch_worker_set_->Init()) {
+    DINGO_LOG(FATAL) << "Init CoordinatorMetaWatchWorkerSet failed!";
+  }
 }
 
 CoordinatorControl::~CoordinatorControl() {
@@ -126,6 +134,7 @@ CoordinatorControl::~CoordinatorControl() {
   delete table_index_meta_;
   delete common_disk_meta_;
   delete common_mem_meta_;
+  meta_watch_worker_set_->Destroy();
 }
 
 // InitIds
