@@ -181,6 +181,10 @@ DEFINE_double(rate, 0.0, "rate");
 DEFINE_bool(force_read_only, false, "force read only");
 DEFINE_int64(scan_id, 1, "scan id client supply");
 
+// for meta watch
+DEFINE_int64(watch_id, 0, "watch id client supply");
+DEFINE_int64(start_revision, 0, "start revision client supply");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -880,6 +884,17 @@ int CoordinatorSender() {
     SendOneTimeWatch(coordinator_interaction_version);
   } else if (FLAGS_method == "Lock") {
     SendLock(coordinator_interaction_version);
+  }
+
+  // meta watch
+  else if (FLAGS_method == "ListWatch") {
+    SendListWatch(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateWatch") {
+    SendCreateWatch(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CancelWatch") {
+    SendCancelWatch(coordinator_interaction_meta);
+  } else if (FLAGS_method == "ProgressWatch") {
+    SendProgressWatch(coordinator_interaction_meta);
   }
 
   // tso

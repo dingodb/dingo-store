@@ -76,15 +76,15 @@ struct WatchNode {
 
 class MetaWatchInstance {
  public:
-  MetaWatchInstance(google::protobuf::Closure *done, const pb::meta::WatchRequest *request,
-                    pb::meta::WatchResponse *response) {
-    done = done;
-    request = request;
-    response = response;
+  MetaWatchInstance(google::protobuf::Closure *done_in, const pb::meta::WatchRequest *request_in,
+                    pb::meta::WatchResponse *response_in) {
+    done = done_in;
+    request = request_in;
+    response = response_in;
   }
 
   google::protobuf::Closure *done;
-  pb::meta::WatchRequest *request;
+  const pb::meta::WatchRequest *request;
   pb::meta::WatchResponse *response;
 };
 
@@ -92,28 +92,20 @@ class MetaWatchNode {
  public:
   MetaWatchNode() {
     bthread_mutex_init(&node_mutex, nullptr);
-    bthread_cond_init(&node_cond, nullptr);
-    is_watching = 0;
-    is_canceled = false;
     start_revision = 0;
     watched_revision = 0;
-    last_send_timestamp_ms = 0;
+    last_send_timestamp_ms = Helper::TimestampMs();
   }
 
-  ~MetaWatchNode() {
-    bthread_mutex_destroy(&node_mutex);
-    bthread_cond_destroy(&node_cond);
-  }
+  ~MetaWatchNode() { bthread_mutex_destroy(&node_mutex); }
 
   bthread_mutex_t node_mutex;
-  bthread_cond_t node_cond;
   int64_t watch_id;
-  uint32_t is_watching;
-  bool is_canceled;
   int64_t start_revision;
   int64_t watched_revision;
   std::vector<int64_t> pending_event_revisions;
   std::set<pb::meta::MetaEventType> event_types;
+  std::bitset<WATCH_BITSET_SIZE> watch_bitset;
   int64_t last_send_timestamp_ms;
   std::vector<MetaWatchInstance> watch_instances;
 };
@@ -880,7 +872,8 @@ class CoordinatorControl : public MetaControl {
   butil::Status GetGCSafePoint(int64_t &safe_point, bool &gc_stop);
 
   // meta watch
-  static butil::Status MetaWatchSendEvents(int64_t watch_id, const pb::meta::WatchResponse &event_response,
+  static butil::Status MetaWatchSendEvents(int64_t watch_id, std::bitset<WATCH_BITSET_SIZE> watch_bitset,
+                                           const pb::meta::WatchResponse &event_response,
                                            pb::meta::WatchResponse *response, google::protobuf::Closure *done);
 
   butil::Status MetaWatchGetEventsForRevisions(const std::vector<int64_t> &event_revisions,
