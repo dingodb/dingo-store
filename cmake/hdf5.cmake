@@ -19,9 +19,16 @@ SET(HDF5_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/hdf5)
 SET(HDF5_BINARY_DIR ${THIRD_PARTY_PATH}/build/hdf5)
 SET(HDF5_INSTALL_DIR ${THIRD_PARTY_PATH}/install/hdf5)
 SET(HDF5_INCLUDE_DIR "${HDF5_INSTALL_DIR}/include" CACHE PATH "hdf5 include directory." FORCE)
-SET(HDF5_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5.a" CACHE FILEPATH "hdf5 library." FORCE)
-SET(HDF5_CPP_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_cpp.a" CACHE FILEPATH "hdf5 library." FORCE)
-SET(HDF5_HL_CPP_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_hl_cpp.a" CACHE FILEPATH "hdf5 library." FORCE)
+
+IF(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
+    SET(HDF5_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_debug.a" CACHE FILEPATH "hdf5 library." FORCE)
+    SET(HDF5_CPP_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_cpp_debug.a" CACHE FILEPATH "hdf5 library." FORCE)
+    SET(HDF5_HL_CPP_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_hl_cpp_debug.a" CACHE FILEPATH "hdf5 library." FORCE)
+ELSE()
+    SET(HDF5_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5.a" CACHE FILEPATH "hdf5 library." FORCE)
+    SET(HDF5_CPP_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_cpp.a" CACHE FILEPATH "hdf5 library." FORCE)
+    SET(HDF5_HL_CPP_LIBRARIES "${HDF5_INSTALL_DIR}/lib/libhdf5_hl_cpp.a" CACHE FILEPATH "hdf5 library." FORCE)
+ENDIF()
 
 ExternalProject_Add(
     extern_hdf5
