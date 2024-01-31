@@ -391,6 +391,7 @@ DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state 
 DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
 DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
 DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
+DEFINE_int32(coordinator_meta_watch_clean_interval_s, 60, "coordinator meta watch clean interval seconds");
 DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch interval seconds");
 DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
 DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
@@ -545,6 +546,17 @@ bool Server::InitCrontabManager() {
       FLAGS_coordinator_recycle_orphan_interval_s * 1000,
       false,
       [](void*) { Heartbeat::TriggerCoordinatorRecycleOrphan(nullptr); },
+  });
+
+  // Add meta_watch_clean orphan crontab
+  FLAGS_coordinator_meta_watch_clean_interval_s =
+      GetInterval(config, "coordinator.meta_watch_clean_interval_s", FLAGS_coordinator_meta_watch_clean_interval_s);
+  crontab_configs_.push_back({
+      "meta_watch_clean",
+      {pb::common::COORDINATOR},
+      FLAGS_coordinator_meta_watch_clean_interval_s * 1000,
+      false,
+      [](void*) { Heartbeat::TriggerCoordinatorMetaWatchClean(nullptr); },
   });
 
   // Add recycle orphan crontab

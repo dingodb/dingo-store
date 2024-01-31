@@ -191,6 +191,13 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void GetTsoInfo(google::protobuf::RpcController* controller, const pb::meta::TsoRequest* request,
                   pb::meta::TsoResponse* response, google::protobuf::Closure* done) override;
 
+  // meta watch
+  void Watch(google::protobuf::RpcController* controller, const pb::meta::WatchRequest* request,
+             pb::meta::WatchResponse* response, google::protobuf::Closure* done) override;
+
+  void ListWatch(google::protobuf::RpcController* controller, const pb::meta::ListWatchRequest* request,
+                 pb::meta::ListWatchResponse* response, google::protobuf::Closure* done) override;
+
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
   // table and index definition convertor
