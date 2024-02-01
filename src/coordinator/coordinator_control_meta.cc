@@ -1824,8 +1824,8 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
     return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table range is empty");
   }
 
-  DINGO_LOG(INFO) << "table_internal.range: " << Helper::StringToHex(table_internal.range().start_key()) << " - "
-                  << Helper::StringToHex(table_internal.range().end_key());
+  DINGO_LOG(DEBUG) << "table_internal.range: " << Helper::StringToHex(table_internal.range().start_key()) << " - "
+                   << Helper::StringToHex(table_internal.range().end_key());
 
   std::vector<pb::coordinator_internal::RegionInternal> region_internals;
   // for continuous partitions, merge scan regions.
@@ -1836,7 +1836,7 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
     return ret2;
   }
 
-  DINGO_LOG(INFO) << "GetRegionsByTableInternal table_id=" << table_id << " regions count=" << region_internals.size();
+  DINGO_LOG(DEBUG) << "GetRegionsByTableInternal table_id=" << table_id << " regions count=" << region_internals.size();
 
   for (const auto& part_region : region_internals) {
     if (part_region.definition().table_id() != table_id) {
@@ -1855,9 +1855,9 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
       continue;
     }
 
-    DINGO_LOG(INFO) << fmt::format("region range, table_id={} region_id={} range={}", table_id, part_region.id(),
-                                   part_region.definition().range().ShortDebugString())
-                    << ", region_state: " << pb::common::RegionState_Name(part_region.state());
+    DINGO_LOG(DEBUG) << fmt::format("region range, table_id={} region_id={} range={}", table_id, part_region.id(),
+                                    part_region.definition().range().ShortDebugString())
+                     << ", region_state: " << pb::common::RegionState_Name(part_region.state());
 
     auto* range_distribution = table_range.add_range_distribution();
     auto* common_id_region = range_distribution->mutable_id();

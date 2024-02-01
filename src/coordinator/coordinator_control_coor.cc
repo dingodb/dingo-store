@@ -3585,7 +3585,7 @@ butil::Status CoordinatorControl::GetExecutorUserMap(int64_t cluster_id,
 
 bool CoordinatorControl::ValidateExecutorUser(const pb::common::ExecutorUser& executor_user) {
   if (executor_user.keyring() == std::string("TO_BE_CONTINUED")) {
-    DINGO_LOG(INFO) << "ValidateExecutorUser debug pass with TO_BE_CONTINUED";
+    DINGO_LOG(DEBUG) << "ValidateExecutorUser debug pass with TO_BE_CONTINUED";
     return true;
   }
 
@@ -3789,7 +3789,6 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
 
   bool need_update_epoch = false;
   {
-    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
     pb::common::Executor executor_to_update;
     int ret = executor_map_.Get(executor.id(), executor_to_update);
     if (ret > 0) {
@@ -3817,21 +3816,30 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
         *(executor_increment_executor->mutable_server_location()) = executor.server_location();
         executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
         executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
+        executor_increment_executor->set_create_timestamp(butil::gettimeofday_ms());
       } else {
         // this is normall heartbeat,
         // so only need to update state & last_seen_timestamp, no need to
         // update epoch
-        auto* executor_increment = meta_increment.add_executors();
-        executor_increment->set_id(executor.id());
-        executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+        // and no need to write into raft
+        // auto* executor_increment = meta_increment.add_executors();
+        // executor_increment->set_id(executor.id());
+        // executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
 
-        auto* executor_increment_executor = executor_increment->mutable_executor();
-        *executor_increment_executor = executor_to_update;  // only update server_location &
-                                                            // raft_location & state
+        // auto* executor_increment_executor = executor_increment->mutable_executor();
+        // *executor_increment_executor = executor_to_update;  // only update server_location &
+        //                                                     // raft_location & state
 
-        // only update state & last_seen_timestamp
-        executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
-        executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
+        // // only update state & last_seen_timestamp
+        // executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
+        // executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
+
+        *executor_to_update.mutable_server_location() = executor.server_location();
+        *executor_to_update.mutable_executor_user() = executor.executor_user();
+        *executor_to_update.mutable_resource_tag() = executor.resource_tag();
+        executor_to_update.set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
+        executor_to_update.set_last_seen_timestamp(butil::gettimeofday_ms());
+        executor_map_.Put(executor.id(), executor_to_update);
       }
     } else {
       // this is a special new executor's first heartbeat
@@ -3859,7 +3867,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
     GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
   }
 
-  DINGO_LOG(INFO) << "UpdateExecutorMap executor_id=" << executor.id();
+  DINGO_LOG(DEBUG) << "UpdateExecutorMap executor_id=" << executor.id();
 
   return executor_map_epoch;
 }
@@ -5257,8 +5265,8 @@ butil::Status CoordinatorControl::GetRangeRegionMap(std::vector<std::string>& st
 
 butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, const std::string& end_key, int64_t limit,
                                               std::vector<pb::coordinator_internal::RegionInternal>& regions) {
-  DINGO_LOG(INFO) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
-                  << " end_key=" << Helper::StringToHex(end_key) << " limit=" << limit;
+  DINGO_LOG(DEBUG) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
+                   << " end_key=" << Helper::StringToHex(end_key) << " limit=" << limit;
 
   const std::string& lower_bound = start_key;
   std::string upper_bound;
@@ -5285,9 +5293,9 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
     return butil::Status(pb::error::EINTERNAL, "range_region_map_.FindIntervalValues failed");
   }
 
-  DINGO_LOG(INFO) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
-                  << " upper_bound=" << Helper::StringToHex(upper_bound)
-                  << " region_internals.size()=" << region_internals.size();
+  DINGO_LOG(DEBUG) << "ScanRegions lower_bound=" << Helper::StringToHex(lower_bound)
+                   << " upper_bound=" << Helper::StringToHex(upper_bound)
+                   << " region_internals.size()=" << region_internals.size();
 
   for (const auto& region_internal : region_internals) {
     if (end_key.empty()) {
@@ -5308,7 +5316,8 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   }
 
   DINGO_LOG(INFO) << "ScanRegions start_key=" << Helper::StringToHex(start_key)
-                  << " end_key=" << Helper::StringToHex(end_key) << " limit=" << limit
+                  << " end_key=" << Helper::StringToHex(end_key) << " upper_bound=" << Helper::StringToHex(upper_bound)
+                  << " limit=" << limit << " region_internals.size()=" << region_internals.size()
                   << " regions.size()=" << regions.size();
 
   return butil::Status::OK();

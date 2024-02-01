@@ -1945,7 +1945,11 @@ void DoTsoService(google::protobuf::RpcController *controller, const pb::meta::T
   if (!tso_control->IsLeader()) {
     return tso_control->RedirectResponse(response);
   }
-  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  if (request->op_type() != pb::meta::TsoOpType::OP_GEN_TSO &&
+      request->op_type() != pb::meta::TsoOpType::OP_QUERY_TSO_INFO) {
+    DINGO_LOG(INFO) << request->ShortDebugString();
+  }
 
   if (request->op_type() == pb::meta::TsoOpType::OP_NONE) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
@@ -3201,7 +3205,7 @@ void MetaServiceImpl::TsoService(google::protobuf::RpcController *controller,
   if (!tso_control_->IsLeader()) {
     return RedirectResponseTso(response);
   }
-  DINGO_LOG(INFO) << request->ShortDebugString();
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
 
   if (request->op_type() == pb::meta::TsoOpType::OP_NONE) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
