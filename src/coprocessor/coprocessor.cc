@@ -50,7 +50,10 @@ Coprocessor::Coprocessor()
   bvar_coprocessor_v1_object_running_num << 1;
   bvar_coprocessor_v1_object_total_num << 1;
 }
-Coprocessor::~Coprocessor() { Close(); }
+Coprocessor::~Coprocessor() {
+  Close();
+  bvar_coprocessor_v1_object_running_num << -1;
+}
 
 butil::Status Coprocessor::Open(const std::any& coprocessor) {
   butil::Status status;
@@ -657,8 +660,6 @@ void Coprocessor::Close() {
   if (result_serial_schemas_sorted_) {
     result_serial_schemas_sorted_.reset();
   }
-
-  bvar_coprocessor_v1_object_running_num << -1;
 }
 
 butil::Status Coprocessor::CompareSerialSchema(const pb::store::Coprocessor& coprocessor) {
