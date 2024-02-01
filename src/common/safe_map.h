@@ -569,6 +569,38 @@ class DingoSafeStdMap {
     return keys.size();
   }
 
+  // GetFirstKey
+  // get the first key of the internal std::map
+  int GetFirstKey(T_KEY &key) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    if (ptr->empty()) {
+      return 0;
+    }
+
+    key = ptr->begin()->first;
+    return 1;
+  }
+
+  // GetLastKey
+  // get last key of the internal std::map
+  int GetLastKey(T_KEY &key) {
+    TypeScopedPtr ptr;
+    if (safe_map.Read(&ptr) != 0) {
+      return -1;
+    }
+
+    if (ptr->empty()) {
+      return 0;
+    }
+
+    key = ptr->rbegin()->first;
+    return 1;
+  }
+
   // GetAllKeys
   // get all keys of the map
   int GetAllKeys(std::set<T_KEY> &keys, std::function<bool(T_VALUE)> filter = nullptr) {
@@ -764,7 +796,7 @@ class DingoSafeStdMap {
       return -1;
     }
 
-    typename TypeRawMap::iterator it = ptr->lower_bound(lower_bound);
+    typename TypeRawMap::const_iterator it = ptr->lower_bound(lower_bound);
     for (; it != ptr->end(); ++it) {
       if (it == ptr->end()) {
         break;

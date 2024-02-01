@@ -948,7 +948,11 @@ message WatchRequest {
 }
 
 message WatchCreateRequest {
-  // start_revision is an optional revision to watch from (inclusive). No start_revision is "now".
+  // start_revision is an optional revision to watch from (inclusive).
+  // if start_revision is 0, mean watch from "now".
+  // if start_revision > 0, measn watch from start_revision.
+  // if the caller setup the start_revision, the create may be failed if the start_revision is compacted.
+  // caller need to check the compact_revision in the response.
   int64 start_revision = 1;
 
   // the event_types than client want to get from coordinator
@@ -999,7 +1003,7 @@ message WatchResponse {
   //
   // The client should treat the watcher as canceled and should not try to create any
   // watcher with the same start_revision again.
-  int64 compact_revision = 7;  // NOT IMPLEMENTED
+  int64 compact_revision = 7;
 
   // cancel_reason indicates the reason for canceling the watcher.
   string cancel_reason = 8;

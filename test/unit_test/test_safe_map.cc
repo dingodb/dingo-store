@@ -355,3 +355,94 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapMultiGet) {
   EXPECT_EQ(values.size(), 4);
   EXPECT_EQ(exists.size(), 4);
 }
+
+TEST(DingoSafeStdMapTest, DingoSafeStdMapGetFirstKey) {
+  dingodb::DingoSafeStdMap<int64_t, std::string> safe_map;
+
+  int64_t first_key = 0;
+
+  auto ret = safe_map.GetFirstKey(first_key);
+
+  EXPECT_TRUE(ret == 0);
+
+  ret = safe_map.GetLastKey(first_key);
+
+  EXPECT_TRUE(ret == 0);
+
+  for (int64_t i = 0; i < 1000; i++) {
+    safe_map.Put(i, std::to_string(i));
+  }
+
+  ret = safe_map.GetFirstKey(first_key);
+
+  EXPECT_TRUE(ret > 0);
+  EXPECT_EQ(first_key, 0);
+
+  ret = safe_map.GetLastKey(first_key);
+
+  EXPECT_TRUE(ret > 0);
+  EXPECT_EQ(first_key, 999);
+
+  safe_map.Erase(0);
+
+  ret = safe_map.GetFirstKey(first_key);
+  EXPECT_TRUE(ret > 0);
+  EXPECT_EQ(first_key, 1);
+
+  safe_map.Erase(999);
+
+  ret = safe_map.GetLastKey(first_key);
+  EXPECT_TRUE(ret > 0);
+  EXPECT_EQ(first_key, 998);
+
+  safe_map.Clear();
+
+  ret = safe_map.GetFirstKey(first_key);
+  EXPECT_TRUE(ret == 0);
+
+  ret = safe_map.GetLastKey(first_key);
+  EXPECT_TRUE(ret == 0);
+}
+
+TEST(DingoSafeStdMapTest, DingoSafeStdMapGetRangeKeyValues) {
+  dingodb::DingoSafeStdMap<int64_t, std::string> safe_map;
+
+  for (int64_t i = 0; i < 1000; i++) {
+    safe_map.Put(i, std::to_string(i));
+  }
+
+  std::vector<int64_t> keys;
+  std::vector<std::string> values;
+  auto ret = safe_map.GetRangeKeyValues(keys, values, 10, 100);
+
+  EXPECT_TRUE(ret > 0);
+  EXPECT_EQ(keys.size(), values.size());
+  EXPECT_EQ(keys.size(), 90);
+
+  keys.clear();
+  values.clear();
+
+  ret = safe_map.GetRangeKeyValues(keys, values, 100, 10);
+
+  EXPECT_TRUE(ret == 0);
+  EXPECT_EQ(keys.size(), values.size());
+  EXPECT_EQ(keys.size(), 0);
+
+  keys.clear();
+  values.clear();
+
+  ret = safe_map.GetRangeKeyValues(keys, values, 100, 100);
+
+  EXPECT_TRUE(ret == 0);
+  EXPECT_EQ(keys.size(), values.size());
+  EXPECT_EQ(keys.size(), 0);
+
+  keys.clear();
+  values.clear();
+
+  ret = safe_map.GetRangeKeyValues(keys, values, 90, 95);
+
+  EXPECT_TRUE(ret > 0);
+  EXPECT_EQ(keys.size(), values.size());
+  EXPECT_EQ(keys.size(), 5);
+}
