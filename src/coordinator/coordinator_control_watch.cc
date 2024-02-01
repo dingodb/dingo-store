@@ -219,6 +219,14 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
     return butil::Status(pb::error::Errno::EINTERNAL, "Generate watch_id failed");
   }
 
+  if (meta_increment.ByteSizeLong() > 0) {
+    auto ret = SubmitMetaIncrementSync(meta_increment);
+    if (!ret.ok()) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EINTERNAL, "SubmitMetaIncrementSync failed");
+      return butil::Status(ret.error_code(), ret.error_str());
+    }
+  }
+
   std::shared_ptr<MetaWatchNode> node = std::make_shared<MetaWatchNode>();
   node->watch_id = watch_id;
   node->start_revision = request->create_request().start_revision();
@@ -453,13 +461,18 @@ void CoordinatorControl::AddEventList(int64_t meta_revision,
 }
 
 void CoordinatorControl::RecycleOutdatedMetaWatcher() {
+  DINGO_LOG(INFO) << "RecycleOutdatedMetaWatcher, meta_watch_outdate_time_ms: " << FLAGS_meta_watch_outdate_time_ms;
+  RecycledMetaWatcherByTime(FLAGS_meta_watch_outdate_time_ms);
+}
+
+void CoordinatorControl::RecycledMetaWatcherByTime(int64_t max_outdate_time_ms) {
   std::map<int64_t, std::bitset<WATCH_BITSET_SIZE>> temp_meta_watch_bitmap;
   {
     BAIDU_SCOPED_LOCK(meta_watch_bitmap_mutex_);
     temp_meta_watch_bitmap = meta_watch_bitmap_;
   }
 
-  DINGO_LOG(INFO) << "RecycleOutdatedMetaWatcher, meta_watch_bitmap_size: " << temp_meta_watch_bitmap.size();
+  DINGO_LOG(INFO) << "RecycledMetaWatcherByTime, meta_watch_bitmap_size: " << temp_meta_watch_bitmap.size();
 
   std::vector<int64_t> watch_id_cancel_list;
 
@@ -480,11 +493,11 @@ void CoordinatorControl::RecycleOutdatedMetaWatcher() {
       {
         BAIDU_SCOPED_LOCK(node->node_mutex);
         if (node->watch_instances.empty()) {
-          if (node->last_send_timestamp_ms + FLAGS_meta_watch_outdate_time_ms < Helper::TimestampMs()) {
-            DINGO_LOG(INFO) << "RecycleOutdatedMetaWatcher do remove outdated watch_id, watch_id: " << watch_id
+          if (node->last_send_timestamp_ms + max_outdate_time_ms < Helper::TimestampMs()) {
+            DINGO_LOG(INFO) << "RecycledMetaWatcherByTime do remove outdated watch_id, watch_id: " << watch_id
                             << ", last_send_timestamp_ms: " << node->last_send_timestamp_ms
-                            << ", outdate_time_ms: " << FLAGS_meta_watch_outdate_time_ms
-                            << ", now: " << Helper::TimestampMs() << ", push_back into watch_id_cancel_list";
+                            << ", outdate_time_ms: " << max_outdate_time_ms << ", now: " << Helper::TimestampMs()
+                            << ", push_back into watch_id_cancel_list";
             watch_id_cancel_list.push_back(watch_id);
           }
         } else {
@@ -501,7 +514,7 @@ void CoordinatorControl::RecycleOutdatedMetaWatcher() {
           continue;
         }
 
-        DINGO_LOG(INFO) << "RecycleOutdatedMetaWatcher do idle send, watch_id: " << watch_id
+        DINGO_LOG(INFO) << "RecycledMetaWatcherByTime do idle send, watch_id: " << watch_id
                         << ", revision_size: " << event_revisions.size()
                         << ", event_size: " << event_response.events_size()
                         << ", watch_instance_size: " << watch_instances.size()
@@ -516,7 +529,7 @@ void CoordinatorControl::RecycleOutdatedMetaWatcher() {
           }
         }
       } else {
-        DINGO_LOG(INFO) << "RecycleOutdatedMetaWatcher no watch_instance and not outdated, watch_id: " << watch_id
+        DINGO_LOG(INFO) << "RecycledMetaWatcherByTime no watch_instance and not outdated, watch_id: " << watch_id
                         << ", revision_size: " << event_revisions.size()
                         << ", last_send_timestamp_ms: " << node->last_send_timestamp_ms
                         << ", outdate_time_ms: " << FLAGS_meta_watch_outdate_time_ms

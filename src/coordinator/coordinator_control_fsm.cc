@@ -152,6 +152,17 @@ void CoordinatorControl::OnLeaderStop() {
   // clear all store_metrics on follower
   DeleteStoreRegionMetrics(0);
 
+  // clean meta watchers
+  auto meta_watch_clean_task = std::make_shared<MetaWatchCleanTask>(this, 0);
+  auto ret3 = meta_watch_worker_set_->ExecuteRR(meta_watch_clean_task);
+  if (!ret3) {
+    DINGO_LOG(ERROR)
+        << "OnLeaderStop will clean meta watchers. ApplyMetaIncrement meta_watch_clean_task ExecuteRR failed";
+  } else {
+    DINGO_LOG(INFO)
+        << "OnLeaderStop will clean meta watchers. ApplyMetaIncrement meta_watch_clean_task ExecuteRR success";
+  }
+
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
 
