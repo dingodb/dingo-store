@@ -59,7 +59,7 @@ static std::string GetUsageMessage() {
   message += "\n  --ivf_bucket_init_size IVF bucket init size, default(1000)";
   message += "\n  --ivf_bucket_max_size IVF bucket max size, default(1280000)";
   message += "\n  --ivf_nbits_per_idx IVF nbits per index, default(8)";
-  message += "\n  --vector_search_topk IVF Vector search flag topk, default(10)";
+  message += "\n  --vector_search_topk vector search flag topk, default(10)";
   message += "\n  --vector_search_with_vector_data vector search flag with_vector_data, default(true)";
   message += "\n  --vector_search_with_scalar_data vector search flag with_scalar_data, default(false)";
   message += "\n  --vector_search_with_table_data vector search flag with_table_data, default(false)";
