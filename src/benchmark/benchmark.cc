@@ -191,14 +191,14 @@ void Stats::Report(bool is_cumulative, size_t milliseconds) const {
   }
 
   if (FLAGS_vector_dataset.empty()) {
-    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>16}{:>16}{:>16}{:>16}", epoch_, req_num_,
+    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>8}{:>8}{:>8}{:>8}", epoch_, req_num_,
                              error_count_, (req_num_ / seconds), (write_bytes_ / seconds / 1048576),
                              latency_recorder_->latency(), latency_recorder_->max_latency(),
                              latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
                              latency_recorder_->latency_percentile(0.99))
               << '\n';
   } else {
-    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>16}{:>16}{:>16}{:>16}{:>16.2f}", epoch_, req_num_,
+    std::cout << fmt::format("{:>8}{:>8}{:>8}{:>8.0f}{:>8.2f}{:>16}{:>8}{:>8}{:>8}{:>8}{:>16.2f}", epoch_, req_num_,
                              error_count_, (req_num_ / seconds), (write_bytes_ / seconds / 1048576),
                              latency_recorder_->latency(), latency_recorder_->max_latency(),
                              latency_recorder_->latency_percentile(0.5), latency_recorder_->latency_percentile(0.95),
@@ -209,13 +209,11 @@ void Stats::Report(bool is_cumulative, size_t milliseconds) const {
 
 std::string Stats::Header() {
   if (FLAGS_vector_dataset.empty()) {
-    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>16}{:>16}{:>16}{:>16}", "EPOCH", "REQ_NUM", "ERRORS", "QPS",
-                       "MB/s", "LATENCY_AVG(us)", "LATENCY_MAX(us)", "LATENCY_P50(us)", "LATENCY_P95(us)",
-                       "LATENCY_P99(us)");
+    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>8}{:>8}{:>8}{:>8}", "EPOCH", "REQ_NUM", "ERRORS", "QPS",
+                       "MB/s", "LATENCY AVG(us)", "MAX(us)", "P50(us)", "P95(us)", "P99(us)");
   } else {
-    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>16}{:>16}{:>16}{:>16}{:>16}", "EPOCH", "REQ_NUM", "ERRORS",
-                       "QPS", "MB/s", "LATENCY_AVG(us)", "LATENCY_MAX(us)", "LATENCY_P50(us)", "LATENCY_P95(us)",
-                       "LATENCY_P99(us)", "RECALL_AVG(%)");
+    return fmt::format("{:>8}{:>8}{:>8}{:>8}{:>8}{:>16}{:>8}{:>8}{:>8}{:>8}{:>16}", "EPOCH", "REQ_NUM", "ERRORS", "QPS",
+                       "MB/s", "LATENCY AVG(us)", "MAX(us)", "P50(us)", "P95(us)", "P99(us)", "RECALL AVG(%)");
   }
 }
 

@@ -531,7 +531,7 @@ bool ReadOperation::Arrange(RegionEntryPtr region_entry) {
     }
   }
 
-  std::cout << "\r" << fmt::format("region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
+  std::cout << "\r" << fmt::format("region({}) put data({}) ............ done", prefix, FLAGS_arrange_kv_num) << '\n';
 
   return true;
 }
@@ -634,7 +634,7 @@ bool TxnReadOperation::Arrange(RegionEntryPtr region_entry) {
     }
   }
 
-  std::cout << "\r" << fmt::format("region({}) put data({}) done", prefix, FLAGS_arrange_kv_num) << '\n';
+  std::cout << "\r" << fmt::format("region({}) put data({}) ............ done", prefix, FLAGS_arrange_kv_num) << '\n';
 
   return true;
 }
@@ -894,7 +894,9 @@ bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
     thread.join();
   }
 
-  std::cout << "\r" << fmt::format("vector index({}) put data({}) done", entry->index_id, count.load()) << '\n';
+  std::cout << "\r"
+            << fmt::format("vector index({}) put data({}) .................. done", entry->index_id, count.load())
+            << '\n';
 
   return true;
 }
@@ -948,7 +950,9 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
 
   entry->test_entries = dataset->GetTestData();
 
-  std::cout << "\r" << fmt::format("Vector index({}) put data({}) done", entry->index_id, total_vector_count) << '\n';
+  std::cout << "\r"
+            << fmt::format("Vector index({}) put data({}) .................. done", entry->index_id, total_vector_count)
+            << '\n';
 
   return true;
 }
