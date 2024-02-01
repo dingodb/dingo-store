@@ -3403,6 +3403,10 @@ void DoMetaWatch(google::protobuf::RpcController * /*controller*/, const pb::met
                        << ", errno: " << pb::error::Errno_Name(ret.error_code()) << ", errmsg: " << ret.error_str();
       ServiceHelper::SetError(response->mutable_error(), ret.error_code(), ret.error_str());
     } else {
+      response->set_watch_id(watch_id);
+      response->set_canceled(true);
+      response->set_cancel_reason("canceled by client");
+
       DINGO_LOG(INFO) << "DoMetaWatch Success, watch_id: " << watch_id;
     }
   }
