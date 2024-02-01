@@ -121,6 +121,7 @@ message Schema {
   string name = 2;
   repeated DingoCommonId table_ids = 3;
   repeated DingoCommonId index_ids = 4;
+  int64 revision = 10;
 }
 
 // TableDefinition is for SQL
@@ -721,6 +722,7 @@ message GetTablesResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
   repeated TableDefinitionWithId table_definition_with_ids = 3;
+  int64 revision = 4;
 }
 
 // drop table, vector index and scalar index

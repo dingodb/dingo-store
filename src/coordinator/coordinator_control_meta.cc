@@ -274,7 +274,6 @@ butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::
   }
 
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     butil::FlatMap<int64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
     int ret = schema_map_.GetRawMapCopy(schema_map_copy);
@@ -283,18 +282,19 @@ butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::
       return butil::Status(pb::error::Errno::EINTERNAL, "schema_map_ GetRawMapCopy failed");
     }
 
-    for (const auto& it : schema_map_copy) {
+    for (const auto& [schema_id, schema_internal] : schema_map_copy) {
       pb::meta::Schema schema;
 
       auto* temp_id = schema.mutable_id();
-      temp_id->set_entity_id(it.first);
+      temp_id->set_entity_id(schema_id);
       temp_id->set_parent_entity_id(schema_id);
       temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
-      schema.set_name(it.second.name());
+      schema.set_name(schema_internal.name());
+      schema.set_revision(schema_internal.revision());
 
       // construct table_ids in schema
-      for (auto it_table : it.second.table_ids()) {
+      for (auto it_table : schema_internal.table_ids()) {
         pb::meta::DingoCommonId table_id;
         table_id.set_entity_id(it_table);
         table_id.set_parent_entity_id(temp_id->entity_id());
@@ -304,7 +304,7 @@ butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::
       }
 
       // construct index_ids in schema
-      for (auto it_index : it.second.index_ids()) {
+      for (auto it_index : schema_internal.index_ids()) {
         pb::meta::DingoCommonId index_id;
         index_id.set_entity_id(it_index);
         index_id.set_parent_entity_id(temp_id->entity_id());
@@ -333,7 +333,6 @@ butil::Status CoordinatorControl::GetSchema(int64_t schema_id, pb::meta::Schema&
   }
 
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     pb::coordinator_internal::SchemaInternal temp_schema;
     int ret = schema_map_.Get(schema_id, temp_schema);
     if (ret < 0) {
@@ -347,6 +346,7 @@ butil::Status CoordinatorControl::GetSchema(int64_t schema_id, pb::meta::Schema&
     temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
     schema.set_name(temp_schema.name());
+    schema.set_revision(temp_schema.revision());
 
     for (auto it : temp_schema.table_ids()) {
       pb::meta::DingoCommonId table_id;
@@ -2555,6 +2555,7 @@ butil::Status CoordinatorControl::GetTableIndexes(int64_t schema_id, int64_t tab
 
       *(response->add_table_definition_with_ids()) = temp_definition_with_id;
     }
+    response->set_revision(table_index_internal.revision());
   } else {
     // not found
     DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
