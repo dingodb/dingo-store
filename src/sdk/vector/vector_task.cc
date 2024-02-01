@@ -88,6 +88,9 @@ void VectorTask::FireCallback() {
     DINGO_LOG(WARNING) << "Fail task:" << Name() << ", status:" << status_.ToString() << ", error_msg:" << ErrorMsg();
   }
   call_back_(status_);
+
+  StatusCallback cb;
+  call_back_.swap(cb);
 }
 
 void VectorTask::PostProcess() {}
