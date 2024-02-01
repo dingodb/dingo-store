@@ -49,7 +49,7 @@ bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_execute_latency("dingo_copro
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_execute_txn_running_num(
     "dingo_coprocessor_v2_execute_txn_running_num");
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_execute_txn_total_num(
-    "bvar_coprocessor_v2_execute_txn_total_num");
+    "dingo_coprocessor_v2_execute_txn_total_num");
 bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_execute_txn_latency("dingo_coprocessor_v2_execute_txn_latency");
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_filter_running_num("dingo_coprocessor_v2_filter_running_num");
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_filter_total_num("dingo_coprocessor_v2_filter_total_num");
@@ -59,7 +59,10 @@ CoprocessorV2::CoprocessorV2() : bvar_guard_for_coprocessor_v2_latency_(&coproce
   bvar_coprocessor_v2_object_running_num << 1;
   bvar_coprocessor_v2_object_total_num << 1;
 };
-CoprocessorV2::~CoprocessorV2() { Close(); }
+CoprocessorV2::~CoprocessorV2() {
+  Close();
+  bvar_coprocessor_v2_object_running_num << -1;
+}
 
 butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
   butil::Status status;
@@ -298,7 +301,6 @@ void CoprocessorV2::Close() {
   original_record_decoder_.reset();
   result_column_indexes_.clear();
   rel_runner_.reset();
-  bvar_coprocessor_v2_object_running_num << -1;
 }
 
 butil::Status CoprocessorV2::DoExecute(const std::string& key, const std::string& value, bool* has_result_kv,
