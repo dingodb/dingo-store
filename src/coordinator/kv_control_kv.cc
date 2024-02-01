@@ -182,9 +182,9 @@ butil::Status KvControl::DeleteRawKvRev(const pb::coordinator_internal::Revision
 butil::Status KvControl::KvRange(const std::string &key, const std::string &range_end, int64_t limit, bool keys_only,
                                  bool count_only, std::vector<pb::version::Kv> &kv, int64_t &return_count,
                                  bool &has_more) {
-  DINGO_LOG(INFO) << "KvRange, key: " << key << "(" << Helper::StringToHex(key) << "), range_end: " << range_end << "("
-                  << Helper::StringToHex(range_end) << "), limit: " << limit << ", keys_only: " << keys_only
-                  << ", count_only: " << count_only;
+  DINGO_LOG(DEBUG) << "KvRange, key: " << key << "(" << Helper::StringToHex(key) << "), range_end: " << range_end << "("
+                   << Helper::StringToHex(range_end) << "), limit: " << limit << ", keys_only: " << keys_only
+                   << ", count_only: " << count_only;
 
   has_more = false;
   if (limit == 0) {
@@ -276,7 +276,7 @@ butil::Status KvControl::KvRange(const std::string &key, const std::string &rang
   return_count = kv.size();
 
   DINGO_LOG(INFO) << "KvRange finish, key: " << key << "(" << Helper::StringToHex(key) << "), range_end: " << range_end
-                  << "(" << Helper::StringToHex(range_end) << "), limit" << limit << ", keys_only: " << keys_only
+                  << "(" << Helper::StringToHex(range_end) << "), limit: " << limit << ", keys_only: " << keys_only
                   << ", count_only: " << count_only << ", kv size: " << kv.size()
                   << ", total_count_in_range: " << return_count;
 
@@ -317,9 +317,9 @@ butil::Status KvControl::KvRangeRawKeys(const std::string &key, const std::strin
     }
   }
 
-  DINGO_LOG(INFO) << "KvRangeRawKeys finish, key: " << key << "(" << Helper::StringToHex(key)
-                  << "), range_end: " << range_end << "(" << Helper::StringToHex(range_end)
-                  << "), keys size: " << keys.size();
+  DINGO_LOG(DEBUG) << "KvRangeRawKeys finish, key: " << key << "(" << Helper::StringToHex(key)
+                   << "), range_end: " << range_end << "(" << Helper::StringToHex(range_end)
+                   << "), keys size: " << keys.size();
 
   return butil::Status::OK();
 }

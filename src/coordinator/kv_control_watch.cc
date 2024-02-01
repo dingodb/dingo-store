@@ -45,10 +45,10 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
                                       [[maybe_unused]] brpc::Controller* cntl) {
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(INFO) << "OneTimeWatch, watch_key:" << watch_key << ", start_revision:" << start_revision
-                  << ", no_put_event:" << no_put_event << ", no_delete_event:" << no_delete_event
-                  << ", need_prev_kv:" << need_prev_kv << ", wait_on_not_exist_key:" << wait_on_not_exist_key
-                  << ", done:" << done;
+  DINGO_LOG(INFO) << "OneTimeWatch, watch_key:" << watch_key << ", hex_key: " << Helper::StringToHex(watch_key)
+                  << ", start_revision:" << start_revision << ", no_put_event:" << no_put_event
+                  << ", no_delete_event:" << no_delete_event << ", need_prev_kv:" << need_prev_kv
+                  << ", wait_on_not_exist_key:" << wait_on_not_exist_key << ", done:" << done;
 
   BAIDU_SCOPED_LOCK(one_time_watch_map_mutex_);
 
@@ -65,7 +65,7 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
   if (start_revision == 0) {
     start_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
     DINGO_LOG(INFO) << "OneTimeWatch, start_revision is 0, set to next revision, watch_key:" << watch_key
-                    << ", start_revision:" << start_revision;
+                    << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;
   }
 
   // check if need to send back immediately
@@ -79,6 +79,8 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
     // not exist, no wait, send response
     auto* event = response->add_events();
     event->set_type(::dingodb::pb::version::Event_EventType::Event_EventType_NOT_EXISTS);
+    DINGO_LOG(INFO) << "OneTimeWatch, key not exists, no wait, send response, watch_key:" << watch_key
+                    << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;
     return butil::Status::OK();
   }
 
@@ -114,20 +116,24 @@ butil::Status KvControl::AddOneTimeWatch(const std::string& watch_key, int64_t s
   // add to watch
   KvWatchNode watch_node(closure_id, start_revision, no_put_event, no_delete_event, need_prev_kv);
 
-  DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key:" << watch_key << ", start_revision:" << start_revision
-                  << ", no_put_event:" << no_put_event << ", no_delete_event:" << no_delete_event
-                  << ", need_prev_kv:" << need_prev_kv << ", closure_id:" << closure_id;
+  DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key:" << watch_key << ", hex_key: " << Helper::StringToHex(watch_key)
+                  << ", start_revision:" << start_revision << ", no_put_event:" << no_put_event
+                  << ", no_delete_event:" << no_delete_event << ", need_prev_kv:" << need_prev_kv
+                  << ", closure_id:" << closure_id;
 
   auto it = one_time_watch_map_.find(watch_key);
   if (it == one_time_watch_map_.end()) {
     std::map<uint64_t, KvWatchNode> watch_node_map;
     watch_node_map.insert_or_assign(closure_id, watch_node);
     one_time_watch_map_.insert_or_assign(watch_key, watch_node_map);
-    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key not found, insert, watch_key:" << watch_key;
+    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key not found, insert, watch_key:" << watch_key
+                    << ", hex_key: " << Helper::StringToHex(watch_key)
+                    << ", watch_node_map.size:" << watch_node_map.size();
   } else {
     auto& exist_watch_node_map = it->second;
     exist_watch_node_map.insert_or_assign(closure_id, watch_node);
     DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key found, insert, watch_key:" << watch_key
+                    << ", hex_key: " << Helper::StringToHex(watch_key)
                     << ", watch_node_map.size:" << exist_watch_node_map.size();
   }
 

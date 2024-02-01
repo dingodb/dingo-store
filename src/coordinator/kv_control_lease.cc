@@ -35,6 +35,7 @@ namespace dingodb {
 DEFINE_int64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
 DEFINE_int64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
 DEFINE_int64(version_lease_max_count, 50000, "max lease count");
+DEFINE_int64(version_lease_print_ttl_remaining_seconds, 10, "print ttl remaining seconds if value is less than this");
 
 butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64_t &granted_id,
                                     int64_t &granted_ttl_seconds,
@@ -244,10 +245,12 @@ void KvControl::LeaseTask() {
         DINGO_LOG(INFO) << "lease id " << lease.id() << " expired, will revoke";
         lease_ids_to_revoke.emplace_back(lease.id());
       } else {
-        DINGO_LOG(INFO) << "lease id " << lease.id() << " is ok, last_renew_ts_seconds "
-                        << lease.last_renew_ts_seconds() << ", ttl_seconds " << lease.ttl_seconds()
-                        << ", remaining ttl_seconds "
-                        << lease.ttl_seconds() - (butil::gettimeofday_s() - lease.last_renew_ts_seconds());
+        auto remaining_ttl_seconds = lease.ttl_seconds() - (butil::gettimeofday_s() - lease.last_renew_ts_seconds());
+        if (remaining_ttl_seconds < FLAGS_version_lease_print_ttl_remaining_seconds) {
+          DINGO_LOG(INFO) << "lease id " << lease.id() << " is ok, last_renew_ts_seconds "
+                          << lease.last_renew_ts_seconds() << ", ttl_seconds " << lease.ttl_seconds()
+                          << ", remaining ttl_seconds " << remaining_ttl_seconds;
+        }
       }
     }
 

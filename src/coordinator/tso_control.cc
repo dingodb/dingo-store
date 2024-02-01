@@ -181,7 +181,7 @@ void TsoControl::GenTso(const pb::meta::TsoRequest* request, pb::meta::TsoRespon
     DINGO_LOG(ERROR) << "gen tso failed";
     return;
   }
-  DINGO_LOG(WARNING) << "gen tso current: (" << current.physical() << ", " << current.logical() << ")";
+  DINGO_LOG(INFO) << "gen tso current: (" << current.physical() << ", " << current.logical() << ")";
   auto* timestamp = response->mutable_start_timestamp();
   *timestamp = current;
   response->set_count(count);
