@@ -894,6 +894,7 @@ class CoordinatorControl : public MetaControl {
   void AddEventList(int64_t meta_revision, std::shared_ptr<std::vector<pb::meta::MetaEvent>> event_list,
                     std::bitset<WATCH_BITSET_SIZE> watch_bitset);
 
+  void RecycledMetaWatcherByTime(int64_t max_outdate_time_ms);
   void RecycleOutdatedMetaWatcher();
   void TrimMetaWatchEventList();
 
@@ -1073,6 +1074,24 @@ class MetaWatchSendTask : public TaskRunnable {
   int64_t meta_revision_;
   std::shared_ptr<std::vector<pb::meta::MetaEvent>> event_list_;
   std::bitset<WATCH_BITSET_SIZE> watch_bitset_;
+};
+
+class MetaWatchCleanTask : public TaskRunnable {
+ public:
+  MetaWatchCleanTask(CoordinatorControl *coordinator_control, int64_t max_outdate_time_ms)
+      : coordinator_control_(coordinator_control), max_outdate_time_ms_(max_outdate_time_ms) {}
+  ~MetaWatchCleanTask() override = default;
+
+  std::string Type() override { return "META_WATCH_CLEAN"; }
+
+  void Run() override {
+    DINGO_LOG(DEBUG) << "start process MetaWatchCleanTask";
+    coordinator_control_->RecycledMetaWatcherByTime(max_outdate_time_ms_);
+  }
+
+ private:
+  CoordinatorControl *coordinator_control_;
+  int64_t max_outdate_time_ms_;
 };
 
 }  // namespace dingodb
