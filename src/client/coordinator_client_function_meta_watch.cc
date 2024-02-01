@@ -20,6 +20,7 @@
 
 #include "butil/status.h"
 #include "client/coordinator_client_function.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
 #include "gflags/gflags_declare.h"
@@ -45,6 +46,12 @@ void SendListWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   auto status = coordinator_interaction->SendRequest("ListWatch", request, response, 600000);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
+
+  for (const auto& node : response.watch_nodes()) {
+    DINGO_LOG(INFO) << "watch_id: " << node.watch_id()
+                    << ", last_send_time: " << dingodb::Helper::FormatMsTime(node.last_send_timestamp_ms())
+                    << ", watched_revision: " << node.watched_revision();
+  }
 }
 
 void SendCreateWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

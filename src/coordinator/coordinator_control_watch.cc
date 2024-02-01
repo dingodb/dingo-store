@@ -503,6 +503,7 @@ void CoordinatorControl::RecycledMetaWatcherByTime(int64_t max_outdate_time_ms) 
         } else {
           watch_instances.swap(node->watch_instances);
           event_revisions.swap(node->pending_event_revisions);
+          node->last_send_timestamp_ms = Helper::TimestampMs();
         }
       }
 
@@ -528,12 +529,16 @@ void CoordinatorControl::RecycledMetaWatcherByTime(int64_t max_outdate_time_ms) 
             DINGO_LOG(ERROR) << "Send event list failed, watch_id: " << watch_id;
           }
         }
+      }
+    }
+
+    // cancel watch_id in watch_id_cancel_list
+    for (const auto &watch_id : watch_id_cancel_list) {
+      auto ret = MetaWatchCancel(watch_id);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "Cancel watch_id failed, watch_id: " << watch_id;
       } else {
-        DINGO_LOG(INFO) << "RecycledMetaWatcherByTime no watch_instance and not outdated, watch_id: " << watch_id
-                        << ", revision_size: " << event_revisions.size()
-                        << ", last_send_timestamp_ms: " << node->last_send_timestamp_ms
-                        << ", outdate_time_ms: " << FLAGS_meta_watch_outdate_time_ms
-                        << ", now: " << Helper::TimestampMs();
+        DINGO_LOG(INFO) << "Cancel watch_id success, watch_id: " << watch_id;
       }
     }
   }
