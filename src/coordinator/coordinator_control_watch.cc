@@ -186,10 +186,29 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "event_types size is too large, the max is 64");
   }
 
-  if (request->create_request().start_revision() < 0) {
+  int64_t start_revision = request->create_request().start_revision();
+
+  if (start_revision < 0) {
     ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::EILLEGAL_PARAMTETERS,
                             "start_revision is less than 0");
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "start_revision is less than 0");
+  }
+
+  int64_t first_event_revision = 0;
+  if (meta_event_map_.GetFirstKey(first_event_revision) < 0) {
+    DINGO_LOG(ERROR) << "Get first event revision failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "Get first event revision failed");
+  }
+
+  // if start_revision is zero, mean watch from now
+  // if start_revision > 0, mean watch from start_revision, will check if the start_revision is already compacted
+  if (start_revision > 0 && first_event_revision > request->create_request().start_revision()) {
+    DINGO_LOG(INFO) << "start_revision is less than first event revision, start_revision: " << start_revision
+                    << ", first_event_revision: " << first_event_revision;
+    response->set_compact_revision(first_event_revision);
+    response->set_created(false);
+
+    return butil::Status::OK();
   }
 
   if (meta_watch_node_map_.Size() > FLAGS_meta_watch_max_watchers) {
@@ -229,7 +248,7 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
 
   std::shared_ptr<MetaWatchNode> node = std::make_shared<MetaWatchNode>();
   node->watch_id = watch_id;
-  node->start_revision = request->create_request().start_revision();
+  node->start_revision = start_revision;
   auto watch_bitset = GenWatchBitSet(request->create_request());
   node->watch_bitset = watch_bitset;
 
@@ -239,10 +258,104 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
     meta_watch_bitmap_.insert_or_assign(watch_id, watch_bitset);
   }
 
+  // if start_revision is zero, mean watch from now
+  // if start_revision > 0, mean watch from start_revision, will check if the start_revision is already compacted
+  if (start_revision == 0) {
+    response->set_watch_id(watch_id);
+    response->set_created(true);
+
+    DINGO_LOG(INFO) << "Create meta_watch success, watch_id: " << watch_id << ", start_revision: 0";
+
+    return butil::Status::OK();
+  }
+
+  DINGO_LOG(INFO) << "Create meta_watch is going, will check history events, watch_id: " << watch_id
+                  << ", start_revision: " << start_revision;
+
+  // get last_event_revisions and generate response for caller
+  int64_t last_event_revision = 0;
+  if (meta_event_map_.GetLastKey(last_event_revision) < 0) {
+    DINGO_LOG(ERROR) << "Get last event revision failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "Get last event revision failed");
+  }
+
+  if (last_event_revision == 0) {
+    DINGO_LOG(INFO) << "last_event_revision is 0, no event, watch from now";
+  }
+
+  std::vector<int64_t> temp_revisions;
+  std::vector<std::shared_ptr<std::vector<pb::meta::MetaEvent>>> temp_events;
+  meta_event_map_.GetRangeKeyValues(temp_revisions, temp_events, start_revision, last_event_revision);
+
+  if (temp_revisions.empty()) {
+    DINGO_LOG(INFO) << "temp_revisions is empty, no event, watch from now";
+  } else {
+    DINGO_LOG(INFO) << "temp_revisions size: " << temp_revisions.size()
+                    << ", last_event_revision: " << last_event_revision;
+
+    // get first event revision
+    if (start_revision > 0 && temp_revisions.at(0) > start_revision) {
+      DINGO_LOG(INFO) << "start_revision is less than first event revision, start_revision: " << start_revision
+                      << ", first_event_revision: " << temp_revisions.at(0) << ", will cancel watch_id";
+
+      response->set_compact_revision(temp_revisions.at(0));
+      response->set_created(false);
+
+      auto ret = MetaWatchCancel(watch_id);
+
+      return butil::Status::OK();
+    }
+
+    std::vector<int64_t> event_revisions_to_supply;
+
+    for (int64_t i = 0; i < temp_revisions.size(); ++i) {
+      const auto &event_list = temp_events.at(i);
+      if (event_list == nullptr) {
+        DINGO_LOG(ERROR) << "Get event list failed, get nullptr, event_revision: " << temp_revisions.at(i);
+        return butil::Status(pb::error::Errno::EINTERNAL, "Get event list failed, get nullptr");
+      }
+
+      std::bitset<WATCH_BITSET_SIZE> bit_set_in_event_list;
+      for (const auto &event : *event_list) {
+        bit_set_in_event_list.set(event.event_type());
+      }
+
+      auto bit_set_result = bit_set_in_event_list & watch_bitset;
+      if (bit_set_result.none()) {
+        DINGO_LOG(INFO) << "bit_set_result is none, no event for watch_id: " << watch_id
+                        << ", event_revision: " << temp_revisions.at(i) << ", skip this event_revision";
+        continue;
+      }
+
+      event_revisions_to_supply.push_back(temp_revisions.at(i));
+    }
+
+    DINGO_LOG(INFO) << "watch_id: " << watch_id
+                    << ", event_revisions_to_supply size: " << event_revisions_to_supply.size();
+
+    if (!event_revisions_to_supply.empty()) {
+      BAIDU_SCOPED_LOCK(node->node_mutex);
+
+      if (node->pending_event_revisions.empty()) {
+        node->pending_event_revisions.swap(event_revisions_to_supply);
+        DINGO_LOG(INFO) << "watch_id: " << watch_id
+                        << ", pending_event_revisions swap success, size: " << node->pending_event_revisions.size();
+      } else {
+        DINGO_LOG(INFO) << "watch_id: " << watch_id
+                        << ", pending_event_revisions is not empty, append to pending_event_revisions, old size: "
+                        << node->pending_event_revisions.size() << ", add size: " << event_revisions_to_supply.size();
+
+        event_revisions_to_supply.insert(event_revisions_to_supply.end(), node->pending_event_revisions.begin(),
+                                         node->pending_event_revisions.end());
+        node->pending_event_revisions.swap(event_revisions_to_supply);
+      }
+    }
+  }
+
   response->set_watch_id(watch_id);
   response->set_created(true);
 
-  DINGO_LOG(INFO) << "Create meta_watch success, watch_id: " << watch_id;
+  DINGO_LOG(INFO) << "Create meta_watch success, watch_id: " << watch_id << ", start_revision: " << start_revision;
 
   return butil::Status::OK();
 }
