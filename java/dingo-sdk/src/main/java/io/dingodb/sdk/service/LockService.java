@@ -23,8 +23,8 @@ import io.dingodb.sdk.service.entity.meta.TsoOpType;
 import io.dingodb.sdk.service.entity.meta.TsoRequest;
 import io.dingodb.sdk.service.entity.meta.TsoTimestamp;
 import io.dingodb.sdk.service.entity.version.DeleteRangeRequest;
+import io.dingodb.sdk.service.entity.version.Event;
 import io.dingodb.sdk.service.entity.version.EventFilterType;
-import io.dingodb.sdk.service.entity.version.EventType;
 import io.dingodb.sdk.service.entity.version.Kv;
 import io.dingodb.sdk.service.entity.version.LeaseGrantRequest;
 import io.dingodb.sdk.service.entity.version.LeaseRenewRequest;
@@ -53,6 +53,8 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 
+import static io.dingodb.sdk.service.entity.version.EventType.DELETE;
+import static io.dingodb.sdk.service.entity.version.EventType.NOT_EXISTS;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
@@ -282,7 +284,7 @@ public class LockService {
             Kv current = rangeResponse.getKvs().stream().filter(Objects::nonNull)
                 .min(Comparator.comparingLong(Kv::getCreateRevision))
                 .get();
-            if (current.getModRevision() == revision) {
+            if (current.getCreateRevision() == revision) {
                 this.revision = revision;
                 if (log.isDebugEnabled()) {
                     log.debug(
@@ -299,6 +301,14 @@ public class LockService {
             return false;
         }
 
+        private long getCreateRevision(PutResponse response) {
+            if (response.getPrevKv() == null) {
+                return response.getHeader().getRevision();
+            } else {
+                return response.getPrevKv().getCreateRevision();
+            }
+        }
+
         @Override
         public synchronized void lock() {
             if (locked()) {
@@ -307,7 +317,7 @@ public class LockService {
             while (true) {
                 try {
                     PutResponse response = kvService.kvPut(putRequest(resourceKey, resourceValue));
-                    long revision = response.getHeader().getRevision();
+                    long revision = getCreateRevision(response);
                     RangeResponse rangeResponse = kvService.kvRange(rangeRequest());
                     if (isLockRevision(revision, rangeResponse)) {
                         break;
@@ -350,11 +360,11 @@ public class LockService {
             }
             try {
                 PutResponse response = kvService.kvPut(putRequest(resourceKey, resourceValue));
-                long revision = response.getHeader().getRevision();
+                long revision = getCreateRevision(response);
                 Optional<Kv> current = kvService.kvRange(rangeRequest())
                     .getKvs().stream()
                     .min(Comparator.comparingLong(Kv::getCreateRevision));
-                if (current.map(Kv::getModRevision).filter(__ -> __ == revision).isPresent()) {
+                if (current.map(Kv::getCreateRevision).filter(__ -> __ == revision).isPresent()) {
                     locked++;
                     watchLock(current.get(), this::destroy);
                     return true;
@@ -374,13 +384,13 @@ public class LockService {
             }
             try {
                 PutResponse response = kvService.kvPut(putRequest(resourceKey, resourceValue));
-                long revision = response.getHeader().getRevision();
+                long revision = getCreateRevision(response);
                 while (time-- > 0) {
                     RangeResponse rangeResponse = kvService.kvRange(rangeRequest());
                     Kv current = rangeResponse.getKvs().stream().filter(Objects::nonNull)
                         .min(Comparator.comparingLong(Kv::getCreateRevision))
                         .orElseThrow(() -> new RuntimeException("Put " + resourceKey + " success, but range is empty."));
-                    if (current.getModRevision() == revision) {
+                    if (current.getCreateRevision() == revision) {
                         if (log.isDebugEnabled()) {
                             log.debug("Lock {} wait...", resourceKey);
                         }
@@ -435,7 +445,7 @@ public class LockService {
                 log.error("Watch locked error, or watch retry time great than lease ttl.", e);
                 return;
             }
-            if (r.getEvents().stream().anyMatch(event -> event.getType() == EventType.DELETE)) {
+            if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
                 task.run();
             } else {
                 watchLock(kv, task);
