@@ -295,6 +295,7 @@ struct VectorWithDistance {
 std::string DumpToString(const VectorWithDistance& obj);
 
 struct SearchResult {
+  // TODO : maybe remove VectorWithId
   VectorWithId id;
   std::vector<VectorWithDistance> vector_datas;
 

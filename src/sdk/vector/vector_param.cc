@@ -28,10 +28,24 @@ namespace dingodb {
 namespace sdk {
 
 std::string DumpToString(const Vector& obj) {
-  std::string float_values = fmt::format("{}", fmt::join(obj.float_values, ", "));
-  std::string binary_values = fmt::format("{}", fmt::join(obj.binary_values, ", "));
+  std::stringstream float_ss;
+  for (size_t i = 0; i < obj.float_values.size(); ++i) {
+    float_ss << obj.float_values[i];
+    if (i != obj.float_values.size() - 1) {
+      float_ss << ", ";
+    }
+  }
+
+  std::stringstream binary_ss;
+  for (size_t i = 0; i < obj.binary_values.size(); ++i) {
+    binary_ss << obj.binary_values[i];
+    if (i != obj.binary_values.size() - 1) {
+      binary_ss << ", ";
+    }
+  }
+
   return fmt::format("Vector {{ dimension: {}, value_type: {}, float_values: [{}], binary_values: [{}] }}",
-                     obj.dimension, ValueTypeToString(obj.value_type), float_values, binary_values);
+                     obj.dimension, ValueTypeToString(obj.value_type), float_ss.str(), binary_ss.str());
 }
 
 std::string DumpToString(const VectorWithId& obj) {
