@@ -179,8 +179,10 @@ static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type)
   }
 }
 
-static void FillVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId& vector_with_id) {
-  pb->set_id(vector_with_id.id);
+static void FillVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId& vector_with_id, bool with_id = true) {
+  if (with_id) {
+    pb->set_id(vector_with_id.id);
+  }
   auto* vector_pb = pb->mutable_vector();
   const auto& vector = vector_with_id.vector;
   vector_pb->set_dimension(vector.dimension);

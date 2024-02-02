@@ -153,14 +153,18 @@ static void VectorAdd(bool use_index_name = false) {
 
 static void VectorSearch(bool use_index_name = false) {
   std::vector<dingodb::sdk::VectorWithId> target_vectors;
-  {
+  float init = 0.1f;
+  for (int i = 0; i < 5; i++) {
     dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
-    tmp_vector.float_values.push_back(1.5);
-    tmp_vector.float_values.push_back(1.5);
+    tmp_vector.float_values.clear();
+    tmp_vector.float_values.push_back(init);
+    tmp_vector.float_values.push_back(init);
 
     dingodb::sdk::VectorWithId tmp;
     tmp.vector = std::move(tmp_vector);
     target_vectors.push_back(std::move(tmp));
+
+    init = init + 0.1;
   }
 
   dingodb::sdk::SearchParameter param;
@@ -181,9 +185,15 @@ static void VectorSearch(bool use_index_name = false) {
     DINGO_LOG(INFO) << "vector search result:" << dingodb::sdk::DumpToString(r);
   }
 
-  if (!result.empty()) {
-    CHECK_EQ(result.size(), 1);
-    CHECK_EQ(result[0].vector_datas.size(), 2);
+  CHECK_EQ(result.size(), target_vectors.size());
+  for (auto i = 0; i < result.size(); i++) {
+    auto& search_result = result[i];
+    if (!search_result.vector_datas.empty()) {
+      CHECK_EQ(search_result.vector_datas.size(), param.topk);
+    }
+    const auto& vector_id = search_result.id;
+    CHECK_EQ(vector_id.id, target_vectors[i].id);
+    CHECK_EQ(vector_id.vector.Size(), target_vectors[i].vector.Size());
   }
 }
 

@@ -48,15 +48,15 @@ class VectorSearchTask : public VectorTask {
 
   std::string Name() const override { return fmt::format("VectorSearchTask-{}", index_id_); }
 
-  void SubTaskCallback(Status status, std::shared_ptr<VectorSearchPartTask> sub_task);
+  void SubTaskCallback(Status status, VectorSearchPartTask* sub_task);
 
   void ConstructResultUnlocked();
 
   const int64_t index_id_;
   const SearchParameter& search_param_;
   const std::vector<VectorWithId>& target_vectors_;
-  std::unordered_map<int64_t, int64_t> vector_id_idx_;
 
+  // target_vectors_ idx to search result
   std::unordered_map<int64_t, std::vector<VectorWithDistance>> tmp_out_result_;
 
   std::vector<SearchResult>& out_result_;
@@ -105,6 +105,7 @@ class VectorSearchPartTask : public VectorTask {
 
   std::unordered_map<int64_t, std::shared_ptr<Region>> next_batch_region_;
 
+  // target_vectors_ idx to search result
   std::unordered_map<int64_t, std::vector<VectorWithDistance>> search_result_;
 
   std::vector<StoreRpcController> controllers_;

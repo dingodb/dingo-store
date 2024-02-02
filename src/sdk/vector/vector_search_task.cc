@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
@@ -45,10 +46,6 @@ Status VectorSearchTask::Init() {
 
   auto part_ids = vector_index_->GetPartitionIds();
 
-  for (int64_t i = 0; i < target_vectors_.size(); i++) {
-    CHECK(vector_id_idx_.insert({target_vectors_[i].id, i}).second) << "duplicate vector id: " << target_vectors_[i].id;
-  }
-
   for (const auto& part_id : part_ids) {
     next_part_ids_.emplace(part_id);
   }
@@ -73,12 +70,14 @@ void VectorSearchTask::DoAsync() {
   sub_tasks_count_.store(next_part_ids.size());
 
   for (const auto& part_id : next_part_ids) {
-    auto sub_task = std::make_shared<VectorSearchPartTask>(stub, index_id_, part_id, search_param_, target_vectors_);
+    auto* sub_task = new VectorSearchPartTask(stub, index_id_, part_id, search_param_, target_vectors_);
     sub_task->AsyncRun([this, sub_task](auto&& s) { SubTaskCallback(std::forward<decltype(s)>(s), sub_task); });
   }
 }
 
-void VectorSearchTask::SubTaskCallback(Status status, std::shared_ptr<VectorSearchPartTask> sub_task) {
+void VectorSearchTask::SubTaskCallback(Status status, VectorSearchPartTask* sub_task) {
+  DEFER(delete sub_task);
+
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "sub_task: " << sub_task->Name() << " fail: " << status.ToString();
 
@@ -116,20 +115,8 @@ void VectorSearchTask::SubTaskCallback(Status status, std::shared_ptr<VectorSear
 }
 
 void VectorSearchTask::ConstructResultUnlocked() {
-  for (auto& iter : tmp_out_result_) {
-    auto& vec = iter.second;
-    std::sort(vec.begin(), vec.end(),
-              [](const VectorWithDistance& a, const VectorWithDistance& b) { return a.distance < b.distance; });
-  }
-
-  for (auto& iter : tmp_out_result_) {
-    int64_t vector_id = iter.first;
-    auto& vec_distance = iter.second;
-    const auto& vector_with_id = target_vectors_[vector_id];
-    CHECK_EQ(vector_with_id.id, vector_id);
-
+  for (const auto& vector_with_id : target_vectors_) {
     VectorWithId tmp;
-    tmp.id = vector_with_id.id;
     {
       //  NOTE: use copy
       const Vector& to_copy = vector_with_id.vector;
@@ -140,14 +127,24 @@ void VectorSearchTask::ConstructResultUnlocked() {
     }
 
     SearchResult search(std::move(tmp));
-    search.vector_datas = std::move(vec_distance);
-
-    if (!search_param_.enable_range_search && search_param_.topk > 0 &&
-        search_param_.topk < search.vector_datas.size()) {
-      search.vector_datas.resize(search_param_.topk);
-    }
 
     out_result_.push_back(std::move(search));
+  }
+
+  for (auto& iter : tmp_out_result_) {
+    auto& vec = iter.second;
+    std::sort(vec.begin(), vec.end(),
+              [](const VectorWithDistance& a, const VectorWithDistance& b) { return a.distance < b.distance; });
+  }
+
+  for (auto& iter : tmp_out_result_) {
+    int64_t idx = iter.first;
+    auto& vec_distance = iter.second;
+    if (!search_param_.enable_range_search && search_param_.topk > 0 && search_param_.topk < vec_distance.size()) {
+      vec_distance.resize(search_param_.topk);
+    }
+
+    out_result_[idx].vector_datas = std::move(vec_distance);
   }
 }
 
@@ -200,11 +197,15 @@ void VectorSearchPartTask::FillVectorSearchRpcRequest(pb::index::VectorSearchReq
   FillRpcContext(*request->mutable_context(), region->RegionId(), region->Epoch());
   FillInternalSearchParams(request->mutable_parameter(), vector_index_->GetVectorIndexType(), search_param_);
   for (const auto& vector_id : target_vectors_) {
-    FillVectorWithIdPB(request->add_vector_with_ids(), vector_id);
+    // NOTE* vector_id is useless
+    FillVectorWithIdPB(request->add_vector_with_ids(), vector_id, false);
   }
 }
 
 void VectorSearchPartTask::VectorSearchRpcCallback(const Status& status, VectorSearchRpc* rpc) {
+  // TODO : to remove
+  VLOG(kSdkVlogLevel) << "rpc: " << rpc->Method() << " request: " << rpc->Request()->DebugString()
+                      << " response: " << rpc->Response()->DebugString();
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "rpc: " << rpc->Method() << " send to region: " << rpc->Request()->context().region_id()
                        << " fail: " << status.ToString();
@@ -215,15 +216,16 @@ void VectorSearchPartTask::VectorSearchRpcCallback(const Status& status, VectorS
       status_ = status;
     }
   } else {
-    VLOG(kSdkVlogLevel) << Name() << ", rpc: " << rpc->Method()
-                        << " send to region: " << rpc->Request()->context().region_id()
-                        << " status: " << status.ToString() << " request: " << rpc->Request()->DebugString()
-                        << " response: " << rpc->Response()->DebugString();
+    CHECK_EQ(rpc->Response()->batch_results_size(), rpc->Request()->vector_with_ids_size())
+        << Name() << ", rpc: " << rpc->Method()
+        << " request vector_with_ids_size: " << rpc->Request()->vector_with_ids_size()
+        << " response batch_results_size: " << rpc->Response()->batch_results_size()
+        << " request: " << rpc->Request()->DebugString() << " response: " << rpc->Response()->DebugString();
+
     for (auto i = 0; i < rpc->Response()->batch_results_size(); i++) {
-      int64_t vector_id = rpc->Request()->vector_with_ids(i).id();
       for (const auto& distancepb : rpc->Response()->batch_results(i).vector_with_distances()) {
         VectorWithDistance distance = InternalVectorWithDistance2VectorWithDistance(distancepb);
-        search_result_[vector_id].push_back(std::move(distance));
+        search_result_[i].push_back(std::move(distance));
       }
     }
   }
