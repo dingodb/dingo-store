@@ -317,14 +317,6 @@ public class MessageGenerateProcessor {
             }
             real.put(fieldName, number);
 
-            if (fieldType.equals(BYTE_ARRARY)) {
-                builder.addMethod(methodBuilder(fieldName + "Hex$", TypeName.get(String.class), PUBLIC)
-                    .addAnnotation(JsonIgnore.class)
-                    .addAnnotation(ToString.Include.class)
-                    .addCode("return io.dingodb.sdk.common.utils.ByteArrayUtils.toHex(" + fieldName + ");")
-                    .build()
-                );
-            }
             builder.addField(FieldSpec.builder(fieldType, fieldName, PRIVATE).build());
 
         }

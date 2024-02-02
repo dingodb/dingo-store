@@ -31,6 +31,8 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
+import static io.dingodb.sdk.service.JsonMessageUtils.toJson;
+
 @Slf4j
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ServiceCallCycles<REQ extends Request, RES extends Response>
@@ -162,8 +164,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void before(REQ req, CallOptions options, long trace) {
         if (Before.log.isDebugEnabled() && logger.isDebugEnabled()) {
             Before.log.debug(
-                "Service call [{}] enter on [{}], trace [{}], request: {}, options: {}",
-                method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
+                toJson(method.getFullMethodName(), trace, req, null, options)
             );
         }
         req.setRequestInfo(RequestInfo.builder().requestId(trace).build());
@@ -176,8 +177,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void rBefore(REQ req, CallOptions options, String remote, long trace) {
         if (RBefore.log.isDebugEnabled() && logger.isDebugEnabled()) {
             RBefore.log.debug(
-                "RCall [{}:{}] enter on [{}], trace [{}], request: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
+                toJson(remote, method.getFullMethodName(), trace, req, null, options)
             );
         }
         for (ServiceCallCycle.RBefore<REQ, RES> rBefore : rBefore.list) {
@@ -189,8 +189,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void after(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (After.log.isDebugEnabled() && logger.isDebugEnabled()) {
             After.log.debug(
-                "Service call [{}:{}] after on [{}], trace [{}], request: {}, response: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
+                toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
         for (ServiceCallCycle.After<REQ, RES> after : after.list) {
@@ -202,8 +201,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void rAfter(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (RAfter.log.isDebugEnabled() && logger.isDebugEnabled()) {
             RAfter.log.debug(
-                "RCall [{}:{}] after on [{}], trace [{}], request: {}, response: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
+                toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
         for (ServiceCallCycle.RAfter<REQ, RES> rAfter : rAfter.list) {
@@ -215,8 +213,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void rError(REQ req, CallOptions options, String remote, long trace, String statusMessage) {
         if (RError.log.isDebugEnabled() && logger.isDebugEnabled()) {
             RError.log.debug(
-                "RCall [{}:{}] error on {}, message [{}], trace [{}], request: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), statusMessage, trace, req, options
+                toJson(statusMessage, remote, method.getFullMethodName(), trace, req, null, options, null)
             );
         }
         for (ServiceCallCycle.RError<REQ, RES> rError : rError.list) {
@@ -259,8 +256,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void onException(REQ req, Exception ex, CallOptions options, String remote, long trace) {
         if (OnException.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnException.log.debug(
-                "Service call [{}:{}] exception on [{}], trace [{}], request: {}, ex: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, ex, options, ex
+                toJson(null, remote, method.getFullMethodName(), trace, req, null, options, ex)
             );
         }
         for (ServiceCallCycle.OnException<REQ, RES> onException : onException.list) {
@@ -272,8 +268,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void onRetry(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnRetry.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnRetry.log.debug(
-                "Service call [{}:{}] need retry on [{}], trace [{}], request: {}, response: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
+                toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
         for (ServiceCallCycle.OnRetry<REQ, RES> onRetry : onRetry.list) {
@@ -285,8 +280,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void onFailed(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnFailed.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnFailed.log.debug(
-                "Service call [{}:{}] failed on [{}], trace [{}], request: {}, response: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
+                toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
         for (ServiceCallCycle.OnFailed<REQ, RES> onFailed : onFailed.list) {
@@ -298,8 +292,8 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void onIgnore(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnIgnore.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnIgnore.log.debug(
-                "Service call [{}:{}] ignore error on [{}], trace [{}], request: {}, response: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
+                toJson(remote, method.getFullMethodName(), trace, req, res, options)
+
             );
         }
         for (ServiceCallCycle.OnIgnore<REQ, RES> onIgnore : onIgnore.list) {
@@ -311,8 +305,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void onRefresh(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnRefresh.log.isDebugEnabled() && logger.isDebugEnabled()) {
             OnRefresh.log.debug(
-                "Service call [{}:{}] need refresh on [{}], trace [{}], request: {}, response: {}, options: {}",
-                remote, method.getFullMethodName(), System.currentTimeMillis(), trace, req, res, options
+                toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
         for (ServiceCallCycle.OnRefresh<REQ, RES> onRefresh : onRefresh.list) {
@@ -323,10 +316,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onNonConnection(REQ req, CallOptions options, long trace) {
         if (OnNonConnection.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnNonConnection.log.debug(
-                "Service call [{}] non connection on [{}], trace [{}], request: {}, options: {}",
-                method.getFullMethodName(), System.currentTimeMillis(), trace, req, options
-            );
+            toJson(method.getFullMethodName(), trace, req, null, options);
         }
         for (ServiceCallCycle.OnNonConnection<REQ, RES> onNonConnection : onNonConnection.list) {
             onNonConnection.onNonConnection(req, options, trace);
@@ -337,8 +327,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     public void onThrow(REQ req, ExhaustedRetryException ex, CallOptions options, long trace) {
         if (ServiceCallCycles.OnThrow.log.isDebugEnabled() && logger.isDebugEnabled()) {
             ServiceCallCycles.OnThrow.log.debug(
-                "Service call [{}] throw ex on [{}], trace [{}], request: {}, options: {}, message: {}",
-                method.getFullMethodName(), System.currentTimeMillis(), trace, req, options, ex.getMessage()
+                toJson(null, null, method.getFullMethodName(), trace, req, null, options, ex)
             );
         }
         for (ServiceCallCycle.OnThrow<REQ, RES> onThrow : onThrow.list) {

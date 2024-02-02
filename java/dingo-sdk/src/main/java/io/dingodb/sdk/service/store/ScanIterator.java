@@ -31,6 +31,7 @@ import io.dingodb.store.StoreServiceGrpc;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -108,6 +109,7 @@ public class ScanIterator implements Iterator<KeyValue>, AutoCloseable {
         delegateIterator = response.getKvsList().stream().map(this::mapping).iterator();
         if (!delegateIterator.hasNext()) {
             release = true;
+            CompletableFuture.runAsync(this::scanRelease);
         }
     }
 
