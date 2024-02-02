@@ -787,6 +787,16 @@ static void PrintVector(const std::vector<T>& vec) {
   std::cout << std::endl;
 }
 
+static std::vector<float> FakeGenerateFloatVector(uint32_t dimension) {
+  std::vector<float> vec;
+  vec.reserve(dimension);
+  for (int i = 0; i < dimension; ++i) {
+    vec.push_back(0.12313 * (i + 1));
+  }
+
+  return vec;
+}
+
 sdk::VectorWithId GenVectorWithId(int64_t vector_id) {
   sdk::VectorWithId vector_with_id;
 
@@ -796,11 +806,10 @@ sdk::VectorWithId GenVectorWithId(int64_t vector_id) {
   if (FLAGS_vector_value_type == "FLOAT") {
     vector_with_id.vector.value_type = sdk::ValueType::kFloat;
     vector_with_id.vector.float_values = Helper::GenerateFloatVector(FLAGS_vector_dimension);
-    // PrintVector(vector_with_id.vector.float_values);
+    // vector_with_id.vector.float_values = FakeGenerateFloatVector(FLAGS_vector_dimension);
   } else {
     vector_with_id.vector.value_type = sdk::ValueType::kUint8;
     vector_with_id.vector.binary_values = Helper::GenerateInt8Vector(FLAGS_vector_dimension);
-    // PrintVector(vector_with_id.vector.float_values);
   }
 
   return vector_with_id;
@@ -863,6 +872,7 @@ bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
         if (vector_with_ids.size() == FLAGS_vector_put_batch_size) {
           auto result = VectorPut(entry, vector_with_ids);
           if (!result.status.IsOK()) {
+            // std::cerr << "error: " << result.status.ToString() << std::endl;
             break;
           }
           count.fetch_add(vector_with_ids.size());
