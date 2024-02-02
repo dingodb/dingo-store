@@ -71,8 +71,6 @@ static std::string GetUsageMessage() {
 }
 
 static void SignalHandler(int signo) {  // NOLINT
-  // std::cerr << "Received signal " << signo << std::endl;
-
   dingodb::benchmark::Environment::GetInstance().Stop();
 }
 
@@ -81,11 +79,6 @@ void SetupSignalHandler() {
   s = signal(SIGTERM, SignalHandler);
   if (s == SIG_ERR) {
     printf("Failed to setup signal handler for SIGTERM\n");
-    exit(-1);
-  }
-  s = signal(SIGABRT, SignalHandler);
-  if (s == SIG_ERR) {
-    printf("Failed to setup signal handler for SIGABRT\n");
     exit(-1);
   }
   s = signal(SIGINT, SignalHandler);
