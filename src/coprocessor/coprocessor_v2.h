@@ -33,6 +33,12 @@
 
 namespace dingodb {
 
+#ifndef ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
+#define ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
+#endif
+
+#undef ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
+
 class CoprocessorV2 : public RawCoprocessor {
  public:
   CoprocessorV2();
@@ -112,6 +118,19 @@ class CoprocessorV2 : public RawCoprocessor {
   static bvar::LatencyRecorder coprocessor_v2_filter_latency;
 
   BvarLatencyGuard bvar_guard_for_coprocessor_v2_latency_;  // NOLINT
+
+#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
+  std::chrono::steady_clock::time_point coprocessor_v2_start_time_point;
+  std::chrono::steady_clock::time_point coprocessor_v2_end_time_point;
+  int64_t coprocessor_v2_spend_time_ms;
+  int64_t iter_next_spend_time_ms;
+  int64_t get_kv_spend_time_ms;
+  int64_t trans_field_spend_time_ms;
+  int64_t decode_spend_time_ms;
+  int64_t rel_expr_spend_time_ms;
+  int64_t misc_spend_time_ms;
+  int64_t open_spend_time_ms;
+#endif
 };
 
 }  // namespace dingodb
