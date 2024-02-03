@@ -18,6 +18,7 @@
 
 #include "benchmark/benchmark.h"
 #include "benchmark/dataset.h"
+#include "common/helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 
@@ -88,13 +89,27 @@ void SetupSignalHandler() {
   }
 }
 
-int main(int argc, char* argv[]) {
-  FLAGS_minloglevel = google::GLOG_ERROR;
-  FLAGS_logtostdout = true;
-  FLAGS_colorlogtostdout = true;
-  FLAGS_logbufsecs = 0;
+void InitLog(const std::string& log_dir) {
+  if (!dingodb::Helper::IsExistPath(log_dir)) {
+    dingodb::Helper::CreateDirectories(log_dir);
+  }
 
-  google::InitGoogleLogging(argv[0]);
+  FLAGS_logbufsecs = 0;
+  FLAGS_stop_logging_if_full_disk = true;
+  FLAGS_minloglevel = google::GLOG_INFO;
+  FLAGS_logbuflevel = google::GLOG_INFO;
+
+  std::string program_name = "dingodb_bench";
+
+  google::InitGoogleLogging(program_name.c_str());
+  google::SetLogDestination(google::GLOG_INFO, fmt::format("{}/{}.info.log.", log_dir, program_name).c_str());
+  google::SetLogDestination(google::GLOG_WARNING, fmt::format("{}/{}.warn.log.", log_dir, program_name).c_str());
+  google::SetLogDestination(google::GLOG_ERROR, fmt::format("{}/{}.error.log.", log_dir, program_name).c_str());
+  google::SetLogDestination(google::GLOG_FATAL, fmt::format("{}/{}.fatal.log.", log_dir, program_name).c_str());
+}
+
+int main(int argc, char* argv[]) {
+  InitLog("./log");
 
   google::SetVersionString(kVersion);
   google::SetUsageMessage(GetUsageMessage());
