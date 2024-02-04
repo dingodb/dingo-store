@@ -38,6 +38,7 @@ void VectorTask::AsyncRun(StatusCallback cb) {
   if (status.ok()) {
     DoAsync();
   } else {
+    status_ = status;
     FireCallback();
   }
 }

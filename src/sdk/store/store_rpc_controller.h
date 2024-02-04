@@ -51,7 +51,7 @@ class StoreRpcController {
   void SendStoreRpc();
   void SendStoreRpcCallBack();
   void RetrySendRpcOrFireCallback();
-  void FireCallback() const;
+  void FireCallback();
 
   // backoff
   void MaybeDelay();
@@ -59,10 +59,6 @@ class StoreRpcController {
   int64_t DelayTimeMs() const;
 
   bool PickNextLeader(butil::EndPoint& leader);
-
-  bool Failed(const butil::EndPoint& addr);
-
-  void SetFailed(butil::EndPoint addr);
 
   std::shared_ptr<Region> ProcessStoreRegionInfo(const dingodb::pb::error::StoreRegionInfo& store_region_info);
 
@@ -76,7 +72,6 @@ class StoreRpcController {
   Rpc& rpc_;
   std::shared_ptr<Region> region_;
   int rpc_retry_times_;
-  std::set<butil::EndPoint> failed_addrs_;
   int next_replica_index_;
   Status status_;
   StatusCallback call_back_;

@@ -118,7 +118,7 @@ void StoreRpcController::MaybeDelay() {
 void StoreRpcController::SendStoreRpcCallBack() {
   Status sent = rpc_.GetStatus();
   if (!sent.ok()) {
-    SetFailed(rpc_.GetEndPoint());
+    region_->MarkFollower(rpc_.GetEndPoint());
     DINGO_LOG(WARNING) << "Fail connect to store server, status:" << sent.ToString();
     status_ = sent;
   } else {
@@ -198,14 +198,16 @@ void StoreRpcController::RetrySendRpcOrFireCallback() {
   }
 }
 
-void StoreRpcController::FireCallback() const {
+void StoreRpcController::FireCallback() {
   if (!status_.ok()) {
     DINGO_LOG(WARNING) << "Fail send store rpc status:" << status_.ToString() << ", region:" << region_->RegionId()
                        << ", retry_times:" << rpc_retry_times_ << ", max_retry_limit:" << kMaxRetry;
   }
 
   if (call_back_) {
-    call_back_(status_);
+    StatusCallback cb;
+    call_back_.swap(cb);
+    cb(status_);
   }
 }
 
@@ -213,37 +215,19 @@ bool StoreRpcController::PickNextLeader(butil::EndPoint& leader) {
   butil::EndPoint tmp_leader;
   Status got = region_->GetLeader(tmp_leader);
   if (got.IsOK()) {
-    if (Failed(tmp_leader)) {
-      std::string msg = fmt::format("region:{} get leader success, but leader endpoint is already failed",
-                                    region_->RegionId(), butil::endpoint2str(tmp_leader).c_str());
-      DINGO_LOG(INFO) << msg;
-    } else {
-      leader = tmp_leader;
-      return true;
-    }
+    leader = tmp_leader;
+    return true;
   }
 
   // TODO: filter old leader
   auto endpoints = region_->ReplicaEndPoint();
-  int before = next_replica_index_ % endpoints.size();
-  int current = before;
-  do {
-    auto endpoint = endpoints[current];
-    next_replica_index_++;
-
-    if (!Failed(endpoint)) {
-      leader = endpoint;
-      std::string msg = fmt::format("region:{} get leader fail, pick replica:{} as leader", region_->RegionId(),
-                                    butil::endpoint2str(endpoint).c_str());
-      DINGO_LOG(INFO) << msg;
-      return true;
-    }
-
-    current = next_replica_index_ % endpoints.size();
-  } while (current != before);
-
-  DINGO_LOG(WARNING) << "region:" << region_->RegionId() << " pick leader fail, all replica is set failed";
-  return false;
+  auto endpoint = endpoints[next_replica_index_ % endpoints.size()];
+  next_replica_index_++;
+  leader = endpoint;
+  std::string msg = fmt::format("region:{} get leader fail, pick replica:{} as leader", region_->RegionId(),
+                                butil::endpoint2str(endpoint).c_str());
+  DINGO_LOG(INFO) << msg;
+  return true;
 }
 
 void StoreRpcController::ResetRegion(std::shared_ptr<Region> region) {
@@ -255,16 +239,6 @@ void StoreRpcController::ResetRegion(std::shared_ptr<Region> region) {
   }
   region_.reset();
   region_ = std::move(region);
-}
-
-bool StoreRpcController::Failed(const butil::EndPoint& addr) { return failed_addrs_.find(addr) != failed_addrs_.end(); }
-
-void StoreRpcController::SetFailed(butil::EndPoint addr) {
-  failed_addrs_.emplace(std::move(addr));
-
-  std::string msg =
-      fmt::format("region:{} replica:{} is set failed", region_->RegionId(), butil::endpoint2str(addr).c_str());
-  DINGO_LOG(INFO) << msg;
 }
 
 std::shared_ptr<Region> StoreRpcController::ProcessStoreRegionInfo(
