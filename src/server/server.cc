@@ -947,17 +947,21 @@ bool Server::IsLeader(int64_t region_id) { return storage_->IsLeader(region_id);
 
 std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split_checker_; }
 
-void Server::SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set) { store_service_read_worker_set_ = worker_set; }
+void Server::SetStoreServiceReadWorkerSet(PriorWorkerSetPtr worker_set) { store_service_read_worker_set_ = worker_set; }
 
-void Server::SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set) { store_service_write_worker_set_ = worker_set; }
+void Server::SetStoreServiceWriteWorkerSet(PriorWorkerSetPtr worker_set) {
+  store_service_write_worker_set_ = worker_set;
+}
 
-void Server::SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set) { index_service_read_worker_set_ = worker_set; }
+void Server::SetIndexServiceReadWorkerSet(PriorWorkerSetPtr worker_set) { index_service_read_worker_set_ = worker_set; }
 
-void Server::SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set) { index_service_write_worker_set_ = worker_set; }
+void Server::SetIndexServiceWriteWorkerSet(PriorWorkerSetPtr worker_set) {
+  index_service_write_worker_set_ = worker_set;
+}
 
-void Server::SetRaftApplyWorkerSet(WorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
+void Server::SetRaftApplyWorkerSet(PriorWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
 
-WorkerSetPtr Server::GetRaftApplyWorkerSet() { return raft_apply_worker_set_; }
+PriorWorkerSetPtr Server::GetRaftApplyWorkerSet() { return raft_apply_worker_set_; }
 
 std::vector<std::vector<std::string>> Server::GetStoreServiceReadWorkerSetTrace() {
   if (store_service_read_worker_set_ == nullptr) {

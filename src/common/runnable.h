@@ -20,10 +20,14 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <queue>
 #include <string>
 #include <vector>
 
 #include "bthread/execution_queue.h"
+#include "bthread/types.h"
+#include "bvar/latency_recorder.h"
+#include "common/synchronization.h"
 
 namespace dingodb {
 
@@ -41,23 +45,41 @@ class TaskRunnable {
 
   virtual std::string Trace() { return ""; }
 
+  int32_t Priority() const { return priority_; }
+  void SetPriority(int32_t priority) { priority_ = priority; }
+
+  // Operator overloading to compare tasks.
+  bool operator<(const TaskRunnable& other) const {
+    // Note: Higher priority tasks should come first.
+    return priority_ < other.Priority();
+  }
+
+  int64_t CreateTimeUs() const { return create_time_us_; }
+
  private:
-  uint64_t id_;
+  uint64_t id_{0};
+  int32_t priority_{0};
+  int64_t create_time_us_{0};
 };
 
 using TaskRunnablePtr = std::shared_ptr<TaskRunnable>;
 
+// Custom Comparator for priority_queue
+struct CompareTaskRunnable {
+  bool operator()(const TaskRunnablePtr& lhs, TaskRunnablePtr& rhs) const { return lhs < rhs; }
+};
+
 int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter);
+
+enum class WorkerEventType {
+  kAddTask = 0,
+  kFinishTask = 1,
+};
+using NotifyFuncer = std::function<void(WorkerEventType)>;
 
 // Run task worker
 class Worker {
  public:
-  enum class EventType {
-    kAddTask = 0,
-    kFinishTask = 1,
-  };
-  using NotifyFuncer = std::function<void(EventType)>;
-
   Worker(NotifyFuncer notify_func);
   ~Worker();
 
@@ -76,7 +98,7 @@ class Worker {
   void IncPendingTaskCount();
   void DecPendingTaskCount();
 
-  void Nodify(EventType type);
+  void Notify(WorkerEventType type);
 
   void AppendPendingTaskTrace(uint64_t task_id, const std::string& trace);
   void PopPendingTaskTrace(uint64_t task_id);
@@ -85,7 +107,7 @@ class Worker {
  private:
   // Execution queue is available.
   std::atomic<bool> is_available_;
-  bthread::ExecutionQueueId<TaskRunnablePtr> queue_id_;  // NOLINT
+  bthread::ExecutionQueueId<TaskRunnablePtr> queue_id_;
 
   // Metrics
   std::atomic<uint64_t> total_task_count_{0};
@@ -118,7 +140,7 @@ class WorkerSet {
   bool ExecuteLeastQueue(TaskRunnablePtr task);
   bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task);
 
-  void WatchWorker(Worker::EventType type);
+  void WatchWorker(WorkerEventType type);
 
   uint64_t TotalTaskCount();
   void IncTotalTaskCount();
@@ -146,6 +168,62 @@ class WorkerSet {
 };
 
 using WorkerSetPtr = std::shared_ptr<WorkerSet>;
+
+class PriorWorkerSet {
+ public:
+  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count);
+  ~PriorWorkerSet();
+
+  static std::shared_ptr<PriorWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
+    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count);
+  }
+
+  bool Init();
+  void Destroy();
+
+  bool Execute(TaskRunnablePtr task);
+  bool ExecuteRR(TaskRunnablePtr task);
+  bool ExecuteLeastQueue(TaskRunnablePtr task);
+  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task);
+
+  void WatchWorker(WorkerEventType type);
+
+  uint64_t TotalTaskCount();
+  void IncTotalTaskCount();
+
+  uint64_t PendingTaskCount();
+  void IncPendingTaskCount();
+  void DecPendingTaskCount();
+
+  std::vector<std::vector<std::string>> GetPendingTaskTrace();
+
+  void Notify(WorkerEventType type);
+
+ private:
+  const std::string name_;
+
+  bthread_mutex_t mutex_;
+  bthread_cond_t cond_;
+  std::priority_queue<TaskRunnablePtr, std::vector<TaskRunnablePtr>, CompareTaskRunnable> tasks_;
+
+  std::vector<Bthread> workers_;
+
+  int64_t max_pending_task_count_;
+  uint32_t worker_num_;
+
+  std::atomic<int64_t> pending_task_count_{0};
+
+  // Notify
+  NotifyFuncer notify_func_;
+
+  // Metrics
+  bvar::Adder<uint64_t> total_task_count_metrics_;
+  bvar::Adder<int64_t> pending_task_count_metrics_;
+  bvar::LatencyRecorder queue_wait_metrics_;
+  bvar::LatencyRecorder queue_run_metrics_;
+};
+
+using PriorWorkerSetPtr = std::shared_ptr<PriorWorkerSet>;
 
 }  // namespace dingodb
 

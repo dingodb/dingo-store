@@ -41,7 +41,7 @@ namespace dingodb {
 StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
                                      store::RaftMetaPtr raft_meta, store::RegionMetricsPtr region_metrics,
                                      std::shared_ptr<EventListenerCollection> listeners,
-                                     WorkerSetPtr raft_apply_worker_set)
+                                     PriorWorkerSetPtr raft_apply_worker_set)
     : raw_engine_(engine),
       region_(region),
       str_node_id_(std::to_string(region->Id())),
