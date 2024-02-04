@@ -40,7 +40,7 @@ class Synchronizer {
   }
 
   StatusCallback AsStatusCallBack(Status& in_staus) {
-    return [&](const Status& s) {
+    return [&](Status s) {
       in_staus = s;
       Fire();
     };

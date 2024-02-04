@@ -48,6 +48,7 @@ class VectorTask {
   void FireCallback();
 
   Status status_;
+  mutable std::shared_mutex rw_lock_;
   StatusCallback call_back_;
   int retry_count_{0};
 };

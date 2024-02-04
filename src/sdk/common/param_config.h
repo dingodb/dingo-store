@@ -22,12 +22,12 @@
 const int64_t kSdkVlogLevel = 60;
 
 // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
-const int64_t kRpcChannelTimeOutMs = 5000;
+const int64_t kRpcChannelTimeOutMs = 500000;
 const int64_t kRpcChannelConnectTimeOutMs  = 3000;
 
 // each rpc call params
 const int64_t kRpcCallMaxRetry = 3;
-const int64_t kRpcTimeOutMs = 5000;
+const int64_t kRpcTimeOutMs = 500000;
 
 // use case: wrong leader or request range invalid
 const int64_t kRpcMaxRetry = 5;
