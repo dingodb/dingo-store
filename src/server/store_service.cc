@@ -47,8 +47,8 @@ DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
 DECLARE_int64(max_scan_lock_limit);
 DECLARE_int64(max_prewrite_count);
 
-bvar::LatencyRecorder g_raw_latches_recorder("dingodb", "latches_us_raw");
-bvar::LatencyRecorder g_txn_latches_recorder("dingodb", "latches_us_txn");
+bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
+bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
 
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
