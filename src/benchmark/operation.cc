@@ -289,22 +289,28 @@ Operation::Result BaseOperation::KvTxnPut(const std::vector<sdk::KVPair>& kvs) {
 
   result.status = client->NewTransaction(options, &txn);
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("new transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
   for (const auto& kv : kvs) {
     result.status = txn->Put(kv.key, kv.value);
     if (!result.status.IsOK()) {
+      LOG(ERROR) << fmt::format("transaction put failed, error: {}", result.status.ToString());
       goto end;
     }
   }
 
   result.status = txn->PreCommit();
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("pre commit transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
   result.status = txn->Commit();
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("commit transaction failed, error: {}", result.status.ToString());
+  }
 
 end:
   result.eplased_time = Helper::TimestampUs() - start_time;
@@ -348,20 +354,26 @@ Operation::Result BaseOperation::KvTxnBatchPut(const std::vector<sdk::KVPair>& k
 
   result.status = client->NewTransaction(options, &txn);
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("new transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
   result.status = txn->BatchPut(kvs);
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("transaction batch put failed, error: {}", result.status.ToString());
     goto end;
   }
 
   result.status = txn->PreCommit();
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("pre commit transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
   result.status = txn->Commit();
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("commit transaction failed, error: {}", result.status.ToString());
+  }
 
 end:
   result.eplased_time = Helper::TimestampUs() - start_time;
@@ -382,6 +394,7 @@ Operation::Result BaseOperation::KvTxnGet(const std::vector<std::string>& keys) 
 
   result.status = client->NewTransaction(options, &txn);
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("new transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
@@ -389,16 +402,21 @@ Operation::Result BaseOperation::KvTxnGet(const std::vector<std::string>& keys) 
     std::string value;
     result.status = txn->Get(key, value);
     if (!result.status.IsOK()) {
+      LOG(ERROR) << fmt::format("transaction get failed, error: {}", result.status.ToString());
       goto end;
     }
   }
 
   result.status = txn->PreCommit();
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("pre commit transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
   result.status = txn->Commit();
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("commit transaction failed, error: {}", result.status.ToString());
+  }
 
 end:
   result.eplased_time = Helper::TimestampUs() - start_time;
@@ -419,6 +437,7 @@ Operation::Result BaseOperation::KvTxnBatchGet(const std::vector<std::vector<std
 
   result.status = client->NewTransaction(options, &txn);
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("new transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
@@ -426,16 +445,21 @@ Operation::Result BaseOperation::KvTxnBatchGet(const std::vector<std::vector<std
     std::vector<sdk::KVPair> kvs;
     result.status = txn->BatchGet(batch_keys, kvs);
     if (!result.status.IsOK()) {
+      LOG(ERROR) << fmt::format("transaction batch get failed, error: {}", result.status.ToString());
       goto end;
     }
   }
 
   result.status = txn->PreCommit();
   if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("pre commit transaction failed, error: {}", result.status.ToString());
     goto end;
   }
 
   result.status = txn->Commit();
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("commit transaction failed, error: {}", result.status.ToString());
+  }
 
 end:
   result.eplased_time = Helper::TimestampUs() - start_time;
@@ -460,6 +484,9 @@ Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
     return result;
   }
   result.status = vector_client->Add(entry->index_id, vector_with_ids);
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("put vector failed, error: {}", result.status.ToString());
+  }
 
   result.eplased_time = Helper::TimestampUs() - start_time;
 
@@ -486,6 +513,9 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
   }
 
   result.status = vector_client->Search(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("search vector failed, error: {}", result.status.ToString());
+  }
 
   result.eplased_time = Helper::TimestampUs() - start_time;
 
@@ -860,27 +890,40 @@ bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
   std::vector<std::thread> threads;
   threads.reserve(FLAGS_vector_arrange_concurrency);
 
+  uint32_t put_count_per_thread = FLAGS_arrange_kv_num / FLAGS_vector_arrange_concurrency;
+
   std::atomic<int> stop_count = 0;
   std::atomic<uint32_t> count = 0;
+  std::atomic<uint32_t> fail_count = 0;
+
   for (int thread_no = 0; thread_no < FLAGS_vector_arrange_concurrency; ++thread_no) {
-    threads.emplace_back([this, thread_no, entry, &stop_count, &count]() {
+    uint32_t actual_put_count_per_thread =
+        thread_no == 0 ? put_count_per_thread + (FLAGS_arrange_kv_num % FLAGS_vector_arrange_concurrency)
+                       : put_count_per_thread;
+    threads.emplace_back([this, thread_no, entry, actual_put_count_per_thread, &stop_count, &count, &fail_count]() {
       std::vector<sdk::VectorWithId> vector_with_ids;
       vector_with_ids.reserve(FLAGS_vector_put_batch_size);
-      for (;;) {
-        vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
 
-        if (vector_with_ids.size() == FLAGS_vector_put_batch_size) {
+      bool retry = false;
+      for (uint32_t i = 1; i <= actual_put_count_per_thread;) {
+        if (!retry) {
+          vector_with_ids.push_back(GenVectorWithId(entry->GenId()));
+        }
+
+        if (vector_with_ids.size() == FLAGS_vector_put_batch_size || i == actual_put_count_per_thread) {
           auto result = VectorPut(entry, vector_with_ids);
           if (!result.status.IsOK()) {
-            // std::cerr << "error: " << result.status.ToString() << std::endl;
-            break;
+            fail_count.fetch_add(vector_with_ids.size());
+            retry = true;
+            continue;
           }
+
           count.fetch_add(vector_with_ids.size());
-          if (count.load() >= FLAGS_arrange_kv_num) {
-            break;
-          }
           vector_with_ids.clear();
+          retry = false;
         }
+
+        ++i;
       }
 
       stop_count.fetch_add(1);
@@ -895,8 +938,8 @@ bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
 
     uint32_t cur_count = count.load();
     std::cout << '\r'
-              << fmt::format("vector index({}) put data progress [{} / {} {}%]", entry->index_id, cur_count,
-                             FLAGS_arrange_kv_num, cur_count * 100 / FLAGS_arrange_kv_num)
+              << fmt::format("vector index({}) put data progress [{} / {} / {} {}%]", entry->index_id, cur_count,
+                             fail_count.load(), FLAGS_arrange_kv_num, cur_count * 100 / FLAGS_arrange_kv_num)
               << std::flush;
   }
 
@@ -905,11 +948,13 @@ bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
   }
 
   std::cout << "\r"
-            << fmt::format("vector index({}) put data({}) .................. done", entry->index_id, count.load())
+            << fmt::format("vector index({}) put data success({}) fail({}) .................. done", entry->index_id,
+                           count.load(), fail_count.load())
             << '\n';
 
   return true;
 }
+
 // parallel put
 bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, DatasetPtr dataset) {
   uint32_t total_vector_count = dataset->GetTrainDataCount();
@@ -919,19 +964,27 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
 
   std::atomic<int> stop_count = 0;
   std::atomic<uint32_t> count = 0;
+  std::atomic<uint32_t> fail_count = 0;
   for (int thread_no = 0; thread_no < FLAGS_vector_arrange_concurrency; ++thread_no) {
-    threads.emplace_back([this, thread_no, entry, dataset, &stop_count, &count]() {
+    threads.emplace_back([this, thread_no, entry, dataset, &stop_count, &count, &fail_count]() {
       std::vector<sdk::VectorWithId> vector_with_ids;
-      for (int batch_num = thread_no;; batch_num += FLAGS_vector_arrange_concurrency) {
-        bool is_eof = false;
-        dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
+      bool retry = false;
+      bool is_eof = false;
+      for (int batch_num = thread_no;;) {
+        if (!retry) {
+          dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
+        }
         auto result = VectorPut(entry, vector_with_ids);
         if (!result.status.IsOK()) {
-          break;
+          fail_count.fetch_add(vector_with_ids.size());
+          retry = true;
+          continue;
         }
 
         count.fetch_add(vector_with_ids.size());
         vector_with_ids.clear();
+        batch_num += FLAGS_vector_arrange_concurrency;
+        retry = false;
         if (is_eof) {
           break;
         }
@@ -949,8 +1002,8 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
 
     uint32_t cur_count = count.load();
     std::cout << '\r'
-              << fmt::format("Vector index({}) put data progress [{} / {} {}%]", entry->index_id, cur_count,
-                             total_vector_count, cur_count * 100 / total_vector_count)
+              << fmt::format("Vector index({}) put data progress [{} / {} / {} {}%]", entry->index_id, cur_count,
+                             fail_count.load(), total_vector_count, cur_count * 100 / total_vector_count)
               << std::flush;
   }
 
@@ -961,7 +1014,8 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
   entry->test_entries = dataset->GetTestData();
 
   std::cout << "\r"
-            << fmt::format("Vector index({}) put data({}) .................. done", entry->index_id, total_vector_count)
+            << fmt::format("Vector index({}) put data success({}) fail({}) .................. done", entry->index_id,
+                           total_vector_count, fail_count.load())
             << '\n';
 
   return true;
