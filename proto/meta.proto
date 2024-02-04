@@ -949,8 +949,8 @@ message WatchRequest {
 
 message WatchCreateRequest {
   // start_revision is an optional revision to watch from (inclusive).
-  // if start_revision is 0, mean watch from "now".
-  // if start_revision > 0, measn watch from start_revision.
+  // if start_revision is 0, means watch from "now".
+  // if start_revision > 0, means watch from start_revision.
   // if the caller setup the start_revision, the create may be failed if the start_revision is compacted.
   // caller need to check the compact_revision in the response.
   int64 start_revision = 1;

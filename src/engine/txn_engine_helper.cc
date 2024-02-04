@@ -25,6 +25,7 @@
 
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
+#include "bvar/latency_recorder.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -646,9 +647,13 @@ butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const st
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_scan_lock_latency("dingo_txn_scan_lock");
+
 butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_lock_ts, int64_t max_lock_ts,
                                             const std::string &start_key, const std::string &end_key, int64_t limit,
                                             std::vector<pb::store::LockInfo> &lock_infos) {
+  BvarLatencyGuard bvar_guard(&g_txn_scan_lock_latency);
+
   DINGO_LOG(INFO) << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
                   << ", start_key: " << Helper::StringToHex(start_key) << ", end_key: " << Helper::StringToHex(end_key)
                   << ", limit: " << limit;
@@ -722,11 +727,15 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_batch_get_latency("dingo_txn_batch_get");
+
 butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::IsolationLevel &isolation_level,
                                         int64_t start_ts, const std::vector<std::string> &keys,
                                         const std::set<int64_t> &resolved_locks,
                                         pb::store::TxnResultInfo &txn_result_info,
                                         std::vector<pb::common::KeyValue> &kvs) {
+  BvarLatencyGuard bvar_guard(&g_txn_batch_get_latency);
+
   DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
                   << ", start_ts: " << start_ts << ", first_key: " << Helper::StringToHex(keys[0])
                   << ", last_key: " << Helper::StringToHex(keys[keys.size() - 1]);
@@ -904,12 +913,16 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_scan_latency("dingo_txn_scan");
+
 butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
                                     int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
                                     bool is_reverse, const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                                     const pb::common::CoprocessorV2 &coprocessor,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
                                     bool &has_more, std::string &end_key) {
+  BvarLatencyGuard bvar_guard(&g_txn_scan_latency);
+
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
                   << ", start_key: " << Helper::StringToHex(range.start_key())
                   << ", end_key: " << Helper::StringToHex(range.end_key())
@@ -1140,11 +1153,15 @@ butil::Status TxnEngineHelper::GetRollbackInfo(RawEngine::ReaderPtr reader, int6
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock");
+
 butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                                std::shared_ptr<Context> ctx,
                                                const std::vector<pb::store::Mutation> &mutations,
                                                const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
                                                int64_t for_update_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_pessimistic_lock_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                   << ", mutations_size: " << mutations.size() << ", primary_lock: " << Helper::StringToHex(primary_lock)
@@ -1356,8 +1373,12 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_do_update_lock_latency("dingo_txn_do_update_lock");
+
 butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                             const pb::store::LockInfo &lock_info) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_update_lock_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock, start_ts: {}", ctx->RegionId(), lock_info.lock_ts())
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                   << ", lock_info: " << lock_info.ShortDebugString();
@@ -1406,9 +1427,13 @@ butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine,
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_pessimistic_rollback_latency("dingo_txn_pessimistic_rollback");
+
 butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                                    std::shared_ptr<Context> ctx, int64_t start_ts,
                                                    int64_t for_update_ts, const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_pessimistic_rollback_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
                   << ", keys_size: " << keys.size();
@@ -1535,6 +1560,8 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
+
 butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                         std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                         const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
@@ -1542,6 +1569,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                                         const std::vector<int64_t> &pessimistic_checks,
                                         const std::map<int64_t, int64_t> &for_update_ts_checks,
                                         const std::map<int64_t, std::string> &lock_extra_datas) {
+  BvarLatencyGuard bvar_guard(&g_txn_prewrite_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                   << ", mutations_size: " << mutations.size() << ", primary_lock: " << Helper::StringToHex(primary_lock)
@@ -2027,9 +2056,13 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_commit_latency("dingo_txn_commit");
+
 butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                       std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                       const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_commit_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
                   << ", keys_size: " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
@@ -2145,8 +2178,8 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
           return butil::Status::OK();
         }
 
-        // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should get
-        // a new tso from coordinator, then commit again.
+        // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should
+        // get a new tso from coordinator, then commit again.
         if (lock_info.min_commit_ts() > 0 && commit_ts <= lock_info.min_commit_ts()) {
           // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
           auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
@@ -2244,10 +2277,14 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_do_commit_latency("dingo_txn_do_commit");
+
 butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, store::RegionPtr region,
                                            const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
                                            int64_t commit_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_commit_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {}", region->Id(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
                   << ", lock_infos_size: " << lock_infos.size();
@@ -2369,9 +2406,13 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_check_txn_status_latency("dingo_txn_check_txn_status");
+
 butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                               std::shared_ptr<Context> ctx, const std::string &primary_key,
                                               int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_check_txn_status_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
                                  Helper::StringToHex(primary_key))
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
@@ -2384,9 +2425,9 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
   // In the read-write conflict scenario, we may need to update the min_commit_ts of the primary_lock to reduce the
   // read-write confict. The executor will receive MinCommitTSPushed in CheckTxnStatus response, and will add the
   // lock_ts to Get and Scan requests's context, after this, the read-write conflict will be resolved. And the store
-  // will bypass the lock conflict for the lock_ts. And if the executor commit lock in a commit_ts smaller than the new
-  // min_commit_ts, it will received CommitTsExpired in TxnResultInfo. Executor need to get a new tso from coordinator,
-  // then retry the commit.
+  // will bypass the lock conflict for the lock_ts. And if the executor commit lock in a commit_ts smaller than the
+  // new min_commit_ts, it will received CommitTsExpired in TxnResultInfo. Executor need to get a new tso from
+  // coordinator, then retry the commit.
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -2438,7 +2479,8 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
                          << ", lock_ts: " << lock_ts << ", lock_info: " << lock_info.ShortDebugString();
       *txn_result->mutable_locked() = lock_info;
 
-      // if the lock is not expired, try to update the min_commit_ts in the next code block, so we cannot return now.
+      // if the lock is not expired, try to update the min_commit_ts in the next code block, so we cannot return
+      // now.
 
     } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
                lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
@@ -2573,9 +2615,13 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
   }
 }
 
+bvar::LatencyRecorder g_txn_batch_rollback_latency("dingo_txn_batch_rollback");
+
 butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                              std::shared_ptr<Context> ctx, int64_t start_ts,
                                              const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_batch_rollback_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
 
@@ -2686,11 +2732,15 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_do_rollback_latency("dingo_txn_do_rollback");
+
 // DoRollback
 butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
                                           std::shared_ptr<Context> ctx,
                                           std::vector<std::string> &keys_to_rollback_with_data,
                                           std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
+
   DINGO_LOG(INFO) << "[txn]Rollback start_ts: " << start_ts
                   << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
                   << ", keys_count_without_data: " << keys_to_rollback_without_data.size();
@@ -2775,9 +2825,13 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_resolve_lock_latency("dingo_txn_resolve_lock");
+
 butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                            const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_resolve_lock_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
                   << ", keys_size: " << keys.size();
@@ -2962,9 +3016,13 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   return butil::Status::OK();
 }
 
+bvar::LatencyRecorder g_txn_hearbeat_latency("dingo_txn_heartbeat");
+
 butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                          std::shared_ptr<Context> ctx, const std::string &primary_lock,
                                          int64_t start_ts, int64_t advise_lock_ttl) {
+  BvarLatencyGuard bvar_guard(&g_txn_hearbeat_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(),
                                  Helper::StringToHex(primary_lock))
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", start_ts: " << start_ts
@@ -3038,9 +3096,13 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_delete_range_latency("dingo_txn_delete_range");
+
 butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, const std::string &start_key,
                                            const std::string &end_key) {
+  BvarLatencyGuard bvar_guard(&g_txn_delete_range_latency);
+
   DINGO_LOG(INFO) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", ctx->RegionId(),
                                  Helper::StringToHex(start_key))
                   << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", end_key: " << end_key;
@@ -3226,7 +3288,8 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
           } else {
             if (pb::error::Errno::EKEY_NOT_FOUND == status.error_code()) {
               std::string s = fmt::format(
-                  "[txn_gc][data] key not found. maybe key already deleted or txn error. ignore. key: {} raw_key : {}  "
+                  "[txn_gc][data] key not found. maybe key already deleted or txn error. ignore. key: {} raw_key : "
+                  "{}  "
                   "start_ts : {} "
                   "status : {} write_info: {}",
                   Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
@@ -3273,7 +3336,8 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
         [[fallthrough]];
       default: {
         std::string s = fmt::format(
-            "[txn_gc][write] invalid pb::store::Op type : {} type string : {} , write_iter->key : {}  write_key : {}  "
+            "[txn_gc][write] invalid pb::store::Op type : {} type string : {} , write_iter->key : {}  write_key : "
+            "{}  "
             "write_ts : {} write_iter->value "
             ": {} "
             "ignore. ",
@@ -3296,7 +3360,8 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
       if (safe_point_ts < internal_safe_point_ts) {
         DINGO_LOG(INFO) << fmt::format(
-            "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore. "
+            "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. "
+            "ignore. "
             "region_id : {}.  start_key : {} end_key : {}",
             safe_point_ts, internal_safe_point_ts, ctx->RegionId(), Helper::StringToHex(region_start_key),
             Helper::StringToHex(region_end_key));
@@ -3341,9 +3406,13 @@ _interrupt2:
   return butil::Status();
 }
 
+bvar::LatencyRecorder g_txn_check_lock_for_gc_latency("dingo_txn_check_lock_for_gc");
+
 butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
                                               const std::string &start_key, const std::string &end_key,
                                               int64_t safe_point_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_check_lock_for_gc_latency);
+
   auto lambda_get_raw_key_function = [](std::string_view lock_iter_key) {
     std::string lock_key;
     int64_t ts = 0;
@@ -3391,7 +3460,8 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
     bool parse_success = lock_info.ParseFromString(std::string(lock_iter_value));
     if (!parse_success) {
       std::string s = fmt::format(
-          "[txn_gc][lock] parse lock info failed, lock_iter_key : {} lock_key: {} , lock_value : {} safe_point_ts : {}",
+          "[txn_gc][lock] parse lock info failed, lock_iter_key : {} lock_key: {} , lock_value : {} safe_point_ts "
+          ": {}",
           Helper::StringToHex(lock_iter_key), Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)),
           Helper::StringToHex(lock_iter_value), safe_point_ts);
       DINGO_LOG(ERROR) << s;
@@ -3403,7 +3473,8 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
     int64_t lock_ts = lock_info.lock_ts();
     if (lock_ts <= safe_point_ts) {
       std::string s = fmt::format(
-          "[txn_gc][lock] find lock error. exist lock_ts : {} <= safe_point_ts : {}, lock_iter_key : {} lock_key: {}  "
+          "[txn_gc][lock] find lock error. exist lock_ts : {} <= safe_point_ts : {}, lock_iter_key : {} lock_key: "
+          "{}  "
           ", safe_point_ts : {} "
           "lock_value : {}",
           lock_ts, safe_point_ts, Helper::StringToHex(lock_iter_key),
@@ -3419,7 +3490,8 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
   }
 
   std::string s = fmt::format(
-      "[txn_gc][lock] scan lock column family. start_key : {} end_key : {} safe_point_ts : {} total : {} success : {} "
+      "[txn_gc][lock] scan lock column family. start_key : {} end_key : {} safe_point_ts : {} total : {} success : "
+      "{} "
       "failed : {}",
       Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts, total_count,
       (total_count - failed_count), failed_count);
@@ -3428,10 +3500,14 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
   return butil::Status();
 }
 
+bvar::LatencyRecorder g_txn_raft_engine_write_for_gc_latency("dingo_txn_raft_engine_write_for_gc");
+
 butil::Status TxnEngineHelper::RaftEngineWriteForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                                     const std::vector<std::string> &kv_deletes_lock,
                                                     const std::vector<std::string> &kv_deletes_data,
                                                     const std::vector<std::string> &kv_deletes_write) {
+  BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
+
   pb::raft::TxnRaftRequest txn_raft_request;
   auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
 
@@ -3477,6 +3553,8 @@ butil::Status TxnEngineHelper::RaftEngineWriteForGc(std::shared_ptr<Engine> raft
   return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
 }
 
+bvar::LatencyRecorder g_txn_do_final_work_for_gc_latency("dingo_txn_do_final_work_for_gc");
+
 butil::Status TxnEngineHelper::DoFinalWorkForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                                 RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
                                                 const std::string &write_key, int64_t safe_point_ts,
@@ -3485,6 +3563,8 @@ butil::Status TxnEngineHelper::DoFinalWorkForGc(std::shared_ptr<Engine> raft_eng
                                                 std::vector<std::string> &kv_deletes_write, std::string &lock_start_key,
                                                 std::string &lock_end_key, std::string &last_lock_start_key,
                                                 std::string &last_lock_end_key) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
+
   butil::Status status;
   lock_end_key = write_key;
   // optimization . already checked Ignore.
@@ -3669,7 +3749,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 
     if (safe_point_ts < internal_safe_point_ts) {
       DINGO_LOG(INFO) << fmt::format(
-          "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore.",
+          "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. "
+          "ignore.",
           safe_point_ts, internal_safe_point_ts);
     }
 
