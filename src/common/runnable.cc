@@ -125,7 +125,7 @@ bool Worker::Execute(TaskRunnablePtr task) {
 uint64_t Worker::TotalTaskCount() { return total_task_count_.load(std::memory_order_relaxed); }
 void Worker::IncTotalTaskCount() { total_task_count_.fetch_add(1, std::memory_order_relaxed); }
 
-uint64_t Worker::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
+int32_t Worker::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
 void Worker::IncPendingTaskCount() { pending_task_count_.fetch_add(1, std::memory_order_relaxed); }
 void Worker::DecPendingTaskCount() { pending_task_count_.fetch_sub(1, std::memory_order_relaxed); }
 
@@ -207,6 +207,23 @@ bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
   return ret;
 }
 
+bool WorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) {
+  if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
+                     pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
+    DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
+                                      pending_task_count_.load(std::memory_order_relaxed), max_pending_task_count_);
+    return false;
+  }
+
+  auto ret = workers_[LeastPendingTaskWorker()]->Execute(task);
+  if (ret) {
+    IncPendingTaskCount();
+    IncTotalTaskCount();
+  }
+
+  return ret;
+}
+
 bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
                      pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
@@ -228,6 +245,22 @@ void WorkerSet::WatchWorker(Worker::EventType type) {
   if (type == Worker::EventType::kFinishTask) {
     DecPendingTaskCount();
   }
+}
+
+uint32_t WorkerSet::LeastPendingTaskWorker() {
+  uint32_t index = 0;
+  int32_t min_pending_count = INT32_MAX;
+  uint32_t worker_num = workers_.size();
+  for (uint32_t i = 0; i < worker_num; ++i) {
+    auto& worker = workers_[i];
+    int32_t pending_count = worker->PendingTaskCount();
+    if (pending_count < min_pending_count) {
+      min_pending_count = pending_count;
+      index = i;
+    }
+  }
+
+  return index;
 }
 
 uint64_t WorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }

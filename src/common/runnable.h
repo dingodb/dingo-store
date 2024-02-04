@@ -72,7 +72,7 @@ class Worker {
   uint64_t TotalTaskCount();
   void IncTotalTaskCount();
 
-  uint64_t PendingTaskCount();
+  int32_t PendingTaskCount();
   void IncPendingTaskCount();
   void DecPendingTaskCount();
 
@@ -89,7 +89,7 @@ class Worker {
 
   // Metrics
   std::atomic<uint64_t> total_task_count_{0};
-  std::atomic<int64_t> pending_task_count_{0};
+  std::atomic<int32_t> pending_task_count_{0};
 
   // Notify
   NotifyFuncer notify_func_;
@@ -115,6 +115,7 @@ class WorkerSet {
   void Destroy();
 
   bool ExecuteRR(TaskRunnablePtr task);
+  bool ExecuteLeastQueue(TaskRunnablePtr task);
   bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task);
 
   void WatchWorker(Worker::EventType type);
@@ -129,6 +130,8 @@ class WorkerSet {
   std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
  private:
+  uint32_t LeastPendingTaskWorker();
+
   const std::string name_;
   int64_t max_pending_task_count_;
   uint32_t worker_num_;
