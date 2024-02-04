@@ -28,9 +28,13 @@ Status RawKvTask::Run() {
 }
 
 void RawKvTask::AsyncRun(StatusCallback cb) {
-  call_back_.swap(cb);
-  status_ = Init();
-  if (status_.ok()) {
+  CHECK(cb) << "cb is invalid";
+  {
+    std::unique_lock<std::shared_mutex> w(rw_lock_);
+    call_back_.swap(cb);
+  }
+  Status status = Init();
+  if (status.ok()) {
     DoAsync();
   } else {
     FireCallback();
@@ -42,10 +46,10 @@ Status RawKvTask::Init() { return Status::OK(); }
 std::string RawKvTask::ErrorMsg() const { return ""; }
 
 void RawKvTask::DoAsyncDone(const Status& status) {
-  status_ = status;
-  if (status_.ok()) {
+  if (status.ok()) {
     FireCallback();
   } else {
+    status_ = status;
     FailOrRetry();
   }
 }
@@ -87,10 +91,15 @@ void RawKvTask::FireCallback() {
   if (!status_.ok()) {
     DINGO_LOG(WARNING) << "Fail task:" << Name() << ", status:" << status_.ToString() << ", error_msg:" << ErrorMsg();
   }
-  call_back_(status_);
 
   StatusCallback cb;
-  call_back_.swap(cb);
+  {
+    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    CHECK(call_back_) << "call_back_ is invalid";
+    call_back_.swap(cb);
+  }
+
+  cb(status_);
 }
 
 void RawKvTask::PostProcess() {}
