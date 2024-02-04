@@ -311,7 +311,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   StoragePtr storage = storage_;
   auto task =
       std::make_shared<ServiceTask>([=]() { DoVectorSearch(storage, controller, request, response, svr_done); });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->ExecuteLeastQueue(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
