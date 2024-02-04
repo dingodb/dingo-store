@@ -25,6 +25,8 @@
 #include "butil/compiler_specific.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
+#include "butil/time.h"
+#include "bvar/latency_recorder.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
@@ -391,7 +393,11 @@ std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_pt
   return raft_cmd;
 }
 
+bvar::LatencyRecorder g_raft_write_latency("dingo_raft_store_engine_write_latency");
+
 butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
+  BvarLatencyGuard bvar_guard(&g_raft_write_latency);
+
   auto node = raft_node_manager->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] not found raft node.", ctx->RegionId());
@@ -422,8 +428,12 @@ butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::sha
   return AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {});
 }
 
+bvar::LatencyRecorder g_raft_async_write_latency("dingo_raft_store_engine_async_write_latency");
+
 butil::Status RaftStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                                           WriteCbFunc cb) {
+  BvarLatencyGuard bvar_guard(&g_raft_async_write_latency);
+
   auto node = raft_node_manager->GetNode(ctx->RegionId());
   if (node == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] not found raft node.", ctx->RegionId());
