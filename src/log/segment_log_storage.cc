@@ -37,6 +37,7 @@
 #include "butil/raw_pack.h"                // butil::RawPacker
 #include "butil/string_printf.h"           // butil::string_appendf
 #include "butil/time.h"
+#include "bvar/latency_recorder.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -50,15 +51,14 @@
 namespace dingodb {
 
 DEFINE_bool(dingo_raft_sync_log, true, "Sync log to disk or not");
+DEFINE_bool(dingo_trace_append_entry_latency, false, "Trace append entry latency");
 
 using ::butil::RawPacker;
 using ::butil::RawUnpacker;
 
-static const bool kTraceAppendEntryLatency = false;
-
-static bvar::LatencyRecorder g_segment_log_open_segment_latency("segment_log_open_segment");
-static bvar::LatencyRecorder g_segment_log_append_entry_latency("segment_log_append_entry");
-static bvar::LatencyRecorder g_segment_log_sync_segment_latency("segment_log_sync_segment");
+static bvar::LatencyRecorder g_segment_log_open_segment_latency("dingo_segment_log_open_segment");
+static bvar::LatencyRecorder g_segment_log_append_entry_latency("dingo_segment_log_append_entry");
+static bvar::LatencyRecorder g_segment_log_sync_segment_latency("dingo_segment_log_sync_segment");
 
 int FtruncateUninterrupted(int fd, off_t length) {
   int rc = 0;
@@ -788,7 +788,7 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
     braft::LogEntry* entry = entries[i];
 
     auto segment = OpenSegment();
-    if (kTraceAppendEntryLatency && metric) {
+    if (FLAGS_dingo_trace_append_entry_latency && metric) {
       delta_time_us = butil::cpuwide_time_us() - now;
       metric->open_segment_time_us += delta_time_us;
       g_segment_log_open_segment_latency << delta_time_us;
@@ -800,7 +800,7 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
     if (0 != ret) {
       return i;
     }
-    if (kTraceAppendEntryLatency && metric) {
+    if (FLAGS_dingo_trace_append_entry_latency && metric) {
       delta_time_us = butil::cpuwide_time_us() - now;
       metric->append_entry_time_us += delta_time_us;
       g_segment_log_append_entry_latency << delta_time_us;
@@ -810,7 +810,7 @@ int SegmentLogStorage::AppendEntries(const std::vector<braft::LogEntry*>& entrie
   }
   now = butil::cpuwide_time_us();
   last_segment->Sync(enable_sync_);
-  if (kTraceAppendEntryLatency && metric) {
+  if (FLAGS_dingo_trace_append_entry_latency && metric) {
     delta_time_us = butil::cpuwide_time_us() - now;
     metric->sync_segment_time_us += delta_time_us;
     g_segment_log_sync_segment_latency << delta_time_us;

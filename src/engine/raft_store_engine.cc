@@ -25,7 +25,6 @@
 #include "butil/compiler_specific.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
-#include "butil/time.h"
 #include "bvar/latency_recorder.h"
 #include "common/helper.h"
 #include "common/logging.h"
