@@ -894,10 +894,10 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr coordinator_worker_set = dingodb::WorkerSet::New(
+    dingodb::PriorWorkerSetPtr coordinator_worker_set = dingodb::PriorWorkerSet::New(
         "CoordinatorService", FLAGS_coordinator_service_worker_num, FLAGS_coordinator_service_worker_max_pending_num);
     if (!coordinator_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init CoordinatorService WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init CoordinatorService PriorWorkerSet failed!";
       return -1;
     }
 
@@ -913,10 +913,10 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr meta_worker_set = dingodb::WorkerSet::New("MetaService", FLAGS_meta_service_worker_num,
-                                                                    FLAGS_meta_service_worker_max_pending_num);
+    dingodb::PriorWorkerSetPtr meta_worker_set = dingodb::PriorWorkerSet::New(
+        "MetaService", FLAGS_meta_service_worker_num, FLAGS_meta_service_worker_max_pending_num);
     if (!meta_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init MetaService WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init MetaService PriorWorkerSet failed!";
       return -1;
     }
 
@@ -932,10 +932,10 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr version_worker_set = dingodb::WorkerSet::New(
+    dingodb::PriorWorkerSetPtr version_worker_set = dingodb::PriorWorkerSet::New(
         "VersionService", FLAGS_version_service_worker_num, FLAGS_version_service_worker_max_pending_num);
     if (!version_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init VersionService WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init VersionService PriorWorkerSet failed!";
       return -1;
     }
 
@@ -1075,29 +1075,29 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr read_worker_set =
-        dingodb::WorkerSet::New("StoreServiceRead", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
+    dingodb::PriorWorkerSetPtr read_worker_set =
+        dingodb::PriorWorkerSet::New("StoreServiceRead", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init StoreServiceRead WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init StoreServiceRead PriorWorkerSet failed!";
       return -1;
     }
     store_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetStoreServiceReadWorkerSet(read_worker_set);
 
-    dingodb::WorkerSetPtr write_worker_set =
-        dingodb::WorkerSet::New("StoreServiceWrite", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
+    dingodb::PriorWorkerSetPtr write_worker_set =
+        dingodb::PriorWorkerSet::New("StoreServiceWrite", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init StoreServiceWrite WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init StoreServiceWrite PriorWorkerSet failed!";
       return -1;
     }
     store_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetStoreServiceWriteWorkerSet(write_worker_set);
 
     if (FLAGS_raft_apply_worker_num > 0) {
-      dingodb::WorkerSetPtr raft_apply_worker_set =
-          dingodb::WorkerSet::New("RaftApply", FLAGS_raft_apply_worker_num, 0);
+      dingodb::PriorWorkerSetPtr raft_apply_worker_set =
+          dingodb::PriorWorkerSet::New("RaftApply", FLAGS_raft_apply_worker_num, 0);
       if (!raft_apply_worker_set->Init()) {
-        DINGO_LOG(ERROR) << "Init RaftApply WorkerSet failed!";
+        DINGO_LOG(ERROR) << "Init RaftApply PriorWorkerSet failed!";
         return -1;
       }
       store_service.SetRaftApplyWorkSet(raft_apply_worker_set);
@@ -1186,30 +1186,30 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::WorkerSetPtr read_worker_set =
-        dingodb::WorkerSet::New("IndexServiceRead", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
+    dingodb::PriorWorkerSetPtr read_worker_set =
+        dingodb::PriorWorkerSet::New("IndexServiceRead", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init IndexServiceRead WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init IndexServiceRead PriorWorkerSet failed!";
       return -1;
     }
     index_service.SetReadWorkSet(read_worker_set);
     util_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
-    dingodb::WorkerSetPtr write_worker_set =
-        dingodb::WorkerSet::New("IndexServiceWrite", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
+    dingodb::PriorWorkerSetPtr write_worker_set =
+        dingodb::PriorWorkerSet::New("IndexServiceWrite", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init IndexServiceWrite WorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init IndexServiceWrite PriorWorkerSet failed!";
       return -1;
     }
     index_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
 
     if (FLAGS_raft_apply_worker_num > 0) {
-      dingodb::WorkerSetPtr raft_apply_worker_set =
-          dingodb::WorkerSet::New("RaftApply", FLAGS_raft_apply_worker_num, 0);
+      dingodb::PriorWorkerSetPtr raft_apply_worker_set =
+          dingodb::PriorWorkerSet::New("RaftApply", FLAGS_raft_apply_worker_num, 0);
       if (!raft_apply_worker_set->Init()) {
-        DINGO_LOG(ERROR) << "Init RaftApply WorkerSet failed!";
+        DINGO_LOG(ERROR) << "Init RaftApply PriorWorkerSet failed!";
         return -1;
       }
       index_service.SetRaftApplyWorkSet(raft_apply_worker_set);

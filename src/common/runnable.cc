@@ -20,12 +20,13 @@
 #include "butil/compiler_specific.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "fmt/core.h"
 
 namespace dingodb {
 
-TaskRunnable::TaskRunnable() : id_(GenId()) {}  // NOLINT
-TaskRunnable::~TaskRunnable() {}                // NOLINT
+TaskRunnable::TaskRunnable() : id_(GenId()) { create_time_us_ = Helper::TimestampUs(); }
+TaskRunnable::~TaskRunnable() = default;
 
 uint64_t TaskRunnable::Id() const { return id_; }
 
@@ -55,7 +56,7 @@ int ExecuteRoutine(void* meta, bthread::TaskIterator<TaskRunnablePtr>& iter) {  
     if (BAIDU_LIKELY(worker != nullptr)) {
       worker->PopPendingTaskTrace((*iter)->Id());
       worker->DecPendingTaskCount();
-      worker->Nodify(Worker::EventType::kFinishTask);
+      worker->Notify(WorkerEventType::kFinishTask);
     }
   }
 
@@ -117,7 +118,7 @@ bool Worker::Execute(TaskRunnablePtr task) {
   IncPendingTaskCount();
   IncTotalTaskCount();
 
-  Nodify(EventType::kAddTask);
+  Notify(WorkerEventType::kAddTask);
 
   return true;
 }
@@ -129,7 +130,7 @@ int32_t Worker::PendingTaskCount() { return pending_task_count_.load(std::memory
 void Worker::IncPendingTaskCount() { pending_task_count_.fetch_add(1, std::memory_order_relaxed); }
 void Worker::DecPendingTaskCount() { pending_task_count_.fetch_sub(1, std::memory_order_relaxed); }
 
-void Worker::Nodify(EventType type) {
+void Worker::Notify(WorkerEventType type) {
   if (notify_func_ != nullptr) {
     notify_func_(type);
   }
@@ -174,7 +175,7 @@ WorkerSet::~WorkerSet() = default;
 
 bool WorkerSet::Init() {
   for (int i = 0; i < worker_num_; ++i) {
-    auto worker = Worker::New([this](Worker::EventType type) { WatchWorker(type); });
+    auto worker = Worker::New([this](WorkerEventType type) { WatchWorker(type); });
     if (!worker->Init()) {
       return false;
     }
@@ -241,8 +242,8 @@ bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   return ret;
 }
 
-void WorkerSet::WatchWorker(Worker::EventType type) {
-  if (type == Worker::EventType::kFinishTask) {
+void WorkerSet::WatchWorker(WorkerEventType type) {
+  if (type == WorkerEventType::kFinishTask) {
     DecPendingTaskCount();
   }
 }
@@ -288,6 +289,144 @@ std::vector<std::vector<std::string>> WorkerSet::GetPendingTaskTrace() {
   }
 
   return traces;
+}
+
+PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
+    : name_(name),
+      worker_num_(worker_num),
+      max_pending_task_count_(max_pending_task_count),
+      total_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_total_task_count", name)),
+      pending_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_pending_task_count", name)),
+      queue_wait_metrics_(fmt::format("dingo_prior_worker_set_{}_queue_wait_latency", name)),
+      queue_run_metrics_(fmt::format("dingo_prior_worker_set_{}_queue_run_latency", name)) {
+  bthread_mutex_init(&mutex_, nullptr);
+  bthread_cond_init(&cond_, nullptr);
+}
+
+PriorWorkerSet::~PriorWorkerSet() {
+  bthread_cond_destroy(&cond_);
+  bthread_mutex_destroy(&mutex_);
+}
+
+bool PriorWorkerSet::Init() {
+  for (uint32_t i = 0; i < worker_num_; ++i) {
+    workers_.push_back(Bthread());
+  }
+
+  auto worker_function = [this]() {
+    while (true) {
+      bthread_mutex_lock(&mutex_);
+      while (pending_task_count_.load(std::memory_order_relaxed) == 0) {
+        bthread_cond_wait(&cond_, &mutex_);
+      }
+
+      // get task from task queue
+      TaskRunnablePtr task = nullptr;
+      int64_t now_time_us = 0;
+      if (!tasks_.empty()) {
+        task = tasks_.top();
+        tasks_.pop();
+
+        now_time_us = Helper::TimestampUs();
+        queue_wait_metrics_ << now_time_us - task->CreateTimeUs();
+      }
+
+      bthread_mutex_unlock(&mutex_);
+
+      if (task != nullptr) {
+        task->Run();
+        queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
+        DecPendingTaskCount();
+        Notify(WorkerEventType::kFinishTask);
+      }
+    }
+  };
+
+  for (auto& bthread : workers_) {
+    bthread.Run(worker_function);
+  }
+
+  return true;
+}
+
+void PriorWorkerSet::Destroy() {
+  for (const auto& bthread : workers_) {
+    bthread.Join();
+  }
+}
+
+bool PriorWorkerSet::Execute(TaskRunnablePtr task) {
+  auto pend_task_count = pending_task_count_.load(std::memory_order_relaxed);
+
+  if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 && pend_task_count > max_pending_task_count_)) {
+    DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
+                                      pending_task_count_.load(std::memory_order_relaxed), max_pending_task_count_);
+    return false;
+  }
+
+  IncPendingTaskCount();
+  IncTotalTaskCount();
+
+  // if the pending task count is less than the worker number, execute the task directly
+  // else push the task to the task queue
+  // the total count of pending task will be decreased in the worker function
+  // and the total concurrency is limited by the worker number
+  if (pend_task_count < worker_num_) {
+    int64_t now_time_us = Helper::TimestampUs();
+    task->Run();
+    queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
+
+    DecPendingTaskCount();
+    Notify(WorkerEventType::kFinishTask);
+
+  } else {
+    bthread_mutex_lock(&mutex_);
+    tasks_.push(task);
+    bthread_cond_signal(&cond_);
+    bthread_mutex_unlock(&mutex_);
+  }
+
+  return true;
+}
+
+bool PriorWorkerSet::ExecuteRR(TaskRunnablePtr task) { return Execute(task); }
+
+bool PriorWorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) { return Execute(task); }
+
+bool PriorWorkerSet::ExecuteHashByRegionId(int64_t /*region_id*/, TaskRunnablePtr task) { return Execute(task); }
+
+void PriorWorkerSet::WatchWorker(WorkerEventType type) {
+  if (type == WorkerEventType::kFinishTask) {
+    DecPendingTaskCount();
+  }
+}
+
+uint64_t PriorWorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }
+
+void PriorWorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
+
+uint64_t PriorWorkerSet::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
+
+void PriorWorkerSet::IncPendingTaskCount() {
+  pending_task_count_metrics_ << 1;
+  pending_task_count_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void PriorWorkerSet::DecPendingTaskCount() {
+  pending_task_count_metrics_ << -1;
+  pending_task_count_.fetch_sub(1, std::memory_order_relaxed);
+}
+
+std::vector<std::vector<std::string>> PriorWorkerSet::GetPendingTaskTrace() {  // NOLINT
+  std::vector<std::vector<std::string>> traces;
+
+  return traces;
+}
+
+void PriorWorkerSet::Notify(WorkerEventType type) {
+  if (notify_func_ != nullptr) {
+    notify_func_(type);
+  }
 }
 
 }  // namespace dingodb
