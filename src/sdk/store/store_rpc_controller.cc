@@ -275,7 +275,7 @@ bool StoreRpcController::NeedDelay() const { return status_.IsRemoteError(); }
 
 bool StoreRpcController::NeedPickLeader() const { return !status_.IsRemoteError(); }
 
-int64_t StoreRpcController::DelayTimeMs() const { return rpc_.Controller()->timeout_ms(); }
+int64_t StoreRpcController::DelayTimeMs() const { return kRpcRetryDelayMs; }
 
 const pb::error::Error& StoreRpcController::GetResponseError(Rpc& rpc) {
   const auto* response = rpc.RawResponse();

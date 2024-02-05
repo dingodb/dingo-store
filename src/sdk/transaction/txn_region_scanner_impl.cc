@@ -104,9 +104,8 @@ Status TxnRegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
     }
 
     if (NeedRetryAndInc(retry)) {
-      int64_t delay_ms = rpc->Controller()->timeout_ms();
-      DINGO_LOG(INFO) << "try to delay:" << delay_ms << "ms";
-      DelayRetry(delay_ms);
+      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
+      DelayRetry(kRpcRetryDelayMs);
     } else {
       break;
     }

@@ -54,6 +54,9 @@ class MetaCache {
   Status ScanRegionsBetweenRange(std::string_view start_key, std::string_view end_key, int64_t limit,
                                  std::vector<std::shared_ptr<Region>>& regions);
 
+  //  return all regions between [start_key, end_key), used for get partion regions
+  Status ScanRegionsBetweenContinuousRange(std::string_view start_key, std::string_view end_key, std::vector<std::shared_ptr<Region>>& regions);
+
   void ClearRange(const std::shared_ptr<Region>& region);
 
   void RemoveRegion(int64_t region_id);
