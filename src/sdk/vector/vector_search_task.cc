@@ -222,10 +222,13 @@ void VectorSearchPartTask::VectorSearchRpcCallback(const Status& status, VectorS
         << " response batch_results_size: " << rpc->Response()->batch_results_size()
         << " request: " << rpc->Request()->DebugString() << " response: " << rpc->Response()->DebugString();
 
-    for (auto i = 0; i < rpc->Response()->batch_results_size(); i++) {
-      for (const auto& distancepb : rpc->Response()->batch_results(i).vector_with_distances()) {
-        VectorWithDistance distance = InternalVectorWithDistance2VectorWithDistance(distancepb);
-        search_result_[i].push_back(std::move(distance));
+    {
+      std::unique_lock<std::shared_mutex> w(rw_lock_);
+      for (auto i = 0; i < rpc->Response()->batch_results_size(); i++) {
+        for (const auto& distancepb : rpc->Response()->batch_results(i).vector_with_distances()) {
+          VectorWithDistance distance = InternalVectorWithDistance2VectorWithDistance(distancepb);
+          search_result_[i].push_back(std::move(distance));
+        }
       }
     }
   }
