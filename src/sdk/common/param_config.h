@@ -32,6 +32,8 @@ const int64_t kRpcTimeOutMs = 500000;
 // use case: wrong leader or request range invalid
 const int64_t kRpcMaxRetry = 5;
 
+const int64_t kRpcRetryDelayMs = 1000;
+
 // start: use for region scanner
 const int64_t kScanBatchSize = 10;
 

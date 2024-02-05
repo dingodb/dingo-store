@@ -92,9 +92,9 @@ Status Transaction::TxnImpl::DoTxnGet(const std::string& key, std::string& value
     }
 
     if (NeedRetryAndInc(retry)) {
-      int64_t delay_ms = rpc->Controller()->timeout_ms();
-      DINGO_LOG(INFO) << "try to delay:" << delay_ms << "ms";
-      DelayRetry(delay_ms);
+      // TODO: set txn retry ms
+      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
+      DelayRetry(kRpcRetryDelayMs);
     } else {
       break;
     }
@@ -165,9 +165,9 @@ void Transaction::TxnImpl::ProcessTxnBatchGetSubTask(TxnSubTask* sub_task) {
     }
 
     if (NeedRetryAndInc(retry)) {
-      int64_t delay_ms = rpc->Controller()->timeout_ms();
-      DINGO_LOG(INFO) << "try to delay:" << delay_ms << "ms";
-      DelayRetry(delay_ms);
+      // TODO: set txn retry ms
+      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
+      DelayRetry(kRpcRetryDelayMs);
     } else {
       break;
     }
@@ -562,9 +562,9 @@ Status Transaction::TxnImpl::PreCommitPrimaryKey() {
     }
 
     if (NeedRetryAndInc(retry)) {
-      int64_t delay_ms = rpc->Controller()->timeout_ms();
-      DINGO_LOG(INFO) << "try to delay:" << delay_ms << "ms";
-      DelayRetry(delay_ms);
+      // TODO: set txn retry ms
+      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
+      DelayRetry(kRpcRetryDelayMs);
     } else {
       break;
     }
@@ -596,9 +596,9 @@ void Transaction::TxnImpl::ProcessTxnPrewriteSubTask(TxnSubTask* sub_task) {
       break;
     }
     if (NeedRetryAndInc(retry)) {
-      int64_t delay_ms = rpc->Controller()->timeout_ms();
-      DINGO_LOG(INFO) << "try to delay:" << delay_ms << "ms";
-      DelayRetry(delay_ms);
+      // TODO: set txn retry ms
+      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
+      DelayRetry(kRpcRetryDelayMs);
     } else {
       // TODO: maybe set ret as meaningful status
       break;

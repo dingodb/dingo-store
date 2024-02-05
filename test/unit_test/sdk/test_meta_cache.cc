@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <vector>
+
 #include "gtest/gtest.h"
 #include "mock_coordinator_proxy.h"
 #include "sdk/coordinator_proxy.h"
@@ -453,6 +455,292 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangeNoPreetch) {
   EXPECT_EQ(tmp->RegionId(), a2c->RegionId());
   EXPECT_EQ(tmp->Range().start_key(), a2c->Range().start_key());
   EXPECT_EQ(tmp->Range().end_key(), a2c->Range().end_key());
+}
+
+TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
+  {
+    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+        .WillOnce(
+            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+              (void)request;
+              (void)response;
+              return Status::OK();
+            });
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
+    EXPECT_TRUE(got.IsNotFound());
+    EXPECT_EQ(regions.size(), 0);
+  }
+
+  {
+    auto region = RegionA2C();
+    meta_cache->MaybeAddRegion(region);
+
+    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+        .WillOnce(
+            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+              (void)request;
+              (void)response;
+              return Status::OK();
+            });
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
+    EXPECT_TRUE(got.IsNotFound());
+    EXPECT_EQ(regions.size(), 0);
+
+    meta_cache->ClearCache();
+  }
+
+  {
+    auto region = RegionB2F();
+    meta_cache->MaybeAddRegion(region);
+
+    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+        .WillOnce(
+            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+              (void)request;
+              (void)response;
+              return Status::OK();
+            });
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
+    EXPECT_TRUE(got.IsNotFound());
+    EXPECT_EQ(regions.size(), 0);
+
+    meta_cache->ClearCache();
+  }
+
+  {
+    auto region = RegionE2G();
+    meta_cache->MaybeAddRegion(region);
+    region = RegionL2N();
+    meta_cache->MaybeAddRegion(region);
+
+    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+        .WillOnce(
+            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+              (void)request;
+              (void)response;
+              return Status::OK();
+            });
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "e", regions);
+    EXPECT_TRUE(got.IsNotFound());
+    EXPECT_EQ(regions.size(), 0);
+
+    meta_cache->ClearCache();
+  }
+
+  {
+    auto region = RegionL2N();
+    meta_cache->MaybeAddRegion(region);
+
+    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+        .WillOnce(
+            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+              (void)request;
+              (void)response;
+              return Status::OK();
+            });
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
+    EXPECT_TRUE(got.IsNotFound());
+    EXPECT_EQ(regions.size(), 0);
+
+    meta_cache->ClearCache();
+  }
+
+  {
+    auto region = RegionA2C();
+    meta_cache->MaybeAddRegion(region);
+    region = RegionE2G();
+    meta_cache->MaybeAddRegion(region);
+
+    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+        .WillOnce(
+            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+              (void)request;
+              (void)response;
+              return Status::OK();
+            });
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "g", regions);
+    EXPECT_TRUE(got.IsNotFound());
+    EXPECT_EQ(regions.size(), 0);
+
+    meta_cache->ClearCache();
+  }
+}
+
+TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeRegionFromCache) {
+  {
+    auto region = RegionA2C();
+    meta_cache->MaybeAddRegion(region);
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "c", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 1);
+
+    auto target = regions[0];
+    EXPECT_EQ(target->RegionId(), region->RegionId());
+    EXPECT_EQ(target->Range().start_key(), region->Range().start_key());
+
+    EXPECT_EQ(target->Range().end_key(), region->Range().end_key());
+  }
+
+  {
+    auto a2c = RegionA2C();
+    meta_cache->MaybeAddRegion(a2c);
+    auto c2e = RegionC2E();
+    meta_cache->MaybeAddRegion(c2e);
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "e", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 1);
+
+    auto target = regions[0];
+    EXPECT_EQ(target->RegionId(), c2e->RegionId());
+    EXPECT_EQ(target->Range().start_key(), c2e->Range().start_key());
+
+    EXPECT_EQ(target->Range().end_key(), c2e->Range().end_key());
+  }
+
+  {
+    auto a2c = RegionA2C();
+    meta_cache->MaybeAddRegion(a2c);
+    auto c2e = RegionC2E();
+    meta_cache->MaybeAddRegion(c2e);
+    auto e2g = RegionE2G();
+    meta_cache->MaybeAddRegion(e2g);
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "e", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 1);
+
+    auto target = regions[0];
+    EXPECT_EQ(target->RegionId(), c2e->RegionId());
+    EXPECT_EQ(target->Range().start_key(), c2e->Range().start_key());
+    EXPECT_EQ(target->Range().end_key(), c2e->Range().end_key());
+  }
+}
+
+TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromCache) {
+  {
+    auto a2c = RegionA2C();
+    meta_cache->MaybeAddRegion(a2c);
+    auto c2e = RegionC2E();
+    meta_cache->MaybeAddRegion(c2e);
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "e", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 2);
+
+    EXPECT_EQ(regions[0]->RegionId(), a2c->RegionId());
+    EXPECT_EQ(regions[0]->Range().start_key(), a2c->Range().start_key());
+    EXPECT_EQ(regions[0]->Range().end_key(), a2c->Range().end_key());
+
+    EXPECT_EQ(regions[1]->RegionId(), c2e->RegionId());
+    EXPECT_EQ(regions[1]->Range().start_key(), c2e->Range().start_key());
+    EXPECT_EQ(regions[1]->Range().end_key(), c2e->Range().end_key());
+  }
+
+  {
+    auto a2c = RegionA2C();
+    meta_cache->MaybeAddRegion(a2c);
+    auto c2e = RegionC2E();
+    meta_cache->MaybeAddRegion(c2e);
+    auto e2g = RegionE2G();
+    meta_cache->MaybeAddRegion(e2g);
+
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 2);
+
+    EXPECT_EQ(regions[0]->RegionId(), c2e->RegionId());
+    EXPECT_EQ(regions[0]->Range().start_key(), c2e->Range().start_key());
+    EXPECT_EQ(regions[0]->Range().end_key(), c2e->Range().end_key());
+
+    EXPECT_EQ(regions[1]->RegionId(), e2g->RegionId());
+    EXPECT_EQ(regions[1]->Range().start_key(), e2g->Range().start_key());
+    EXPECT_EQ(regions[1]->Range().end_key(), e2g->Range().end_key());
+  }
+}
+
+TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromRemote) {
+  auto a2c = RegionA2C();
+  auto c2e = RegionC2E();
+  auto e2g = RegionE2G();
+
+  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
+      .WillOnce(
+          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
+            EXPECT_EQ(request.key(), "a");
+            EXPECT_EQ(request.range_end(), "g");
+            EXPECT_EQ(request.limit(), 0);
+            Region2ScanRegionInfo(a2c, response.add_regions());
+            Region2ScanRegionInfo(c2e, response.add_regions());
+            Region2ScanRegionInfo(e2g, response.add_regions());
+            return Status::OK();
+          });
+  {
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "g", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 3);
+
+    EXPECT_EQ(regions[0]->RegionId(), a2c->RegionId());
+    EXPECT_EQ(regions[0]->Range().start_key(), a2c->Range().start_key());
+    EXPECT_EQ(regions[0]->Range().end_key(), a2c->Range().end_key());
+
+    EXPECT_EQ(regions[1]->RegionId(), c2e->RegionId());
+    EXPECT_EQ(regions[1]->Range().start_key(), c2e->Range().start_key());
+    EXPECT_EQ(regions[1]->Range().end_key(), c2e->Range().end_key());
+
+    EXPECT_EQ(regions[2]->RegionId(), e2g->RegionId());
+    EXPECT_EQ(regions[2]->Range().start_key(), e2g->Range().start_key());
+    EXPECT_EQ(regions[2]->Range().end_key(), e2g->Range().end_key());
+  }
+
+  {
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "e", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 2);
+
+    EXPECT_EQ(regions[0]->RegionId(), a2c->RegionId());
+    EXPECT_EQ(regions[0]->Range().start_key(), a2c->Range().start_key());
+    EXPECT_EQ(regions[0]->Range().end_key(), a2c->Range().end_key());
+
+    EXPECT_EQ(regions[1]->RegionId(), c2e->RegionId());
+    EXPECT_EQ(regions[1]->Range().start_key(), c2e->Range().start_key());
+    EXPECT_EQ(regions[1]->Range().end_key(), c2e->Range().end_key());
+  }
+
+  {
+    std::vector<std::shared_ptr<Region>> regions;
+    Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
+    EXPECT_TRUE(got.ok());
+    EXPECT_EQ(regions.size(), 2);
+
+    EXPECT_EQ(regions[0]->RegionId(), c2e->RegionId());
+    EXPECT_EQ(regions[0]->Range().start_key(), c2e->Range().start_key());
+    EXPECT_EQ(regions[0]->Range().end_key(), c2e->Range().end_key());
+
+    EXPECT_EQ(regions[1]->RegionId(), e2g->RegionId());
+    EXPECT_EQ(regions[1]->Range().start_key(), e2g->Range().start_key());
+    EXPECT_EQ(regions[1]->Range().end_key(), e2g->Range().end_key());
+  }
 }
 
 }  // namespace sdk

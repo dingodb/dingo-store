@@ -20,6 +20,7 @@
 #include "glog/logging.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
@@ -101,6 +102,75 @@ Status MetaCache::ScanRegionsBetweenRange(std::string_view start_key, std::strin
   request.set_key(std::string(start_key));
   request.set_range_end(std::string(end_key));
   request.set_limit(limit);
+
+  Status send = SendScanRegionsRequest(request, response);
+  if (!send.IsOK()) {
+    return send;
+  }
+
+  return ProcessScanRegionsBetweenRangeResponse(response, regions);
+}
+
+Status MetaCache::ScanRegionsBetweenContinuousRange(std::string_view start_key, std::string_view end_key,
+                                                    std::vector<std::shared_ptr<Region>>& regions) {
+  std::vector<std::shared_ptr<Region>> to_return;
+  {
+    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    // find region start_key >= start_key
+    auto start_iter = region_by_key_.lower_bound(start_key);
+    if (start_iter != region_by_key_.end() && start_iter->first == start_key) {
+      // find region start_key >= end_key
+      auto end_iter = region_by_key_.lower_bound(end_key);
+      if (end_iter != region_by_key_.begin()) {
+        end_iter--;
+        if (end_iter->second->Range().end_key() == end_key) {
+          auto iter = start_iter;
+          while (iter != end_iter) {
+            to_return.push_back(iter->second);
+            iter++;
+          }
+          to_return.push_back(end_iter->second);
+        }
+      }
+    }
+  }
+
+  if (!to_return.empty()) {
+    if (to_return.size() == 1) {
+      auto& find = to_return[0];
+      CHECK_EQ(find->Range().start_key(), start_key);
+      CHECK_EQ(find->Range().end_key(), end_key);
+      regions.swap(to_return);
+      return Status::OK();
+    } else {
+      auto cur = to_return.begin();
+      auto next = cur;
+      next++;
+      CHECK(next != to_return.end());
+
+      bool continues = true;
+      while (next != to_return.end()) {
+        if ((*cur)->Range().end_key() != (*next)->Range().start_key()) {
+          continues = false;
+          break;
+        }
+        ++cur;
+        ++next;
+      }
+
+      if (continues) {
+        CHECK(!to_return.empty());
+        regions.swap(to_return);
+        return Status::OK();
+      }
+    }
+  }
+
+  pb::coordinator::ScanRegionsRequest request;
+  pb::coordinator::ScanRegionsResponse response;
+  request.set_key(std::string(start_key));
+  request.set_range_end(std::string(end_key));
+  request.set_limit(0);
 
   Status send = SendScanRegionsRequest(request, response);
   if (!send.IsOK()) {

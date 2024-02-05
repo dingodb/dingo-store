@@ -160,7 +160,7 @@ Status VectorSearchPartTask::Init() {
 void VectorSearchPartTask::DoAsync() {
   const auto& range = vector_index_->GetPartitionRange(part_id_);
   std::vector<std::shared_ptr<Region>> regions;
-  Status s = stub.GetMetaCache()->ScanRegionsBetweenRange(range.start_key(), range.end_key(), 0, regions);
+  Status s = stub.GetMetaCache()->ScanRegionsBetweenContinuousRange(range.start_key(), range.end_key(), regions);
   if (!s.ok()) {
     DoAsyncDone(s);
     return;
