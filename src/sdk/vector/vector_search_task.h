@@ -105,14 +105,13 @@ class VectorSearchPartTask : public VectorTask {
 
   std::unordered_map<int64_t, std::shared_ptr<Region>> next_batch_region_;
 
-  // target_vectors_ idx to search result
-  std::unordered_map<int64_t, std::vector<VectorWithDistance>> search_result_;
-
   std::vector<StoreRpcController> controllers_;
   std::vector<std::unique_ptr<VectorSearchRpc>> rpcs_;
 
   std::shared_mutex rw_lock_;
   Status status_;
+  // target_vectors_ idx to search result
+  std::unordered_map<int64_t, std::vector<VectorWithDistance>> search_result_;
 
   std::atomic<int> sub_tasks_count_{0};
 };
