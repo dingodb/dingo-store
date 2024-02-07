@@ -267,6 +267,10 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
   for (const auto& range : ranges) {
     pb::common::Range txn_range = Helper::GetMemComparableRange(range);
     txn_ranges.push_back(txn_range);
+    DINGO_LOG(INFO) << "[metrics.region] txn range: " << Helper::StringToHex(txn_range.start_key()) << " "
+                    << Helper::StringToHex(txn_range.end_key());
+    DINGO_LOG(INFO) << "[metrics.region] raw range: " << Helper::StringToHex(range.start_key()) << " "
+                    << Helper::StringToHex(range.end_key());
   }
 
   // for raw cf, use region's range to get approximate size
@@ -276,11 +280,15 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
       auto sizes = raw_engine->GetApproximateSizes(cf_name, txn_ranges);
       for (int i = 0; i < sizes.size(); ++i) {
         region_sizes[i].second += sizes[i];
+        DINGO_LOG(INFO) << "[metrics.region] txn region_size: " << sizes[i] << " region_id: " << valid_regions[i]->Id()
+                        << " cf_name: " << cf_name;
       }
     } else {
       auto sizes = raw_engine->GetApproximateSizes(cf_name, ranges);
       for (int i = 0; i < sizes.size(); ++i) {
         region_sizes[i].second += sizes[i];
+        DINGO_LOG(INFO) << "[metrics.region] raw region_size: " << sizes[i] << " region_id: " << valid_regions[i]->Id()
+                        << " cf_name: " << cf_name;
       }
     }
   }

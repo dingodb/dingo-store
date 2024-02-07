@@ -125,8 +125,10 @@ class Benchmark {
 
   void Clean();
 
-  int64_t CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
-                       sdk::EngineType engine_type, int replicas = 3);
+  int64_t CreateRawRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
+                          sdk::EngineType engine_type, int replicas = 3);
+  int64_t CreateTxnRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
+                          sdk::EngineType engine_type, int replicas = 3);
   void DropRegion(int64_t region_id);
 
   int64_t CreateVectorIndex(const std::string& name, const std::string& vector_index_type);

@@ -113,10 +113,12 @@ namespace dingodb {
 namespace benchmark {
 
 static const std::string kClientRaw = "w";
+static const std::string kClientTxn = "x";
 
 static const std::string kNamePrefix = "Benchmark";
 
 static std::string EncodeRawKey(const std::string& str) { return kClientRaw + str; }
+static std::string EncodeTxnKey(const std::string& str) { return kClientTxn + str; }
 
 sdk::EngineType GetRawEngineType() {
   auto raw_engine = Helper::ToUpper(FLAGS_raw_engine);
@@ -296,13 +298,20 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
   std::mutex mutex;
   std::vector<RegionEntryPtr> region_entries;
 
+  bool is_txn_region = IsTransactionBenchmark();
+
   std::vector<std::thread> threads;
   threads.reserve(num);
   for (int thread_no = 0; thread_no < num; ++thread_no) {
-    threads.emplace_back([this, thread_no, &region_entries, &mutex]() {
+    threads.emplace_back([this, is_txn_region, thread_no, &region_entries, &mutex]() {
       auto name = fmt::format("{}_{}_{}", kNamePrefix, Helper::TimestampMs(), thread_no + 1);
       std::string prefix = fmt::format("{}{:06}", FLAGS_prefix, thread_no);
-      auto region_id = CreateRegion(name, prefix, Helper::PrefixNext(prefix), GetRawEngineType(), FLAGS_replica);
+      int64_t region_id = 0;
+      if (is_txn_region) {
+        region_id = CreateTxnRegion(name, prefix, Helper::PrefixNext(prefix), GetRawEngineType(), FLAGS_replica);
+      } else {
+        region_id = CreateRawRegion(name, prefix, Helper::PrefixNext(prefix), GetRawEngineType(), FLAGS_replica);
+      }
       if (region_id == 0) {
         LOG(ERROR) << fmt::format("create region failed, name: {}", name);
         return;
@@ -411,8 +420,8 @@ void Benchmark::Clean() {
   }
 }
 
-int64_t Benchmark::CreateRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
-                                sdk::EngineType engine_type, int replicas) {
+int64_t Benchmark::CreateRawRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
+                                   sdk::EngineType engine_type, int replicas) {
   std::shared_ptr<sdk::RegionCreator> creator;
   auto status = client_->NewRegionCreator(creator);
   CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
@@ -422,6 +431,29 @@ int64_t Benchmark::CreateRegion(const std::string& name, const std::string& star
                .SetEngineType(engine_type)
                .SetReplicaNum(replicas)
                .SetRange(EncodeRawKey(start_key), EncodeRawKey(end_key))
+               .Create(region_id);
+  if (!status.IsOK()) {
+    LOG(ERROR) << fmt::format("create region failed, {}", status.ToString());
+    return 0;
+  }
+  if (region_id == 0) {
+    LOG(ERROR) << "region_id is 0, invalid";
+  }
+
+  return region_id;
+}
+
+int64_t Benchmark::CreateTxnRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
+                                   sdk::EngineType engine_type, int replicas) {
+  std::shared_ptr<sdk::RegionCreator> creator;
+  auto status = client_->NewRegionCreator(creator);
+  CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
+
+  int64_t region_id;
+  status = creator->SetRegionName(name)
+               .SetEngineType(engine_type)
+               .SetReplicaNum(replicas)
+               .SetRange(EncodeTxnKey(start_key), EncodeTxnKey(end_key))
                .Create(region_id);
   if (!status.IsOK()) {
     LOG(ERROR) << fmt::format("create region failed, {}", status.ToString());

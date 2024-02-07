@@ -937,8 +937,8 @@ pb::common::Range Helper::GetMemComparableRange(const pb::common::Range& range) 
   CHECK(range.start_key() < range.end_key());
   pb::common::Range txn_range;
   txn_range.set_start_key(Helper::PaddingUserKey(range.start_key()));
-  txn_range.set_start_key(Helper::PaddingUserKey(range.end_key()));
-  return range;
+  txn_range.set_end_key(Helper::PaddingUserKey(range.end_key()));
+  return txn_range;
 }
 
 int64_t Helper::TimestampNs() {
