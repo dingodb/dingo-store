@@ -17,7 +17,6 @@
 #include <unistd.h>
 
 #include <atomic>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -30,7 +29,6 @@
 #include "benchmark/benchmark.h"
 #include "benchmark/dataset.h"
 #include "common/helper.h"
-#include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "gflags/gflags_declare.h"
@@ -76,6 +74,7 @@ namespace dingodb {
 namespace benchmark {
 
 static const std::string kClientRaw = "w";
+static const std::string kClientTxn = "x";
 
 static const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
                                  'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
@@ -157,6 +156,7 @@ static std::string GenRandomString(int len) {
 static std::string GenSeqString(int num, int len) { return fmt::format("{0:0{1}}", num, len); }
 
 static std::string EncodeRawKey(const std::string& str) { return kClientRaw + str; }
+static std::string EncodeTxnKey(const std::string& str) { return kClientTxn + str; }
 
 BaseOperation::BaseOperation(std::shared_ptr<sdk::Client> client) : client(client) {
   auto status = client->NewRawKV(raw_kv);
@@ -263,8 +263,8 @@ Operation::Result BaseOperation::KvTxnPut(std::vector<RegionEntryPtr>& region_en
 
     sdk::KVPair kv;
     size_t count = region_entry->counter.fetch_add(1, std::memory_order_relaxed);
-    kv.key = is_random ? EncodeRawKey(region_entry->prefix + GenRandomString(random_str_len))
-                       : EncodeRawKey(region_entry->prefix + GenSeqString(count, random_str_len));
+    kv.key = is_random ? EncodeTxnKey(region_entry->prefix + GenRandomString(random_str_len))
+                       : EncodeTxnKey(region_entry->prefix + GenSeqString(count, random_str_len));
 
     kv.value = GenRandomString(FLAGS_value_size);
     kvs.push_back(kv);
@@ -327,8 +327,8 @@ Operation::Result BaseOperation::KvTxnBatchPut(std::vector<RegionEntryPtr>& regi
     for (int i = 0; i < FLAGS_batch_size; ++i) {
       sdk::KVPair kv;
       size_t count = region_entry->counter.fetch_add(1, std::memory_order_relaxed);
-      kv.key = is_random ? EncodeRawKey(region_entry->prefix + GenRandomString(random_str_len))
-                         : EncodeRawKey(region_entry->prefix + GenSeqString(count, random_str_len));
+      kv.key = is_random ? EncodeTxnKey(region_entry->prefix + GenRandomString(random_str_len))
+                         : EncodeTxnKey(region_entry->prefix + GenSeqString(count, random_str_len));
       kv.value = GenRandomString(FLAGS_value_size);
 
       kvs.push_back(kv);
@@ -814,7 +814,7 @@ static void PrintVector(const std::vector<T>& vec) {
     std::cout << v << " ";
   }
 
-  std::cout << std::endl;
+  std::cout << '\n';
 }
 
 static std::vector<float> FakeGenerateFloatVector(uint32_t dimension) {

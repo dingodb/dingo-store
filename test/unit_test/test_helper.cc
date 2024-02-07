@@ -545,3 +545,21 @@ TEST_F(HelperTest, IsConflictRange) {
     EXPECT_TRUE(dingodb::Helper::IsConflictRange(range1, range2));
   }
 }
+
+TEST_F(HelperTest, GetMemComparableRange) {
+  std::string start_key = "hello";
+  std::string end_key = "hello0000";
+  dingodb::pb::common::Range range;
+  range.set_start_key(start_key);
+  range.set_end_key(end_key);
+
+  auto mem_comparable_range = dingodb::Helper::GetMemComparableRange(range);
+
+  DINGO_LOG(INFO) << "start_key: " << dingodb::Helper::StringToHex(range.start_key()) << " "
+                  << dingodb::Helper::StringToHex(mem_comparable_range.start_key());
+  DINGO_LOG(INFO) << "end_key: " << dingodb::Helper::StringToHex(range.end_key()) << " "
+                  << dingodb::Helper::StringToHex(mem_comparable_range.end_key());
+
+  EXPECT_EQ(dingodb::Helper::PaddingUserKey(range.start_key()), mem_comparable_range.start_key());
+  EXPECT_EQ(dingodb::Helper::PaddingUserKey(range.end_key()), mem_comparable_range.end_key());
+}
