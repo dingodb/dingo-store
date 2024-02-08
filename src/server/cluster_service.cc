@@ -130,10 +130,10 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
   table_header.push_back("RESOURCE_TAG");
   table_header.push_back("CREATE_TIME");
   table_header.push_back("UPDATE_TIME");
-  table_header.push_back("STORE_METRICS");
-  table_header.push_back("STORE_OPERATION");
-  table_header.push_back("INFO");
-  table_header.push_back("MEMORY_STATS");
+  table_header.push_back("METRICS_C");
+  table_header.push_back("OPERATION");
+  table_header.push_back("METRICS_S");
+  table_header.push_back("MEMORY");
 
   std::vector<int32_t> min_widths;
 
@@ -144,12 +144,12 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
   min_widths.push_back(30);  // SERVER_LOCATION
   min_widths.push_back(30);  // RAFT_LOCATION
   min_widths.push_back(15);  // RESOURCE_TAG
-  min_widths.push_back(30);  // CREATE_TIME
+  min_widths.push_back(20);  // CREATE_TIME
   min_widths.push_back(30);  // UPDATE_TIME
-  min_widths.push_back(10);  // STORE_METRICS
-  min_widths.push_back(10);  // STORE_OPERATION
-  min_widths.push_back(5);   // INFO
-  min_widths.push_back(10);  // MEMORY_STATS
+  min_widths.push_back(10);  // METRICS_C
+  min_widths.push_back(10);  // OPERATION
+  min_widths.push_back(5);   // METRICS_S
+  min_widths.push_back(10);  // MEMORY
 
   std::vector<std::vector<std::string>> table_contents;
   std::vector<std::vector<std::string>> table_urls;
@@ -191,11 +191,11 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
     url_line.push_back(std::string());
     line.push_back(Helper::FormatMsTime(store.last_seen_timestamp(), "%Y-%m-%d %H:%M:%S"));  // UPDATE_TIME
     url_line.push_back(std::string());
-    line.push_back(std::to_string(store.id()));  // STORE_METRICS
+    line.push_back(std::to_string(store.id()));  // METRICS_C
     url_line.push_back("/store_metrics/");
-    line.push_back(std::to_string(store.id()));  // STORE_OPERATION
+    line.push_back(std::to_string(store.id()));  // OPERATION
     url_line.push_back("/store_operation/");
-    line.push_back(std::to_string(store.id()) + "/Info");  // INFO
+    line.push_back(std::to_string(store.id()) + "/metrics");  // METRICS_S
     if (store.store_type() == pb::common::StoreType::NODE_TYPE_STORE) {
       url_line.push_back("http://" + store.server_location().host() + ":" +
                          std::to_string(store.server_location().port()) + "/StoreService/GetMemoryInfo/");
@@ -206,9 +206,9 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
       url_line.push_back(std::string());
     }
 
-    line.push_back(std::to_string(store.id()) + "/Stats");  // MEMORY_STATS
+    line.push_back(std::to_string(store.id()) + "/memory");  // MEMORY
     url_line.push_back("http://" + store.server_location().host() + ":" +
-                       std::to_string(store.server_location().port()) + "/NodeService/GetMemoryStats/");
+                       std::to_string(store.server_location().port()) + "/memory/");
 
     table_contents.push_back(line);
     table_urls.push_back(url_line);
@@ -236,7 +236,7 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
   min_widths.push_back(16);  // STATUS
   min_widths.push_back(30);  // SERVER_LOCATION
   min_widths.push_back(15);  // RESOURCE_TAG
-  min_widths.push_back(30);  // CREATE_TIME
+  min_widths.push_back(20);  // CREATE_TIME
   min_widths.push_back(30);  // UPDATE_TIME
 
   std::vector<std::vector<std::string>> table_contents;
@@ -896,7 +896,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
        << "</a>" << '\n';
     os << "<a href=\"/store_operation/"
        << "\">"
-       << "GET_STORE_OPERATION"
+       << "GET_OPERATION"
        << "</a>" << '\n';
 
     os << (use_html ? "<br>CoordinatorMap:\n" : "\n");
