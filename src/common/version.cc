@@ -88,6 +88,7 @@ void DingoLogVerion() {
   DINGO_LOG(INFO) << "DINGO_STORE BUILD_TYPE:[" << FLAGS_dingo_build_type << "] CONTRIB_BUILD_TYPE:["
                   << FLAGS_dingo_contrib_build_type << "]";
   DINGO_LOG(INFO) << GetBuildFlag();
+  DINGO_LOG(INFO) << "PID: " << getpid();
 }
 
 pb::common::VersionInfo GetVersionInfo() {

@@ -213,6 +213,19 @@ void ErrorCallback(void *vdata, const char *msg, int errnum) {
 // The signal handler
 #define MAX_STACKTRACE_SIZE 128
 static void SignalHandler(int signo) {
+  printf("========== handle signal '%d' ==========\n", signo);
+
+  if (signo == SIGTERM) {
+    // TODO: graceful shutdown
+    // clean temp directory
+    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
+    dingodb::Helper::RemoveFileOrDirectory(dingodb::Server::GetInstance().PidFilePath());
+    DINGO_LOG(ERROR) << "GRACEFUL SHUTDOWN, clean up checkpoint dir: "
+                     << dingodb::Server::GetInstance().GetCheckpointPath()
+                     << ", clean up pid_file: " << dingodb::Server::GetInstance().PidFilePath();
+    _exit(0);
+  }
+
   std::cerr << "Received signal " << signo << '\n';
   std::cerr << "Stack trace:" << '\n';
   DINGO_LOG(ERROR) << "Received signal " << signo;
@@ -265,26 +278,29 @@ static void SignalHandler(int signo) {
     }
   }
 
-  if (signo == SIGTERM) {
-    // TODO: graceful shutdown
-    // clean temp directory
-    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
-    DINGO_LOG(ERROR) << "graceful shutdown, clean up checkpoint dir: "
-                     << dingodb::Server::GetInstance().GetCheckpointPath();
-    exit(0);
-  } else {
-    // call abort() to generate core dump
-    DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
-    auto s = signal(SIGABRT, SIG_DFL);
-    if (s == SIG_ERR) {
-      std::cerr << "Failed to set signal handler to SIG_DFL for SIGABRT" << '\n';
-    }
-    abort();
+  // call abort() to generate core dump
+  DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
+  auto s = signal(SIGABRT, SIG_DFL);
+  if (s == SIG_ERR) {
+    std::cerr << "Failed to set signal handler to SIG_DFL for SIGABRT" << '\n';
   }
+  abort();
 }
 
 static void SignalHandlerWithoutLineno(int signo) {
   printf("========== handle signal '%d' ==========\n", signo);
+
+  if (signo == SIGTERM) {
+    // TODO: graceful shutdown
+    // clean temp directory
+    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
+    dingodb::Helper::RemoveFileOrDirectory(dingodb::Server::GetInstance().PidFilePath());
+    DINGO_LOG(ERROR) << "GRACEFUL SHUTDOWN, clean up checkpoint dir: "
+                     << dingodb::Server::GetInstance().GetCheckpointPath()
+                     << ", clean up pid_file: " << dingodb::Server::GetInstance().PidFilePath();
+    _exit(0);
+  }
+
   unw_context_t context;
   unw_cursor_t cursor;
   unw_getcontext(&context);
@@ -338,22 +354,13 @@ static void SignalHandlerWithoutLineno(int signo) {
 
   } while (unw_step(&cursor) > 0);
 
-  if (signo == SIGTERM) {
-    // TODO: graceful shutdown
-    // clean temp directory
-    dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
-    DINGO_LOG(ERROR) << "graceful shutdown, clean up checkpoint dir: "
-                     << dingodb::Server::GetInstance().GetCheckpointPath();
-    exit(0);
-  } else {
-    // call abort() to generate core dump
-    DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
-    auto s = signal(SIGABRT, SIG_DFL);
-    if (s == SIG_ERR) {
-      std::cerr << "Failed to set signal handler to SIG_DFL for SIGABRT" << '\n';
-    }
-    abort();
+  // call abort() to generate core dump
+  DINGO_LOG(ERROR) << "call abort() to generate core dump for signo=" << signo << " " << strsignal(signo);
+  auto s = signal(SIGABRT, SIG_DFL);
+  if (s == SIG_ERR) {
+    std::cerr << "Failed to set signal handler to SIG_DFL for SIGABRT" << '\n';
   }
+  abort();
 }
 
 void SetupSignalHandler() {
@@ -503,8 +510,8 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
 
   auto raft_apply_max_pending_num = config->GetInt64("server.raft_apply_worker_max_pending_num");
   if (raft_apply_max_pending_num <= 0) {
-    DINGO_LOG(WARNING)
-        << "server.raft_apply_worker_max_pending_num is not set, use dingodb::FLAGS_raft_apply_worker_max_pending_num";
+    DINGO_LOG(WARNING) << "server.raft_apply_worker_max_pending_num is not set, use "
+                          "dingodb::FLAGS_raft_apply_worker_max_pending_num";
   } else {
     FLAGS_raft_apply_worker_max_pending_num = raft_apply_max_pending_num;
   }
@@ -710,18 +717,18 @@ int main(int argc, char *argv[]) {
   }
 
   auto const config = dingodb::ConfigManager::GetInstance().GetRoleConfig();
-  auto placeholder = dingo_server.InitLog();
-  if (!placeholder) {
-    DINGO_LOG(ERROR) << "InitLog failed!";
-    return -1;
-  }
-  if (!dingo_server.InitServerID()) {
-    DINGO_LOG(ERROR) << "InitServerID failed!";
+  if (!dingo_server.InitDirectory()) {
+    DINGO_LOG(ERROR) << "InitDirectory failed!";
     return -1;
   }
 
-  if (!dingo_server.InitDirectory()) {
-    DINGO_LOG(ERROR) << "InitDirectory failed!";
+  if (!dingo_server.InitLog()) {
+    DINGO_LOG(ERROR) << "InitLog failed!";
+    return -1;
+  }
+
+  if (!dingo_server.InitServerID()) {
+    DINGO_LOG(ERROR) << "InitServerID failed!";
     return -1;
   }
 
@@ -1322,6 +1329,11 @@ int main(int argc, char *argv[]) {
   }
 
   // Start server after raft server started.
+  options.pid_file = dingo_server.PidFilePath();
+
+  DINGO_LOG(INFO) << "Server is going to start on " << dingo_server.ServerEndpoint()
+                  << ", pid_file:" << options.pid_file;
+
   if (brpc_server.Start(dingo_server.ServerEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;

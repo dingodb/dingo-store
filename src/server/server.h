@@ -50,7 +50,7 @@ class Server {
   bool InitConfig(const std::string& filename);
 
   // Init log.
-  static bool InitLog();
+  bool InitLog();
 
   // Valiate coordinator is connected and valid.
   static bool ValiateCoordinator() { return true; }
@@ -117,6 +117,8 @@ class Server {
   int64_t Id() const;
   std::string Keyring() const;
 
+  std::string LogDir();
+  std::string PidFilePath();
   std::string ServerAddr();
   butil::EndPoint ServerEndpoint();
   void SetServerEndpoint(const butil::EndPoint& endpoint);
@@ -277,6 +279,9 @@ class Server {
 
   // checkpoint directory
   std::string checkpoint_path_;
+
+  // log directory
+  std::string log_dir_;
 
   // Pre split checker
   std::shared_ptr<PreSplitChecker> pre_split_checker_;

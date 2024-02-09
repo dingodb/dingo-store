@@ -1267,6 +1267,12 @@ bool Helper::GetSystemDiskIoUtil(const std::string& device_name, std::map<std::s
   }
 }
 
+std::string Helper::ConcatPath(const std::string& path1, const std::string& path2) {
+  std::filesystem::path path_a(path1);
+  std::filesystem::path path_b(path2);
+  return (path_a / path_b).string();
+}
+
 std::vector<std::string> Helper::TraverseDirectory(const std::string& path, bool ignore_dir, bool ignore_file) {
   return TraverseDirectory(path, "", ignore_dir, ignore_file);
 }
